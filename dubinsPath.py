@@ -2,15 +2,27 @@
 """
 Created on Thu Jun 15 23:21:57 2023
 
-@author: dfesh
+@author: Daniel Feshbach
+
+This is more or less a python version of a MATLAB function from:
+Wei-Hsi Chen, Woohyeok Yang, Lucien Peach, Daniel E. Koditschek, and Cynthia R. Sung,
+"Kinegami: Algorithmic Design of Compliant Kinematic Chains From Tubular Origami",
+IEEE Transaction on Robotics 2022.
+
+This particular part of the Kinegami code is based on a construction from:
+Sikha Hota and Debasish Ghose,
+"Optimal Geometrical Path in 3D with Curvature Constraint", 
+IROS 2010.
 """
 
 import numpy as np
 from numpy import cross, dot, arctan2
 import scipy
+from scipy.spatial.transform import Rotation
 from scipy.linalg import null_space
 from numpy.linalg import norm
 import matplotlib.pyplot as plt
+
 
 """ 
 Given 3D np vectors u and v, return a unit vector orthogonal to both, 
@@ -47,6 +59,66 @@ def signedAngle(a, b, n):
         
     return arctan2(dot(cross(a,b),n), dot(a,b))
 
+# wrap angles to [0,2pi)
+def wrapAngle(angle):
+    return angle % (2*np.pi)
+
+class Circle3D:
+    def __init__(self, radius, center, normal):
+        assert(norm(normal)>0)
+        self.r = radius
+        self.c = center
+        self.n = normal / norm(normal)
+    
+    def interpolate(self, count=50):
+        angle = np.linspace(0, 2*np.pi, count).reshape(-1,1)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        
+        # construct basis for circle plane
+        uhat = unitNormalToBoth(self.n, self.n).reshape(1,3)
+        vhat = cross(self.n, uhat).reshape(1,3)
+        
+        # 3d circle points
+        return self.c + u @ uhat + v @ vhat
+    
+class Arc3D:
+    def __init__(self, circleCenter, startPoint, startDir, theta):
+        assert(norm(startPoint-circleCenter)>0)
+        # verify orthogonality up to numerical stability
+        assert(abs(np.dot(startDir, startPoint-circleCenter)) < 0.000001)
+        
+        self.circleCenter = circleCenter
+        self.startPoint = startPoint
+        self.startTangent = startDir / norm(startDir)
+        self.theta = theta
+        
+        self.centerToStart = self.startPoint - self.circleCenter
+        self.r = norm(self.centerToStart)
+        self.startNormal = - self.centerToStart / self.r
+        
+        
+        self.binormal = cross(self.startTangent, self.startNormal)
+        self.rot = Rotation.from_rotvec(self.theta * self.binormal)
+        self.centerToEnd = self.rot.apply(self.centerToStart)
+        self.endPoint = self.circleCenter + self.centerToEnd
+        self.endNormal = - self.centerToEnd / self.r
+        self.endTangent = cross(self.endNormal, self.binormal)
+    
+    def interpolate(self, count=50):
+        angle = np.linspace(0, self.theta, count).reshape(-1,1)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        
+        # construct basis for circle plane
+        uhat = -self.startNormal.reshape(1,3)
+        vhat = cross(self.binormal, uhat).reshape(1,3)
+        
+        # 3d circle points
+        return self.circleCenter + u @ uhat + v @ vhat
+
+
+
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,
 and the other Dubins path parameters, construct the PathCSC and return
@@ -76,6 +148,9 @@ def pathErrorCSC(tDirMag, r, startPos, startDir, endPos, endDir,
                    circle1sign, circle2sign).error
 
 def shortestCSC(r, startPos, startDir, endPos, endDir):
+    startDir = startDir / norm(startDir)
+    endDir = endDir / norm(endDir)
+    
     t0 = endPos - startPos
     if norm(t0)==0:
         t0 = r * startDir
@@ -104,42 +179,11 @@ def shortestCSC(r, startPos, startDir, endPos, endDir):
     paths = [pathPP, pathPM, pathMP, pathMM]
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
-    print(errorNorms)
-    print(lengths)
     # exclude invalid paths from length-min selection
     lengths[errorNorms > 0.001*r] = np.inf
     
     return paths[np.argmin(lengths)]
-    
-    
-    
-# wrap angles to [0,2pi)
-def wrapAngle(angle):
-    return angle % (2*np.pi)
-
-class Circle3D:
-    def __init__(self, radius, center, normal):
-        assert(norm(normal)>0)
-        self.r = radius
-        self.c = center
-        self.n = normal / norm(normal)
-    
-    def points(self, count=50):
-        angle = np.linspace(0, 2*np.pi, count).reshape(-1,1)
-        u = self.r * np.cos(angle)
-        v = self.r * np.sin(angle)
         
-        # construct basis for circle plane
-        uhat = unitNormalToBoth(self.n, self.n).reshape(1,3)
-        vhat = cross(self.n, uhat).reshape(1,3)
-        
-        # 3d circle points
-        return self.c + u @ uhat + v @ vhat
-        # TODO: test this (especially vectorization dimensions)
-        
-        
-        
-
 
 class PathCSC:
     """
@@ -229,35 +273,45 @@ class PathCSC:
                         ", circle2sign="+str(self.circle2sign)+")"
     
     # add to existing matplotlib axis ax
-    def addToPlot(self, ax, startColor='red', endColor='blue', pathColor='green'):
-        # start pose
-        x1,y1,z1 = self.startPos
-        u1,v1,w1 = self.startDir
-        ax.quiver(x1,y1,z1,u1,v1,w1,
-                  length=self.r, color=startColor, label='start')
+    def addToPlot(self, ax, showCircles=True, showPoses=True, startColor='red', endColor='blue', pathColor='green'):
+        if showPoses:
+            # start pose
+            x1,y1,z1 = self.startPos
+            u1,v1,w1 = self.startDir
+            ax.quiver(x1,y1,z1,u1,v1,w1,
+                      length=self.r, color=startColor, label='start')
+            # end pose
+            x2,y2,z2 = self.endPos
+            u2,v2,w2 = self.endDir
+            ax.quiver(x2,y2,z2,u2,v2,w2,
+                      length=self.r, color=endColor, label='end')
         
-        # end pose
-        x2,y2,z2 = self.endPos
-        u2,v2,w2 = self.endDir
-        ax.quiver(x2,y2,z2,u2,v2,w2,
-                  length=self.r, color=endColor, label='end')
+        if showCircles:
+            # circles
+            c1x, c1y, c1z = Circle3D(self.r, 
+                            self.circleCenter1, self.circleNormal1).interpolate().T
+            ax.plot(c1x, c1y, c1z, color = startColor)
+            c2x, c2y, c2z = Circle3D(self.r, 
+                            self.circleCenter2, self.circleNormal2).interpolate().T
+            ax.plot(c2x, c2y, c2z, color = endColor)
         
-        # circles
-        c1x, c1y, c1z = Circle3D(self.r, 
-                            self.circleCenter1, self.circleNormal1).points().T
-        ax.plot(c1x, c1y, c1z, color = startColor)
-        c2x, c2y, c2z = Circle3D(self.r, 
-                            self.circleCenter2, self.circleNormal2).points().T
-        ax.plot(c2x, c2y, c2z, color = endColor)
+        
+        # path arcs (C components)
+        a1x, a1y, a1z = Arc3D(self.circleCenter1, 
+                self.startPos, self.startDir, self.theta1).interpolate().T
+        ax.plot(a1x, a1y, a1z, color = pathColor)
+        a2x, a2y, a2z = Arc3D(self.circleCenter2, 
+                self.turn2start, self.tUnit, self.theta2).interpolate().T
+        ax.plot(a2x, a2y, a2z, color = pathColor)
         
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
         ax.plot(sx, sy, sz, color = pathColor, marker='*')
         
     
-    def plot(self, startColor='red', endColor='blue', pathColor='green'):
+    def plot(self, showCircles=True, showPoses=True, startColor='red', endColor='blue', pathColor='green'):
         ax = plt.figure().add_subplot(projection='3d')
-        self.addToPlot(ax, startColor, endColor, pathColor)
+        self.addToPlot(ax, showCircles, showPoses, startColor, endColor, pathColor)
         ax.set_aspect('equal')
         ax.legend()
         plt.show()
