@@ -83,8 +83,7 @@ class Arc3D:
         self.centerToStart = self.startPoint - self.circleCenter
         self.r = norm(self.centerToStart)
         self.startNormal = - self.centerToStart / self.r
-        
-        
+                
         self.binormal = cross(self.startTangent, self.startNormal)
         self.rot = Rotation.from_rotvec(self.theta * self.binormal)
         self.centerToEnd = self.rot.apply(self.centerToStart)
