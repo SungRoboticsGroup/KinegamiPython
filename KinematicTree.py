@@ -27,8 +27,8 @@ class KinematicTree:
         self.r = root.r
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
-        self.Paths = [emptyCSC(self.r, root.proximalPosition, 
-                                       root.pathDirection)]
+        self.Paths = [emptyCSC(self.r, root.proximalPosition(), \
+                                       root.pathDirection())]
     
     # return its index
     def addJoint(self, parentIndex, NewJoint):
@@ -38,5 +38,5 @@ class KinematicTree:
         parent = self.Joints[parentIndex]
         self.Paths.append(shortestCSC(self.r, 
                     parent.distalPosition(), parent.pathDirection(), 
-                    NewJoint.proximalPosition(), newJoint.pathDirection()))
+                    NewJoint.proximalPosition(), NewJoint.pathDirection()))
         return len(self.Joints)-1

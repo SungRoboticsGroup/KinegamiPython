@@ -96,7 +96,7 @@ def shortestCSC(r, startPos, startDir, endPos, endDir):
 # empty path of radius r at position p in direction d
 def emptyCSC(r, p, d):
     d = d / norm(d)
-    return PathCSC(self, np.append(d,0), r, p, d, p, d, 1, 1)
+    return PathCSC(np.append(d,0), r, p, d, p, d, 1, 1)
 
 class PathCSC:
     """
@@ -137,12 +137,6 @@ class PathCSC:
         self.tMag = abs(tDirMag[3])   # S section length (along tUnit)
         self.t = self.tMag * self.tUnit
         
-        # Measure turning angles along each circle
-        self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
-                                unitNormalToBoth(self.startDir, self.tUnit)))
-        self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
-                                unitNormalToBoth(self.tUnit, self.endDir)))
-        
         """ 
         The Hota and Ghose vector construction solves for where the path 
         departs circle1 and enters circle2 given the common tangent direction
@@ -169,6 +163,18 @@ class PathCSC:
         # We also need a part of the error to enforce that tDir becomes unit.
         self.error = np.append(tError, norm(tDirMag[0:3]) - 1)
         
+        
+        # Measure turning angles along each circle
+        """
+        self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
+                                unitNormalToBoth(self.startDir, self.tUnit)))
+        self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
+                                unitNormalToBoth(self.tUnit, self.endDir)))
+        """
+        self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
+                                cross(self.startDir, self.w1)))
+        self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
+                                cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
     
     def __str__(self):
