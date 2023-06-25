@@ -9,7 +9,8 @@ import scipy
 from scipy.spatial.transform import Rotation
 from scipy.linalg import null_space
 from numpy.linalg import norm
-
+from spatialmath import SE3
+import matplotlib.pyplot as plt
 
 """ 
 Given 3D np vectors u and v, return a unit vector orthogonal to both, 
@@ -102,3 +103,21 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
+
+# add given reference frames to matplotlib figure ax with a 3d subplot
+# pose is a matrix of SE3() objects
+def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oColors='black'):
+    if Poses.shape == (4,4): # so it can plot a single frame
+        Poses = np.array([Poses])
+    
+    ux, vx, wx = Poses[:,0:3,0].T # frame xhat coordinates
+    uy, vy, wy = Poses[:,0:3,1].T # frame yhat coordinates
+    uz, vz, wz = Poses[:,0:3,2].T # frame zhat coordinates
+    ox, oy, oz = Poses[:,0:3,3].T # frame origin coordinates
+    
+    # https://matplotlib.org/stable/gallery/mplot3d/quiver3d.html
+    # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.quiver.html#matplotlib.axes.Axes.quiver
+    ax.quiver(ox, oy, oz, ux, vx, wx, length=axisLength, color=xColor, label='x') #plot xhat vectors
+    ax.quiver(ox, oy, oz, uy, vy, wy, length=axisLength, color=yColor, label='y') #plot yhat vectors
+    ax.quiver(ox, oy, oz, uz, vz, wz, length=axisLength, color=zColor, label='z') #plot zhat vectors
+    ax.scatter(ox, oy, oz, c=oColors)

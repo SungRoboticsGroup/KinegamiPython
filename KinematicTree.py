@@ -11,16 +11,14 @@ from dubinsPath import *
 
 class KinematicTree:
     """
-    Nodes are Joint objects in parent-relative coordinates
-    Edges are Dubins linkages from parent distal frame to child proximal frame
-    
-    Attributes:
+    Nodes are Joint objects
+    Edges are Dubins linkages from parent distal frame to child proximal frame    
+    Attributes (GLOBAL COORDINATES):
         r           tubular radius
-        root        root joint, in global coordinates
-        Joints      array of Joint objects (nodes) in parent coordinates
+        root        root joint
+        Joints      array of Joint objects (nodes)
         Parents     array of parent indices in self.Joints
-        Paths       array of CSC Dubins paths (in parent coordiantes)
-                    to each joint from its parent
+        Paths       array of CSC Dubins paths to each joint from its parent
     """
     def __init__(self, root):
         self.root = root
@@ -37,6 +35,28 @@ class KinematicTree:
         self.Parents.append(parentIndex)
         parent = self.Joints[parentIndex]
         self.Paths.append(shortestCSC(self.r, 
-                    parent.distalPosition(), parent.pathDirection(), 
+                    parent.distalPosition(), parent.pathDirection(),
                     NewJoint.proximalPosition(), NewJoint.pathDirection()))
         return len(self.Joints)-1
+    
+    
+    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+                  proximalColor='c', centerColor='m', distalColor='y',
+                  pathColor='black', showCircles=False):
+        for joint in self.Joints:
+            joint.addToPlot(ax, xColor, yColor, zColor, 
+                            proximalColor, centerColor, distalColor)
+        for path in self.Paths:
+            path.addToPlot(ax, showCircles, False, pathColor=pathColor)
+        
+    
+    def plot(self, xColor='r', yColor='b', zColor='g', 
+             proximalColor='c', centerColor='m', distalColor='y',
+             pathColor='black', showCircles=False):
+        ax = plt.figure().add_subplot(projection='3d')
+        self.addToPlot(ax, xColor, yColor, zColor, 
+                       proximalColor, centerColor, distalColor,
+                       pathColor, showCircles)
+        ax.set_aspect('equal')
+        ax.legend()
+        plt.show()

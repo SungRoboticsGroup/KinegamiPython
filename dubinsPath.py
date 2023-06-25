@@ -1,4 +1,4 @@
-# -*- cendPosing: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Created on Thu Jun 15 23:21:57 2023
 
@@ -51,16 +51,16 @@ direction-magnitude to ensure tDir becomes the common tangent between circles
 even if t=[0,0,0]) and args are the Dubins start/end frames and the signs 
 controlling the circle directions.
 """
-def pathErrorCSC(tDirMag, r, startPos, startDir, endPos, endDir, 
+def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                  circle1sign, circle2sign):
-    return PathCSC(tDirMag, r, startPos, startDir, endPos, endDir, 
+    return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                    circle1sign, circle2sign).error
 
-def shortestCSC(r, startPos, startDir, endPos, endDir):
+def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     startDir = startDir / norm(startDir)
     endDir = endDir / norm(endDir)
     
-    t0 = endPos - startPos
+    t0 = endPosition - startPosition
     if norm(t0)==0:
         t0 = r * startDir
     t0mag = norm(t0)
@@ -71,19 +71,19 @@ def shortestCSC(r, startPos, startDir, endPos, endDir):
     # solve for the path under all 4 sign combinations
     # solutions are values for tDirMag
     solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPos, startDir, endPos, endDir, 1, 1))
+                            (r, startPosition, startDir, endPosition, endDir, 1, 1))
     solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPos, startDir, endPos, endDir, 1, -1))
+                            (r, startPosition, startDir, endPosition, endDir, 1, -1))
     solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPos, startDir, endPos, endDir, -1, 1))
+                            (r, startPosition, startDir, endPosition, endDir, -1, 1))
     solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPos, startDir, endPos, endDir, -1, -1))
+                            (r, startPosition, startDir, endPosition, endDir, -1, -1))
     
     # Construct the paths found based on the solutions found for tDirMag
-    pathPP = PathCSC(solPP, r, startPos, startDir, endPos, endDir, 1, 1)
-    pathPM = PathCSC(solPM, r, startPos, startDir, endPos, endDir, 1, -1)
-    pathMP = PathCSC(solMP, r, startPos, startDir, endPos, endDir, -1, 1)
-    pathMM = PathCSC(solMM, r, startPos, startDir, endPos, endDir, -1, -1)
+    pathPP = PathCSC(solPP, r, startPosition, startDir, endPosition, endDir, 1, 1)
+    pathPM = PathCSC(solPM, r, startPosition, startDir, endPosition, endDir, 1, -1)
+    pathMP = PathCSC(solMP, r, startPosition, startDir, endPosition, endDir, -1, 1)
+    pathMM = PathCSC(solMM, r, startPosition, startDir, endPosition, endDir, -1, -1)
     
     paths = [pathPP, pathPM, pathMP, pathMM]
     errorNorms = np.array([norm(path.error) for path in paths])
@@ -108,21 +108,21 @@ class PathCSC:
     
     """
     r is the turn radius (a scalar)
-    startPos, startDir, endPos, endDir define the Dubins frames
+    startPosition, startDir, endPosition, endDir define the Dubins frames
                                        and are np arrays of shape (3,)
     tDirMag defines the t vector in direction-magnitude form, an np array of 
         shape (4,) with direction first 3 indices and magnitdue last
     circle1sign and circle2sign are each 1 or -1, and control the direction of 
-        the circles (relative to startPos, endPos) in the planes defined by
+        the circles (relative to startPosition, endPosition) in the planes defined by
         startDir/endDir and tDir.
     """
-    def __init__(self, tDirMag, r, startPos, startDir, endPos, endDir, 
+    def __init__(self, tDirMag, r, startPosition, startDir, endPosition, endDir, 
                  circle1sign, circle2sign):
         assert(r>=0 and abs(circle1sign)==1 and abs(circle2sign)==1)
         self.r = r
-        self.startPos = startPos
+        self.startPosition = startPosition
         self.startDir = startDir
-        self.endPos = endPos
+        self.endPosition = endPosition
         self.endDir = endDir
         self.circle1sign = circle1sign  # direction of circle 1 in plane of startDir, tUnit
         self.circle2sign = circle2sign  # direction of circle 2 in plane of endDir, tUnit
@@ -143,15 +143,15 @@ class PathCSC:
         tUnit. 
         """
         self.circleNormal1 = unitNormalToBoth(self.tUnit, self.startDir) # normal to circle 1
-        self.w1 = self.circle1sign * cross(self.startDir, self.circleNormal1) # unit vector from startPos to circle center
+        self.w1 = self.circle1sign * cross(self.startDir, self.circleNormal1) # unit vector from startPosition to circle center
         self.y1 = self.circle1sign * cross(self.tUnit, self.circleNormal1) # unit vector from circle 1 departure point to circle center
-        self.circleCenter1 = self.startPos + self.r * self.w1
+        self.circleCenter1 = self.startPosition + self.r * self.w1
         self.turn1end = self.circleCenter1 - self.r * self.y1
         
         self.circleNormal2 = unitNormalToBoth(self.tUnit, self.endDir) # normal to circle 2        
-        self.w2 = circle2sign * cross(self.endDir, self.circleNormal2) # unit vector from startPos to circle center
+        self.w2 = circle2sign * cross(self.endDir, self.circleNormal2) # unit vector from startPosition to circle center
         self.y2 = circle2sign * cross(self.tUnit, self.circleNormal2) # unit vector from circle 2 entering point to circle center
-        self.circleCenter2 = self.endPos + self.r * self.w2
+        self.circleCenter2 = self.endPosition + self.r * self.w2
         self.turn2start = self.circleCenter2 - self.r * self.y2
         
         """
@@ -184,23 +184,24 @@ class PathCSC:
         tDirMag = np.append(self.tUnit, self.tMag)
         return "PathCSC(tDirMag="+str(tDirMag)+\
                         ", r="+str(self.r)+\
-                        ", startPos="+str(self.startPos)+\
+                        ", startPosition="+str(self.startPosition)+\
                         ", startDir="+str(self.startDir)+\
-                        ", endPos="+str(self.endPos)+\
+                        ", endPosition="+str(self.endPosition)+\
                         ", endDir="+str(self.endDir)+\
                         ", circle1sign="+str(self.circle1sign)+\
                         ", circle2sign="+str(self.circle2sign)+")"
     
     # add to existing matplotlib axis ax
-    def addToPlot(self, ax, showCircles=True, showPoses=True, startColor='red', endColor='blue', pathColor='green'):
+    def addToPlot(self, ax, showCircles=True, showPoses=True, 
+                  startColor='red', endColor='blue', pathColor='green'):
         if showPoses:
             # start pose
-            x1,y1,z1 = self.startPos
+            x1,y1,z1 = self.startPosition
             u1,v1,w1 = self.startDir
             ax.quiver(x1,y1,z1,u1,v1,w1,
                       length=self.r, color=startColor, label='start')
             # end pose
-            x2,y2,z2 = self.endPos
+            x2,y2,z2 = self.endPosition
             u2,v2,w2 = self.endDir
             ax.quiver(x2,y2,z2,u2,v2,w2,
                       length=self.r, color=endColor, label='end')
@@ -217,7 +218,7 @@ class PathCSC:
         
         # path arcs (C components)
         a1x, a1y, a1z = Arc3D(self.circleCenter1, 
-                self.startPos, self.startDir, self.theta1).interpolate().T
+                self.startPosition, self.startDir, self.theta1).interpolate().T
         ax.plot(a1x, a1y, a1z, color = pathColor)
         a2x, a2y, a2z = Arc3D(self.circleCenter2, 
                 self.turn2start, self.tUnit, self.theta2).interpolate().T
