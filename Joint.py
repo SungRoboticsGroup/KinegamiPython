@@ -43,14 +43,23 @@ class Joint(ABC):
              proximalColor='c', centerColor='m', distalColor='y'):
         Poses = np.array([self.proximalPose(), self.distalPose(), self.Pose])
         oColors = np.array([proximalColor, distalColor, centerColor])
-        addPosesToPlot(Poses, ax, self.r, xColor, yColor, zColor, oColors)
+        plotHandles = addPosesToPlot(Poses, ax, self.r, 
+                                     xColor, yColor, zColor, oColors)
+        scale = 4
+        JointAxis = np.array([self.Pose.t - scale*self.r*self.pathDirection(),
+                              self.Pose.t + scale*self.r*self.pathDirection()])
+        ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
+                linestyle='--', color='silver')
+        return plotHandles
+        
     
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y'):
         ax = plt.figure().add_subplot(projection='3d')
-        self.addToPlot(ax, xColor, yColor, zColor)
+        plotHandles = self.addToPlot(ax, xColor, yColor, zColor)
+        xHats, yHats, zHats, origins = plotHandles
         ax.set_aspect('equal')
-        ax.legend()
+        ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
     
     
 class RevoluteJoint(Joint):

@@ -106,6 +106,7 @@ class Arc3D:
 
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
+# returns the plot handles for the xHats, yHats, zHats, origins
 def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oColors='black'):
     if Poses.shape == (4,4): # so it can plot a single frame
         Poses = np.array([Poses])
@@ -117,7 +118,9 @@ def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oC
     
     # https://matplotlib.org/stable/gallery/mplot3d/quiver3d.html
     # https://matplotlib.org/stable/api/_as_gen/matplotlib.axes.Axes.quiver.html#matplotlib.axes.Axes.quiver
-    ax.quiver(ox, oy, oz, ux, vx, wx, length=axisLength, color=xColor, label='x') #plot xhat vectors
-    ax.quiver(ox, oy, oz, uy, vy, wy, length=axisLength, color=yColor, label='y') #plot yhat vectors
-    ax.quiver(ox, oy, oz, uz, vz, wz, length=axisLength, color=zColor, label='z') #plot zhat vectors
-    ax.scatter(ox, oy, oz, c=oColors)
+    xHats = ax.quiver(ox, oy, oz, ux, vx, wx, length=axisLength, color=xColor) #plot xhat vectors
+    yHats = ax.quiver(ox, oy, oz, uy, vy, wy, length=axisLength, color=yColor) #plot yhat vectors
+    zHats = ax.quiver(ox, oy, oz, uz, vz, wz, length=axisLength, color=zColor) #plot zhat vectors
+    origins = ax.scatter(ox, oy, oz, c=oColors)
+    
+    return (xHats, yHats, zHats, origins)
