@@ -49,7 +49,8 @@ class KinematicTree:
                             proximalColor, centerColor, distalColor))
         
         for path in self.Paths:
-            path.addToPlot(ax, showCircles, False, pathColor=pathColor)
+            path.addToPlot(ax, showCircles, False, pathColor=pathColor, 
+                           cscBoundaryMarker=None)
         
         return np.array(jointPlotHandles)
         

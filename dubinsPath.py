@@ -193,7 +193,8 @@ class PathCSC:
     
     # add to existing matplotlib axis ax
     def addToPlot(self, ax, showCircles=True, showPoses=True, 
-                  startColor='red', endColor='blue', pathColor='green'):
+                  startColor='r', endColor='b', pathColor='g',
+                  cscBoundaryMarker='*'):
         if showPoses:
             # start pose
             x1,y1,z1 = self.startPosition
@@ -226,12 +227,15 @@ class PathCSC:
         
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
-        ax.plot(sx, sy, sz, color = pathColor, marker='*')
+        ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
         
     
-    def plot(self, showCircles=True, showPoses=True, startColor='red', endColor='blue', pathColor='green'):
+    def plot(self, showCircles=True, showPoses=True, 
+                  startColor='r', endColor='b', pathColor='g',
+                  cscBoundaryMarker='*'):
         ax = plt.figure().add_subplot(projection='3d')
-        self.addToPlot(ax, showCircles, showPoses, startColor, endColor, pathColor)
+        self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
+                       pathColor, cscBoundaryMarker)
         ax.set_aspect('equal')
         ax.legend()
         plt.show()
