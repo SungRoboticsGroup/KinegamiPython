@@ -124,3 +124,77 @@ def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oC
     origins = ax.scatter(ox, oy, oz, c=oColors)
     
     return (xHats, yHats, zHats, origins)
+
+
+class Ball:
+    # closed ball centered at self.c of radius self.r
+    def __init__(self, center, radius):
+        self.c = center
+        self.r = radius
+    
+    def containsPoint(self, point):
+        return norm(self.c - point) <= self.r
+
+
+"""
+I'm pretty sure the below algorithm works but I haven't proven correctness yet.
+The minimum bounding balls of balls is much more complicated for n balls, but
+fortunately we only need to deal with the n=2 case.
+For the n case, see:
+Fischer, Kaspar, and Bernd Gartner. "The smallest enclosing ball of balls: 
+combinatorial structure and algorithms." Proceedings of the nineteenth annual 
+symposium on Computational geometry. 2003.
+"""
+# minimum bounding ball of 2 balls
+def minBoundingBall(ball1, ball2):
+    if ball1.r <= ball2.r:
+        smaller, larger = ball1, ball2
+    else:
+        smaller, larger = ball2, ball1
+    
+    v = larger.c - smaller.c
+    if norm(v) <= larger.r: # if larger contains smaller
+        return larger
+    else:
+        vhat = v / norm(v)
+        p = smaller.c - smaller.r*vhat
+        q = larger.c + larger.r*vhat
+        pq = q-p
+        return Ball(p + pq/2, norm(pq)/2)
+
+def distanceBetweenBalls(ball1, ball2):
+    centerDistance = norm(ball2.c - ball1.c)
+    return max(0, centerDistance - ball1.r - ball2.r)
+
+
+"""
+Returns the common normal from line 1 to line 2, input in point-direction form.
+If the lines intersect, return the given value representing undefined.
+"""
+def commonNormal(point1, direction1, point2, direction2, undefined="undefined"):
+    direction1 = direction1 / norm(direction1)
+    direction2 = direction2 / norm(direction2)
+    
+    v12 = point2 - point1
+    
+    cp = cross(direction1, direction2)
+    if norm(cp) > 0:
+        nhat = cp / norm(cp)
+    else: # z axes are parallel
+        normalInPlane = cross(direction1, cross(v12, direction1))
+        if norm(normalInPlane) == 0: #axes are coincident
+            return undefined
+        else:
+            nhat = normalInPlane / norm(normalInPlane)
+            
+    projectionAlongNormal = dot(v12, nhat)
+    if projectionAlongNormal > 0: # nhat is oriented correctly
+        return nhat
+    elif projectionAlongNormal < 0: # nhat is opposite orientation
+        return -nhat
+    else: # axes instersect
+        return undefined
+    
+    
+    
+    

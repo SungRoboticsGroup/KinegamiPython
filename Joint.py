@@ -15,7 +15,7 @@ class Joint(ABC):
     Pose is an SE3 object where the Z axis is the joint axis
     length is from proximal to distal position (in relaxed configuration)
     """
-    def __init__(self, r, Pose, length):
+    def __init__(self, r, length, Pose):
         self.r = r
         self.Pose = Pose
         self.length = length
@@ -23,6 +23,12 @@ class Joint(ABC):
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self):
         pass
+    
+    def boundingRadius(self):
+        return self.length / 2
+    
+    def boundingBall(self):
+        return Ball(self.Pose.t, self.boundingRadius())
     
     def pathDirection(self):
         return self.Pose.R[:,self.pathIndex()]
@@ -38,6 +44,24 @@ class Joint(ABC):
     
     def distalPosition(self):
         return self.distalPose().t    
+    
+    # Frame should be an SE3 object
+    def transformIntoFrame(self, Frame):
+        self.Pose = self.Pose @ Frame
+    
+    def translateAlongZ(self, zChange):
+        self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
+    
+    def setXhatAboutZhat(self, xhatNew):
+        xhatNew = xhatNew / norm(xhatNew)
+        zhat = self.Pose.R[:,2]
+        yhatNew = cross(zhat, xhatNew)
+        Transform = np.eye(4)
+        Transform[0:3,0] = xhatNew.reshape((3,1))
+        Transform[0:3,1] = yhatNew.reshape((3,1))
+        Transform[0:3,2] = zhat.reshape((3,1))
+        Transform[0:3,3] = self.Pose.t.reshape((3,1))
+        self.Pose = SE3(Transform)
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y'):
@@ -61,26 +85,46 @@ class Joint(ABC):
         ax.set_aspect('equal')
         ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
     
+class OrigamiJoint(Joint):
+    def __init__(self, numSides, r, length, Pose):
+        self.numSides = numSides
+        self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
+        super().__init__(r, length, Pose)
+
     
-class RevoluteJoint(Joint):
-    def __init__(self, r, Pose, length):
-        super().__init__(r, Pose, length)
+class RevoluteJoint(OrigamiJoint):
+    """
+    Origami revolute joint with rotation range [-angleLimit/2, angleLimit/2]
+    and sinkLayers recursive sing gadget layers 
+    """
+    def __init__(self, numSides, r, angleLimit, sinkLayers, Pose):
+        polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
+        length = 2*r*np.sin(polygonInnerAngle)*np.tan(angleLimit/4) #2*delta from paper
+        super().__init__(numSides, r, length, Pose)
+        self.sinkLayers = sinkLayers
+        self.angleLimit = angleLimit
     
     def pathIndex(self):
         return 0 # xhat
     
+    def boundingRadius(self):
+        return self.length / 2
     
-class PrismaticJoint(Joint):
-    def __init__(self, r, Pose, length):
-        super().__init__(r, Pose, length)
     
+class PrismaticJoint(OrigamiJoint):
+    def __init__(self, numSides, r, reboRelaxedLength, reboNumLayers, coneAngle):
+        jointRelaxedLength = (1/2) * reboRelaxedLength * (2 + 1/np.sin(coneAngle))
+        super().__init__(numSides, r, jointRelaxedLength, Pose)
+        self.reboNumLayers = reboNumLayers
+        self.coneAngle = coneAngle
+        
     def pathIndex(self):
         return 2 # zhat
     
     
-class WayPoint(Joint):
-    def __init__(self, r, Pose):
-        super().__init__(r, Pose, 0)
+class WayPoint(OrigamiJoint):
+    def __init__(self, numSides, r, Pose):
+        super().__init__(numSides, r, Pose, 0)
     
     def pathIndex(self):
         return 2 # zhat
