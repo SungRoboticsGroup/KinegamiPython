@@ -10,23 +10,28 @@ import KinematicTree
 from KinematicTree import *
 
 r = 1
+numSides = 6
 
 # tree whose root is a waypoint at the global frame
-KT = KinematicTree(WayPoint(r, SE3())) 
+KT = KinematicTree(WayPoint(numSides, r, SE3())) 
 
 
 # SE3.Rx(np.pi/4)@SE3([1,1,0]) needs turns >theta to reach from the root
-pose1 = SE3.Rx(np.pi/4) @ SE3([3,1,0])
-i = KT.addJoint(0, RevoluteJoint(r, pose1, 1))
+i = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
+                                 SE3.Rx(np.pi/4) @ SE3([3,1,0])))
 
-pose2 = SE3.Ry(np.pi/4) @ SE3([1,-3,0])
-j = KT.addJoint(0, PrismaticJoint(r, pose2, 1))
+j = KT.addJoint(0, PrismaticJoint(numSides, r, reboRelaxedLength=3, 
+                    reboNumLayers=6, coneAngle=np.pi/4,
+                    Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
+                fixedPosition=False, fixedOrientation=False)
 
-pose3 = SE3.Rz(7*np.pi/6) @ SE3.Trans(4,4,4) @ pose2
-k = KT.addJoint(j, WayPoint(r, pose3))
+k = KT.addJoint(j, WayPoint(numSides, r, SE3.Rz(7*np.pi/6) @ SE3.Trans(4,4,4)), 
+                relative=True, fixedPosition=False, fixedOrientation=False)
+m = KT.addJoint(j, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
+                relative=True, fixedPosition=False, fixedOrientation=False)
 
-pose4 = SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3) @ pose2
-m = KT.addJoint(j, WayPoint(r, pose4))
+n = KT.addJoint(i, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
+                relative=True, fixedPosition=False, fixedOrientation=False)
 
 KT.plot()
 

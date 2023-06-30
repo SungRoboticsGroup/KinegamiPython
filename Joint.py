@@ -55,16 +55,18 @@ class Joint(ABC):
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
         zhat = self.Pose.R[:,2]
+        assert(dot(zhat, xhatNew)==0) #input must be orthogonal to Z axis
         yhatNew = cross(zhat, xhatNew)
         Transform = np.eye(4)
-        Transform[0:3,0] = xhatNew.reshape((3,1))
-        Transform[0:3,1] = yhatNew.reshape((3,1))
-        Transform[0:3,2] = zhat.reshape((3,1))
-        Transform[0:3,3] = self.Pose.t.reshape((3,1))
+        Transform[0:3,0] = xhatNew
+        Transform[0:3,1] = yhatNew
+        Transform[0:3,2] = zhat
+        Transform[0:3,3] = self.Pose.t
         self.Pose = SE3(Transform)
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
-             proximalColor='c', centerColor='m', distalColor='y'):
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor='black', showSphere=False):
         Poses = np.array([self.proximalPose(), self.distalPose(), self.Pose])
         oColors = np.array([proximalColor, distalColor, centerColor])
         plotHandles = addPosesToPlot(Poses, ax, self.r, 
@@ -74,6 +76,8 @@ class Joint(ABC):
                               self.Pose.t + scale*self.r*self.pathDirection()])
         ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
                 linestyle='--', color='silver')
+        if showSphere:
+            self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
         return plotHandles
         
     
@@ -112,7 +116,8 @@ class RevoluteJoint(OrigamiJoint):
     
     
 class PrismaticJoint(OrigamiJoint):
-    def __init__(self, numSides, r, reboRelaxedLength, reboNumLayers, coneAngle):
+    def __init__(self, numSides, r, reboRelaxedLength, reboNumLayers, 
+                 coneAngle, Pose):
         jointRelaxedLength = (1/2) * reboRelaxedLength * (2 + 1/np.sin(coneAngle))
         super().__init__(numSides, r, jointRelaxedLength, Pose)
         self.reboNumLayers = reboNumLayers
@@ -124,7 +129,7 @@ class PrismaticJoint(OrigamiJoint):
     
 class WayPoint(OrigamiJoint):
     def __init__(self, numSides, r, Pose):
-        super().__init__(numSides, r, Pose, 0)
+        super().__init__(numSides, r, 0, Pose)
     
     def pathIndex(self):
         return 2 # zhat

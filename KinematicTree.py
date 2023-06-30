@@ -69,10 +69,9 @@ class KinematicTree:
                 lb= 4*self.r + self.boundingBall.r + newJoint.boundingRadius(), 
                 ub= np.inf)
             
-            zChange = minimize(distanceFromParent, 0, 
-                               args=(newJoint.Pose, parent.Pose),
+            result = minimize(distanceFromParent, 0, 
                                constraints=(farEnough))
-            
+            zChange = result.x[0]
             newJoint.translateAlongZ(zChange)
         ######################################################################
         if not fixedOrientation:
@@ -88,20 +87,29 @@ class KinematicTree:
         self.Paths.append(shortestCSC(self.r, 
                     parent.distalPosition(), parent.pathDirection(),
                     newJoint.proximalPosition(), newJoint.pathDirection()))
+        
+        self.plot()
+        
         return len(self.Joints)-1
     
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  pathColor='black', showCircles=False):
+                  pathColor='black', showCircles=False, sphereColor='black',
+                  showSpheres=True):
         jointPlotHandles = []
         for joint in self.Joints:
             jointPlotHandles.append(joint.addToPlot(ax, xColor, yColor, zColor, 
-                            proximalColor, centerColor, distalColor))
+                                    proximalColor, centerColor, distalColor, 
+                                    sphereColor, showSpheres))
         
         for path in self.Paths:
             path.addToPlot(ax, showCircles, False, pathColor=pathColor, 
                            cscBoundaryMarker=None)
+        
+        if showSpheres:
+            self.boundingBall.addToPlot(ax, color=sphereColor, 
+                                        alpha=0.05, frame=True)
         
         return np.array(jointPlotHandles)
         

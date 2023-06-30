@@ -134,6 +134,22 @@ class Ball:
     
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
+    
+    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
+        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
+        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
+        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
+        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
+        z = self.c[2] + self.r*np.cos(v)
+        if frame:
+            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
+        else:
+            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
+    
+    def plot(self, color='black', alpha=1, frame=False):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, color, alpha, frame)
+        ax.set_aspect('equal')
 
 
 """
