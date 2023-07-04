@@ -9,7 +9,7 @@ import scipy
 from scipy.spatial.transform import Rotation
 from scipy.linalg import null_space
 from numpy.linalg import norm
-from spatialmath import SE3
+from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 
 """ 
@@ -210,7 +210,69 @@ def commonNormal(point1, direction1, point2, direction2, undefined="undefined"):
         return -nhat
     else: # axes instersect
         return undefined
+
+
+class Line:
+    def __init__(self, point, direction):
+        self.p = point
+        self.dhat = direction / norm(direction)
     
+class Plane:
+    def __init__(self, point, normal):
+        self.p = point
+        self.nhat = normal / norm(normal)
+        
+    # sign is + if the point is on the +nhat side, 0 if on plane, - otherwise
+    def signedDistanceToPoint(self, point, epsilon=0.00000001):
+        projectionLength = dot(self.p - point, self.nhat)
+        if abs(projectionLength) < epsilon: #for numerical stability
+            return 0
+        else:
+            return projectionLength
+    
+    # return 0 if point is on the plane, +1 if on the +nhat side, -1 otherwise
+    def sideOfPoint(self, point, epsilon=0.00000001):
+        return np.sign(self.signedDistanceToPoint(point, epsilon))
+    
+    def containsPoint(self, point, epsilon=0.00000001):
+        # plane contains point iff self.p - point is orthogonal to self.nhat
+        return self.sideOfPoint(point, epsilon) == 0
+    
+    def intersectionWithLine(self, line):
+        if dot(self.nhat, line.dhat)==0: 
+            # line is either on the plane or parallel to it
+            if self.containsPoint(line.p): 
+                # line is on the plane
+                return line
+            else: 
+                # line is parallel to the plane
+                return "empty"
+        else:
+            # line intersects the plane at a single point
+            # so the linear system constructed per wikipedia has point solution
+            # https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
+            # what they call cross(p01, p02) is just our nhat
+            t = dot(self.nhat, line.p - self.p) / dot(-line.dhat, self.nhat)
+            intersect = line.p + t * line.dhat
+            assert(self.containsPoint(intersect))
+            return intersect
+        
+    
+    """ 
+    Return an array containing the sides of the plane that the given line
+    intersects with: 0 for on the plane, 1 for +nhat side, -1 for -nhat side
+    """
+    def sidesOfLine(self, line):
+        intersection = self.intersectionWithLine(line)
+        if intersection == 'empty':
+            # line is parallel to plane, need to check on which side
+            return [self.sideOfPoint(line.p)]
+        elif type(intersection) == Line:
+            # whole line is on plane
+            return [0]
+        else:
+            # line crosses the plane at a point
+            return [-1,0,1]
     
     
     

@@ -71,9 +71,10 @@ class Joint(ABC):
         oColors = np.array([proximalColor, distalColor, centerColor])
         plotHandles = addPosesToPlot(Poses, ax, self.r, 
                                      xColor, yColor, zColor, oColors)
-        scale = 4
-        JointAxis = np.array([self.Pose.t - scale*self.r*self.pathDirection(),
-                              self.Pose.t + scale*self.r*self.pathDirection()])
+        scale = 5
+        zhat = self.Pose.R[:,2]
+        JointAxis = np.array([self.Pose.t - scale*self.r*zhat,
+                              self.Pose.t + scale*self.r*zhat])
         ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
                 linestyle='--', color='silver')
         if showSphere:
@@ -128,8 +129,10 @@ class PrismaticJoint(OrigamiJoint):
     
     
 class WayPoint(OrigamiJoint):
-    def __init__(self, numSides, r, Pose):
+    # path direction through a waypoint defaults to zhat
+    def __init__(self, numSides, r, Pose, pathIndex=2):
         super().__init__(numSides, r, 0, Pose)
+        self.pidx = pathIndex
     
     def pathIndex(self):
-        return 2 # zhat
+        return self.pidx
