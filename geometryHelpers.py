@@ -224,7 +224,7 @@ class Plane:
         
     # sign is + if the point is on the +nhat side, 0 if on plane, - otherwise
     def signedDistanceToPoint(self, point, epsilon=0.00000001):
-        projectionLength = dot(self.p - point, self.nhat)
+        projectionLength = dot(point - self.p, self.nhat)
         if abs(projectionLength) < epsilon: #for numerical stability
             return 0
         else:

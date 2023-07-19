@@ -10,17 +10,20 @@ import dubinsPath
 from dubinsPath import *
 import scipy
 from scipy.optimize import NonlinearConstraint, minimize
+import queue
 
 class KinematicTree:
     """
     Nodes are Joint objects
     Edges are Dubins linkages from parent distal frame to child proximal frame    
     Attributes (GLOBAL COORDINATES):
-        r           tubular radius
-        root        root joint
-        Joints      array of Joint objects (nodes)
-        Parents     array of parent indices in self.Joints
-        Paths       array of CSC Dubins paths to each joint from its parent
+        r               tubular radius
+        root            root joint
+        Joints          array of Joint objects (nodes)
+        Parents         array of parent indices in self.Joints
+        Paths           array of CSC Dubins paths to each joint from its parent
+        boundingBall    ball bounding all proximal, central, and distal origins
+        Children        array of arrays of child indices of each joint
     """
     def __init__(self, root):
         self.root = root
@@ -31,104 +34,7 @@ class KinematicTree:
         self.Paths = [emptyCSC(self.r, root.proximalPosition(), \
                                        root.pathDirection())]
         self.boundingBall = root.boundingBall()
-    
-    
-    # Algorithm 9
-    def addJointWithWayPoints(self, parentIndex, newJoint, relative=False):
-        assert(newJoint.r == self.r)
-        assert(newJoint.numSides == self.numSides)
-        parent = self.Joints[parentIndex]
-        if relative:
-            newJoint.transformIntoFrame(parent.Pose)
-        
-        """
-        This algorithm (Algorithm 9 from the 2022 Kinegami paper) 
-        avoids local self-intersection (Dubins paths with turning 
-        angles >pi) using Conjecture 7 from that paper.               
-        The central idea is to insert 1 or 2 intermediate waypoints 
-        that route the path from parallel planes >=4r apart, then place 
-        the new joint along its axis based on proximity to the last 
-        waypoint.
-        """
-        
-        """ First, construct the plane tangent to the bounding sphere
-        and normal to the parent's path direction. """
-        ppd = parent.pathDirection()
-        # point on bounding sphere in direction ppd
-        s = self.boundingBall.c + self.boundingBall.r * ppd 
-        tangentPlane = Plane(s, ppd)
-        
-        """ Construct a waypoint where this plane intersects the 
-        parent's path axis, with orientation matching parent. """
-        parentPathAxis = Line(parent.Pose.t, ppd)
-        originW1 = tangentPlane.intersectionWithLine(parentPathAxis)
-        # guaranteed to be a point because line is normal to plane
-        PoseW1 = SE3.Rt(parent.Pose.R, originW1)
-        ppidx = parent.pathIndex() #path direction matches parent's
-        W1 = WayPoint(self.numSides, self.r, PoseW1, ppidx)
-        w1idx = self.addJoint(parentIndex, W1)
-                                     
-        """ Translate the tangent plane forward by 4r + the new joint's 
-        bounding radius, to check if we need a second waypoint. """
-        njbr = newJoint.boundingRadius()
-        farPoint = s + ppd * (4*self.r + njbr)
-        farPlane = Plane(farPoint, ppd)
-        zhatNew = newJoint.Pose.R[:,2]
-        zAxisNew = Line(newJoint.Pose.t, zhatNew)
-        if farPlane.sidesOfLine(zAxisNew) == [-1]:
-            """ The new joint's Z axis is entirely on the near side of 
-            farPlane, so we need to route through a second waypoint. 
-            We construct this waypoint similarly to the above, but
-            constructing points and planes in the direction of the
-            new joint's Z rather than the parent's path direction,
-            and the waypoint path direction is also along zhatNew. """
-                                
-            s2 = self.boundingBall.c + self.boundingBall.r*zhatNew
-            tangentPlane2 = Plane(s2, zhatNew)
-            
-            # TODO: think through what this is doing and if it's
-            # correct given that I'm not using the separate [a b c] 
-            # frames
-            R_ParentToW2 = SO3.AngleAxis(np.pi/2, 
-                                cross(parent.pathDirection(), zhatNew))
-            RotationW2 = R_ParentToW2 @ parent.Pose.R
-            originW2 = tangentPlane2.intersectionWithLine(
-                                        Line(parent.Pose.t, zhatNew))
-            PoseW2 = SE3.Rt(RotationW2, originW2)
-            waypoint2 = WayPoint(self.numSides, self.r, PoseW2, ppidx)
-            w2idx = self.addJoint(w1idx, waypoint2)
-            
-            farPoint2 = s2 + (4*self.r + njbr)*zhatNew
-            farPlane2 = Plane(farPoint, zhatNew)
-            
-        else:
-            """
-            We only need 1 waypoint, but some values of waypoint 2 are used 
-            to place+orient newJoint, so we need to define those as the
-            corresponding values of waypoint 1
-            """
-            farPlane2 = farPlane 
-            originW2 = originW1
-            w2idx = w1idx
-        
-        def newPosition(zChange):
-            return newJoint.Pose.t + zChange*newJoint.Pose.R[:,2]
-        
-        def distanceFromW2(zChange):
-            return norm(originW2 - newPosition(zChange))
-        
-        def signedDistanceToFarPlane2(zChange):
-            return farPlane2.signedDistanceToPoint(newPosition(zChange))
-        
-        farEnough = NonlinearConstraint(signedDistanceToFarPlane2, 
-            lb= 0, ub= np.inf)
-        
-        result = minimize(distanceFromW2, 0, constraints=(farEnough))
-        zChange = result.x[0]
-        newJoint.translateAlongZ(zChange)
-        return self.addJoint(w2idx, newJoint)
-    
-
+        self.Children = [[]]
 
     """
     Returns the new Joint's index. 
@@ -161,47 +67,36 @@ class KinematicTree:
             newJoint.transformIntoFrame(parent.Pose)
         
         if guarantee: # Algorithm 9
-            return self.addJointWithWayPoints(parentIndex, newJoint)
+            #return self.addJointWithWayPoints(parentIndex, newJoint)
+            jointsToAdd = placeJointAndWayPoints(newJoint, parent,
+                                                          self.boundingBall)
+            i = parentIndex
+            for joint in jointsToAdd:
+                i = self.addJoint(parentIndex=i, newJoint=joint)
+            return i
         
-        
-        ######################################################################
         if not fixedPosition: #Algorithm 8
-            def newPosition(zChange):
-                return newJoint.Pose.t + zChange*newJoint.Pose.R[:,2]
+            newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
+                                                          self.boundingBall)
         
-            # optimization objective
-            def distanceFromParent(zChange): 
-                return norm(parent.Pose.t - newPosition(zChange))
-            
-            # for constraint 
-            def distanceBetweenBallCenters(zChange):
-                return norm(self.boundingBall.c - newPosition(zChange))    
-                
-            farEnough = NonlinearConstraint(distanceBetweenBallCenters, 
-                lb= 4*self.r + self.boundingBall.r + newJoint.boundingRadius(), 
-                ub= np.inf)
-                
-            result = minimize(distanceFromParent, 0, constraints=(farEnough))
-            zChange = result.x[0]
-            newJoint.translateAlongZ(zChange)
-        ######################################################################
         if not fixedOrientation:
             xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
                                 newJoint.Pose.t, newJoint.Pose.R[:,2],
                                 undefined=parent.Pose.R[:,0])
             newJoint.setXhatAboutZhat(xhat)
-        ######################################################################
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newJoint.boundingBall())
+        newIndex = len(self.Joints)
         self.Joints.append(newJoint)
+        self.Children[parentIndex].append(newIndex)
+        self.Children.append([])
         self.Parents.append(parentIndex)        
         self.Paths.append(shortestCSC(self.r, 
                     parent.distalPosition(), parent.pathDirection(),
                     newJoint.proximalPosition(), newJoint.pathDirection()))
-        
         self.plot()
         
-        return len(self.Joints)-1
+        return newIndex
     
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
@@ -240,3 +135,174 @@ class KinematicTree:
                   [r'$\^x$', r'$\^y$', r'$\^z$'])
         ax.set_aspect('equal')
         plt.show()
+    
+    
+    def isLeaf(self, jointIndex):
+        return len(Children[jointIndex]) == 0
+    
+    """ Returns list of indices of descendants of a given joint index, 
+        in breadth-first order"""
+    def DescendantsBreadthFirst(self, jointIndex):
+        descendants = Children[jointIndex].copy()
+        i = 0
+        while i < len(descendants):
+            d = descendants[i]
+            descendants += self.DescendantsBreadthFirst(d)
+            i += 0
+        return descendants
+    
+    """ Apply given transformation (SE3() object) to given joint (index), 
+        and to its descendants if recursive (defaults to False) """
+    def transformJoint(self, jointIndex, Transformation, recursive=False):
+        self.Joints[jointIndex].transformBy(Transformation)
+        if recursive:
+            for c in self.Children[jointIndex]:
+                self.transformJoint(c, Transformation, recursive=True)
+
+
+""" 
+Places joint along its joint axis, as close as possible to the given neighbor 
+joint while >= 4r from the given ball. Modifies and returns joint.
+ - joint is interpreted in global coordinates.
+ - neighbor is usually for a parent, but could be for a child if 
+   building a chain backwards (as in the 2022 paper).
+ - ball is intended to enclose other parts of the tree whose location is 
+   already fixed. If building a chain backwards, for example, this would be 
+   all the descendant joints.
+
+Placing the joint 4r outside of the bounding sphere is the approach from 
+Algorithm 8 from the 2022 Kinegami paper: it does NOT guarantee local 
+collision-avoidance, and does not insert waypoints.
+"""
+def moveJointNearNeighborBut4rFromBall(jointToPlace, neighbor, ball):
+    def newPosition(zChange):
+        return jointToPlace.Pose.t + zChange*jointToPlace.Pose.R[:,2]
+
+    # optimization objective
+    def distanceFromNeighbor(zChange): 
+        return norm(neighbor.Pose.t - newPosition(zChange))
+    
+    # for constraint 
+    def distanceBetweenBallCenters(zChange):
+        return norm(ball.c - newPosition(zChange))
+        
+    farEnough = NonlinearConstraint(distanceBetweenBallCenters, 
+        lb= 4*jointToPlace.r + ball.r + jointToPlace.boundingRadius(), 
+        ub= np.inf)
+        
+    result = minimize(distanceFromNeighbor, 0, constraints=(farEnough))
+    zChange = result.x[0]
+    jointToPlace.translateAlongZ(zChange)
+    return jointToPlace
+
+
+"""
+Places jointToPlace along its joint axis, as close as possible to the given 
+neighbor while inserting intermediate waypoints as appropriate to guarantee
+no local collision avoidance, based on the parallel-plane strategy from
+Conjecture 7 and Algorithm 9 of the 2022 Kinegami paper.
+- jointToPlace should be given in global coordinates.
+- neighbor is usually a parent, but could be for a child if 
+  building a chain backwards (as in the 2022 paper).
+- ball is intended to enclose other parts of the tree whose location is 
+  already fixed. If building a chain backwards, for example, this would be 
+  all the descendant joints.
+- backwards (optional, defaults to False) specifies whether we're inserting
+  joints backwards (i.e., neighbor is jointToPlace's child) or forwards 
+  (neighbor is jointToPlace's parent). If backwards, we need to take the 
+  neighbor path direction and jointToPlace z direction in reverse.
+Returns the list of joints to insert, including any intermediate waypoints.
+"""
+def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
+    """
+    This algorithm (Algorithm 9 from the 2022 Kinegami paper) 
+    avoids local self-intersection (Dubins paths with turning angles >pi) 
+    using Conjecture 7 from that paper.               
+    The central idea is to insert 1 or 2 intermediate waypoints 
+    that route the path from parallel planes >=4r apart, then place 
+    the new joint along its axis based on proximity to the last 
+    waypoint.
+    """    
+    toReturn = []
+    """ First, construct the plane tangent to the bounding sphere
+    and normal to the neighbors's path direction. """
+    if backwards:
+        nhat1 = -neighbor.pathDirection()
+    else:
+        nhat1 = neighbor.pathDirection()
+    # point on bounding sphere in direction nhat1
+    s1 = ball.c + ball.r * nhat1
+    tangentPlane1 = Plane(s1, nhat1)
+    
+    """ Construct a waypoint where this plane intersects the 
+    neighbor's path axis, with orientation matching neighbor. """
+    neighborPathAxis = Line(neighbor.Pose.t, nhat1)
+    originW1 = tangentPlane1.intersectionWithLine(neighborPathAxis)
+    # guaranteed to be a point because line is normal to plane
+    PoseW1 = SE3.Rt(neighbor.Pose.R, originW1)
+    W1 = WayPoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
+                  neighbor.pathIndex())
+    toReturn.append(W1)
+    
+    """ Translate the tangent plane forward by 4r + the new joint's 
+    bounding radius, to check if we need a second waypoint. """
+    farPoint1 = s1 + nhat1 * (4*jointToPlace.r + jointToPlace.boundingRadius())
+    farPlane1 = Plane(farPoint1, nhat1)
+    zhatNew = jointToPlace.Pose.R[:,2]
+    zAxisNew = Line(jointToPlace.Pose.t, zhatNew)
+    if farPlane1.sidesOfLine(zAxisNew) == [-1]:
+        """ The new joint's Z axis is entirely on the near side of 
+        farPlane, so we need to route through a second waypoint. 
+        We construct this waypoint similarly to the above, but
+        constructing points and planes in the direction of the
+        new joint's Z rather than the neighbor's path direction,
+        and the waypoint path direction is also along zhatNew. """
+        if backward:
+            nhat2 = -zhatNew
+        else:
+            nhat2 = zhatNew
+                
+        s2 = ball.c + ball.r*nhat2
+        tangentPlane2 = Plane(s2, nhat2)
+        
+        # TODO: think through what this is doing and if it's correct given 
+        # that I'm not using the separate [a b c] frames
+        R_NeighborToW2 = SO3.AngleAxis(np.pi/2, cross(nhat1, nhat2))
+        RotationW2 = R_NeighborToW2 @ neighbor.Pose.R
+        originW2 = tangentPlane2.intersectionWithLine(
+                                    Line(neighbor.Pose.t, nhat2))
+        PoseW2 = SE3.Rt(RotationW2, originW2)
+        W2 = WayPoint(jointToPlace.numSides, jointToPlace.r, PoseW2, 
+                      neighbor.pathIndex())
+        toReturn.append(W2)
+        
+        farPoint2 = s2 + nhat2 * (4*jointToPlace.r +\
+                                  jointToPlace.boundingRadius())
+        farPlane2 = Plane(farPoint2, nhat2)
+        
+    else:
+        """
+        We only need 1 waypoint, but some values of waypoint 2 are used 
+        to place+orient jointToPlace, so we need to define those as the
+        corresponding values of waypoint 1
+        """
+        farPlane2 = farPlane1 
+        originW2 = originW1
+    
+    def newPosition(zChange):
+        return jointToPlace.Pose.t + zChange*jointToPlace.Pose.R[:,2]
+    
+    def distanceFromW2(zChange):
+        return norm(originW2 - newPosition(zChange))
+    
+    def signedDistanceToFarPlane2(zChange):
+        return farPlane2.signedDistanceToPoint(newPosition(zChange))
+    
+    beyondFarPlane2 = NonlinearConstraint(signedDistanceToFarPlane2, 
+        lb= 0, ub= np.inf)
+    
+    result = minimize(distanceFromW2, 0, constraints=(beyondFarPlane2))
+    zChange = result.x[0]
+    jointToPlace.translateAlongZ(zChange)
+    toReturn.append(jointToPlace)
+    return toReturn
