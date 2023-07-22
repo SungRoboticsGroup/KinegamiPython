@@ -238,8 +238,8 @@ class Plane:
         # plane contains point iff self.p - point is orthogonal to self.nhat
         return self.sideOfPoint(point, epsilon) == 0
     
-    def intersectionWithLine(self, line):
-        if dot(self.nhat, line.dhat)==0: 
+    def intersectionWithLine(self, line, epsilon=0.00000001):
+        if abs(dot(self.nhat, line.dhat)) < epsilon: 
             # line is either on the plane or parallel to it
             if self.containsPoint(line.p): 
                 # line is on the plane
@@ -274,5 +274,4 @@ class Plane:
             # line crosses the plane at a point
             return [-1,0,1]
     
-    
-    
+

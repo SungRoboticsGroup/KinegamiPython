@@ -34,6 +34,8 @@ class KinematicTree:
         self.Paths = [emptyCSC(self.r, root.proximalPosition(), \
                                        root.pathDirection())]
         self.boundingBall = root.boundingBall()
+        if self.boundingBall.r < self.r:
+            self.boundingBall = Ball(self.root.Pose.t, self.r)
         self.Children = [[]]
 
     """
@@ -223,6 +225,8 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     the new joint along its axis based on proximity to the last 
     waypoint.
     """    
+    assert(neighbor.r == jointToPlace.r)
+    r = jointToPlace.r
     toReturn = []
     """ First, construct the plane tangent to the bounding sphere
     and normal to the neighbors's path direction. """
@@ -257,7 +261,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         constructing points and planes in the direction of the
         new joint's Z rather than the neighbor's path direction,
         and the waypoint path direction is also along zhatNew. """
-        if backward:
+        if backwards:
             nhat2 = -zhatNew
         else:
             nhat2 = zhatNew
@@ -268,16 +272,14 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         # TODO: think through what this is doing and if it's correct given 
         # that I'm not using the separate [a b c] frames
         R_NeighborToW2 = SO3.AngleAxis(np.pi/2, cross(nhat1, nhat2))
-        RotationW2 = R_NeighborToW2 @ neighbor.Pose.R
+        RotationW2 = R_NeighborToW2.R @ neighbor.Pose.R
         originW2 = tangentPlane2.intersectionWithLine(
-                                    Line(neighbor.Pose.t, nhat2))
+                                        Line(originW1 + r*nhat1, nhat2))
         PoseW2 = SE3.Rt(RotationW2, originW2)
-        W2 = WayPoint(jointToPlace.numSides, jointToPlace.r, PoseW2, 
-                      neighbor.pathIndex())
+        W2 = WayPoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
         toReturn.append(W2)
         
-        farPoint2 = s2 + nhat2 * (4*jointToPlace.r +\
-                                  jointToPlace.boundingRadius())
+        farPoint2 = s2 + nhat2 * (4*r + jointToPlace.boundingRadius())
         farPlane2 = Plane(farPoint2, nhat2)
         
     else:

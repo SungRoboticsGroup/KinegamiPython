@@ -36,12 +36,16 @@ n = KT.addJoint(i, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
 """
 
 
-KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
+c = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
+                             SE3.Rx(np.pi/2) @ SE3([0,-2,0])), guarantee=True)
+
+"""
+a = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
                              SE3.Ry(np.pi/4) @ SE3([-2,-2,0])), guarantee=True)
 
 
-
 # SE3.Rx(np.pi/4)@SE3([1,1,0]) needs turns >theta to reach from the root
-KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
+b = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
                              SE3.Rx(np.pi/4) @ SE3([1,1,0])), guarantee=True)
 
+"""
