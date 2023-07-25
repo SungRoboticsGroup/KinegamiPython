@@ -66,7 +66,7 @@ class KinematicTree:
         assert(newJoint.numSides == self.numSides)
         parent = self.Joints[parentIndex]
         if relative:
-            newJoint.transformIntoFrame(parent.Pose)
+            newJoint.transformFromFrame(parent.Pose)
         
         if guarantee: # Algorithm 9
             #return self.addJointWithWayPoints(parentIndex, newJoint)

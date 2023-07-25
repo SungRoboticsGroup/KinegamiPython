@@ -46,7 +46,7 @@ class Joint(ABC):
         return self.distalPose().t    
     
     # Frame should be an SE3 object
-    def transformIntoFrame(self, Frame):
+    def transformFromFrame(self, Frame):
         self.Pose = self.Pose @ Frame
     
     def translateAlongZ(self, zChange):
