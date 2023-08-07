@@ -100,6 +100,34 @@ class KinematicTree:
         
         return newIndex
     
+    """
+    IN PROCESS OF IMPLEMENTING, COMMENTING OUT FOR THIS COMMIT
+    
+    Input:
+    childrenToPlace is an array of joints
+    parentIndex is the index of the parent joint
+    """
+    """
+    def addChildrenWithWayPoints(childrenToPlace, parentIndex):
+        parent = self.Joints[parentIndex]
+        
+        # WAYPOINT 1 (common to all children)
+        nhat1 = parent.pathDirection()
+        # point on bounding sphere in direction nhat1
+        s1 = ball.c + ball.r * nhat1
+        tangentPlane1 = Plane(s1, nhat1)
+        # Construct a waypoint where this plane intersects the 
+        # parent's path axis, with orientation matching parent.
+        parentPathAxis = Line(parent.Pose.t, nhat1)
+        originW1 = tangentPlane1.intersectionWithLine(parentPathAxis)
+        # guaranteed to be a point because line is normal to plane
+        PoseW1 = SE3.Rt(parent.Pose.R, originW1)
+        W1 = WayPoint(jointToPlace.numSides, jointToPlace.r, 
+                                   PoseW1, parent.pathIndex())
+        # don't add in W1 yet because don't want to update bounding sphere?
+    """            
+        
+    
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
@@ -308,3 +336,4 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     jointToPlace.translateAlongZ(zChange)
     toReturn.append(jointToPlace)
     return toReturn
+    
