@@ -50,9 +50,21 @@ class TubularPattern(ABC):
         relative = np.vstack((proximalBaseX, nzeros)).T
         self.proximalBase = self.proximalMarker + relative
         self.width = self.width = self.baseSideLength * self.numSides
+        
+        """
+        Abstract instance attributes (ensure all subclass constructors define):
+            self.Vertices
+            self.distalBase
+            self.MountainEdges
+            self.ValleyEdges
+            self.patternHeight
+            self.distalMarker
+        (Python ABC does not support abstract instance attributes directly)
+        """
     
-    def wrapVertices(self):
+    def wrap(self):
         self.Vertices[:,0] %= self.width
+        self.distalMarker[0,0] %= self.width
     
     def MountainFolds(self):
         return self.Vertices[self.MountainEdges]
@@ -69,8 +81,8 @@ class TubularPattern(ABC):
         doc.layers.add(name="Valley", color=1)
         doc.layers.add(name="Boundary", color=2)
         
-        ymin = np.min(self.Vertices[:,1])
-        ymax = np.max(self.Vertices[:,1])
+        ymin = self.proximalMarker[0,1]
+        ymax = ymin + self.patternHeight
         xmin = 0
         xmax = self.width
         
@@ -102,16 +114,15 @@ class TubularPattern(ABC):
 class Tube(TubularPattern):
     def __init__(self, numSides, r, height, proximalMarker=[0,0]):
         super().__init__(numSides, r, proximalMarker)
-        self.height = height
-        self.distalBase = self.proximalBase + [0, self.height]
+        self.patternHeight = height
+        self.distalBase = self.proximalBase + [0, self.patternHeight]
         self.Vertices = np.vstack((self.proximalBase, self.distalBase))
         proxInds = np.arange(self.numSides)
         distInds = self.numSides + proxInds
         self.MountainEdges = np.vstack((proxInds, distInds)).T
         self.ValleyEdges = np.array([[]]) # What shape to give this???
-        self.distalMarker = self.proximalMarker + [0, self.height]
-        self.distalMarker[0] %= self.width
-        self.wrapVertices()
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        self.wrap()
         
         
 class Twist(TubularPattern):
@@ -150,7 +161,6 @@ class Twist(TubularPattern):
                             self.baseSideLength) + baseXshift
         self.distalMarker = self.proximalMarker + \
                             np.array([referenceXshift, patternHeight])
-        self.distalMarker[0] %= self.width
-        self.wrapVertices()
+        self.wrap()
         
     
