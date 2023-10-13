@@ -37,18 +37,22 @@ from abc import ABC, abstractmethod
 import ezdxf
 
 class TubularPattern(ABC):
-    def __init__(self, numSides, r, origin=np.zeros((1,2))):
+    def __init__(self, numSides, r, proximalMarker=[0,0]):
         assert(r>0)
         assert(numSides%2 == 0)
         self.numSides = numSides                                   #n_s
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides) #\delta
         self.r = r
         self.baseSideLength = 2*r*np.cos(self.polygonInnerAngle)
-        self.origin = origin
-        proximalBaseX = np.arange(self.numSides) #+ 0.5
+        self.proximalMarker = np.array(proximalMarker).reshape((1,2))
+        proximalBaseX = np.arange(self.numSides) + 0.5
         nzeros = np.zeros(self.numSides)
         relative = np.vstack((proximalBaseX, nzeros)).T
-        self.proximalBase = self.origin + relative
+        self.proximalBase = self.proximalMarker + relative
+        self.width = self.width = self.baseSideLength * self.numSides
+    
+    def wrapVertices(self):
+        self.Vertices[:,0] %= self.width
     
     def MountainFolds(self):
         return self.Vertices[self.MountainEdges]
@@ -67,15 +71,13 @@ class TubularPattern(ABC):
         
         ymin = np.min(self.Vertices[:,1])
         ymax = np.max(self.Vertices[:,1])
-        xmin = self.origin[0,0]
-        xmax = xmin + self.numSides*self.baseSideLength
+        xmin = 0
+        xmax = self.width
         
         msp.add_line((xmin,ymin),(xmin,ymax), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmin,ymin),(xmax,ymin), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmax,ymax),(xmin,ymax), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmax,ymax),(xmax,ymin), dxfattribs={"layer": "Boundary"})
-        
-        width = self.baseSideLength * self.numSides
         
         if self.MountainEdges.shape[1] > 0:  
             MF = self.MountainFolds()
@@ -83,18 +85,23 @@ class TubularPattern(ABC):
             for seg in MF[np.logical_not(WrapAround)]:
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
             for seg in MF[WrapAround]:
-                seg[seg[:,0] <= self.baseSideLength, 0] += width
+                seg[seg[:,0] <= self.baseSideLength, 0] += self.width
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
         
         if self.ValleyEdges.shape[1] > 0:
-            for seg in self.ValleyFolds():
+            VF = self.ValleyFolds()
+            WrapAround = abs(VF[:,1,0]-VF[:,0,0]) > self.baseSideLength
+            for seg in VF[np.logical_not(WrapAround)]:
+                msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
+            for seg in VF[WrapAround]:
+                seg[seg[:,0] <= self.baseSideLength, 0] += self.width
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
         
         doc.saveas(name+".dxf")
 
 class Tube(TubularPattern):
-    def __init__(self, numSides, r, height, origin=np.zeros((1,2))):
-        super().__init__(numSides, r, origin)
+    def __init__(self, numSides, r, height, proximalMarker=[0,0]):
+        super().__init__(numSides, r, proximalMarker)
         self.height = height
         self.distalBase = self.proximalBase + [0, self.height]
         self.Vertices = np.vstack((self.proximalBase, self.distalBase))
@@ -102,26 +109,30 @@ class Tube(TubularPattern):
         distInds = self.numSides + proxInds
         self.MountainEdges = np.vstack((proxInds, distInds)).T
         self.ValleyEdges = np.array([[]]) # What shape to give this???
-            
+        self.distalMarker = self.proximalMarker + [0, self.height]
+        self.distalMarker[0] %= self.width
+        self.wrapVertices()
+        
+        
 class Twist(TubularPattern):
     def __init__(self, numSides, r, twistAngle, moduleHeight, 
-                 origin=np.zeros((1,2))):
-        super().__init__(numSides, r, origin)
-        twistAngle = twistAngle % 2*np.pi
+                 proximalMarker=[0,0]):
+        super().__init__(numSides, r, proximalMarker)
+        twistAngle = twistAngle % (2*np.pi)
         """ 
         Twist in increments of 2pi/numSides is be accomplished by rotating the
         next modules itself (shift crease pattern columns modularly).
         So the twist module only needs to instantiate the remaining portion:
         """
         baseTwist = twistAngle % (2*np.pi / self.numSides) #\overline{\alpha}
-        xShift = (self.baseSideLength/2) * ( 1 - np.cos(baseTwist) + 
+        baseXshift = (self.baseSideLength/2) * ( 1 - np.cos(baseTwist) + 
               (1/np.tan(np.pi/numSides))*np.sin(baseTwist) )
         patternHeight = np.sqrt(moduleHeight**2 + 
                         (self.baseSideLength * 
                          (1/np.sin(np.pi/numSides)) *
                          np.sin((np.pi/numSides) - (baseTwist/2)) *
                          np.sin(baseTwist/2) )**2 )
-        self.distalBase = self.proximalBase + [xShift, patternHeight]
+        self.distalBase = self.proximalBase + [baseXshift, patternHeight]
         self.distalBase[:,0] %= numSides * self.baseSideLength
         self.Vertices = np.vstack((self.proximalBase, self.distalBase))
         
@@ -135,5 +146,11 @@ class Twist(TubularPattern):
         distalValleys = np.vstack((distInds, np.roll(distInds,1))).T
         self.ValleyEdges = np.vstack((proximalValleys,distalValleys))
         
+        referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) * \
+                            self.baseSideLength) + baseXshift
+        self.distalMarker = self.proximalMarker + \
+                            np.array([referenceXshift, patternHeight])
+        self.distalMarker[0] %= self.width
+        self.wrapVertices()
         
     
