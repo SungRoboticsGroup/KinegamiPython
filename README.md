@@ -10,5 +10,4 @@ We developed this code using python 3.9 and the following libraries:
 - scipy
 - matplotlib
 - roboticstoolbox-python
-
-
+- ezdxf[draw] (installed as pip3 install ezdxf[draw], see https://ezdxf.mozman.at/docs/setup.html)
