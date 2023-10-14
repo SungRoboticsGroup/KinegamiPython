@@ -22,55 +22,104 @@ We store the pattern as a graph where vertices are points and edges are
 partitioned into mountain and valley lists (each encoded by vertex pairs).
 Since edges are within their panel of width baseSideLength, we can detect
 edges with ostensible x component > baseSideLength as those that wrap around.
-?????????????????????????
-When outputting to a dxf pattern, we can find all edges in x range
-[0, baseSideLength] with ???????????????????????
 
-
-Can I use integer coordinates for the proximal base, and then just scale
-based on r at the end????
-Should we just manually maintain a marking of which edges are wraparound?
-Or manually construct the duplicate at the end?
+TODO: figure out how to get the DXF export pattern to duplicate the boundary
+panel on each side
 """
 import numpy as np
-from abc import ABC, abstractmethod
 import ezdxf
 
-class TubularPattern(ABC):
+class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0,0]):
         assert(r>0)
         assert(numSides%2 == 0)
         self.numSides = numSides                                   #n_s
-        self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides) #\delta
         self.r = r
+        self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides) #\delta
         self.baseSideLength = 2*r*np.cos(self.polygonInnerAngle)
+        self.width = self.baseSideLength * self.numSides
+        
         self.proximalMarker = np.array(proximalMarker).reshape((1,2))
         proximalBaseX = np.arange(self.numSides) + 0.5
         nzeros = np.zeros(self.numSides)
         relative = np.vstack((proximalBaseX, nzeros)).T
-        self.proximalBase = self.proximalMarker + relative
-        self.width = self.width = self.baseSideLength * self.numSides
+        proximalBase = self.proximalMarker + relative
+        self.proximalBaseIndices = np.arange(self.numSides)
         
+              
         """
-        Abstract instance attributes (ensure all subclass constructors define):
-            self.Vertices
-            self.distalBase
-            self.MountainEdges
-            self.ValleyEdges
-            self.patternHeight
-            self.distalMarker
-        (Python ABC does not support abstract instance attributes directly)
+        Instance variables initialized here for an empty pattern:
+        SHOULD ALL BE RESET OR ADJUSTED IN SUBCLASS CONSTRUCTORS
         """
+        self.Vertices = proximalBase
+        self.distalBaseIndices = self.proximalBaseIndices
+        self.MountainEdges = np.empty(shape=(0,2), dtype=np.int32)
+        self.ValleyEdges = np.empty(shape=(0,2), dtype=np.int32)
+        self.patternHeight = 0
+        self.distalMarker = self.proximalMarker
     
-    def wrap(self):
+    def hasMountainFolds(self):
+        return self.MountainEdges.shape[0] > 0
+    
+    def hasValleyFolds(self):
+        return self.ValleyEdges.shape[0] > 0
+    
+    def isEmpty(self):
+        return self.hasMountainFolds() or self.hasValleyFolds()
+    
+    def wrapToWidth(self):
         self.Vertices[:,0] %= self.width
+        self.proximalMarker[0,0] %= self.width
         self.distalMarker[0,0] %= self.width
+            
+    def shift(self, v):
+        self.Vertices += v
+        self.proximalMarker = self.proximalMarker + v
+        self.distalMarker = self.distalMarker + v
+        self.wrapToWidth()
+    
+    def proximalBase(self):
+        return self.Vertices[self.proximalBaseIndices,:]
+    
+    def distalBase(self):
+        return self.Vertices[self.distalBaseIndices,:]
+    
+    """ index to roll other.proximalBase() by to align with self.distalBase(),
+        or None if this is impossible """
+    def rollToAlign(self, other : 'TubularPattern'):
+        for i in range(self.numSides):
+            if np.array_equal(self.distalBase(), 
+                        np.roll(other.proximalBase(), i, axis=0)):
+                return i
+        return None
+    
+    def append(self, other : 'TubularPattern'):
+        assert(other.numSides == self.numSides)
+        assert(other.r == self.r)
+        assert(self.MountainEdges.dtype.kind == 'i')
+        assert(self.ValleyEdges.dtype.kind == 'i')
+        other.shift(self.distalMarker - other.proximalMarker)
+        currentNumVertices = self.Vertices.shape[0]
+        mountainEdgesToAdd = other.MountainEdges + currentNumVertices
+        self.MountainEdges = np.vstack((self.MountainEdges,mountainEdgesToAdd))
+        valleyEdgesToAdd = other.ValleyEdges + currentNumVertices
+        self.ValleyEdges = np.vstack((self.ValleyEdges, valleyEdgesToAdd))
+        self.distalBaseIndices = other.distalBaseIndices + currentNumVertices
+        self.Vertices = np.vstack((self.Vertices, other.Vertices))
+        self.patternHeight += other.patternHeight
+        self.distalMarker = other.distalMarker
     
     def MountainFolds(self):
-        return self.Vertices[self.MountainEdges]
+        if (self.hasMountainFolds()):
+            return self.Vertices[self.MountainEdges]
+        else:
+            return np.array([]).reshape((0,2,2))
     
     def ValleyFolds(self):
-        return self.Vertices[self.ValleyEdges]
+        if (self.hasValleyFolds()):
+            return self.Vertices[self.ValleyEdges]
+        else:
+            return np.array([]).reshape((0,2,2))
     
     def saveDXF(self, name):
         doc = ezdxf.new()
@@ -91,21 +140,21 @@ class TubularPattern(ABC):
         msp.add_line((xmax,ymax),(xmin,ymax), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmax,ymax),(xmax,ymin), dxfattribs={"layer": "Boundary"})
         
-        if self.MountainEdges.shape[1] > 0:  
+        if self.hasMountainFolds():
             MF = self.MountainFolds()
-            WrapAround = abs(MF[:,1,0]-MF[:,0,0]) > self.baseSideLength
-            for seg in MF[np.logical_not(WrapAround)]:
+            WrappingEdges = abs(MF[:,1,0]-MF[:,0,0]) > self.baseSideLength
+            for seg in MF[np.logical_not(WrappingEdges)]:
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
-            for seg in MF[WrapAround]:
+            for seg in MF[WrappingEdges]:
                 seg[seg[:,0] <= self.baseSideLength, 0] += self.width
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
         
-        if self.ValleyEdges.shape[1] > 0:
+        if self.hasValleyFolds():
             VF = self.ValleyFolds()
-            WrapAround = abs(VF[:,1,0]-VF[:,0,0]) > self.baseSideLength
-            for seg in VF[np.logical_not(WrapAround)]:
+            WrappingEdges = abs(VF[:,1,0]-VF[:,0,0]) > self.baseSideLength
+            for seg in VF[np.logical_not(WrappingEdges)]:
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
-            for seg in VF[WrapAround]:
+            for seg in VF[WrappingEdges]:
                 seg[seg[:,0] <= self.baseSideLength, 0] += self.width
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
         
@@ -115,14 +164,14 @@ class Tube(TubularPattern):
     def __init__(self, numSides, r, height, proximalMarker=[0,0]):
         super().__init__(numSides, r, proximalMarker)
         self.patternHeight = height
-        self.distalBase = self.proximalBase + [0, self.patternHeight]
-        self.Vertices = np.vstack((self.proximalBase, self.distalBase))
-        proxInds = np.arange(self.numSides)
-        distInds = self.numSides + proxInds
-        self.MountainEdges = np.vstack((proxInds, distInds)).T
-        self.ValleyEdges = np.array([[]]) # What shape to give this???
+        proximalBase = self.Vertices
+        distalBase = proximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((proximalBase, distalBase))
+        self.distalBaseIndices = self.numSides + self.proximalBaseIndices
+        self.MountainEdges = np.vstack((self.proximalBaseIndices, 
+                                        self.distalBaseIndices)).T
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
-        self.wrap()
+        self.wrapToWidth()
         
         
 class Twist(TubularPattern):
@@ -138,29 +187,45 @@ class Twist(TubularPattern):
         baseTwist = twistAngle % (2*np.pi / self.numSides) #\overline{\alpha}
         baseXshift = (self.baseSideLength/2) * ( 1 - np.cos(baseTwist) + 
               (1/np.tan(np.pi/numSides))*np.sin(baseTwist) )
-        patternHeight = np.sqrt(moduleHeight**2 + 
+        self.patternHeight = np.sqrt(moduleHeight**2 + 
                         (self.baseSideLength * 
                          (1/np.sin(np.pi/numSides)) *
                          np.sin((np.pi/numSides) - (baseTwist/2)) *
                          np.sin(baseTwist/2) )**2 )
-        self.distalBase = self.proximalBase + [baseXshift, patternHeight]
-        self.distalBase[:,0] %= numSides * self.baseSideLength
-        self.Vertices = np.vstack((self.proximalBase, self.distalBase))
+        proximalBase = self.Vertices
+        distalBase = proximalBase + [baseXshift, self.patternHeight]
+        distalBase[:,0] %= self.width
+        self.Vertices = np.vstack((proximalBase, distalBase))
         
-        proxInds = np.arange(self.numSides)
-        distInds = self.numSides + proxInds
-        rightDiagonals = np.vstack((proxInds, distInds)).T
-        leftDiagonals = np.vstack((proxInds, np.roll(distInds,1))).T
+        self.distalBaseIndices = self.numSides + self.proximalBaseIndices
+        rightDiagonals = np.vstack((self.proximalBaseIndices, 
+                                    self.distalBaseIndices)).T
+        leftDiagonals = np.vstack((self.proximalBaseIndices, 
+                                   np.roll(self.distalBaseIndices,1))).T
         self.MountainEdges = np.vstack((rightDiagonals, leftDiagonals))
         
-        proximalValleys = np.vstack((proxInds, np.roll(proxInds,1))).T
-        distalValleys = np.vstack((distInds, np.roll(distInds,1))).T
+        proximalValleys = np.vstack((self.proximalBaseIndices, 
+                                     np.roll(self.proximalBaseIndices,1))).T
+        distalValleys = np.vstack((self.distalBaseIndices, 
+                                   np.roll(self.distalBaseIndices,1))).T
         self.ValleyEdges = np.vstack((proximalValleys,distalValleys))
         
         referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) * \
                             self.baseSideLength) + baseXshift
         self.distalMarker = self.proximalMarker + \
-                            np.array([referenceXshift, patternHeight])
-        self.wrap()
+                            np.array([referenceXshift, self.patternHeight])
+        self.wrapToWidth()
         
-    
+
+""" Testing """
+r = 1
+numSides = 6
+composed = TubularPattern(numSides, r)
+tube = Tube(numSides, r, 3)
+tube.saveDXF("tube")
+composed.append(Tube(numSides, r, 3))
+twist = Twist(numSides, r, 0.45*np.pi, 1)
+twist.saveDXF("twist")
+composed.append(Twist(numSides, r, 0.45*np.pi, 1))
+composed.append(Tube(numSides, r, 3))
+composed.saveDXF("tube_twist_tube")
