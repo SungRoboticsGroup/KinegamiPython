@@ -274,4 +274,3 @@ class Plane:
             # line crosses the plane at a point
             return [-1,0,1]
     
-

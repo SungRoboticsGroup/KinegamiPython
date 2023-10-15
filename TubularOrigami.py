@@ -23,11 +23,16 @@ partitioned into mountain and valley lists (each encoded by vertex pairs).
 Since edges are within their panel of width baseSideLength, we can detect
 edges with ostensible x component > baseSideLength as those that wrap around.
 
-TODO: figure out how to get the DXF export pattern to duplicate the boundary
-panel on each side
+TODO: Cut off the segments after they leave the cut boundary
 """
 import numpy as np
+import matplotlib.pyplot as plt
 import ezdxf
+from ezdxf.addons.drawing import RenderContext, Frontend
+from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
+from ezdxf.addons.drawing.config import Configuration
+from ezdxf.addons.drawing.properties import LayoutProperties
+
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0,0]):
@@ -121,7 +126,7 @@ class TubularPattern():
         else:
             return np.array([]).reshape((0,2,2))
     
-    def saveDXF(self, name):
+    def makeDXF(self, saveas="", show=False):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -129,36 +134,114 @@ class TubularPattern():
         doc.layers.add(name="Mountain", color=5)
         doc.layers.add(name="Valley", color=1)
         doc.layers.add(name="Boundary", color=2)
+        doc.layers.add(name="Cut", color=3)
         
         ymin = self.proximalMarker[0,1]
         ymax = ymin + self.patternHeight
         xmin = 0
         xmax = self.width
-        
         msp.add_line((xmin,ymin),(xmin,ymax), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmin,ymin),(xmax,ymin), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmax,ymax),(xmin,ymax), dxfattribs={"layer": "Boundary"})
         msp.add_line((xmax,ymax),(xmax,ymin), dxfattribs={"layer": "Boundary"})
         
+        xmin = -0.5*self.baseSideLength
+        xmax = self.width + 0.5*self.baseSideLength
+        msp.add_line((xmin,ymin),(xmin,ymax), dxfattribs={"layer": "Cut"})
+        msp.add_line((xmin,ymin),(xmax,ymin), dxfattribs={"layer": "Cut"})
+        msp.add_line((xmax,ymax),(xmin,ymax), dxfattribs={"layer": "Cut"})
+        msp.add_line((xmax,ymax),(xmax,ymin), dxfattribs={"layer": "Cut"})
+        
         if self.hasMountainFolds():
             MF = self.MountainFolds()
             WrappingEdges = abs(MF[:,1,0]-MF[:,0,0]) > self.baseSideLength
-            for seg in MF[np.logical_not(WrappingEdges)]:
+            NonWrappingFolds = MF[np.logical_not(WrappingEdges)]
+            WrappingFolds = MF[WrappingEdges]
+            lastColStart = self.width - self.baseSideLength
+            
+            for seg in NonWrappingFolds:
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
-            for seg in MF[WrappingEdges]:
-                seg[seg[:,0] <= self.baseSideLength, 0] += self.width
-                msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Mountain"})
+            for seg in WrappingFolds:
+                rightcopy = np.copy(seg)
+                leftcopy = np.copy(seg)
+                rightcopy[seg[:,0] <= self.baseSideLength, 0] += self.width
+                msp.add_line(rightcopy[0,:],rightcopy[1,:],
+                             dxfattribs={"layer":"Mountain"})
+                leftcopy[seg[:,0] >= lastColStart, 0] -= self.width
+                msp.add_line(leftcopy[0,:],leftcopy[1,:],
+                             dxfattribs={"layer":"Mountain"})
+            FirstColFolds = NonWrappingFolds[np.logical_or(
+                NonWrappingFolds[:,0,0] <= composed.baseSideLength, 
+                NonWrappingFolds[:,1,0] <= composed.baseSideLength)]
+            for seg in FirstColFolds:
+                seg[:,0] += self.width
+                msp.add_line(seg[0,:],seg[1,:],
+                             dxfattribs={"layer":"Mountain"})
+            
+            LastColFolds = NonWrappingFolds[np.logical_or(
+                NonWrappingFolds[:,0,0] >= lastColStart, 
+                NonWrappingFolds[:,1,0] >= lastColStart)]
+            for seg in LastColFolds:
+                seg[:,0] -= self.width
+                msp.add_line(seg[0,:],seg[1,:],
+                             dxfattribs={"layer":"Mountain"})
+            
         
         if self.hasValleyFolds():
             VF = self.ValleyFolds()
             WrappingEdges = abs(VF[:,1,0]-VF[:,0,0]) > self.baseSideLength
-            for seg in VF[np.logical_not(WrappingEdges)]:
+            NonWrappingFolds = VF[np.logical_not(WrappingEdges)]
+            WrappingFolds = VF[WrappingEdges]
+            lastColStart = self.width - self.baseSideLength
+            
+            for seg in NonWrappingFolds:
                 msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
-            for seg in VF[WrappingEdges]:
-                seg[seg[:,0] <= self.baseSideLength, 0] += self.width
-                msp.add_line(seg[0,:],seg[1,:],dxfattribs={"layer":"Valley"})
+            for seg in WrappingFolds:
+                rightcopy = np.copy(seg)
+                leftcopy = np.copy(seg)
+                rightcopy[seg[:,0] <= self.baseSideLength, 0] += self.width
+                msp.add_line(rightcopy[0,:],rightcopy[1,:],
+                             dxfattribs={"layer":"Valley"})
+                leftcopy[seg[:,0] >= lastColStart, 0] -= self.width
+                msp.add_line(leftcopy[0,:],leftcopy[1,:],
+                             dxfattribs={"layer":"Valley"})
+            FirstColFolds = NonWrappingFolds[np.logical_or(
+                NonWrappingFolds[:,0,0] <= composed.baseSideLength, 
+                NonWrappingFolds[:,1,0] <= composed.baseSideLength)]
+            for seg in FirstColFolds:
+                seg[:,0] += self.width
+                msp.add_line(seg[0,:],seg[1,:],
+                             dxfattribs={"layer":"Valley"})
+            
+            LastColFolds = NonWrappingFolds[np.logical_or(
+                NonWrappingFolds[:,0,0] >= lastColStart, 
+                NonWrappingFolds[:,1,0] >= lastColStart)]
+            for seg in LastColFolds:
+                seg[:,0] -= self.width
+                msp.add_line(seg[0,:],seg[1,:],
+                             dxfattribs={"layer":"Valley"})
         
-        doc.saveas(name+".dxf")
+        if saveas:
+            doc.saveas(saveas+".dxf")
+        
+        if show:
+            config = Configuration()
+            fig: plt.Figure = plt.figure(figsize=(xmax-xmin, ymax-ymin))
+            ax: plt.Axes = fig.add_axes([0, 0, 1, 1])
+            ctx = RenderContext(doc)
+            out = MatplotlibBackend(ax)
+            # get the modelspace properties
+            msp_properties = LayoutProperties.from_layout(msp)
+            # set light gray background color and black foreground color
+            msp_properties.set_colors("#eaeaea")
+            Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
+                                            layout_properties=msp_properties)
+            ax.set_ylim(ymin,ymax)
+            ax.set_xlim(xmin,xmax)
+            ax.show()
+        
+        return doc
+        
 
 class Tube(TubularPattern):
     def __init__(self, numSides, r, height, proximalMarker=[0,0]):
@@ -222,10 +305,10 @@ r = 1
 numSides = 6
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 3)
-tube.saveDXF("tube")
+tube.makeDXF(saveas="tube")
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
-twist.saveDXF("twist")
+twist.makeDXF(saveas="twist")
 composed.append(Twist(numSides, r, 0.45*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
-composed.saveDXF("tube_twist_tube")
+composed.makeDXF(saveas="tube_twist_tube", show=True)
