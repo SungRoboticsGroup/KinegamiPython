@@ -9,21 +9,27 @@ Kinegami paper (Chen et al. 2022).
 
 These functions construct 2D crease patterns which fold into tubular modules
 of radius r whose ends are identical regular polygons where the number of sides
-(called numSides here and n_s in the original paper) is even.
-Let x coordinates be around the tube and y coordinates be along it, so the
-tube wraparound is represented by modular wraparound in x. 
-The base polygon's side length can be computed from r and numSides.
-The proximal base polygon's vertices have y=0 in the crease pattern, and the
-distal base has constant y>0. 
-The proximal base vertices have x coordinates
-    0, baseSideLength, 2*baseSideLength, ..., (numSides-1)*baseSideLength
-and x coordinates wrap modulo numSides*baseSideLength.
-We store the pattern as a graph where vertices are points and edges are
-partitioned into mountain and valley lists (each encoded by vertex pairs).
-Since edges are within their panel of width baseSideLength, we can detect
-edges with ostensible x component > baseSideLength as those that wrap around.
+is even.
 
-TODO: Cut off the segments after they leave the cut boundary
+Each module stores a proximal reference point along the proximal base,
+and a distal reference point along the distal base, to encode how they 
+align together when composed.
+
+We represent them with a graph structure that encodes the geometry and topology
+in a graph structure where vertices (points on the surface) are parameterized
+in 2D by:
+    x - distance about the tube modulo numSides*baseSideLength, i.e., the
+        horizontal coordinate when cut and unwrapped to flat
+    y - distance about the tube, i.e., the vertical coordiante when flat
+
+To make this manufacturable in a flat topology (e.g. by a laser etching),
+we consider it to be cut along the x=0 axis, with the geometry in 
+x=[0,baseSideLength] duplicated at the end so that the wraparound can adhere
+together along a 2D surface. This duplication, along with other difficulties of
+converting wraparound edges to a flat pattern, are dealt with in the method
+that constructs a DXF file. (We organize in this way to separate fabrication 
+details from the underlying pattern: the construction and representation of 
+TubularPattern objects is in the tubular topology).
 """
 import numpy as np
 import matplotlib.pyplot as plt
