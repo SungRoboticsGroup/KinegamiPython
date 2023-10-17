@@ -108,6 +108,7 @@ class TubularPattern():
                             (self.ValleyEdges[ValleyMask] + k) % self.numSides 
         self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
     
+    
     def append(self, other : 'TubularPattern'):
         assert(other.numSides == self.numSides)
         assert(other.r == self.r)
@@ -131,13 +132,18 @@ class TubularPattern():
         MEtoAdd = other.MountainEdges
         MEtoAdd[MEtoAdd >= self.numSides] += indexShift #non-proximal vertices
         MEtoAdd[MEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
-        self.MountainEdges = np.vstack((self.MountainEdges, MEtoAdd))
+        self.MountainEdges = np.unique(np.vstack((self.MountainEdges,
+                                                  MEtoAdd)), axis=0)
+        
+        
+        
         # other's proximal indices were {0,...,self.numSides-1} in some order,
         # we want to convert them to corresponding {j,...,j+self.numSides-1}
         VEtoAdd = other.ValleyEdges
         VEtoAdd[VEtoAdd >= self.numSides] += indexShift #non-proximal vertices
         VEtoAdd[VEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
-        self.ValleyEdges = np.vstack((self.ValleyEdges, VEtoAdd))
+        self.ValleyEdges = np.unique(np.vstack((self.ValleyEdges,
+                                                VEtoAdd)), axis=0)
         
         self.distalBaseIndices = other.distalBaseIndices + indexShift
         
@@ -353,3 +359,8 @@ twist.makeDXF(saveas="twist", show=True)
 composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=True)
+
+doubleTwist = TubularPattern(numSides, r)
+doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
+doubleTwist.append(Twist(numSides, r, 0.1*np.pi, 1))
+doubleTwist.makeDXF(saveas="twist_twist", show=True)
