@@ -38,7 +38,10 @@ from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 from ezdxf.addons.drawing.config import Configuration
 from ezdxf.addons.drawing.properties import LayoutProperties
-
+import math
+from math import remainder
+import geometryHelpers
+from geometryHelpers import rollToMatch
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0,0]):
@@ -56,7 +59,6 @@ class TubularPattern():
         relative = np.vstack((proximalBaseX, nzeros)).T
         proximalBase = self.proximalMarker + relative
         self.proximalBaseIndices = np.arange(self.numSides)
-        
               
         """
         Instance variables initialized here for an empty pattern:
@@ -95,14 +97,16 @@ class TubularPattern():
     def distalBase(self):
         return self.Vertices[self.distalBaseIndices,:]
     
-    """ index to roll other.proximalBase() by to align with self.distalBase(),
-        or None if this is impossible """
-    def rollToAlign(self, other : 'TubularPattern'):
-        for i in range(self.numSides):
-            if np.array_equal(self.distalBase(), 
-                        np.roll(other.proximalBase(), i, axis=0)):
-                return i
-        return None
+    def rollProximalIndices(self, k):
+        PI = self.proximalBaseIndices
+        self.Vertices[PI,:] = np.roll(self.Vertices[PI,:], k, axis=0)
+        MountainMask = self.MountainEdges < self.numSides
+        self.MountainEdges[MountainMask] = \
+                        (self.MountainEdges[MountainMask] + k) % self.numSides 
+        ValleyMask = self.ValleyEdges < self.numSides
+        self.ValleyEdges[ValleyMask] = \
+                            (self.ValleyEdges[ValleyMask] + k) % self.numSides 
+        self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
     
     def append(self, other : 'TubularPattern'):
         assert(other.numSides == self.numSides)
@@ -110,13 +114,33 @@ class TubularPattern():
         assert(self.MountainEdges.dtype.kind == 'i')
         assert(self.ValleyEdges.dtype.kind == 'i')
         other.shift(self.distalMarker - other.proximalMarker)
-        currentNumVertices = self.Vertices.shape[0]
-        mountainEdgesToAdd = other.MountainEdges + currentNumVertices
-        self.MountainEdges = np.vstack((self.MountainEdges,mountainEdgesToAdd))
-        valleyEdgesToAdd = other.ValleyEdges + currentNumVertices
-        self.ValleyEdges = np.vstack((self.ValleyEdges, valleyEdgesToAdd))
-        self.distalBaseIndices = other.distalBaseIndices + currentNumVertices
-        self.Vertices = np.vstack((self.Vertices, other.Vertices))
+        
+        """ Merge other's proximal base vertices with current distal base """
+        indexShift = self.Vertices.shape[0] - other.numSides
+        otherNonProximalVertices = np.delete(other.Vertices, 
+                                             other.proximalBaseIndices, axis=0)
+        self.Vertices = np.vstack((self.Vertices, otherNonProximalVertices))
+        
+        """ Reindex other's proximal base vertices such that they match
+            the current distal base vertices they correspond to """
+        k = rollToMatch(other.proximalBase(), self.distalBase(),
+                                                        EPSILON=0.0001*self.r)
+        
+        assert(not k is None)
+        other.rollProximalIndices(k)
+        MEtoAdd = other.MountainEdges
+        MEtoAdd[MEtoAdd >= self.numSides] += indexShift #non-proximal vertices
+        MEtoAdd[MEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
+        self.MountainEdges = np.vstack((self.MountainEdges, MEtoAdd))
+        # other's proximal indices were {0,...,self.numSides-1} in some order,
+        # we want to convert them to corresponding {j,...,j+self.numSides-1}
+        VEtoAdd = other.ValleyEdges
+        VEtoAdd[VEtoAdd >= self.numSides] += indexShift #non-proximal vertices
+        VEtoAdd[VEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
+        self.ValleyEdges = np.vstack((self.ValleyEdges, VEtoAdd))
+        
+        self.distalBaseIndices = other.distalBaseIndices + indexShift
+        
         self.patternHeight += other.patternHeight
         self.distalMarker = other.distalMarker
     
@@ -244,7 +268,7 @@ class TubularPattern():
                                             layout_properties=msp_properties)
             ax.set_ylim(ymin,ymax)
             ax.set_xlim(xmin,xmax)
-            ax.show()
+            plt.show()
         
         return doc
         
@@ -261,6 +285,17 @@ class Tube(TubularPattern):
                                         self.distalBaseIndices)).T
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+
+"""        
+class Elbow(TubularPattern):
+    def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
+                 proximalMarker=[0,0]):
+        super().__init__(numSides, r, proximalMarker)
+        rotationalAxisAngle %= 2*np.pi
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) < np.pi) #ensure it's in (-pi,pi)
+        dw = r * np.tan(bendingAngle / 2)
+"""        
         
         
 class Twist(TubularPattern):
@@ -311,10 +346,10 @@ r = 1
 numSides = 6
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 3)
-tube.makeDXF(saveas="tube")
+tube.makeDXF(saveas="tube", show=False)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
-twist.makeDXF(saveas="twist")
-composed.append(Twist(numSides, r, 0.45*np.pi, 1))
+twist.makeDXF(saveas="twist", show=True)
+composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=True)

@@ -12,6 +12,20 @@ from numpy.linalg import norm
 from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 
+"""
+Given a numpy array whose rows are points, and an array of the same points
+cycled by a roll of k, find k. If this fails (i.e. if the points don't
+actually match via a roll) return None.
+"""
+def rollToMatch(points, pointsCycled, EPSILON=0.00001):
+    n = points.shape[0]
+    assert(points.shape == pointsCycled.shape)
+    for k in range(n):
+        if np.all(np.abs(np.roll(points, k, axis=0) - pointsCycled) < EPSILON):
+            return k
+    return None
+
+
 """ 
 Given 3D np vectors u and v, return a unit vector orthogonal to both, 
 obeying the right-hand-rule if applicable 
