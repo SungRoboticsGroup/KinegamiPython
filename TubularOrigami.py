@@ -32,7 +32,6 @@ details from the underlying pattern: the construction and representation of
 TubularPattern objects is in the tubular topology).
 
 TODO:
-    Debug extraneous long edge in twist_twist example
     Combine edges into single array with a separate M/V label array
     Make edges be oriented clockwise
 """
@@ -131,7 +130,7 @@ class TubularPattern():
         """ Reindex other's proximal base vertices such that they match
             the current distal base vertices they correspond to """
         k = rollToMatch(other.proximalBase(), self.distalBase(),
-                        EPSILON=0.0001*self.r)
+                        EPSILON=self.EPSILON)
 
         assert (not k is None)
         other.rollProximalIndices(k)
