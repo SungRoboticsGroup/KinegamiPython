@@ -32,6 +32,7 @@ details from the underlying pattern: the construction and representation of
 TubularPattern objects is in the tubular topology).
 
 TODO:
+    Debug extra side folds generated in twist
     Combine edges into single array with a separate M/V label array
     Make edges be oriented clockwise
 """
@@ -72,19 +73,30 @@ class TubularPattern():
         """
         self.Vertices = proximalBase
         self.distalBaseIndices = self.proximalBaseIndices
-        self.MountainEdges = np.empty(shape=(0, 2), dtype=np.int32)
-        self.ValleyEdges = np.empty(shape=(0, 2), dtype=np.int32)
+        self.Edges = np.empty(shape=(0, 2), dtype=np.int32)
+        self.EdgeLabelsMV = np.empty(0, dtype=bool) #True for M, False for V
         self.patternHeight = 0
         self.distalMarker = self.proximalMarker
 
-    def hasMountainFolds(self):
-        return self.MountainEdges.shape[0] > 0
+    def addEdges(self, EdgesToAdd, LabelsToAdd, deDuplicate=False):
+        assert(EdgesToAdd.shape[0] == LabelsToAdd.shape[0])
+        self.Edges = np.vstack((self.Edges, EdgesToAdd))
+        self.EdgeLabelsMV = np.hstack((self.EdgeLabelsMV, LabelsToAdd))
+        
+        if deDuplicate:
+            self.Edges, indices = np.unique(self.Edges, return_index=True, 
+                                            axis=0)
+            self.EdgeLabelsMV = self.EdgeLabelsMV[indices]
+            # TODO: is there a nice way to verify that duplicated edges have 
+            # the same MV label?
 
-    def hasValleyFolds(self):
-        return self.ValleyEdges.shape[0] > 0
-
-    def isEmpty(self):
-        return self.hasMountainFolds() or self.hasValleyFolds()
+    def addMountainEdges(self, EdgesToAdd, deDuplicate=False):
+        newTrues = np.ones(EdgesToAdd.shape[0], dtype=bool)
+        self.addEdges(EdgesToAdd, newTrues, deDuplicate)
+    
+    def addValleyEdges(self, EdgesToAdd, deDuplicate=False):
+        newFalses = np.zeros(EdgesToAdd.shape[0], dtype=bool)
+        self.addEdges(EdgesToAdd, newFalses, deDuplicate)
 
     def wrapToWidth(self):
         self.Vertices[:, 0] %= self.width
@@ -106,19 +118,14 @@ class TubularPattern():
     def rollProximalIndices(self, k):
         PI = self.proximalBaseIndices
         self.Vertices[PI, :] = np.roll(self.Vertices[PI, :], k, axis=0)
-        MountainMask = self.MountainEdges < self.numSides
-        self.MountainEdges[MountainMask] = \
-            (self.MountainEdges[MountainMask] + k) % self.numSides
-        ValleyMask = self.ValleyEdges < self.numSides
-        self.ValleyEdges[ValleyMask] = \
-            (self.ValleyEdges[ValleyMask] + k) % self.numSides
+        Mask = self.Edges < self.numSides
+        self.Edges[Mask] = (self.Edges[Mask] + k) % self.numSides
         self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
-
+    
     def append(self, other: 'TubularPattern'):
         assert (other.numSides == self.numSides)
         assert (other.r == self.r)
-        assert (self.MountainEdges.dtype.kind == 'i')
-        assert (self.ValleyEdges.dtype.kind == 'i')
+        assert (self.Edges.dtype.kind == 'i')
         other.shift(self.distalMarker - other.proximalMarker)
 
         """ Merge other's proximal base vertices with current distal base """
@@ -131,43 +138,18 @@ class TubularPattern():
             the current distal base vertices they correspond to """
         k = rollToMatch(other.proximalBase(), self.distalBase(),
                         EPSILON=self.EPSILON)
-
         assert (not k is None)
         other.rollProximalIndices(k)
-        MEtoAdd = other.MountainEdges
-        # non-proximal vertices
-        MEtoAdd[MEtoAdd >= self.numSides] += indexShift
-        MEtoAdd[MEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
-        self.MountainEdges = np.unique(np.vstack((self.MountainEdges,
-                                                  MEtoAdd)), axis=0)
-
-        # other's proximal indices were {0,...,self.numSides-1} in some order,
-        # we want to convert them to corresponding {j,...,j+self.numSides-1}
-        VEtoAdd = other.ValleyEdges
-        # non-proximal vertices
-        VEtoAdd[VEtoAdd >= self.numSides] += indexShift
-        VEtoAdd[VEtoAdd < self.numSides] += np.min(self.distalBaseIndices)
-        self.ValleyEdges = np.unique(np.vstack((self.ValleyEdges,
-                                                VEtoAdd)), axis=0)
-
+        EdgesToAdd = other.Edges
+        EdgesToAdd[EdgesToAdd>=self.numSides] += indexShift #non-proximal
+        EdgesToAdd[EdgesToAdd<self.numSides] += np.min(self.distalBaseIndices)
+        self.addEdges(EdgesToAdd, other.EdgeLabelsMV, deDuplicate=True)
+        
         self.distalBaseIndices = other.distalBaseIndices + indexShift
-
         self.patternHeight += other.patternHeight
         self.distalMarker = other.distalMarker
-
-    def MountainFolds(self):
-        if (self.hasMountainFolds()):
-            return self.Vertices[self.MountainEdges]
-        else:
-            return np.array([]).reshape((0, 2, 2))
-
-    def ValleyFolds(self):
-        if (self.hasValleyFolds()):
-            return self.Vertices[self.ValleyEdges]
-        else:
-            return np.array([]).reshape((0, 2, 2))
-
-    def makeDXF(self, saveas="", show=False):
+    
+    def makeDXF(self, saveas="", show=False, debug=False):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -196,79 +178,50 @@ class TubularPattern():
         msp.add_line((xmin, ymin), (xmax, ymin), dxfattribs={"layer": "Cut"})
         msp.add_line((xmax, ymax), (xmin, ymax), dxfattribs={"layer": "Cut"})
         msp.add_line((xmax, ymax), (xmax, ymin), dxfattribs={"layer": "Cut"})
-
-        if self.hasMountainFolds():
-            MF = self.MountainFolds()
-            WrappingEdges = abs(MF[:, 1, 0]-MF[:, 0, 0]) > \
-                                    self.baseSideLength + self.EPSILON
-            NonWrappingFolds = MF[np.logical_not(WrappingEdges)]
-            WrappingFolds = MF[WrappingEdges]
-            lastColStart = self.width - self.baseSideLength
-
-            for seg in NonWrappingFolds:
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Mountain"})
-            for seg in WrappingFolds:
+        
+        Folds = self.Vertices[self.Edges]
+        lastColStart = self.width - self.baseSideLength
+        if debug:
+            print("Vertices:")
+            print(self.Vertices)
+            print("Edges:")
+            print(self.Edges)
+            print("Folds:")
+            print(Folds)
+        for i in range(self.Edges.shape[0]):
+            seg = Folds[i,:,:]
+            isWrapping = abs(seg[1,0] - seg[0,0]) > \
+                            self.baseSideLength + self.EPSILON
+            layer = "Mountain" if self.EdgeLabelsMV[i] else "Valley"
+            
+            if isWrapping:
                 rightcopy = np.copy(seg)
                 leftcopy = np.copy(seg)
                 rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
                 msp.add_line(rightcopy[0, :], rightcopy[1, :],
-                             dxfattribs={"layer": "Mountain"})
+                             dxfattribs={"layer": layer})
                 leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
                 msp.add_line(leftcopy[0, :], leftcopy[1, :],
-                             dxfattribs={"layer": "Mountain"})
-            FirstColFolds = NonWrappingFolds[np.logical_or(
-                NonWrappingFolds[:, 0, 0] <= composed.baseSideLength,
-                NonWrappingFolds[:, 1, 0] <= composed.baseSideLength)]
-            for seg in FirstColFolds:
-                seg[:, 0] += self.width
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Mountain"})
-
-            LastColFolds = NonWrappingFolds[np.logical_or(
-                NonWrappingFolds[:, 0, 0] >= lastColStart,
-                NonWrappingFolds[:, 1, 0] >= lastColStart)]
-            for seg in LastColFolds:
-                seg[:, 0] -= self.width
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Mountain"})
-
-        if self.hasValleyFolds():
-            VF = self.ValleyFolds()
-            WrappingEdges = abs(VF[:, 1, 0]-VF[:, 0, 0]) > \
-                                    self.baseSideLength + self.EPSILON
-            NonWrappingFolds = VF[np.logical_not(WrappingEdges)]
-            WrappingFolds = VF[WrappingEdges]
-            lastColStart = self.width - self.baseSideLength
-
-            for seg in NonWrappingFolds:
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Valley"})
-            for seg in WrappingFolds:
-                rightcopy = np.copy(seg)
-                leftcopy = np.copy(seg)
-                rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
-                msp.add_line(rightcopy[0, :], rightcopy[1, :],
-                             dxfattribs={"layer": "Valley"})
-                leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
-                msp.add_line(leftcopy[0, :], leftcopy[1, :],
-                             dxfattribs={"layer": "Valley"})
-            FirstColFolds = NonWrappingFolds[np.logical_or(
-                NonWrappingFolds[:, 0, 0] <= composed.baseSideLength,
-                NonWrappingFolds[:, 1, 0] <= composed.baseSideLength)]
-            for seg in FirstColFolds:
-                seg[:, 0] += self.width
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Valley"})
-
-            LastColFolds = NonWrappingFolds[np.logical_or(
-                NonWrappingFolds[:, 0, 0] >= lastColStart,
-                NonWrappingFolds[:, 1, 0] >= lastColStart)]
-            for seg in LastColFolds:
-                seg[:, 0] -= self.width
-                msp.add_line(seg[0, :], seg[1, :],
-                             dxfattribs={"layer": "Valley"})
-
+                             dxfattribs={"layer": layer})
+            else:
+                msp.add_line(seg[0, :], seg[1, :], dxfattribs={"layer": layer})
+            
+                # If it intersects with the first column, duplicate on right
+                firstColEnd = self.baseSideLength + self.EPSILON
+                if (seg[0,0] <= firstColEnd) or (seg[1,0] <= firstColEnd):
+                    rightcopy = np.copy(seg)    
+                    rightcopy[:,0] += self.width
+                    msp.add_line(rightcopy[0, :], rightcopy[1, :],
+                                 dxfattribs={"layer": layer})
+                
+                # If it intersects with the last column, duplicate on left
+                lastColStart = self.width - self.baseSideLength - self.EPSILON
+                if (seg[0,0]>=lastColStart) or (seg[1,0]>=lastColStart):
+                    leftcopy = np.copy(seg)
+                    leftcopy[:,0] -= self.width
+                    msp.add_line(leftcopy[0, :], leftcopy[1, :],
+                                 dxfattribs={"layer": layer})
+            
         if saveas:
             doc.saveas(saveas+".dxf")
 
@@ -299,8 +252,8 @@ class Tube(TubularPattern):
         distalBase = proximalBase + [0, self.patternHeight]
         self.Vertices = np.vstack((proximalBase, distalBase))
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
-        self.MountainEdges = np.vstack((self.proximalBaseIndices,
-                                        self.distalBaseIndices)).T
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
+                                        self.distalBaseIndices)).T)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
@@ -345,14 +298,14 @@ class Twist(TubularPattern):
                                     self.distalBaseIndices)).T
         leftDiagonals = np.vstack((self.proximalBaseIndices,
                                    np.roll(self.distalBaseIndices, 1))).T
-        self.MountainEdges = np.vstack((rightDiagonals, leftDiagonals))
+        self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
 
-        proximalValleys = np.vstack((self.proximalBaseIndices,
-                                     np.roll(self.proximalBaseIndices, 1))).T
-        distalValleys = np.vstack((self.distalBaseIndices,
-                                   np.roll(self.distalBaseIndices, 1))).T
-        self.ValleyEdges = np.vstack((proximalValleys, distalValleys))
-
+        
+        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
+                                      np.roll(self.proximalBaseIndices, 1))).T)
+        self.addValleyEdges(np.vstack((self.distalBaseIndices,
+                                      np.roll(self.distalBaseIndices, 1))).T)
+        
         referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) *
                            self.baseSideLength) + baseXshift
         self.distalMarker = self.proximalMarker + \
@@ -365,10 +318,10 @@ r = 1
 numSides = 6
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 3)
-tube.makeDXF(saveas="tube", show=False)
+tube.makeDXF(saveas="tube", show=True)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
-twist.makeDXF(saveas="twist", show=False)
+twist.makeDXF(saveas="twist", show=True)
 composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=True)
