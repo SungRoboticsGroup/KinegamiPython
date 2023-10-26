@@ -22,17 +22,23 @@ in 2D by:
         horizontal coordinate when cut and unwrapped to flat
     y - distance about the tube, i.e., the vertical coordiante when flat
 
+In tubular topology, a non-vertical edge can either proceed clockwise or 
+counterclockwise from one vertex to the other. To disambiguate and enable us
+to detect which edges wrap around in the x coordinate, we encode all edges in
+the +x direction. This means an edge (i,j) proceeds from vertex i in the 
++x direction (possibly with wraparound) to vertex j. Therefore, if 
+vertex j is to the left of vertex i, we know the fold has wraparound. 
+(When detecting vertical edges, an epsilon term provides numerical stability.)
+Obeying this orientation is important when implementing new fold patterns. 
+
 To make this manufacturable in a flat topology (e.g. by a laser etching),
 we consider it to be cut along the x=0 axis, with the geometry in 
 x=[0,baseSideLength] duplicated at the end so that the wraparound can adhere
 together along a 2D surface. This duplication, along with other difficulties of
-converting wraparound edges to a flat pattern, are dealt with in the method
+converting wraparound edges to a flat pattern, is dealt with in the method
 that constructs a DXF file. (We organize in this way to separate fabrication 
 details from the underlying pattern: the construction and representation of 
 TubularPattern objects is in the tubular topology).
-
-TODO:
-    Make edges be oriented clockwise
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -147,6 +153,58 @@ class TubularPattern():
         self.patternHeight += other.patternHeight
         self.distalMarker = other.distalMarker
     
+    """ Plot the graph directly, without accounting for wraparound, boundary,
+        or other considerations for actual manufacturing.
+        Mainly useful for debugging - comparing it to the result of makeDXF
+        helps separate mistakes in the actual graph from bugs in makeDXF. """
+    def plotRawGraph(self, saveas="", show=True, directed=False):
+        doc = ezdxf.new()
+
+        # add new entities to the modelspace
+        msp = doc.modelspace()
+        if directed:
+            doc.layers.add(name="MountainCW", color=5)
+            doc.layers.add(name="MountainCCW", color=4)
+            doc.layers.add(name="ValleyCW", color=1)
+            doc.layers.add(name="ValleyCCW", color=6)
+        else:
+            doc.layers.add(name="Mountain", color=5)
+            doc.layers.add(name="Valley", color=1)
+
+        ymin = self.proximalMarker[0, 1]
+        ymax = ymin + self.patternHeight
+        xmin = -0.5*self.baseSideLength
+        xmax = self.width + 0.5*self.baseSideLength
+        
+        Folds = self.Vertices[self.Edges]
+        for i in range(self.Edges.shape[0]):
+            seg = Folds[i,:,:]
+            layer = "Mountain" if self.EdgeLabelsMV[i] else "Valley"
+            if directed:
+                layer += "CCW" if seg[0,0] > seg[1,0]+self.EPSILON else "CW"
+            msp.add_line(seg[0, :], seg[1, :], dxfattribs={"layer": layer})
+            
+        if saveas:
+            doc.saveas(saveas+".dxf")
+
+        if show:
+            config = Configuration()
+            fig: plt.Figure = plt.figure(figsize=(xmax-xmin, ymax-ymin))
+            ax: plt.Axes = fig.add_axes([0, 0, 1, 1])
+            ctx = RenderContext(doc)
+            out = MatplotlibBackend(ax)
+            # get the modelspace properties
+            msp_properties = LayoutProperties.from_layout(msp)
+            # set light gray background color and black foreground color
+            msp_properties.set_colors("#eaeaea")
+            Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
+                                             layout_properties=msp_properties)
+            ax.set_ylim(ymin, ymax)
+            ax.set_xlim(xmin, xmax)
+            plt.show()
+
+        return doc
+    
     def makeDXF(self, saveas="", show=False, debug=False):
         doc = ezdxf.new()
 
@@ -159,15 +217,13 @@ class TubularPattern():
 
         ymin = self.proximalMarker[0, 1]
         ymax = ymin + self.patternHeight
-        xmin = 0
-        xmax = self.width
-        msp.add_line((xmin, ymin), (xmin, ymax),
+        msp.add_line((0, ymin), (0, ymax),
                      dxfattribs={"layer": "Boundary"})
-        msp.add_line((xmin, ymin), (xmax, ymin),
+        msp.add_line((0, ymin), (self.width, ymin),
                      dxfattribs={"layer": "Boundary"})
-        msp.add_line((xmax, ymax), (xmin, ymax),
+        msp.add_line((self.width, ymax), (0, ymax),
                      dxfattribs={"layer": "Boundary"})
-        msp.add_line((xmax, ymax), (xmax, ymin),
+        msp.add_line((self.width, ymax), (self.width, ymin),
                      dxfattribs={"layer": "Boundary"})
 
         xmin = -0.5*self.baseSideLength
@@ -188,8 +244,7 @@ class TubularPattern():
             print(Folds)
         for i in range(self.Edges.shape[0]):
             seg = Folds[i,:,:]
-            isWrapping = abs(seg[1,0] - seg[0,0]) > \
-                            self.baseSideLength + self.EPSILON
+            isWrapping = seg[0,0] > seg[1,0]+self.EPSILON
             layer = "Mountain" if self.EdgeLabelsMV[i] else "Valley"
             
             if isWrapping:
@@ -234,7 +289,7 @@ class TubularPattern():
             # set light gray background color and black foreground color
             msp_properties.set_colors("#eaeaea")
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
-                                                          layout_properties=msp_properties)
+                                             layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
             plt.show()
@@ -280,12 +335,12 @@ class Twist(TubularPattern):
         """
         baseTwist = twistAngle % (2*np.pi / self.numSides)  # \overline{\alpha}
         baseXshift = (self.baseSideLength/2) * (1 - np.cos(baseTwist) +
-                                                (1/np.tan(np.pi/numSides))*np.sin(baseTwist))
+                                (1/np.tan(np.pi/numSides))*np.sin(baseTwist))
         self.patternHeight = np.sqrt(moduleHeight**2 +
                                      (self.baseSideLength *
-                                      (1/np.sin(np.pi/numSides)) *
-                                         np.sin((np.pi/numSides) - (baseTwist/2)) *
-                                         np.sin(baseTwist/2))**2)
+                                     (1/np.sin(np.pi/numSides)) *
+                                     np.sin((np.pi/numSides) - (baseTwist/2)) *
+                                     np.sin(baseTwist/2))**2)
         proximalBase = self.Vertices
         distalBase = proximalBase + [baseXshift, self.patternHeight]
         distalBase[:, 0] %= self.width
@@ -294,15 +349,15 @@ class Twist(TubularPattern):
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
         rightDiagonals = np.vstack((self.proximalBaseIndices,
                                     self.distalBaseIndices)).T
-        leftDiagonals = np.vstack((self.proximalBaseIndices,
-                                   np.roll(self.distalBaseIndices, 1))).T
+        leftDiagonals = np.vstack((np.roll(self.distalBaseIndices, 1),
+                                   self.proximalBaseIndices)).T
         self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
 
         
-        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
-                                      np.roll(self.proximalBaseIndices, 1))).T)
-        self.addValleyEdges(np.vstack((self.distalBaseIndices,
-                                      np.roll(self.distalBaseIndices, 1))).T)
+        self.addValleyEdges(np.vstack((np.roll(self.proximalBaseIndices, 1),
+                                       self.proximalBaseIndices)).T)
+        self.addValleyEdges(np.vstack((np.roll(self.distalBaseIndices, 1),
+                                       self.distalBaseIndices)).T)
         
         referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) *
                            self.baseSideLength) + baseXshift
@@ -317,14 +372,18 @@ numSides = 6
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 3)
 tube.makeDXF(saveas="tube", show=True)
+tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
+twist.plotRawGraph(saveas="twist_raw_graph", directed=True)
 twist.makeDXF(saveas="twist", show=True)
 composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=True)
+composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
 
 doubleTwist = TubularPattern(numSides, r)
 doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
 doubleTwist.append(Twist(numSides, r, 0.3*np.pi, 1))
 doubleTwist.makeDXF(saveas="twist_twist", show=True)
+doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
