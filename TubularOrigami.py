@@ -32,8 +32,6 @@ details from the underlying pattern: the construction and representation of
 TubularPattern objects is in the tubular topology).
 
 TODO:
-    Debug extra side folds generated in twist
-    Combine edges into single array with a separate M/V label array
     Make edges be oriented clockwise
 """
 import numpy as np
