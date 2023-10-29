@@ -49,6 +49,26 @@ def unitNormalToBoth(u, v):
         # we'll use the first one since it may be the only one
         return nullSpaceBasis[:,0].flatten()
 
+
+"""
+For A and B matrices (of the same shape) storing vectors as rows,
+return the unsigned angle between corresponding rows
+"""
+def unsignedAngles(A,B):
+    assert(A.shape == B.shape)
+    AnormalizedRows = (A.T * (1/norm(A, axis=1))).T
+    BnormalizedRows = (B.T * (1/norm(B, axis=1))).T
+    dotProductsOfRows = np.sum(AnormalizedRows*BnormalizedRows, axis=1)
+    return np.arccos(np.clip(dotProductsOfRows, -1.0, 1.0))
+
+"""
+Unsigned angle between two vectors, based on
+https://stackoverflow.com/questions/2827393/angles-between-two-n-dimensional-vectors-in-python
+"""
+def unsignedAngle(a,b):
+    return np.arccos(np.clip(np.dot(a/norm(a), b/norm(b)), -1.0, 1.0))
+    
+    
 """
 Signed angle (radians) from vector a to vector b, around the normal vector n.
 All inputs should be numpy arrays of shape (3,)
@@ -60,6 +80,33 @@ def signedAngle(a, b, n):
         n = n / norm(n)
         
     return arctan2(dot(cross(a,b),n), dot(a,b))
+
+
+"""
+For A and B matrices (of the same shape) storing 2D vectors as rows,
+return the signed angle between corresponding rows
+"""
+def signedAngles2D(A, B):
+    assert(A.shape == B.shape)
+    k = A.shape[0]
+    A3 = np.hstack((A, np.zeros((k,1))))
+    B3 = np.hstack((B, np.zeros((k,1))))
+    return np.array([signedAngle(A3[i], B3[i], [0,0,1])
+                     for i in range(k)])
+    """
+    crossedRows = np.cross(Anormed,Bnormed)
+    dottedRows = np.sum(A*B, axis=1)
+    return arctan2()
+    """
+
+"""
+For A and B matrices (of the same shape) storing 3D vectors as rows,
+return the signed angle about n between corresponding rows
+"""
+def signedAngles3D(A, B, n):
+    assert(A.shape == B.shape)
+    k = A.shape[0]
+    return np.array([signedAngle(A[i], B[i], n) for i in range(k)]).flatten()
 
 # wrap angles to [0,2pi)
 def wrapAngle(angle):

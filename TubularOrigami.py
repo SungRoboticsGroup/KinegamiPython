@@ -39,6 +39,15 @@ converting wraparound edges to a flat pattern, is dealt with in the method
 that constructs a DXF file. (We organize in this way to separate fabrication 
 details from the underlying pattern: the construction and representation of 
 TubularPattern objects is in the tubular topology).
+
+
+TODO:
+    Debug why TuckAngles are negative - or should they be?
+    
+    Make variable naming consistent:
+        Matrices/arrays of >1 axis: Capitalize
+        Vectors/1-axis arrays: plural, don't capitalize
+        Vcalars: singular, don't capitalize
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -50,8 +59,9 @@ from ezdxf.addons.drawing.properties import LayoutProperties
 import math
 from math import remainder
 import geometryHelpers
-from geometryHelpers import rollToMatch
-
+from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
+    signedAngles2D, signedAngles3D
+from spatialmath import SO3, SE3
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0, 0]):
@@ -64,10 +74,10 @@ class TubularPattern():
         self.width = self.baseSideLength * self.numSides
 
         self.proximalMarker = np.array(proximalMarker).reshape((1, 2))
-        proximalBaseX = np.arange(self.numSides) + 0.5
+        ProximalBaseX = np.arange(self.numSides) + 0.5
         nzeros = np.zeros(self.numSides)
-        relative = np.vstack((proximalBaseX, nzeros)).T
-        proximalBase = self.proximalMarker + relative
+        relative = np.vstack((ProximalBaseX, nzeros)).T
+        ProximalBase = self.proximalMarker + relative
         self.proximalBaseIndices = np.arange(self.numSides)
         self.EPSILON = self.baseSideLength * 0.00001
 
@@ -75,17 +85,22 @@ class TubularPattern():
         Instance variables initialized here for an empty pattern:
         SHOULD ALL BE RESET OR ADJUSTED IN SUBCLASS CONSTRUCTORS
         """
-        self.Vertices = proximalBase
+        self.Vertices = ProximalBase
         self.distalBaseIndices = self.proximalBaseIndices
         self.Edges = np.empty(shape=(0, 2), dtype=np.int32)
         self.EdgeLabelsMV = np.empty(0, dtype=bool) #True for M, False for V
         self.patternHeight = 0
         self.distalMarker = self.proximalMarker
 
+    """ Add the given edges, with the given mountain/valley labels, to the 
+        crease pattern. Filters our self-edges (i,i). If deDuplicate is set
+        to True, also filters out duplicate edges. """
     def addEdges(self, EdgesToAdd, LabelsToAdd, deDuplicate=False):
         assert(EdgesToAdd.shape[0] == LabelsToAdd.shape[0])
-        self.Edges = np.vstack((self.Edges, EdgesToAdd))
-        self.EdgeLabelsMV = np.hstack((self.EdgeLabelsMV, LabelsToAdd))
+        nonEmpty = EdgesToAdd[:,0] != EdgesToAdd[:,1]
+        self.Edges = np.vstack((self.Edges, EdgesToAdd[nonEmpty]))
+        self.EdgeLabelsMV = np.hstack((self.EdgeLabelsMV, 
+                                       LabelsToAdd[nonEmpty]))
         
         if deDuplicate:
             self.Edges, indices = np.unique(self.Edges, return_index=True, 
@@ -113,10 +128,10 @@ class TubularPattern():
         self.distalMarker = self.distalMarker + v
         self.wrapToWidth()
 
-    def proximalBase(self):
+    def ProximalBase(self):
         return self.Vertices[self.proximalBaseIndices, :]
 
-    def distalBase(self):
+    def DistalBase(self):
         return self.Vertices[self.distalBaseIndices, :]
 
     def rollProximalIndices(self, k):
@@ -140,7 +155,7 @@ class TubularPattern():
 
         """ Reindex other's proximal base vertices such that they match
             the current distal base vertices they correspond to """
-        k = rollToMatch(other.proximalBase(), self.distalBase(),
+        k = rollToMatch(other.ProximalBase(), self.DistalBase(),
                         EPSILON=self.EPSILON)
         assert (not k is None)
         other.rollProximalIndices(k)
@@ -301,26 +316,143 @@ class Tube(TubularPattern):
     def __init__(self, numSides, r, height, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         self.patternHeight = height
-        proximalBase = self.Vertices
-        distalBase = proximalBase + [0, self.patternHeight]
-        self.Vertices = np.vstack((proximalBase, distalBase))
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
         self.addMountainEdges(np.vstack((self.proximalBaseIndices,
                                         self.distalBaseIndices)).T)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
-
-"""        
-class Elbow(TubularPattern):
+    
+class ElbowFitting(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
                  proximalMarker=[0,0]):
         super().__init__(numSides, r, proximalMarker)
         rotationalAxisAngle %= 2*np.pi
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
-        assert(abs(bendingAngle) < np.pi) #ensure it's in (-pi,pi)
-        dw = r * np.tan(bendingAngle / 2)
-"""
+        assert(abs(bendingAngle) < np.pi)
+        assert(abs(bendingAngle) > self.EPSILON)
+        
+        dw = self.r * np.tan(bendingAngle / 2)
+        baseAngles = (2*np.pi/self.numSides)*(np.arange(self.numSides)+0.5)\
+                        - rotationalAxisAngle
+        midPolygonHeights = dw * (np.sin(baseAngles) + 1)
+        maxMidPolygonHeight = np.max(midPolygonHeights)
+        self.patternHeight = 2*maxMidPolygonHeight
+        
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
+        self.distalBaseIndices = self.numSides + self.proximalBaseIndices
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        
+        Heights0Y = np.vstack((np.zeros(self.numSides), midPolygonHeights)).T
+        LowerTuckBoundary = ProximalBase + Heights0Y
+        UpperTuckBoundary = DistalBase - Heights0Y
+        
+        
+        Prev2D = np.roll(LowerTuckBoundary, 1, axis=0)
+        Prev2D[0,0] -= self.width
+        Next2D = np.roll(LowerTuckBoundary, -1, axis=0)
+        Next2D[-1,0] += self.width
+        #Angles2D = signedAngles2D(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary) % 2*np.pi
+        Angles2D = unsignedAngles(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary)
+        print("Angles2D=")
+        print(Angles2D)
+        
+        MidPolygon3D = np.vstack((self.r * np.sin(baseAngles),
+                                  self.r * np.cos(baseAngles),
+                                  midPolygonHeights)).T
+        print("MidPolygon3D=")
+        print(MidPolygon3D)
+        rotAxis = np.array([np.cos(rotationalAxisAngle), 
+                            np.sin(rotationalAxisAngle), 
+                            0])
+        midNormal3D = SO3.AngVec(bendingAngle/2, rotAxis) * np.array([0,0,1])
+        
+        Prev3D = np.roll(MidPolygon3D, 1, axis=0)
+        Next3D = np.roll(MidPolygon3D, -1, axis=0)
+        Angles3D = unsignedAngles(MidPolygon3D-Prev3D, Next3D-MidPolygon3D)
+        #Angles3D = signedAngles3D(MidPolygon3D-Prev3D, Next3D-MidPolygon3D,midNormal3D)
+        print("Angles3D=")
+        print(Angles3D)
+        
+        TuckAngles = (Angles2D - Angles3D)/2 #\varepsilon_i for each i
+        print("TuckAngles=")
+        print(TuckAngles)
+        mMPHcopies = maxMidPolygonHeight * np.ones(self.numSides) 
+        MidAligned = np.vstack((ProximalBase[:,0], mMPHcopies)).T
+        print("MidAligned=")
+        print(MidAligned)
+        MidOffset = np.vstack((ProximalBase[:,0] +\
+                        (mMPHcopies-midPolygonHeights)*np.tan(TuckAngles), 
+                        mMPHcopies)).T
+        print("MidOffset=")
+        print(MidOffset)
+            
+        lowerTuckBoundaryIndices = []
+        upperTuckBoundaryIndices = []
+        midAlignedIndices = []
+        midOffsetIndices = []
+        VerticesToAdd = []
+        nv = self.Vertices.shape[0] #number of vertices / next vertex index
+        for i in range(self.numSides):
+            height = midPolygonHeights[i]
+            if abs(height-maxMidPolygonHeight) < self.EPSILON:
+                # all four are the same vertex, don't want to duplicate
+                VerticesToAdd.append(MidAligned[i])
+                lowerTuckBoundaryIndices.append(nv)
+                upperTuckBoundaryIndices.append(nv)
+                midAlignedIndices.append(nv)
+                midOffsetIndices.append(nv)
+                nv += 1
+            else:
+                # add the four vertices separately
+                lowerTuckBoundaryIndices.append(nv)
+                VerticesToAdd.append(LowerTuckBoundary[i]) #lower
+                midAlignedIndices.append(nv+1)
+                VerticesToAdd.append(MidAligned[i])
+                midOffsetIndices.append(nv+2)
+                VerticesToAdd.append(MidOffset[i])
+                upperTuckBoundaryIndices.append(nv+3)
+                VerticesToAdd.append(UpperTuckBoundary[i]) #upper
+                nv += 4
+        
+        self.Vertices = np.vstack((self.Vertices, VerticesToAdd))
+        
+        lowerBoundaryEdges = np.vstack((np.roll(lowerTuckBoundaryIndices, 1), 
+                                       lowerTuckBoundaryIndices)).T
+        self.addMountainEdges(lowerBoundaryEdges)
+        lowerVerticalEdges = np.vstack((lowerTuckBoundaryIndices,
+                                        self.proximalBaseIndices)).T
+        self.addMountainEdges(lowerVerticalEdges)
+        
+        upperBoundaryEdges = np.vstack((np.roll(upperTuckBoundaryIndices, 1), 
+                                               upperTuckBoundaryIndices)).T
+        self.addMountainEdges(upperBoundaryEdges, deDuplicate=True)
+        upperVerticalEdges = np.vstack((upperTuckBoundaryIndices,
+                                        self.distalBaseIndices)).T
+        self.addMountainEdges(upperVerticalEdges, deDuplicate=True)
+        
+        # Horizontal tucking edges (across the middle)
+        self.addValleyEdges(np.vstack((midAlignedIndices, midOffsetIndices)).T)
+        nextMidAligned = np.roll(midAlignedIndices, -1)
+        self.addValleyEdges(np.vstack((midOffsetIndices, nextMidAligned)).T)
+        
+        # Vertical tucking edges (aligned with the base vertices)
+        self.addValleyEdges(np.vstack((lowerTuckBoundaryIndices, 
+                                       midAlignedIndices)).T)
+        self.addMountainEdges(np.vstack((midAlignedIndices, 
+                                         upperTuckBoundaryIndices)).T)
+        
+        # Diagonal tucking edges (boundary vertices to mid offset vertices)
+        self.addMountainEdges(np.vstack((lowerTuckBoundaryIndices,
+                                        midOffsetIndices)).T, deDuplicate=True)
+        self.addValleyEdges(np.vstack((upperTuckBoundaryIndices,
+                                       midOffsetIndices)).T, deDuplicate=True)
+        self.wrapToWidth()
 
 
 class Twist(TubularPattern):
@@ -341,10 +473,10 @@ class Twist(TubularPattern):
                                      (1/np.sin(np.pi/numSides)) *
                                      np.sin((np.pi/numSides) - (baseTwist/2)) *
                                      np.sin(baseTwist/2))**2)
-        proximalBase = self.Vertices
-        distalBase = proximalBase + [baseXshift, self.patternHeight]
-        distalBase[:, 0] %= self.width
-        self.Vertices = np.vstack((proximalBase, distalBase))
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [baseXshift, self.patternHeight]
+        DistalBase[:, 0] %= self.width
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
 
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
         rightDiagonals = np.vstack((self.proximalBaseIndices,
@@ -371,19 +503,23 @@ r = 1
 numSides = 6
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 3)
-tube.makeDXF(saveas="tube", show=True)
-tube.plotRawGraph(directed=True)
+tube.makeDXF(saveas="tube", show=False)
+#tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
-twist.plotRawGraph(saveas="twist_raw_graph", directed=True)
-twist.makeDXF(saveas="twist", show=True)
+#twist.plotRawGraph(saveas="twist_raw_graph", directed=True)
+twist.makeDXF(saveas="twist", show=False)
 composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
-composed.makeDXF(saveas="tube_twist_tube", show=True)
-composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
+composed.makeDXF(saveas="tube_twist_tube", show=False)
+#composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
 
 doubleTwist = TubularPattern(numSides, r)
 doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
 doubleTwist.append(Twist(numSides, r, 0.3*np.pi, 1))
-doubleTwist.makeDXF(saveas="twist_twist", show=True)
-doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
+doubleTwist.makeDXF(saveas="twist_twist", show=False)
+#doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
+
+elbow = ElbowFitting(numSides, r, np.pi/2, -np.pi/4)
+elbow.plotRawGraph(saveas="elbow_raw_graph", directed=True)
+elbow.makeDXF(saveas="elbow", show=True)
