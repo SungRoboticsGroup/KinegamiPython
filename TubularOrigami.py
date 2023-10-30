@@ -334,8 +334,12 @@ class ElbowFitting(TubularPattern):
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
         assert(abs(bendingAngle) < np.pi)
         assert(abs(bendingAngle) > self.EPSILON)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            rotationalAxisAngle = (rotationalAxisAngle + np.pi) % 2*np.pi
         
         dw = self.r * np.tan(bendingAngle / 2)
+        print("dw="+str(dw))
         baseAngles = (2*np.pi/self.numSides)*(np.arange(self.numSides)+0.5)\
                         - rotationalAxisAngle
         midPolygonHeights = dw * (np.sin(baseAngles) + 1)
@@ -520,6 +524,6 @@ doubleTwist.append(Twist(numSides, r, 0.3*np.pi, 1))
 doubleTwist.makeDXF(saveas="twist_twist", show=False)
 #doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
 
-elbow = ElbowFitting(numSides, r, np.pi/2, -np.pi/4)
+elbow = ElbowFitting(numSides, r, -np.pi/2, np.pi/3)
 elbow.plotRawGraph(saveas="elbow_raw_graph", directed=True)
 elbow.makeDXF(saveas="elbow", show=True)
