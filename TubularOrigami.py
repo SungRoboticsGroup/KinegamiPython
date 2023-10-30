@@ -330,19 +330,17 @@ class ElbowFitting(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
                  proximalMarker=[0,0]):
         super().__init__(numSides, r, proximalMarker)
-        rotationalAxisAngle %= 2*np.pi
+        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
         assert(abs(bendingAngle) < np.pi)
         assert(abs(bendingAngle) > self.EPSILON)
         if bendingAngle < 0:
             bendingAngle = abs(bendingAngle)
-            rotationalAxisAngle = (rotationalAxisAngle + np.pi) % 2*np.pi
+            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
         
         dw = self.r * np.tan(bendingAngle / 2)
-        print("dw="+str(dw))
-        baseAngles = (2*np.pi/self.numSides)*(np.arange(self.numSides)+0.5)\
-                        - rotationalAxisAngle
-        midPolygonHeights = dw * (np.sin(baseAngles) + 1)
+        baseAngles = (2*np.pi/self.numSides)*(np.arange(self.numSides)+0.5)
+        midPolygonHeights = dw * (np.sin(baseAngles - rotationalAxisAngle) + 1)
         maxMidPolygonHeight = np.max(midPolygonHeights)
         self.patternHeight = 2*maxMidPolygonHeight
         
@@ -356,21 +354,31 @@ class ElbowFitting(TubularPattern):
         LowerTuckBoundary = ProximalBase + Heights0Y
         UpperTuckBoundary = DistalBase - Heights0Y
         
-        
         Prev2D = np.roll(LowerTuckBoundary, 1, axis=0)
         Prev2D[0,0] -= self.width
         Next2D = np.roll(LowerTuckBoundary, -1, axis=0)
         Next2D[-1,0] += self.width
-        #Angles2D = signedAngles2D(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary) % 2*np.pi
-        Angles2D = unsignedAngles(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary)
-        print("Angles2D=")
-        print(Angles2D)
         
-        MidPolygon3D = np.vstack((self.r * np.sin(baseAngles),
-                                  self.r * np.cos(baseAngles),
+        """ For this to make geometric sense in the isometry of tucking,
+            it has to be the angle on the inside of the tucking region,
+            even if that angle is >pi? 
+            
+            Possible issues:
+                Angle wraparound
+                Vector about which to be measuring signed angle
+                Direction of input vectors
+                (Check all these in both 2D and 3D!!!)
+        """
+        Back2D = Prev2D - LowerTuckBoundary
+        Forward2D = Next2D - LowerTuckBoundary
+        
+        Angles2D = np.mod(signedAngles2D(Forward2D, Back2D), 2*np.pi)
+        #Angles2D = signedAngles2D(Next2D-LowerTuckBoundary, Prev2D-LowerTuckBoundary)
+        #Angles2D = unsignedAngles(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary)
+        
+        MidPolygon3D = np.vstack((self.r * np.cos(baseAngles),
+                                  self.r * np.sin(baseAngles),
                                   midPolygonHeights)).T
-        print("MidPolygon3D=")
-        print(MidPolygon3D)
         rotAxis = np.array([np.cos(rotationalAxisAngle), 
                             np.sin(rotationalAxisAngle), 
                             0])
@@ -378,23 +386,17 @@ class ElbowFitting(TubularPattern):
         
         Prev3D = np.roll(MidPolygon3D, 1, axis=0)
         Next3D = np.roll(MidPolygon3D, -1, axis=0)
-        Angles3D = unsignedAngles(MidPolygon3D-Prev3D, Next3D-MidPolygon3D)
-        #Angles3D = signedAngles3D(MidPolygon3D-Prev3D, Next3D-MidPolygon3D,midNormal3D)
-        print("Angles3D=")
-        print(Angles3D)
+        #Angles3D = unsignedAngles(MidPolygon3D-Prev3D, Next3D-MidPolygon3D)
+        Back3D = Prev3D-MidPolygon3D
+        Forward3D = Next3D-MidPolygon3D
+        Angles3D = signedAngles3D(Forward3D, Back3D, midNormal3D)
         
         TuckAngles = (Angles2D - Angles3D)/2 #\varepsilon_i for each i
-        print("TuckAngles=")
-        print(TuckAngles)
         mMPHcopies = maxMidPolygonHeight * np.ones(self.numSides) 
         MidAligned = np.vstack((ProximalBase[:,0], mMPHcopies)).T
-        print("MidAligned=")
-        print(MidAligned)
         MidOffset = np.vstack((ProximalBase[:,0] +\
                         (mMPHcopies-midPolygonHeights)*np.tan(TuckAngles), 
                         mMPHcopies)).T
-        print("MidOffset=")
-        print(MidOffset)
             
         lowerTuckBoundaryIndices = []
         upperTuckBoundaryIndices = []

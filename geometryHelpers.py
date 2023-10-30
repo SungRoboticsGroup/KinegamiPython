@@ -91,13 +91,9 @@ def signedAngles2D(A, B):
     k = A.shape[0]
     A3 = np.hstack((A, np.zeros((k,1))))
     B3 = np.hstack((B, np.zeros((k,1))))
-    return np.array([signedAngle(A3[i], B3[i], [0,0,1])
+    return np.array([signedAngle(A3[i,:], B3[i,:], [0,0,1])
                      for i in range(k)])
-    """
-    crossedRows = np.cross(Anormed,Bnormed)
-    dottedRows = np.sum(A*B, axis=1)
-    return arctan2()
-    """
+
 
 """
 For A and B matrices (of the same shape) storing 3D vectors as rows,
