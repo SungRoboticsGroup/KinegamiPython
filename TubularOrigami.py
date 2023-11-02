@@ -42,12 +42,13 @@ TubularPattern objects is in the tubular topology).
 
 
 TODO:
-    Debug why TuckAngles are negative - or should they be?
-    
     Make variable naming consistent:
         Matrices/arrays of >1 axis: Capitalize
         Vectors/1-axis arrays: plural, don't capitalize
         Vcalars: singular, don't capitalize
+    
+    Review all uses of %, np.mod, and math.remainder to make sure the correct
+    one is being used for the situation
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -97,6 +98,7 @@ class TubularPattern():
         to True, also filters out duplicate edges. """
     def addEdges(self, EdgesToAdd, LabelsToAdd, deDuplicate=False):
         assert(EdgesToAdd.shape[0] == LabelsToAdd.shape[0])
+        assert(EdgesToAdd.shape[1] == 2)
         nonEmpty = EdgesToAdd[:,0] != EdgesToAdd[:,1]
         self.Edges = np.vstack((self.Edges, EdgesToAdd[nonEmpty]))
         self.EdgeLabelsMV = np.hstack((self.EdgeLabelsMV, 
@@ -325,6 +327,84 @@ class Tube(TubularPattern):
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
+class PrismaticJointPattern(TubularPattern):
+    def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
+                 proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        assert(coneAngle > 0 and coneAngle < np.pi/2)
+        assert(numLayers > 0)
+        neutralLayerHeight = neutralLength / numLayers
+        flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
+        maxLength = 2*numLayers*flatLayerHalfHeight
+        self.patternHeight = 4*maxLength
+        varphi = (np.pi/2)*(1 - 2*np.cos(coneAngle)/numSides)
+        
+        # Standard distal base setup
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
+        self.distalBaseIndices = numSides + self.proximalBaseIndices
+        
+        Mid1 = ProximalBase + [0, maxLength]
+        mid1Indices = numSides + self.distalBaseIndices
+        self.Vertices = np.vstack((self.Vertices,Mid1))
+        
+        xsTiled = np.tile(ProximalBase[:,0], numLayers+1)
+        y0 = proximalMarker[1]
+        reboY0 = proximalMarker[1] + 2*maxLength
+        layerYs = reboY0 + np.arange(numLayers+1)*2*flatLayerHalfHeight
+        ysRepeated = np.repeat(layerYs, numSides)
+        ReboLayerBoundariesVertices = np.vstack((xsTiled, ysRepeated)).T
+        ReboLayerBoundariesIndices = self.Vertices.shape[0] + \
+            np.arange((numLayers+1)*numSides).reshape((numLayers+1, numSides))
+        self.Vertices = np.vstack((self.Vertices, ReboLayerBoundariesVertices))
+        # TODO: can this be written more elegantly with np.meshgrid?
+        
+        ReboLayerMidAlignedVertices = [0, flatLayerHalfHeight] +\
+                                    ReboLayerBoundariesVertices[:-numSides,:]
+        ReboLayerMidAlignedIndices = self.Vertices.shape[0] + \
+            np.arange(numLayers*numSides).reshape((numLayers, numSides))
+        self.Vertices = np.vstack((self.Vertices, ReboLayerMidAlignedVertices))
+        
+        offset = [-flatLayerHalfHeight/np.tan(varphi), 0]
+        ReboLayerMidOffsetVertices = ReboLayerMidAlignedVertices + offset
+        ReboLayerMidOffsetIndices = self.Vertices.shape[0] + \
+            np.arange(numLayers*numSides).reshape((numLayers, numSides))
+        self.Vertices = np.vstack((self.Vertices, ReboLayerMidOffsetVertices))
+        
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
+                                         mid1Indices)).T)
+        self.addMountainEdges(np.vstack((mid1Indices, 
+                                         np.roll(mid1Indices, -1, axis=0))).T)
+        
+        reboBottom = ReboLayerBoundariesIndices[0,:]
+        reboTop = ReboLayerBoundariesIndices[numLayers,:]
+        self.addMountainEdges(np.vstack((mid1Indices, reboBottom)).T)
+        self.addMountainEdges(np.vstack((reboTop, self.distalBaseIndices)).T)
+        
+        # Construct REBO folds
+        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
+        # TODO: vectortize?
+        for i in range(numLayers):
+            bottom = ReboLayerBoundariesIndices[i,:]
+            nextBottom = np.roll(bottom, -1)
+            midAligned = ReboLayerMidAlignedIndices[i,:]
+            midOffset = ReboLayerMidOffsetIndices[i,:]
+            nextMidOffset = np.roll(midOffset, -1)
+            top = ReboLayerBoundariesIndices[i+1,:]
+            
+            self.addValleyEdges(np.vstack((bottom, nextBottom)).T)
+            self.addValleyEdges(np.vstack((bottom, midAligned)).T)
+            self.addValleyEdges(np.vstack((midAligned, top)).T)
+            self.addValleyEdges(np.vstack((midOffset, midAligned)).T)
+            self.addMountainEdges(np.vstack((midAligned, nextMidOffset)).T)
+            self.addMountainEdges(np.vstack((midOffset, bottom)).T)
+            self.addMountainEdges(np.vstack((midOffset, top)).T)
+        
+        
+        
+        
+        
     
 class ElbowFitting(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
@@ -526,6 +606,12 @@ doubleTwist.append(Twist(numSides, r, 0.3*np.pi, 1))
 doubleTwist.makeDXF(saveas="twist_twist", show=False)
 #doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
 
-elbow = ElbowFitting(numSides, r, -np.pi/2, np.pi/3)
-elbow.plotRawGraph(saveas="elbow_raw_graph", directed=True)
-elbow.makeDXF(saveas="elbow", show=True)
+elbow = ElbowFitting(numSides, r, -np.pi/4, np.pi/3)
+#elbow.plotRawGraph(saveas="elbow_raw_graph", directed=True)
+elbow.makeDXF(saveas="elbow", show=False)
+composed.append(elbow)
+composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
+
+prismatic = PrismaticJointPattern(numSides, r, 2, 3, np.pi/3)
+#prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
+prismatic.makeDXF(saveas="prismatic", show=True)
