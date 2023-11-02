@@ -42,6 +42,8 @@ TubularPattern objects is in the tubular topology).
 
 
 TODO:
+    Make append copy, not modify, the other pattern
+    
     Make variable naming consistent:
         Matrices/arrays of >1 axis: Capitalize
         Vectors/1-axis arrays: plural, don't capitalize
@@ -350,7 +352,6 @@ class PrismaticJointPattern(TubularPattern):
         self.Vertices = np.vstack((self.Vertices,Mid1))
         
         xsTiled = np.tile(ProximalBase[:,0], numLayers+1)
-        y0 = proximalMarker[1]
         reboY0 = proximalMarker[1] + 2*maxLength
         layerYs = reboY0 + np.arange(numLayers+1)*2*flatLayerHalfHeight
         ysRepeated = np.repeat(layerYs, numSides)
@@ -400,8 +401,9 @@ class PrismaticJointPattern(TubularPattern):
             self.addMountainEdges(np.vstack((midAligned, nextMidOffset)).T)
             self.addMountainEdges(np.vstack((midOffset, bottom)).T)
             self.addMountainEdges(np.vstack((midOffset, top)).T)
-        
-        
+            
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        self.wrapToWidth()  
         
         
         
@@ -589,7 +591,7 @@ class Twist(TubularPattern):
 r = 1
 numSides = 6
 composed = TubularPattern(numSides, r)
-tube = Tube(numSides, r, 3)
+tube = Tube(numSides, r, 2)
 tube.makeDXF(saveas="tube", show=False)
 #tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
@@ -613,8 +615,10 @@ elbow.makeDXF(saveas="elbow", show=False)
 composed.append(elbow)
 composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
 
-prismatic = PrismaticJointPattern(numSides, r, 2, 3, np.pi/3)
+prismatic = PrismaticJointPattern(numSides, r, 1, 3, np.pi/3)
 #prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
 prismatic.makeDXF(saveas="prismatic", show=False)
 composed.append(prismatic)
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=True)
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
+composed.append(Tube(numSides, r, 0.25))
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=True)
