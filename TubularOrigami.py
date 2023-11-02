@@ -337,7 +337,7 @@ class PrismaticJointPattern(TubularPattern):
         flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
         maxLength = 2*numLayers*flatLayerHalfHeight
         self.patternHeight = 4*maxLength
-        varphi = (np.pi/2)*(1 - 2*np.cos(coneAngle)/numSides)
+        flatConeAngle = (np.pi/2)*(1 - 2*np.cos(coneAngle)/numSides)
         
         # Standard distal base setup
         ProximalBase = self.Vertices
@@ -366,7 +366,7 @@ class PrismaticJointPattern(TubularPattern):
             np.arange(numLayers*numSides).reshape((numLayers, numSides))
         self.Vertices = np.vstack((self.Vertices, ReboLayerMidAlignedVertices))
         
-        offset = [-flatLayerHalfHeight/np.tan(varphi), 0]
+        offset = [-flatLayerHalfHeight/np.tan(flatConeAngle), 0]
         ReboLayerMidOffsetVertices = ReboLayerMidAlignedVertices + offset
         ReboLayerMidOffsetIndices = self.Vertices.shape[0] + \
             np.arange(numLayers*numSides).reshape((numLayers, numSides))
@@ -538,6 +538,7 @@ class ElbowFitting(TubularPattern):
                                         midOffsetIndices)).T, deDuplicate=True)
         self.addValleyEdges(np.vstack((upperTuckBoundaryIndices,
                                        midOffsetIndices)).T, deDuplicate=True)
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
 
@@ -614,4 +615,6 @@ composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
 
 prismatic = PrismaticJointPattern(numSides, r, 2, 3, np.pi/3)
 #prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
-prismatic.makeDXF(saveas="prismatic", show=True)
+prismatic.makeDXF(saveas="prismatic", show=False)
+composed.append(prismatic)
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=True)
