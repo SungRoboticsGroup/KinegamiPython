@@ -51,6 +51,9 @@ TODO:
     
     Review all uses of %, np.mod, and math.remainder to make sure the correct
     one is being used for the situation
+    
+    Figure out how to append revolute joints (mountain folds at the bases)
+    and twist fittings (valley folds at the bases)
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -114,10 +117,12 @@ class TubularPattern():
             # the same MV label?
 
     def addMountainEdges(self, EdgesToAdd, deDuplicate=False):
+        EdgesToAdd = np.array(EdgesToAdd)
         newTrues = np.ones(EdgesToAdd.shape[0], dtype=bool)
         self.addEdges(EdgesToAdd, newTrues, deDuplicate)
     
     def addValleyEdges(self, EdgesToAdd, deDuplicate=False):
+        EdgesToAdd = np.array(EdgesToAdd)
         newFalses = np.zeros(EdgesToAdd.shape[0], dtype=bool)
         self.addEdges(EdgesToAdd, newFalses, deDuplicate)
 
@@ -329,6 +334,107 @@ class Tube(TubularPattern):
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
+class RevoluteJointPattern(TubularPattern):
+    def __init__(self, numSides, r, totalBendingAngle, numSinkLayers, 
+                 proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        rotAxisHeight = r*np.sin(self.polygonInnerAngle)*\
+                            np.tan(totalBendingAngle/4)
+        flatRotAxisHeight = r*np.sin(self.polygonInnerAngle)/\
+                                np.cos(totalBendingAngle/4)
+        self.patternHeight = 2*flatRotAxisHeight
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
+        self.distalBaseIndices = self.numSides + self.proximalBaseIndices
+        MidAlignedVertices = ProximalBase + [0, flatRotAxisHeight]
+        midAlignedIndices = self.Vertices.shape[0] + np.arange(numSides)
+        self.Vertices = np.vstack((self.Vertices, MidAlignedVertices))
+        MidHalfVertices = MidAlignedVertices + [self.baseSideLength/2, 0]
+        midHalfIndices = self.Vertices.shape[0] + np.arange(numSides)
+        self.Vertices = np.vstack((self.Vertices, MidHalfVertices))
+        
+        # Base mountain folds
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices, 
+                                np.roll(self.proximalBaseIndices, -1))).T)
+        self.addMountainEdges(np.vstack((self.distalBaseIndices,
+                                np.roll(self.distalBaseIndices, -1))).T)
+        
+        # Folds of the flapping rectangles
+        j = numSides-1
+        k = (numSides-1)//2
+        self.addMountainEdges([
+                    [self.proximalBaseIndices[0], midAlignedIndices[0]],
+                    [midAlignedIndices[0], midHalfIndices[0]],
+                    [midAlignedIndices[0], self.distalBaseIndices[0]], 
+                    #######
+                    [self.proximalBaseIndices[k], midAlignedIndices[k]],
+                    [midHalfIndices[k-1], midAlignedIndices[k]],
+                    [midAlignedIndices[k], self.distalBaseIndices[k]], 
+                    #######
+                    [self.proximalBaseIndices[k+1], midAlignedIndices[k+1]],
+                    [midAlignedIndices[k+1], midHalfIndices[k+1]],
+                    [midAlignedIndices[k+1], self.distalBaseIndices[k+1]],
+                    #######
+                    [self.proximalBaseIndices[j], midAlignedIndices[j]],
+                    [midHalfIndices[j-1], midAlignedIndices[j]],
+                    [midAlignedIndices[j], self.distalBaseIndices[j]]
+                ])
+        self.addValleyEdges([    [midAlignedIndices[k], midHalfIndices[k]],
+                                 [midHalfIndices[k], midAlignedIndices[k+1]],
+                                 [midAlignedIndices[j], midHalfIndices[j]],
+                                 [midHalfIndices[j], midAlignedIndices[0]]  ])
+        
+        """
+        Why are these things experessed in Chen et al. 2022 as dependent on i?
+        It seems like they should be the same for all the indices on which
+        they're actually defined. But for now I'll write it this way to match.
+        """
+        psi = np.arctan2(self.baseSideLength, self.patternHeight)
+        deltas = np.pi * (numSides + 2 - 4*(np.arange(numSides)+1)) / (2*numSides)
+        frontLengths = np.sqrt(rotAxisHeight**2 + (r*np.sin(deltas))**2)
+        gammas = np.arctan(frontLengths / (r*np.abs(np.cos(deltas))))
+        tuckYs = frontLengths / np.cos((np.pi/2) - gammas - psi)
+        
+        for i in range(numSides):
+            # Crimping vertices and folds
+            if not i in [0, k, k+1, j]:
+                """
+                deltai = np.pi*(numSides-4*i+2)/(2*numSides)
+                hyp = np.sqrt(rotAxisHeight**2 + (r*np.sin(deltai))**2)
+                gammai = np.arctan2(hyp, r*np.cos(deltai))
+                tuckY = hyp / np.cos(np.pi/2 - gammai - psi)
+                """
+                tuckY = tuckYs[i]
+                lowerCrimpVertex = ProximalBase[i] + [0,tuckY]
+                lowerCrimpIndex = self.Vertices.shape[0]
+                upperCrimpVertex = DistalBase[i] - [0,tuckY]
+                upperCrimpIndex = self.Vertices.shape[0]+1
+                self.Vertices = np.vstack((self.Vertices, 
+                                          [lowerCrimpVertex,upperCrimpVertex]))
+                self.addValleyEdges([[midHalfIndices[i-1], upperCrimpIndex],
+                                [midHalfIndices[i-1], midAlignedIndices[i]],
+                                [midAlignedIndices[i], midHalfIndices[i]],
+                                [lowerCrimpIndex, midAlignedIndices[i]]])
+                self.addMountainEdges([[midHalfIndices[i-1], lowerCrimpIndex],
+                                       [lowerCrimpIndex, midHalfIndices[i]],
+                                       [upperCrimpIndex, midHalfIndices[i]],
+                                       [midAlignedIndices[i],upperCrimpIndex]])
+        
+        for i in range(numSides):    
+            # Tucking X folds    
+            if not i in [(numSides-1)//2, numSides-1]:
+                mhi = midHalfIndices[i]
+                self.addValleyEdges([[self.proximalBaseIndices[i], mhi],
+                                     [self.distalBaseIndices[i], mhi],
+                                     [mhi, self.proximalBaseIndices[i+1]],
+                                     [mhi, self.distalBaseIndices[i+1]]])    
+        
+        #TODO: RECURSIVE SINK GADGET
+        
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        self.wrapToWidth()
+
 class PrismaticJointPattern(TubularPattern):
     def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
                  proximalMarker=[0, 0]):
@@ -440,23 +546,9 @@ class ElbowFitting(TubularPattern):
         Prev2D[0,0] -= self.width
         Next2D = np.roll(LowerTuckBoundary, -1, axis=0)
         Next2D[-1,0] += self.width
-        
-        """ For this to make geometric sense in the isometry of tucking,
-            it has to be the angle on the inside of the tucking region,
-            even if that angle is >pi? 
-            
-            Possible issues:
-                Angle wraparound
-                Vector about which to be measuring signed angle
-                Direction of input vectors
-                (Check all these in both 2D and 3D!!!)
-        """
         Back2D = Prev2D - LowerTuckBoundary
         Forward2D = Next2D - LowerTuckBoundary
-        
         Angles2D = np.mod(signedAngles2D(Forward2D, Back2D), 2*np.pi)
-        #Angles2D = signedAngles2D(Next2D-LowerTuckBoundary, Prev2D-LowerTuckBoundary)
-        #Angles2D = unsignedAngles(LowerTuckBoundary-Prev2D, Next2D-LowerTuckBoundary)
         
         MidPolygon3D = np.vstack((self.r * np.cos(baseAngles),
                                   self.r * np.sin(baseAngles),
@@ -465,10 +557,8 @@ class ElbowFitting(TubularPattern):
                             np.sin(rotationalAxisAngle), 
                             0])
         midNormal3D = SO3.AngVec(bendingAngle/2, rotAxis) * np.array([0,0,1])
-        
         Prev3D = np.roll(MidPolygon3D, 1, axis=0)
         Next3D = np.roll(MidPolygon3D, -1, axis=0)
-        #Angles3D = unsignedAngles(MidPolygon3D-Prev3D, Next3D-MidPolygon3D)
         Back3D = Prev3D-MidPolygon3D
         Forward3D = Next3D-MidPolygon3D
         Angles3D = signedAngles3D(Forward3D, Back3D, midNormal3D)
@@ -590,6 +680,7 @@ class Twist(TubularPattern):
 """ Testing """
 r = 1
 numSides = 6
+"""
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
 tube.makeDXF(saveas="tube", show=False)
@@ -621,4 +712,9 @@ prismatic.makeDXF(saveas="prismatic", show=False)
 composed.append(prismatic)
 composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
 composed.append(Tube(numSides, r, 0.25))
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=True)
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=False)
+"""
+
+revolute = RevoluteJointPattern(numSides, r, np.pi, 0)
+revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
+revolute.makeDXF(saveas="revolute", show=True)
