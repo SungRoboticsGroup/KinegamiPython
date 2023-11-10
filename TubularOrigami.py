@@ -413,7 +413,9 @@ class RevoluteJointPattern(TubularPattern):
                 self.addMountainEdges([[midHalfIndices[i-1], lowerCrimpIndex],
                                        [lowerCrimpIndex, midHalfIndices[i]],
                                        [upperCrimpIndex, midHalfIndices[i]],
-                                       [midAlignedIndices[i],upperCrimpIndex]])
+                                       [midAlignedIndices[i],upperCrimpIndex],
+                                [self.proximalBaseIndices[i], lowerCrimpIndex],
+                                [upperCrimpIndex, self.distalBaseIndices[i]]])
         
         for i in range(numSides):    
             # Tucking X folds    
@@ -673,7 +675,7 @@ class Twist(TubularPattern):
 
 """ Testing """
 r = 1
-numSides = 8
+numSides = 6
 
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
@@ -711,8 +713,12 @@ prismatic.makeDXF(saveas="prismatic", show=False)
 composed.append(prismatic)
 composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
 composed.append(Tube(numSides, r, 1))
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=True)
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=False)
 
 revolute = RevoluteJointPattern(numSides, r, np.pi, 0)
-revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
+#revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
 revolute.makeDXF(saveas="revolute", show=True)
+composed.append(revolute)
+composed.append(Tube(numSides, r, 0.5))
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube_revolute_tube",
+                 show=True)
