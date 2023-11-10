@@ -80,7 +80,8 @@ class TubularPattern():
         self.width = self.baseSideLength * self.numSides
 
         self.proximalMarker = np.array(proximalMarker).reshape((1, 2))
-        ProximalBaseX = np.arange(self.numSides) + 0.5
+        ProximalBaseX = np.arange(self.numSides)*self.baseSideLength\
+                                            +0.5*self.baseSideLength
         nzeros = np.zeros(self.numSides)
         relative = np.vstack((ProximalBaseX, nzeros)).T
         ProximalBase = self.proximalMarker + relative
@@ -399,16 +400,9 @@ class RevoluteJointPattern(TubularPattern):
         for i in range(numSides):
             # Crimping vertices and folds
             if not i in [0, k, k+1, j]:
-                """
-                deltai = np.pi*(numSides-4*i+2)/(2*numSides)
-                hyp = np.sqrt(rotAxisHeight**2 + (r*np.sin(deltai))**2)
-                gammai = np.arctan2(hyp, r*np.cos(deltai))
-                tuckY = hyp / np.cos(np.pi/2 - gammai - psi)
-                """
-                tuckY = tuckYs[i]
-                lowerCrimpVertex = ProximalBase[i] + [0,tuckY]
+                lowerCrimpVertex = ProximalBase[i] + [0,tuckYs[i]]
                 lowerCrimpIndex = self.Vertices.shape[0]
-                upperCrimpVertex = DistalBase[i] - [0,tuckY]
+                upperCrimpVertex = DistalBase[i] - [0,tuckYs[i]]
                 upperCrimpIndex = self.Vertices.shape[0]+1
                 self.Vertices = np.vstack((self.Vertices, 
                                           [lowerCrimpVertex,upperCrimpVertex]))
@@ -679,11 +673,14 @@ class Twist(TubularPattern):
 
 """ Testing """
 r = 1
-numSides = 6
-"""
+numSides = 8
+
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
+#tube.plotRawGraph(saveas="tube_raw_graph", directed=True)
 tube.makeDXF(saveas="tube", show=False)
+
+
 #tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
@@ -693,6 +690,7 @@ composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=False)
 #composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
+
 
 doubleTwist = TubularPattern(numSides, r)
 doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
@@ -706,14 +704,14 @@ elbow.makeDXF(saveas="elbow", show=False)
 composed.append(elbow)
 composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
 
+
 prismatic = PrismaticJointPattern(numSides, r, 1, 3, np.pi/3)
 #prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
 prismatic.makeDXF(saveas="prismatic", show=False)
 composed.append(prismatic)
 composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
-composed.append(Tube(numSides, r, 0.25))
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=False)
-"""
+composed.append(Tube(numSides, r, 1))
+composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=True)
 
 revolute = RevoluteJointPattern(numSides, r, np.pi, 0)
 revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
