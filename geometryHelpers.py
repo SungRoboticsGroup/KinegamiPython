@@ -13,6 +13,21 @@ from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 
 """
+Output n points spaced evenly from start to end.
+"""
+def lerpN(start, end, n):
+    assert(start.shape == end.shape)
+    d = start.shape[0]
+    if n==0:
+        return np.empty((0,d))
+    elif n==1:
+        return np.array([start + (end-start)/2])
+    else:
+        ts = (np.arange(n)/(n-1)).reshape((-1,1))
+        return start + ts*(end-start)
+
+
+"""
 Given a numpy array whose rows are points, and an array of the same points
 cycled by a roll of k, find k. If this fails (i.e. if the points don't
 actually match via a roll) return None.

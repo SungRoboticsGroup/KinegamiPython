@@ -66,13 +66,14 @@ import math
 from math import remainder
 import geometryHelpers
 from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
-    signedAngles2D, signedAngles3D
+    signedAngles2D, signedAngles3D, lerpN
 from spatialmath import SO3, SE3
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0, 0]):
         assert (r > 0)
         assert (numSides % 2 == 0)
+        assert (numSides >= 4)
         self.numSides = numSides  # n_s
         self.r = r
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)  # \delta
@@ -99,6 +100,12 @@ class TubularPattern():
         self.patternHeight = 0
         self.distalMarker = self.proximalMarker
 
+    """ Add the given vertices (a numpy nx2), return their indices """    
+    def addVertices(self, VerticesToAdd):
+        newIndices = self.Vertices.shape[0] + np.arange(VerticesToAdd.shape[0])
+        self.Vertices = np.vstack((self.Vertices, VerticesToAdd))
+        return newIndices
+
     """ Add the given edges, with the given mountain/valley labels, to the 
         crease pattern. Filters our self-edges (i,i). If deDuplicate is set
         to True, also filters out duplicate edges. """
@@ -119,10 +126,14 @@ class TubularPattern():
 
     def addMountainEdges(self, EdgesToAdd, deDuplicate=False):
         EdgesToAdd = np.array(EdgesToAdd)
+        assert(EdgesToAdd.shape[0]>0)
+        EdgesToAdd = np.array(EdgesToAdd)
         newTrues = np.ones(EdgesToAdd.shape[0], dtype=bool)
         self.addEdges(EdgesToAdd, newTrues, deDuplicate)
     
     def addValleyEdges(self, EdgesToAdd, deDuplicate=False):
+        EdgesToAdd = np.array(EdgesToAdd)
+        assert(EdgesToAdd.shape[0]>0)
         EdgesToAdd = np.array(EdgesToAdd)
         newFalses = np.zeros(EdgesToAdd.shape[0], dtype=bool)
         self.addEdges(EdgesToAdd, newFalses, deDuplicate)
@@ -321,7 +332,6 @@ class TubularPattern():
 
         return doc
 
-
 class Tube(TubularPattern):
     def __init__(self, numSides, r, height, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
@@ -336,8 +346,9 @@ class Tube(TubularPattern):
         self.wrapToWidth()
 
 class RevoluteJointPattern(TubularPattern):
-    def __init__(self, numSides, r, totalBendingAngle, numSinkLayers, 
+    def __init__(self, numSides, r, totalBendingAngle, numSinkLayers=1, 
                  proximalMarker=[0, 0]):
+        assert(numSinkLayers >= 1)
         super().__init__(numSides, r, proximalMarker)
         rotAxisHeight = r*np.sin(self.polygonInnerAngle)*\
                             np.tan(totalBendingAngle/4)
@@ -362,29 +373,32 @@ class RevoluteJointPattern(TubularPattern):
                                 np.roll(self.distalBaseIndices, -1))).T)
         
         # Folds of the flapping rectangles
-        j = numSides-1
-        k = (numSides-1)//2
+        
+        ep = numSides-1 # end panel index
+        mp = (numSides-1)//2 # mid panel index
+        nonSinkPanelIndices = [mp, ep]
+        
         self.addMountainEdges([
                     [self.proximalBaseIndices[0], midAlignedIndices[0]],
                     [midAlignedIndices[0], midHalfIndices[0]],
                     [midAlignedIndices[0], self.distalBaseIndices[0]], 
                     #######
-                    [self.proximalBaseIndices[k], midAlignedIndices[k]],
-                    [midHalfIndices[k-1], midAlignedIndices[k]],
-                    [midAlignedIndices[k], self.distalBaseIndices[k]], 
+                    [self.proximalBaseIndices[mp], midAlignedIndices[mp]],
+                    [midHalfIndices[mp-1], midAlignedIndices[mp]],
+                    [midAlignedIndices[mp], self.distalBaseIndices[mp]], 
                     #######
-                    [self.proximalBaseIndices[k+1], midAlignedIndices[k+1]],
-                    [midAlignedIndices[k+1], midHalfIndices[k+1]],
-                    [midAlignedIndices[k+1], self.distalBaseIndices[k+1]],
+                    [self.proximalBaseIndices[mp+1], midAlignedIndices[mp+1]],
+                    [midAlignedIndices[mp+1], midHalfIndices[mp+1]],
+                    [midAlignedIndices[mp+1], self.distalBaseIndices[mp+1]],
                     #######
-                    [self.proximalBaseIndices[j], midAlignedIndices[j]],
-                    [midHalfIndices[j-1], midAlignedIndices[j]],
-                    [midAlignedIndices[j], self.distalBaseIndices[j]]
+                    [self.proximalBaseIndices[ep], midAlignedIndices[ep]],
+                    [midHalfIndices[ep-1], midAlignedIndices[ep]],
+                    [midAlignedIndices[ep], self.distalBaseIndices[ep]]
                 ])
-        self.addValleyEdges([    [midAlignedIndices[k], midHalfIndices[k]],
-                                 [midHalfIndices[k], midAlignedIndices[k+1]],
-                                 [midAlignedIndices[j], midHalfIndices[j]],
-                                 [midHalfIndices[j], midAlignedIndices[0]]  ])
+        self.addValleyEdges([    [midAlignedIndices[mp], midHalfIndices[mp]],
+                                 [midHalfIndices[mp], midAlignedIndices[mp+1]],
+                                 [midAlignedIndices[ep], midHalfIndices[ep]],
+                                 [midHalfIndices[ep], midAlignedIndices[0]]  ])
         
         """
         Why are these things experessed in Chen et al. 2022 as dependent on i?
@@ -397,36 +411,155 @@ class RevoluteJointPattern(TubularPattern):
         gammas = np.arctan(frontLengths / (r*np.abs(np.cos(deltas))))
         tuckYs = frontLengths / np.cos((np.pi/2) - gammas - psi)
         
+        lowerCrimpIndices = {}
+        upperCrimpIndices = {}
+        
         for i in range(numSides):
             # Crimping vertices and folds
-            if not i in [0, k, k+1, j]:
+            if not i in [0, mp, mp+1, ep]:
                 lowerCrimpVertex = ProximalBase[i] + [0,tuckYs[i]]
-                lowerCrimpIndex = self.Vertices.shape[0]
+                lowerCrimpIndices[i] = self.Vertices.shape[0]
                 upperCrimpVertex = DistalBase[i] - [0,tuckYs[i]]
-                upperCrimpIndex = self.Vertices.shape[0]+1
+                upperCrimpIndices[i] = self.Vertices.shape[0]+1
                 self.Vertices = np.vstack((self.Vertices, 
                                           [lowerCrimpVertex,upperCrimpVertex]))
-                self.addValleyEdges([[midHalfIndices[i-1], upperCrimpIndex],
-                                [midHalfIndices[i-1], midAlignedIndices[i]],
-                                [midAlignedIndices[i], midHalfIndices[i]],
-                                [lowerCrimpIndex, midAlignedIndices[i]]])
-                self.addMountainEdges([[midHalfIndices[i-1], lowerCrimpIndex],
-                                       [lowerCrimpIndex, midHalfIndices[i]],
-                                       [upperCrimpIndex, midHalfIndices[i]],
-                                       [midAlignedIndices[i],upperCrimpIndex],
-                                [self.proximalBaseIndices[i], lowerCrimpIndex],
-                                [upperCrimpIndex, self.distalBaseIndices[i]]])
-        
-        for i in range(numSides):    
-            # Tucking X folds    
-            if not i in [(numSides-1)//2, numSides-1]:
-                mhi = midHalfIndices[i]
-                self.addValleyEdges([[self.proximalBaseIndices[i], mhi],
-                                     [self.distalBaseIndices[i], mhi],
-                                     [mhi, self.proximalBaseIndices[i+1]],
-                                     [mhi, self.distalBaseIndices[i+1]]])    
-        
-        #TODO: RECURSIVE SINK GADGET
+
+        if numSinkLayers==1:                
+            for i in range(numSides):    
+                # Check if this is a sink panel
+                # (rather than one of the 2 side flaps that stay rectangular)
+                if not i in nonSinkPanelIndices: # Tucking X folds
+                    mhi = midHalfIndices[i]
+                    self.addValleyEdges([[self.proximalBaseIndices[i], mhi],
+                                         [self.distalBaseIndices[i], mhi],
+                                         [mhi, self.proximalBaseIndices[i+1]],
+                                         [mhi, self.distalBaseIndices[i+1]]])    
+                if not i in [0, mp, mp+1, ep]:
+                    self.addValleyEdges([
+                            [midHalfIndices[i-1], upperCrimpIndices[i]],
+                            [midHalfIndices[i-1], midAlignedIndices[i]],
+                            [midAlignedIndices[i], midHalfIndices[i]],
+                            [lowerCrimpIndices[i], midAlignedIndices[i]]
+                        ])
+                    self.addMountainEdges([
+                        [midHalfIndices[i-1], lowerCrimpIndices[i]],
+                        [lowerCrimpIndices[i], midHalfIndices[i]],
+                        [upperCrimpIndices[i], midHalfIndices[i]],
+                        [midAlignedIndices[i], upperCrimpIndices[i]],
+                        [self.proximalBaseIndices[i], lowerCrimpIndices[i]],
+                        [upperCrimpIndices[i], self.distalBaseIndices[i]]
+                        ])
+        else: #RECURSIVE SINK GADGET
+            for p in range(numSides): # panel index
+                if not p in nonSinkPanelIndices:        
+                    bottomLeftIndex = self.proximalBaseIndices[p]
+                    bottomRightIndex = self.proximalBaseIndices[p+1]
+                    midLeftIndex = midAlignedIndices[p]
+                    midRightIndex = midAlignedIndices[p+1]
+                    topLeftIndex = self.distalBaseIndices[p]
+                    topRightIndex = self.distalBaseIndices[p+1]
+                    centerIndex = midHalfIndices[p]
+                    
+                    left, bottom = self.Vertices[bottomLeftIndex]
+                    right, top = self.Vertices[topRightIndex]
+                    
+                    crimpLeft = not (p-1) % numSides in nonSinkPanelIndices
+                    crimpRight = not (p+1) % numSides in nonSinkPanelIndices
+                    
+                    
+                    # Helper function, returns indices used
+                    def addInteriorVertices(startIndex, endIndex=centerIndex):
+                        start = self.Vertices[startIndex]
+                        end = self.Vertices[endIndex]
+                        newIndices = self.addVertices(
+                            lerpN(start, end, numSinkLayers+1)[1:-1,:])
+                        return np.hstack(([startIndex],newIndices,[endIndex]))
+                    
+                    def EdgeSequence(vertexIndices, wrap):
+                        Edges = np.vstack((vertexIndices, 
+                                           np.roll(vertexIndices,-1))).T
+                        return Edges if wrap else Edges[:-1]
+                    
+                    
+                    def EdgesFromVertexIndexSequences(VertexIndexSequenceRows):
+                        Next = np.roll(VertexIndexSequenceRows, -1, axis=1)
+                        Stacked = np.stack((VertexIndexSequenceRows, Next))
+                        return Stacked[:,:,:-1].reshape((2,-1)).T
+                    
+                    def addFoldsAlternating(vertexIndices, startWithValley=True, 
+                                            flipEdges=False):
+                        if flipEdges:
+                            Edges = np.vstack((np.roll(vertexIndices,-1),
+                                               vertexIndices)).T[:-1]
+                        else:
+                            Edges = np.vstack((vertexIndices, 
+                                           np.roll(vertexIndices,-1))).T[:-1]
+                        Labels = np.arange(vertexIndices.shape[0]-1)%2 ==\
+                                                                startWithValley
+                        self.addEdges(Edges, Labels)
+                    
+                    if not crimpLeft and not crimpRight: # crimp neither side
+                        leftIndices = addInteriorVertices(midLeftIndex)
+                        rightIndices = addInteriorVertices(midRightIndex)
+                        topLeftDiagIndices = addInteriorVertices(topLeftIndex)
+                        topRightDiagIndices = addInteriorVertices(topRightIndex)
+                        bottomLeftDiagIndices = addInteriorVertices(bottomLeftIndex)
+                        bottomRightDiagIndices = addInteriorVertices(bottomRightIndex)
+                        
+                        # INWARDS-OUTWARDS FOLDS
+                        # the index lists are oriented inwards,
+                        # so the ones on the rigth need to flip to have
+                        # folds oriented in increasing x
+                        addFoldsAlternating(leftIndices, startWithValley=False)
+                        addFoldsAlternating(rightIndices, startWithValley=False, flipEdges=True)
+                        addFoldsAlternating(topLeftDiagIndices)
+                        addFoldsAlternating(topRightDiagIndices, flipEdges=True)
+                        addFoldsAlternating(bottomLeftDiagIndices)
+                        addFoldsAlternating(bottomRightDiagIndices, flipEdges=True)
+                        
+                        # Each row is the indices of that recursive sink layer,
+                        # counting from outwards in.
+                        # It's split into top and bottom components to ensure
+                        # they're oriented left-to-right.
+                        InnerLayersTopIndices = np.vstack((leftIndices,
+                                                    topLeftDiagIndices,
+                                                    topRightDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        InnerLayersBottomIndices = np.vstack((leftIndices,
+                                                    bottomLeftDiagIndices,
+                                                    bottomRightDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        
+                        # RING FOLDS
+                        ringLayers = np.arange(numSinkLayers-1)
+                        layerIsMountain = ringLayers % 2 == 1 # V, M, V, M, ...
+                        layerIsValley = np.logical_not(layerIsMountain)
+                        
+                        
+                        if np.any(layerIsValley):
+                            self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                InnerLayersTopIndices[layerIsValley, :]))
+                            self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                InnerLayersBottomIndices[layerIsValley, :])) 
+                        if np.any(layerIsMountain):
+                            self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                InnerLayersTopIndices[layerIsMountain, :]))
+                            self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                InnerLayersBottomIndices[layerIsMountain, :]))  
+                        
+                        
+                        
+                    """
+                    elif not crimpRight:
+                        # crimp left only
+                    
+                    elif not crimpLeft:
+                        # crimp right only
+                        
+                    else:
+                        # crimp on both sides
+                    """
+                
         
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
@@ -506,10 +639,7 @@ class PrismaticJointPattern(TubularPattern):
             
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()  
-        
-        
-        
-    
+           
 class ElbowFitting(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
                  proximalMarker=[0,0]):
@@ -629,7 +759,6 @@ class ElbowFitting(TubularPattern):
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
 
-
 class Twist(TubularPattern):
     def __init__(self, numSides, r, twistAngle, moduleHeight,
                  proximalMarker=[0, 0]):
@@ -675,13 +804,12 @@ class Twist(TubularPattern):
 
 """ Testing """
 r = 1
-numSides = 6
+numSides = 4
 
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
 #tube.plotRawGraph(saveas="tube_raw_graph", directed=True)
 tube.makeDXF(saveas="tube", show=False)
-
 
 #tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
@@ -692,7 +820,6 @@ composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
 composed.makeDXF(saveas="tube_twist_tube", show=False)
 #composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
-
 
 doubleTwist = TubularPattern(numSides, r)
 doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
@@ -706,7 +833,6 @@ elbow.makeDXF(saveas="elbow", show=False)
 composed.append(elbow)
 composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
 
-
 prismatic = PrismaticJointPattern(numSides, r, 1, 3, np.pi/3)
 #prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
 prismatic.makeDXF(saveas="prismatic", show=False)
@@ -715,10 +841,10 @@ composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
 composed.append(Tube(numSides, r, 1))
 composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=False)
 
-revolute = RevoluteJointPattern(numSides, r, np.pi, 0)
+revolute = RevoluteJointPattern(numSides, r, np.pi, 4)
 #revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
 revolute.makeDXF(saveas="revolute", show=True)
 composed.append(revolute)
 composed.append(Tube(numSides, r, 0.5))
 composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube_revolute_tube",
-                 show=True)
+                 show=False)
