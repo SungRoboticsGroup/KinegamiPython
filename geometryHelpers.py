@@ -12,6 +12,11 @@ from numpy.linalg import norm
 from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 
+
+def unit(v):
+    return v / np.linalg.norm(v)
+
+
 """
 Output n points spaced evenly from start to end.
 """
@@ -109,6 +114,8 @@ def signedAngles2D(A, B):
     return np.array([signedAngle(A3[i,:], B3[i,:], [0,0,1])
                      for i in range(k)])
 
+def signedAngle2D(a, b):
+    return signedAngle(np.hstack((a,[0])), np.hstack((b,[0])), [0,0,1])
 
 """
 For A and B matrices (of the same shape) storing 3D vectors as rows,

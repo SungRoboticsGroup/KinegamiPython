@@ -42,6 +42,10 @@ TubularPattern objects is in the tubular topology).
 
 
 TODO:
+    CHECK MV ASSIGNMENTS FOR RECURSIVE SINK GADGET
+    
+    Clip recursive sink gadgets to stay within their panels!
+    
     Make append copy, not modify, the other pattern
     
     Make variable naming consistent:
@@ -66,7 +70,7 @@ import math
 from math import remainder
 import geometryHelpers
 from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
-    signedAngles2D, signedAngles3D, lerpN
+    signedAngles2D, signedAngles3D, lerpN, unit, signedAngle2D, unsignedAngle
 from spatialmath import SO3, SE3
 
 class TubularPattern():
@@ -423,6 +427,12 @@ class RevoluteJointPattern(TubularPattern):
                 upperCrimpIndices[i] = self.Vertices.shape[0]+1
                 self.Vertices = np.vstack((self.Vertices, 
                                           [lowerCrimpVertex,upperCrimpVertex]))
+                self.addValleyEdges([[lowerCrimpIndices[i], midAlignedIndices[i]]])
+                self.addMountainEdges([
+                    [midAlignedIndices[i], upperCrimpIndices[i]],
+                    [self.proximalBaseIndices[i], lowerCrimpIndices[i]],
+                    [upperCrimpIndices[i], self.distalBaseIndices[i]]
+                    ])
 
         if numSinkLayers==1:                
             for i in range(numSides):    
@@ -438,17 +448,11 @@ class RevoluteJointPattern(TubularPattern):
                     self.addValleyEdges([
                             [midHalfIndices[i-1], upperCrimpIndices[i]],
                             [midHalfIndices[i-1], midAlignedIndices[i]],
-                            [midAlignedIndices[i], midHalfIndices[i]],
-                            [lowerCrimpIndices[i], midAlignedIndices[i]]
-                        ])
+                            [midAlignedIndices[i], midHalfIndices[i]] ])
                     self.addMountainEdges([
-                        [midHalfIndices[i-1], lowerCrimpIndices[i]],
-                        [lowerCrimpIndices[i], midHalfIndices[i]],
-                        [upperCrimpIndices[i], midHalfIndices[i]],
-                        [midAlignedIndices[i], upperCrimpIndices[i]],
-                        [self.proximalBaseIndices[i], lowerCrimpIndices[i]],
-                        [upperCrimpIndices[i], self.distalBaseIndices[i]]
-                        ])
+                            [midHalfIndices[i-1], lowerCrimpIndices[i]],
+                            [lowerCrimpIndices[i], midHalfIndices[i]],
+                            [upperCrimpIndices[i], midHalfIndices[i]]   ])
         else: #RECURSIVE SINK GADGET
             for p in range(numSides): # panel index
                 if not p in nonSinkPanelIndices:        
@@ -459,44 +463,134 @@ class RevoluteJointPattern(TubularPattern):
                     topLeftIndex = self.distalBaseIndices[p]
                     topRightIndex = self.distalBaseIndices[p+1]
                     centerIndex = midHalfIndices[p]
+                    center = self.Vertices[centerIndex]
                     
                     left, bottom = self.Vertices[bottomLeftIndex]
                     right, top = self.Vertices[topRightIndex]
                     
-                    crimpLeft = not (p-1) % numSides in nonSinkPanelIndices
-                    crimpRight = not (p+1) % numSides in nonSinkPanelIndices
+                    pLeft = (p-1)%numSides
+                    pRight = (p+1)%numSides
+                    crimpLeft = not pLeft in nonSinkPanelIndices
+                    crimpRight = not pRight in nonSinkPanelIndices
+                    
                     
                     
                     # Helper function, returns indices used
-                    def addInteriorVertices(startIndex, endIndex=centerIndex):
+                    def addInteriorVertices(startIndex):
                         start = self.Vertices[startIndex]
-                        end = self.Vertices[endIndex]
+                        end = self.Vertices[centerIndex]
                         newIndices = self.addVertices(
                             lerpN(start, end, numSinkLayers+1)[1:-1,:])
-                        return np.hstack(([startIndex],newIndices,[endIndex]))
+                        return np.hstack(([startIndex],newIndices,[centerIndex]))
+                   
+                    
+                    def addInteriorCrimpVertices(crimpIndex):
+                        crimp = self.Vertices[crimpIndex]
+                        d = self.baseSideLength / (2*numSinkLayers)
+                        interiorStart = center + (numSinkLayers-1)*d*unit(crimp-center)
+                        newIndices = self.addVertices(lerpN(interiorStart, center, 
+                                                      numSinkLayers)[:-1,:])
+                        return interiorStart, np.hstack(([crimpIndex],newIndices,[centerIndex]))
+                    
+                    def addInteriorDiagVertices(crimpInteriorStart, outerIndex):
+                        outer = self.Vertices[outerIndex]
+                        dirFromCenter = unit(outer - center)
+                        crimpInteriorFromCenter = crimpInteriorStart - center 
+                        mag = np.linalg.norm(crimpInteriorFromCenter) /\
+                                    np.cos(unsignedAngle(dirFromCenter, 
+                                                    crimpInteriorFromCenter))
+                        interiorStart = center + mag*dirFromCenter
+                        newIndices = self.addVertices(lerpN(interiorStart, 
+                                                center, numSinkLayers)[:-1,:])
+                        return np.hstack(([outerIndex],newIndices,[centerIndex]))
                     
                     def EdgeSequence(vertexIndices, wrap):
                         Edges = np.vstack((vertexIndices, 
                                            np.roll(vertexIndices,-1))).T
                         return Edges if wrap else Edges[:-1]
                     
-                    
                     def EdgesFromVertexIndexSequences(VertexIndexSequenceRows):
                         Next = np.roll(VertexIndexSequenceRows, -1, axis=1)
                         Stacked = np.stack((VertexIndexSequenceRows, Next))
                         return Stacked[:,:,:-1].reshape((2,-1)).T
                     
-                    def addFoldsAlternating(vertexIndices, startWithValley=True, 
-                                            flipEdges=False):
+                    def addFoldSequence(vertexIndices, startWithValley=True,
+                                            alternating=True, flipEdges=False):
                         if flipEdges:
                             Edges = np.vstack((np.roll(vertexIndices,-1),
                                                vertexIndices)).T[:-1]
                         else:
                             Edges = np.vstack((vertexIndices, 
                                            np.roll(vertexIndices,-1))).T[:-1]
-                        Labels = np.arange(vertexIndices.shape[0]-1)%2 ==\
-                                                                startWithValley
+                        
+                        if alternating:
+                            Labels = np.arange(vertexIndices.shape[0]-1)%2 == startWithValley
+                        else:
+                            Labels = np.zeros(vertexIndices.shape[0]-1) == startWithValley
+                        
                         self.addEdges(Edges, Labels)
+                        
+                    
+                    def addInnerLayersEdges(TopIndices, BottomIndices, 
+                                        diamondLeft=False, diamondRight=False):
+                        # RING FOLDS
+                        ringLayers = np.arange(numSinkLayers-1)
+                        layerIsMountain = ringLayers % 2 == 1 # V, M, V, M, ...
+                        layerIsValley = np.logical_not(layerIsMountain)
+                        
+                        # When we have diamonds on a side, the bottom edge 
+                        # within the diamond has M/V assignment opposite that
+                        # of its layer.
+                        # This edge is the first (for a left diamond) or last
+                        # (for a right diamond) in the bottom part of the layer
+                        
+                        if np.any(layerIsValley):
+                            self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                TopIndices[layerIsValley, :]))
+                            if diamondLeft and diamondRight:
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, 1:-1]))
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, :2]))
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, -2:]))
+                            elif diamondRight:
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, :-1]))
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, -2:]))
+                            elif diamondLeft:
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, 1:]))
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, :2]))
+                            else:
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsValley, :]))
+                                
+                        if np.any(layerIsMountain):
+                            self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                TopIndices[layerIsMountain, :]))
+                            if diamondLeft and diamondRight:
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, 1:-1]))
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, :2]))
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, -2:]))
+                            elif diamondRight:
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, :-1]))
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, -2:]))
+                            elif diamondLeft:
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, 1:]))
+                                self.addValleyEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, :2]))
+                            else:
+                                self.addMountainEdges(EdgesFromVertexIndexSequences(
+                                    BottomIndices[layerIsMountain, :]))
                     
                     if not crimpLeft and not crimpRight: # crimp neither side
                         leftIndices = addInteriorVertices(midLeftIndex)
@@ -510,12 +604,12 @@ class RevoluteJointPattern(TubularPattern):
                         # the index lists are oriented inwards,
                         # so the ones on the rigth need to flip to have
                         # folds oriented in increasing x
-                        addFoldsAlternating(leftIndices, startWithValley=False)
-                        addFoldsAlternating(rightIndices, startWithValley=False, flipEdges=True)
-                        addFoldsAlternating(topLeftDiagIndices)
-                        addFoldsAlternating(topRightDiagIndices, flipEdges=True)
-                        addFoldsAlternating(bottomLeftDiagIndices)
-                        addFoldsAlternating(bottomRightDiagIndices, flipEdges=True)
+                        addFoldSequence(leftIndices, startWithValley=False)
+                        addFoldSequence(rightIndices, flipEdges=True, alternating=False)
+                        addFoldSequence(topLeftDiagIndices)
+                        addFoldSequence(topRightDiagIndices, flipEdges=True)
+                        addFoldSequence(bottomLeftDiagIndices)
+                        addFoldSequence(bottomRightDiagIndices, flipEdges=True)
                         
                         # Each row is the indices of that recursive sink layer,
                         # counting from outwards in.
@@ -530,36 +624,180 @@ class RevoluteJointPattern(TubularPattern):
                                                     bottomRightDiagIndices,
                                                     rightIndices)).T[1:-1]
                         
-                        # RING FOLDS
-                        ringLayers = np.arange(numSinkLayers-1)
-                        layerIsMountain = ringLayers % 2 == 1 # V, M, V, M, ...
-                        layerIsValley = np.logical_not(layerIsMountain)
-                        
-                        
-                        if np.any(layerIsValley):
-                            self.addValleyEdges(EdgesFromVertexIndexSequences(
-                                InnerLayersTopIndices[layerIsValley, :]))
-                            self.addValleyEdges(EdgesFromVertexIndexSequences(
-                                InnerLayersBottomIndices[layerIsValley, :])) 
-                        if np.any(layerIsMountain):
-                            self.addMountainEdges(EdgesFromVertexIndexSequences(
-                                InnerLayersTopIndices[layerIsMountain, :]))
-                            self.addMountainEdges(EdgesFromVertexIndexSequences(
-                                InnerLayersBottomIndices[layerIsMountain, :]))  
-                        
-                        
-                        
-                    """
-                    elif not crimpRight:
-                        # crimp left only
-                    
+                        addInnerLayersEdges(InnerLayersTopIndices, 
+                                            InnerLayersBottomIndices)
+
                     elif not crimpLeft:
                         # crimp right only
+                        leftIndices = addInteriorVertices(midLeftIndex)
+                        topLeftDiagIndices = addInteriorVertices(topLeftIndex)
+                        bottomLeftDiagIndices = addInteriorVertices(bottomLeftIndex)
                         
-                    else:
-                        # crimp on both sides
-                    """
+                        upperRightCrimpInteriorStart, upperRightCrimpDiagIndices = \
+                            addInteriorCrimpVertices(upperCrimpIndices[pRight])
+                        topRightDiagIndices = addInteriorDiagVertices(
+                            upperRightCrimpInteriorStart, topRightIndex)
+                        
+                        lowerRightCrimpInteriorStart, lowerRightCrimpDiagIndices = \
+                            addInteriorCrimpVertices(lowerCrimpIndices[pRight])
+                        bottomRightDiagIndices = addInteriorDiagVertices(
+                            lowerRightCrimpInteriorStart, bottomRightIndex)
+                        
+                        rightIndices = addInteriorDiagVertices(
+                            lowerRightCrimpInteriorStart, midRightIndex)
+                        
+                        # INWARDS-OUTWARDS FOLDS
+                        # the index lists are oriented inwards,
+                        # so the ones on the rigth need to flip to have
+                        # folds oriented in increasing x
+                        addFoldSequence(leftIndices, startWithValley=False)
+                        addFoldSequence(topLeftDiagIndices)
+                        addFoldSequence(topRightDiagIndices, flipEdges=True)
+                        addFoldSequence(upperRightCrimpDiagIndices, flipEdges=True)
+                        addFoldSequence(rightIndices, flipEdges=True, alternating=False)
+                        addFoldSequence(lowerRightCrimpDiagIndices, 
+                                        startWithValley=False, flipEdges=True)
+                        addFoldSequence(bottomRightDiagIndices, flipEdges=True)
+                        addFoldSequence(bottomLeftDiagIndices)
+                        
+                        # Each row is the indices of that recursive sink layer,
+                        # counting from outwards in.
+                        # It's split into top and bottom components to ensure
+                        # they're oriented left-to-right.
+                        InnerLayersTopIndices = np.vstack((leftIndices,
+                                                    topLeftDiagIndices,
+                                                    topRightDiagIndices,
+                                                    upperRightCrimpDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        InnerLayersBottomIndices = np.vstack((leftIndices,
+                                                    bottomLeftDiagIndices,
+                                                    bottomRightDiagIndices,
+                                                    lowerRightCrimpDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        
+                        addInnerLayersEdges(InnerLayersTopIndices, 
+                                            InnerLayersBottomIndices, 
+                                            diamondRight=True)
+                        
+                    
                 
+                    elif not crimpRight:
+                        # crimp left only
+                        rightIndices = addInteriorVertices(midRightIndex)
+                        topRightDiagIndices = addInteriorVertices(topRightIndex)
+                        bottomRightDiagIndices = addInteriorVertices(bottomRightIndex)
+                        
+                        upperLeftCrimpInteriorStart, upperLeftCrimpDiagIndices = \
+                            addInteriorCrimpVertices(upperCrimpIndices[p])
+                        topLeftDiagIndices = addInteriorDiagVertices(
+                            upperLeftCrimpInteriorStart, topLeftIndex)
+                        
+                        lowerLeftCrimpInteriorStart, lowerLeftCrimpDiagIndices = \
+                            addInteriorCrimpVertices(lowerCrimpIndices[p])
+                        bottomLeftDiagIndices = addInteriorDiagVertices(
+                            lowerLeftCrimpInteriorStart, bottomLeftIndex)
+                        
+                        leftIndices = addInteriorDiagVertices(
+                            lowerLeftCrimpInteriorStart, midLeftIndex)
+                        
+                        # INWARDS-OUTWARDS FOLDS
+                        # the index lists are oriented inwards,
+                        # so the ones on the rigth need to flip to have
+                        # folds oriented in increasing x
+                        addFoldSequence(leftIndices, alternating=False)
+                        addFoldSequence(upperLeftCrimpDiagIndices, startWithValley=False)
+                        addFoldSequence(topLeftDiagIndices)
+                        addFoldSequence(topRightDiagIndices, flipEdges=True)
+                        addFoldSequence(rightIndices, flipEdges=True, startWithValley=False)
+                        addFoldSequence(bottomRightDiagIndices, flipEdges=True)
+                        addFoldSequence(bottomLeftDiagIndices)
+                        addFoldSequence(lowerLeftCrimpDiagIndices, startWithValley=False)
+                        
+                        # Each row is the indices of that recursive sink layer,
+                        # counting from outwards in.
+                        # It's split into top and bottom components to ensure
+                        # they're oriented left-to-right.
+                        InnerLayersTopIndices = np.vstack((leftIndices,
+                                                    upperLeftCrimpDiagIndices,
+                                                    topLeftDiagIndices,
+                                                    topRightDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        InnerLayersBottomIndices = np.vstack((leftIndices,
+                                                    lowerLeftCrimpDiagIndices,
+                                                    bottomLeftDiagIndices,
+                                                    bottomRightDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        
+                        addInnerLayersEdges(InnerLayersTopIndices, 
+                                            InnerLayersBottomIndices,
+                                            diamondLeft=True)
+                        
+                    
+                    else:
+                        upperLeftCrimpInteriorStart, upperLeftCrimpDiagIndices = \
+                            addInteriorCrimpVertices(upperCrimpIndices[p])
+                        topLeftDiagIndices = addInteriorDiagVertices(
+                            upperLeftCrimpInteriorStart, topLeftIndex)
+                        
+                        lowerLeftCrimpInteriorStart, lowerLeftCrimpDiagIndices = \
+                            addInteriorCrimpVertices(lowerCrimpIndices[p])
+                        bottomLeftDiagIndices = addInteriorDiagVertices(
+                            lowerLeftCrimpInteriorStart, bottomLeftIndex)
+                        
+                        leftIndices = addInteriorDiagVertices(
+                            lowerLeftCrimpInteriorStart, midLeftIndex)
+                        
+                        # crimp on both sides
+                        upperRightCrimpInteriorStart, upperRightCrimpDiagIndices = \
+                            addInteriorCrimpVertices(upperCrimpIndices[pRight])
+                        topRightDiagIndices = addInteriorDiagVertices(
+                            upperRightCrimpInteriorStart, topRightIndex)
+                        
+                        lowerRightCrimpInteriorStart, lowerRightCrimpDiagIndices = \
+                            addInteriorCrimpVertices(lowerCrimpIndices[pRight])
+                        bottomRightDiagIndices = addInteriorDiagVertices(
+                            lowerRightCrimpInteriorStart, bottomRightIndex)
+                        
+                        rightIndices = addInteriorDiagVertices(
+                            lowerRightCrimpInteriorStart, midRightIndex)
+                        
+                        # INWARDS-OUTWARDS FOLDS
+                        addFoldSequence(bottomLeftDiagIndices)
+                        addFoldSequence(lowerLeftCrimpDiagIndices, startWithValley=False)
+                        addFoldSequence(leftIndices, alternating=False)
+                        addFoldSequence(upperLeftCrimpDiagIndices, startWithValley=False)
+                        addFoldSequence(topLeftDiagIndices)                        
+                        # the index lists are oriented inwards,
+                        # so the ones on the right need to flip to have
+                        # folds oriented in increasing x
+                        addFoldSequence(topRightDiagIndices, flipEdges=True)
+                        addFoldSequence(upperRightCrimpDiagIndices, flipEdges=True)
+                        addFoldSequence(rightIndices, flipEdges=True, alternating=False)
+                        addFoldSequence(lowerRightCrimpDiagIndices, 
+                                        startWithValley=False, flipEdges=True)
+                        addFoldSequence(bottomRightDiagIndices, flipEdges=True)
+                        
+                        # Each row is the indices of that recursive sink layer,
+                        # counting from outwards in.
+                        # It's split into top and bottom components to ensure
+                        # they're oriented left-to-right.
+                        InnerLayersTopIndices = np.vstack((leftIndices,
+                                                    upperLeftCrimpDiagIndices,
+                                                    topLeftDiagIndices,
+                                                    topRightDiagIndices,
+                                                    upperRightCrimpDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        InnerLayersBottomIndices = np.vstack((leftIndices,
+                                                    lowerLeftCrimpDiagIndices,
+                                                    bottomLeftDiagIndices,
+                                                    bottomRightDiagIndices,
+                                                    lowerRightCrimpDiagIndices,
+                                                    rightIndices)).T[1:-1]
+                        
+                        addInnerLayersEdges(InnerLayersTopIndices, 
+                                            InnerLayersBottomIndices,
+                                            diamondLeft=True, 
+                                            diamondRight=True)
         
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
@@ -803,8 +1041,8 @@ class Twist(TubularPattern):
 
 
 """ Testing """
-r = 1
-numSides = 4
+r = 2
+numSides = 8
 
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
