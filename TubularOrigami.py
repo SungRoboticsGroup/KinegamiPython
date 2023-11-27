@@ -18,20 +18,30 @@ align together when composed.
 We represent them with a graph structure that encodes the geometry and topology
 in a graph structure where vertices (points on the surface) are parameterized
 in 2D by:
-    x - distance about the tube modulo numSides*baseSideLength, i.e., the
+    x - distance about the tube modulo width=numSides*baseSideLength, i.e., the
         horizontal coordinate when cut and unwrapped to flat
     y - distance about the tube, i.e., the vertical coordiante when flat
 
-In tubular topology, a non-vertical edge can either proceed clockwise or 
-counterclockwise from one vertex to the other. To disambiguate and enable us
-to detect which edges wrap around in the x coordinate, we encode all edges in
-the +x direction. This means an edge (i,j) proceeds from vertex i in the 
-+x direction (possibly with wraparound) to vertex j. Therefore, if 
-vertex j is to the left of vertex i, we know the fold has wraparound. 
-(When detecting vertical edges, an epsilon term provides numerical stability.)
-Obeying this orientation is important when implementing new fold patterns. 
+The fold segment connecting vertices (x0,y0),(x1,y1) is a shortest path 
+connecting them in the tubular topology. This is either the direct
+line segment within x range [0,width], or the linear path wrapping around
+the vertical edge. We can check which is shorter by comparing abs(x0-x1) to
+width/2. 
 
-To make this manufacturable in a flat topology (e.g. by a laser etching),
+If abs(x0-x1) is exactly width/2, then both paths must be creases. However, 
+they may not have the same mountain-valley assignment, so they have to be 
+encoded separately, distingushed by their ordering of the vertices.
+In this case, we say the edge where x0<x1 is the direct path and the one where
+x0>x1 is the wraparound path.
+
+(To see why both paths must be creases if abs(x0-x1) is exactly width/2, note 
+that in this case the paths have the same length d. If one is a crease, it maps 
+to a straight segment in the folded 3D structure, so the vertices map to 
+exactly d apart, since folding is an isometry. Since the other path must also
+map to a path of length d connecting these vertices in 3D which are d apart,
+it must also map to the segment connecting them, i.e., it is also a crease.)
+
+To make this manufacturable from a sheet (e.g. by a laser cutter),
 we consider it to be cut along the x=0 axis, with the geometry in 
 x=[0,baseSideLength] duplicated at the end so that the wraparound can adhere
 together along a 2D surface. This duplication, along with other difficulties of
@@ -42,9 +52,7 @@ TubularPattern objects is in the tubular topology).
 
 
 TODO:
-    CHECK MV ASSIGNMENTS FOR RECURSIVE SINK GADGET
-    
-    Clip recursive sink gadgets to stay within their panels!
+    Clip recursive sink gadgets to stay within their panels?
     
     Make append copy, not modify, the other pattern
     
@@ -147,7 +155,7 @@ class TubularPattern():
         self.proximalMarker[0, 0] %= self.width
         self.distalMarker[0, 0] %= self.width
 
-    def shift(self, v):
+    def translate(self, v):
         self.Vertices += v
         self.proximalMarker = self.proximalMarker + v
         self.distalMarker = self.distalMarker + v
@@ -170,7 +178,7 @@ class TubularPattern():
         assert (other.numSides == self.numSides)
         assert (other.r == self.r)
         assert (self.Edges.dtype.kind == 'i')
-        other.shift(self.distalMarker - other.proximalMarker)
+        other.translate(self.distalMarker - other.proximalMarker)
 
         """ Merge other's proximal base vertices with current distal base """
         indexShift = self.Vertices.shape[0] - other.numSides
@@ -284,7 +292,15 @@ class TubularPattern():
             print(Folds)
         for i in range(self.Edges.shape[0]):
             seg = Folds[i,:,:]
-            isWrapping = seg[0,0] > seg[1,0]+self.EPSILON
+            # The normal wraparound case is abs(x0-x1) > width/2.
+            # If abs(x0-x1)==width/2, both directions should exist as separate
+            # edges, and the one with x0>x1 is the wraparound version.
+            # Note that (abs(x0-x1)==width/2 and x0>x1) iff x0-x1==width/2.
+            # We implement both of these checks within epsilon bounds for 
+            # numerical stability.
+            dx = seg[0,0] - seg[1,0] # x0 - x1
+            isWrapping = (abs(dx) > (self.width/2 - self.EPSILON)) or \
+                            (abs(dx - self.width/2) < self.EPSILON)
             layer = "Mountain" if self.EdgeLabelsMV[i] else "Valley"
             
             if isWrapping:
@@ -327,7 +343,7 @@ class TubularPattern():
             # get the modelspace properties
             msp_properties = LayoutProperties.from_layout(msp)
             # set light gray background color and black foreground color
-            msp_properties.set_colors("#eaeaea")
+            msp_properties.set_colors("#ffffff") # light gray #eaeaea
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
@@ -1040,49 +1056,70 @@ class Twist(TubularPattern):
         self.wrapToWidth()
 
 
+
+
 """ Testing """
-r = 2
-numSides = 8
+import os
+import errno
+# https://stackoverflow.com/questions/32123394/workflow-to-create-a-folder-if-it-doesnt-exist-already
+def make_sure_path_exists(path):
+    try:
+        os.makedirs(path)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+r = 1
+numSides = 6
+folder = "./examplePatterns/"
+make_sure_path_exists(folder)
+subfolder = folder+"r"+str(r)+"n"+str(numSides)+"/"
+make_sure_path_exists(subfolder)
 
 composed = TubularPattern(numSides, r)
 tube = Tube(numSides, r, 2)
-#tube.plotRawGraph(saveas="tube_raw_graph", directed=True)
-tube.makeDXF(saveas="tube", show=False)
+#tube.plotRawGraph(saveas=subfolder+"tube_raw_graph", directed=True)
+tube.makeDXF(saveas=subfolder+"tube", show=False)
 
 #tube.plotRawGraph(directed=True)
 composed.append(Tube(numSides, r, 3))
 twist = Twist(numSides, r, 0.45*np.pi, 1)
-#twist.plotRawGraph(saveas="twist_raw_graph", directed=True)
-twist.makeDXF(saveas="twist", show=False)
+#twist.plotRawGraph(saveas=subfolder+"twist_raw_graph", directed=True)
+twist.makeDXF(saveas=subfolder+"twist", show=False)
 composed.append(Twist(numSides, r, 0.9*np.pi, 1))
 composed.append(Tube(numSides, r, 3))
-composed.makeDXF(saveas="tube_twist_tube", show=False)
-#composed.plotRawGraph(saveas="tube_twist_tube_raw_graph", directed=True)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube", show=False)
+#composed.plotRawGraph(saveas=subfolder+"tube_twist_tube_raw_graph", directed=True)
 
 doubleTwist = TubularPattern(numSides, r)
 doubleTwist.append(Twist(numSides, r, 0.9*np.pi, 1))
 doubleTwist.append(Twist(numSides, r, 0.3*np.pi, 1))
-doubleTwist.makeDXF(saveas="twist_twist", show=False)
-#doubleTwist.plotRawGraph(saveas="twist_twist_raw_graph", directed=True)
+doubleTwist.makeDXF(saveas=subfolder+"twist_twist", show=False)
+#doubleTwist.plotRawGraph(saveas=subfolder+"twist_twist_raw_graph", directed=True)
 
 elbow = ElbowFitting(numSides, r, -np.pi/4, np.pi/3)
-#elbow.plotRawGraph(saveas="elbow_raw_graph", directed=True)
-elbow.makeDXF(saveas="elbow", show=False)
+#elbow.plotRawGraph(saveas=subfolder+"elbow_raw_graph", directed=True)
+elbow.makeDXF(saveas=subfolder+"elbow", show=False)
 composed.append(elbow)
-composed.makeDXF(saveas="tube_twist_tube_elbow", show=False)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow", show=False)
 
 prismatic = PrismaticJointPattern(numSides, r, 1, 3, np.pi/3)
-#prismatic.plotRawGraph(saveas="prismatic_raw_graph", directed=True)
-prismatic.makeDXF(saveas="prismatic", show=False)
+#prismatic.plotRawGraph(saveas=subfolder+"prismatic_raw_graph", directed=True)
+prismatic.makeDXF(saveas=subfolder+"prismatic", show=False)
 composed.append(prismatic)
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic", show=False)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic", show=False)
 composed.append(Tube(numSides, r, 1))
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube", show=False)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic_tube", show=False)
 
-revolute = RevoluteJointPattern(numSides, r, np.pi, 4)
-#revolute.plotRawGraph(saveas="revolute_raw_graph", directed=True)
-revolute.makeDXF(saveas="revolute", show=True)
+revolute = RevoluteJointPattern(numSides, r, totalBendingAngle=np.pi, numSinkLayers=1)
+#revolute.plotRawGraph(saveas=subfolder+"revolute_raw_graph", directed=True)
+revolute.makeDXF(saveas=subfolder+"revolute_no_sink", show=False)
+
+
+revolute = RevoluteJointPattern(numSides, r, totalBendingAngle=np.pi, numSinkLayers=3)
+#revolute.plotRawGraph(saveas=subfolder+"revolute_raw_graph", directed=True)
+revolute.makeDXF(saveas=subfolder+"revolute", show=False)
 composed.append(revolute)
 composed.append(Tube(numSides, r, 0.5))
-composed.makeDXF(saveas="tube_twist_tube_elbow_prismatic_tube_revolute_tube",
-                 show=False)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic_tube_revolute_tube",
+                 show=True)
