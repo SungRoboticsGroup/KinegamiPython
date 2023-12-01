@@ -149,7 +149,7 @@ class PathCSC:
         self.turn1end = self.circleCenter1 - self.r * self.y1
         
         self.circleNormal2 = unitNormalToBoth(self.tUnit, self.endDir) # normal to circle 2        
-        self.w2 = circle2sign * cross(self.endDir, self.circleNormal2) # unit vector from startPosition to circle center
+        self.w2 = circle2sign * cross(self.endDir, self.circleNormal2) # unit vector from endPosition to circle center
         self.y2 = circle2sign * cross(self.tUnit, self.circleNormal2) # unit vector from circle 2 entering point to circle center
         self.circleCenter2 = self.endPosition + self.r * self.w2
         self.turn2start = self.circleCenter2 - self.r * self.y2

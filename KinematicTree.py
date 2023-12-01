@@ -11,6 +11,9 @@ from dubinsPath import *
 import scipy
 from scipy.optimize import NonlinearConstraint, minimize
 import queue
+import tubularOrigami
+from tubularOrigami import *
+
 
 class KinematicTree:
     """
@@ -126,7 +129,6 @@ class KinematicTree:
                                    PoseW1, parent.pathIndex())
         # don't add in W1 yet because don't want to update bounding sphere?
     """            
-        
     
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
