@@ -54,8 +54,6 @@ TubularPattern objects is in the tubular topology).
 TODO:
     Clip recursive sink gadgets to stay within their panels?
     
-    Make append copy, not modify, the other pattern
-    
     Make variable naming consistent:
         Matrices/arrays of >1 axis: Capitalize
         Vectors/1-axis arrays: plural, don't capitalize
@@ -77,7 +75,7 @@ import geometryHelpers
 from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
     signedAngles2D, signedAngles3D, lerpN, unit, signedAngle2D, unsignedAngle
 from spatialmath import SO3, SE3
-
+import copy
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0, 0]):
@@ -180,6 +178,7 @@ class TubularPattern():
         self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
     
     def append(self, other: 'TubularPattern'):
+        other = copy.deepcopy(other)
         assert (other.numSides == self.numSides)
         assert (other.r == self.r)
         assert (self.Edges.dtype.kind == 'i')
