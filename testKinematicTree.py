@@ -2,7 +2,7 @@
 """
 Created on Fri Jun 23 23:44:41 2023
 
-@author: dfesh
+@author: DanielFeshbach
 
 This file exists to test KinematicTree and by extension Joint and dubinsPath
 """
@@ -15,8 +15,8 @@ numSides = 6
 # tree whose root is a waypoint at the global frame
 KT = KinematicTree(WayPoint(numSides, r, SE3())) 
 
-j = KT.addJoint(0, PrismaticJoint(numSides, r, reboRelaxedLength=3, 
-                    reboNumLayers=6, coneAngle=np.pi/4,
+j = KT.addJoint(0, PrismaticJoint(numSides, r, neutralLength=3, 
+                    numLayers=6, coneAngle=np.pi/4,
                     Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
@@ -28,7 +28,7 @@ m = KT.addJoint(j, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 """
 
-i = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi, 0, 
+i = KT.addJoint(0, RevoluteJoint(numSides, r, np.pi,
                                  SE3.Rx(np.pi/4) @ SE3([3,1,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
@@ -38,7 +38,7 @@ n = KT.addJoint(i, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
 """
 
 
-c = KT.addJoint(j, RevoluteJoint(numSides, r, np.pi, 0, 
+c = KT.addJoint(j, RevoluteJoint(numSides, r, np.pi,
                              SE3.Rx(np.pi/2) @ SE3([0,-2,0])), guarantee=True)
 
 """

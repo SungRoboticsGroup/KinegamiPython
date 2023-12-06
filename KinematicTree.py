@@ -2,7 +2,7 @@
 """
 Created on Fri Jun 23 23:13:27 2023
 
-@author: dfesh
+@author: Daniel Feshbach
 """
 import Joint
 from Joint import *
@@ -28,7 +28,7 @@ class KinematicTree:
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root):
+    def __init__(self, root : Joint):
         self.root = root
         self.r = root.r
         self.numSides = root.numSides
@@ -63,8 +63,9 @@ class KinematicTree:
                 matter what you set those to, the algorithm will adjust the
                 position and orientation of newJoint.
     """
-    def addJoint(self, parentIndex, newJoint, relative=False, 
-                 fixedPosition=True, fixedOrientation=True, guarantee=False):
+    def addJoint(self, parentIndex : int, newJoint : Joint, 
+                 relative : bool = False, fixedPosition : bool = True, 
+                 fixedOrientation : bool =True, guarantee : bool = False):
         assert(newJoint.r == self.r)
         assert(newJoint.numSides == self.numSides)
         parent = self.Joints[parentIndex]
@@ -99,38 +100,10 @@ class KinematicTree:
         self.Paths.append(shortestCSC(self.r, 
                     parent.distalPosition(), parent.pathDirection(),
                     newJoint.proximalPosition(), newJoint.pathDirection()))
-        self.plot()
         
         return newIndex
     
-    """
-    IN PROCESS OF IMPLEMENTING, COMMENTING OUT FOR THIS COMMIT
-    
-    Input:
-    childrenToPlace is an array of joints
-    parentIndex is the index of the parent joint
-    """
-    """
-    def addChildrenWithWayPoints(childrenToPlace, parentIndex):
-        parent = self.Joints[parentIndex]
-        
-        # WAYPOINT 1 (common to all children)
-        nhat1 = parent.pathDirection()
-        # point on bounding sphere in direction nhat1
-        s1 = ball.c + ball.r * nhat1
-        tangentPlane1 = Plane(s1, nhat1)
-        # Construct a waypoint where this plane intersects the 
-        # parent's path axis, with orientation matching parent.
-        parentPathAxis = Line(parent.Pose.t, nhat1)
-        originW1 = tangentPlane1.intersectionWithLine(parentPathAxis)
-        # guaranteed to be a point because line is normal to plane
-        PoseW1 = SE3.Rt(parent.Pose.R, originW1)
-        W1 = WayPoint(jointToPlace.numSides, jointToPlace.r, 
-                                   PoseW1, parent.pathIndex())
-        # don't add in W1 yet because don't want to update bounding sphere?
-    """            
-    
-    
+      
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
                   pathColor='black', showCircles=False, sphereColor='black',
@@ -169,12 +142,12 @@ class KinematicTree:
         plt.show()
     
     
-    def isLeaf(self, jointIndex):
+    def isLeaf(self, jointIndex : int):
         return len(Children[jointIndex]) == 0
     
     """ Returns list of indices of descendants of a given joint index, 
         in breadth-first order"""
-    def DescendantsBreadthFirst(self, jointIndex):
+    def DescendantsBreadthFirst(self, jointIndex : int):
         descendants = Children[jointIndex].copy()
         i = 0
         while i < len(descendants):
@@ -185,7 +158,8 @@ class KinematicTree:
     
     """ Apply given transformation (SE3() object) to given joint (index), 
         and to its descendants if recursive (defaults to False) """
-    def transformJoint(self, jointIndex, Transformation, recursive=False):
+    def transformJoint(self, jointIndex : int, Transformation : SE3, 
+                       recursive : bool = False):
         self.Joints[jointIndex].transformBy(Transformation)
         if recursive:
             for c in self.Children[jointIndex]:

@@ -42,12 +42,16 @@ def dubinsLinkPattern(numSides : int,
                               DistalDubinsFrame.t, distalPathDir)
     else:
         assert(path.r == r)
+        assert(norm(path.startPosition - ProximalDubinsFrame.t) < EPSILON)
+        assert(norm(path.endPosition - DistalDubinsFrame.t) < EPSILON)
+        assert(norm(path.startDir - ProximalDubinsFrame.R[:,0]) < EPSILON)
+        assert(norm(path.endDir - DistalDubinsFrame.R[:,0]) < EPSILON)
     
     assert(path.theta1 >= 0)
     assert(path.theta1 <= np.pi)
     assert(path.theta2 >= 0)
     assert(path.theta2 <= np.pi)
-    
+        
     composed = TubularPattern(numSides, r)
     
     rot1AxisDir = np.cross(proximalPathDir, path.w1)

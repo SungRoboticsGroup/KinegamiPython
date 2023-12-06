@@ -8,6 +8,7 @@ from spatialmath import SE3
 from abc import ABC, abstractmethod
 from geometryHelpers import *
 import matplotlib.pyplot as plt
+from tubularOrigami import *
 
 class Joint(ABC):
     """
@@ -15,7 +16,7 @@ class Joint(ABC):
     Pose is an SE3 object where the Z axis is the joint axis
     length is from proximal to distal position (in relaxed configuration)
     """
-    def __init__(self, r, length, Pose):
+    def __init__(self, r : float, length : float, Pose : SE3):
         self.r = r
         self.Pose = Pose
         self.length = length
@@ -38,6 +39,20 @@ class Joint(ABC):
     
     def proximalPose(self):
         return SE3.Trans(-(self.length/2) * self.pathDirection()) @ self.Pose
+    
+    # Indices 0,1,2,3 with 0,1,2 cycled to begin with pathDirection
+    def dubinsColumnOrder(self):
+        return np.hstack((np.roll(np.arange(3), -self.pathIndex()),[3]))
+    
+    # Pose with axes cycled so that the first axis direction is pathDirection
+    def dubinsFrame(self):
+        return SE3(self.Pose.A[:,self.dubinsColumnOrder()])
+    
+    def proximalDubinsFrame(self):
+        return SE3(self.proximalPose().A[:,self.dubinsColumnOrder()])
+    
+    def distalDubinsFrame(self):
+        return SE3(self.distalPose().A[:,self.dubinsColumnOrder()])
     
     def proximalPosition(self):
         return self.proximalPose().t
@@ -95,19 +110,19 @@ class OrigamiJoint(Joint):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         super().__init__(r, length, Pose)
-
     
 class RevoluteJoint(OrigamiJoint):
     """
-    Origami revolute joint with rotation range [-angleLimit/2, angleLimit/2]
-    and sinkLayers recursive sing gadget layers 
+    Origami revolute joint with rotation range [-totalBendingAngle/2, totalBendingAngle/2]
+    and numSinkLayers recursive sink gadget layers 
     """
-    def __init__(self, numSides, r, angleLimit, sinkLayers, Pose):
+    def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
+                 Pose : SE3, numSinkLayers : int = 1):
         polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
-        length = 2*r*np.sin(polygonInnerAngle)*np.tan(angleLimit/4) #2*delta from paper
+        length = 2*r*np.sin(polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
         super().__init__(numSides, r, length, Pose)
-        self.sinkLayers = sinkLayers
-        self.angleLimit = angleLimit
+        self.pattern = RevoluteJointPattern(self.numSides, self.r, 
+                                            totalBendingAngle, numSinkLayers)
     
     def pathIndex(self):
         return 0 # xhat
@@ -115,14 +130,12 @@ class RevoluteJoint(OrigamiJoint):
     def boundingRadius(self):
         return self.length / 2
     
-    
 class PrismaticJoint(OrigamiJoint):
-    def __init__(self, numSides, r, reboRelaxedLength, reboNumLayers, 
-                 coneAngle, Pose):
-        jointRelaxedLength = (1/2) * reboRelaxedLength * (2 + 1/np.sin(coneAngle))
-        super().__init__(numSides, r, jointRelaxedLength, Pose)
-        self.reboNumLayers = reboNumLayers
-        self.coneAngle = coneAngle
+    def __init__(self, numSides : int, r : float, neutralLength : float, 
+                 numLayers : int, coneAngle : float, Pose : SE3):
+        super().__init__(numSides, r, neutralLength, Pose)
+        self.pattern = PrismaticJointPattern(numSides, r, neutralLength, 
+                                             numLayers, coneAngle)
         
     def pathIndex(self):
         return 2 # zhat
@@ -133,6 +146,7 @@ class WayPoint(OrigamiJoint):
     def __init__(self, numSides, r, Pose, pathIndex=2):
         super().__init__(numSides, r, 0, Pose)
         self.pidx = pathIndex
+        self.pattern = TubularPattern(numSides, r)
     
     def pathIndex(self):
         return self.pidx

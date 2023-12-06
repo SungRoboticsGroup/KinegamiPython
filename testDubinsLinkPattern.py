@@ -2,7 +2,7 @@
 """
 Created on Fri Dec  1 14:49:05 2023
 
-@author: dfesh
+@author: Daniel Feshbach
 """
 import dubinsLinkPattern
 from dubinsLinkPattern import *
