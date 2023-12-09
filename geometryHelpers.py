@@ -148,6 +148,48 @@ class Circle3D:
         
         # 3d circle points
         return self.c + u @ uhat + v @ vhat
+
+class Cylinder:
+    def __init__(self, radius : float, start : np.ndarray, 
+                 direction : np.ndarray, length : float):
+        assert(length > 0)
+        assert(norm(direction)>0)
+        self.start = start
+        self.direction = direction / norm(direction)
+        self.length = length
+        self.end = start + self.length * self.direction
+        self.r = radius
+    
+    # Partially adapted from https://stackoverflow.com/questions/26989131/add-cylinder-to-plot
+    def interpolateCircles(self, radialCount=12, axialCount=3):
+        angle = np.linspace(0, 2*np.pi, radialCount)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        circlePlaneBasis = null_space([self.direction])
+        uhat = circlePlaneBasis[:,0]
+        vhat = circlePlaneBasis[:,1]
+        circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
+        
+        segment = np.linspace(self.start, self.end, axialCount)
+        circlePoints = np.tile(circle, (axialCount,1)) + np.repeat(segment, radialCount, axis=0)
+        return circlePoints.reshape((axialCount, radialCount, 3))
+    
+    def addToPlot(self, ax, radialCount=12, axialCount=3, color='black', alpha=0.5, frame=False):
+        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
+        circles = self.interpolateCircles(radialCount, axialCount)
+        X = circles[:,:,0]
+        Y = circles[:,:,1]
+        Z = circles[:,:,2]
+        if frame:
+            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
+        else:
+            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+    
+    def plot(self, radialCount=13, axialCount=2, color='black', alpha=0.5, frame=False):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, radialCount, axialCount, color, alpha, frame)
+        ax.set_aspect('equal')
+
     
 class Arc3D:
     def __init__(self, circleCenter, startPoint, startDir, theta):
