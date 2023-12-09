@@ -160,8 +160,8 @@ class Cylinder:
         self.end = start + self.length * self.direction
         self.r = radius
     
-    def interpolateCircles(self, radialCount=12, axialCount=3):
-        angle = np.linspace(0, 2*np.pi, radialCount)
+    def interpolateCircles(self, numPointsPerCircle=12, numCircles=2):
+        angle = np.linspace(0, 2*np.pi, numPointsPerCircle+1) #the +1 is because the first equals the last
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
         circlePlaneBasis = null_space([self.direction])
@@ -169,12 +169,12 @@ class Cylinder:
         vhat = circlePlaneBasis[:,1]
         circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
         
-        segment = np.linspace(self.start, self.end, axialCount)
-        circlePoints = np.tile(circle, (axialCount,1)) + np.repeat(segment, radialCount, axis=0)
-        return circlePoints.reshape((axialCount, radialCount, 3))
+        segment = np.linspace(self.start, self.end, numCircles)
+        circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, numPointsPerCircle, axis=0)
+        return circlePoints.reshape((numCircles, numPointsPerCircle, 3))
     
-    def addToPlot(self, ax, radialCount=12, axialCount=3, color='black', alpha=0.5, frame=False):
-        circles = self.interpolateCircles(radialCount, axialCount)
+    def addToPlot(self, ax, numPointsPerCircle=12, numCircles=2, color='black', alpha=0.5, frame=False):
+        circles = self.interpolateCircles(numPointsPerCircle, numCircles)
         X = circles[:,:,0]
         Y = circles[:,:,1]
         Z = circles[:,:,2]
@@ -183,9 +183,9 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
     
-    def plot(self, radialCount=13, axialCount=2, color='black', alpha=0.5, frame=False):
+    def plot(self, numPointsPerCircle=12, numCircles=2, color='black', alpha=0.5, frame=False):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, radialCount, axialCount, color, alpha, frame)
+        plotHandles = self.addToPlot(ax, numPointsPerCircle, numCircles, color, alpha, frame)
         ax.set_aspect('equal')
 
     
