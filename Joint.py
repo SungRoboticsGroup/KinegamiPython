@@ -70,7 +70,7 @@ class Joint(ABC):
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
         zhat = self.Pose.R[:,2]
-        assert(dot(zhat, xhatNew)==0) #input must be orthogonal to Z axis
+        assert(dot(zhat, xhatNew) < 0.0001) #input must be orthogonal to Z axis
         yhatNew = cross(zhat, xhatNew)
         Transform = np.eye(4)
         Transform[0:3,0] = xhatNew
