@@ -160,7 +160,6 @@ class Cylinder:
         self.end = start + self.length * self.direction
         self.r = radius
     
-    # Partially adapted from https://stackoverflow.com/questions/26989131/add-cylinder-to-plot
     def interpolateCircles(self, radialCount=12, axialCount=3):
         angle = np.linspace(0, 2*np.pi, radialCount)
         u = self.r * np.cos(angle)
@@ -175,7 +174,6 @@ class Cylinder:
         return circlePoints.reshape((axialCount, radialCount, 3))
     
     def addToPlot(self, ax, radialCount=12, axialCount=3, color='black', alpha=0.5, frame=False):
-        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
         circles = self.interpolateCircles(radialCount, axialCount)
         X = circles[:,:,0]
         Y = circles[:,:,1]
