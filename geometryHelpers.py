@@ -161,7 +161,8 @@ class Cylinder:
         self.r = radius
     
     def interpolateCircles(self, numPointsPerCircle=12, numCircles=2):
-        angle = np.linspace(0, 2*np.pi, numPointsPerCircle+1) #the +1 is because the first equals the last
+        radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
+        angle = np.linspace(0, 2*np.pi, radialCount) 
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
         circlePlaneBasis = null_space([self.direction])
@@ -170,8 +171,8 @@ class Cylinder:
         circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
         
         segment = np.linspace(self.start, self.end, numCircles)
-        circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, numPointsPerCircle, axis=0)
-        return circlePoints.reshape((numCircles, numPointsPerCircle, 3))
+        circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
+        return circlePoints.reshape((numCircles, radialCount, 3))
     
     def addToPlot(self, ax, numPointsPerCircle=12, numCircles=2, color='black', alpha=0.5, frame=False):
         circles = self.interpolateCircles(numPointsPerCircle, numCircles)
