@@ -11,7 +11,8 @@ from scipy.linalg import null_space
 from numpy.linalg import norm
 from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
-
+import math
+from math import remainder
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -160,7 +161,7 @@ class Cylinder:
         self.end = start + self.length * self.direction
         self.r = radius
     
-    def interpolateCircles(self, numPointsPerCircle=12, numCircles=2):
+    def interpolateCircles(self, numPointsPerCircle=32, numCircles=2):
         radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
         angle = np.linspace(0, 2*np.pi, radialCount) 
         u = self.r * np.cos(angle)
@@ -174,7 +175,7 @@ class Cylinder:
         circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
         return circlePoints.reshape((numCircles, radialCount, 3))
     
-    def addToPlot(self, ax, numPointsPerCircle=12, numCircles=2, color='black', alpha=0.5, frame=False):
+    def addToPlot(self, ax, numPointsPerCircle=32, numCircles=2, color='black', alpha=0.5, frame=False):
         circles = self.interpolateCircles(numPointsPerCircle, numCircles)
         X = circles[:,:,0]
         Y = circles[:,:,1]
@@ -184,11 +185,96 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
     
-    def plot(self, numPointsPerCircle=12, numCircles=2, color='black', alpha=0.5, frame=False):
+    def plot(self, numPointsPerCircle=32, numCircles=2, color='black', alpha=0.5, frame=False):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numPointsPerCircle, numCircles, color, alpha, frame)
         ax.set_aspect('equal')
+    
 
+
+# applies to DUBINS FRAMES, where the dubins direction is column 0 (ahat)
+def elbowTranformation(rotAxis : np.ndarray,
+                       bendingAngle : float,
+                       r : float,
+                       EPSILON : float = 0.0001) -> SE3:
+    if bendingAngle < EPSILON:
+        return SE3()
+    else:
+        Forward = SE3.Tx(r*np.tan(bendingAngle/2))
+        Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
+        return Forward @ Rotate @ Forward
+
+class Elbow:
+    def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
+                 rotAxisDir : np.ndarray, EPSILON : float = 0.0001):
+        assert(norm(rotAxisDir) > EPSILON)
+        assert(dot(rotAxisDir, StartFrame.R[:,0]) < EPSILON)
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) < np.pi)
+        assert(abs(bendingAngle) > 0.00001)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            rotAxisDir = -rotAxisDir
+        
+        self.StartFrame = StartFrame
+        self.r = radius
+        self.rotAxisDir = rotAxisDir / norm(rotAxisDir)
+        self.bendingAngle = bendingAngle
+        self.dw = self.r * np.tan(self.bendingAngle / 2)
+        
+        if bendingAngle < EPSILON:
+            self.Forward = SE3()
+            self.Rotate = SE3()
+            self.Transformation = SE3()
+        else:
+            self.Forward = SE3.Tx(self.r*np.tan(self.bendingAngle/2))
+            self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDir)
+            self.Transformation = self.Forward @ self.Rotate @ self.Forward
+        
+        self.EndFrame = self.Transformation @ self.StartFrame
+        
+    def circleEllipseCircle(self, numSides : int = 32) -> tuple:
+        count = numSides+1 # the +1 is because the first and last point will be identical
+        angle = np.linspace(0, 2*np.pi, count) 
+        ahat = self.StartFrame.R[:,0]
+        bhat = self.StartFrame.R[:,1]
+        chat = self.StartFrame.R[:,2]
+        u = self.r * np.cos(angle).reshape(-1,1)
+        v = self.r * np.sin(angle).reshape(-1,1)
+        StartCircle = u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
+        
+        HalfRotate = SE3.AngleAxis(self.bendingAngle / 2, self.rotAxisDir)
+        midPlaneNormal = HalfRotate * self.StartFrame.R[:,0]
+        midPoint = self.Forward * self.StartFrame.t
+        midPlane = Plane(midPoint, midPlaneNormal)
+        MidEllipse = midPlane.intersectionsWithParallelLines(StartCircle, ahat)
+        
+        endBhat = self.EndFrame.R[:,1]
+        endChat = self.EndFrame.R[:,2]
+        endPoint = self.EndFrame.t
+        EndCircle = endPoint + u @ endBhat.reshape(1,3) + v @ endChat.reshape(1,3)
+        
+        return StartCircle, MidEllipse, EndCircle
+    
+    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
+                  alpha : float = 0.5, frame : bool = False):
+        
+        StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
+        ellipses = np.array([StartCircle, MidEllipse, EndCircle])
+        X = ellipses[:,:,0]
+        Y = ellipses[:,:,1]
+        Z = ellipses[:,:,2]
+        if frame:
+            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
+        else:
+            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+    
+    def plot(self, numSides : int = 32, color : str = 'black', 
+             alpha : float = 0.5, frame : bool = False):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, numSides, color, alpha, frame)
+        ax.set_aspect('equal')
+        
     
 class Arc3D:
     def __init__(self, circleCenter, startPoint, startDir, theta):
@@ -223,7 +309,8 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
-
+        
+        
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
 # returns the plot handles for the xHats, yHats, zHats, origins
@@ -338,28 +425,29 @@ class Line:
         self.dhat = direction / norm(direction)
     
 class Plane:
-    def __init__(self, point, normal):
+    def __init__(self, point, normal, EPSILON=0.00000001):
         self.p = point
         self.nhat = normal / norm(normal)
+        self.EPSILON = EPSILON
         
     # sign is + if the point is on the +nhat side, 0 if on plane, - otherwise
-    def signedDistanceToPoint(self, point, epsilon=0.00000001):
+    def signedDistanceToPoint(self, point):
         projectionLength = dot(point - self.p, self.nhat)
-        if abs(projectionLength) < epsilon: #for numerical stability
+        if abs(projectionLength) < self.EPSILON: #for numerical stability
             return 0
         else:
             return projectionLength
     
     # return 0 if point is on the plane, +1 if on the +nhat side, -1 otherwise
-    def sideOfPoint(self, point, epsilon=0.00000001):
-        return np.sign(self.signedDistanceToPoint(point, epsilon))
+    def sideOfPoint(self, point):
+        return np.sign(self.signedDistanceToPoint(point, self.EPSILON))
     
-    def containsPoint(self, point, epsilon=0.00000001):
+    def containsPoint(self, point):
         # plane contains point iff self.p - point is orthogonal to self.nhat
-        return self.sideOfPoint(point, epsilon) == 0
+        return self.sideOfPoint(point, self.EPSILON) == 0
     
-    def intersectionWithLine(self, line, epsilon=0.00000001):
-        if abs(dot(self.nhat, line.dhat)) < epsilon: 
+    def intersectionWithLine(self, line):
+        if abs(dot(self.nhat, line.dhat)) < self.EPSILON: 
             # line is either on the plane or parallel to it
             if self.containsPoint(line.p): 
                 # line is on the plane
@@ -376,7 +464,13 @@ class Plane:
             intersect = line.p + t * line.dhat
             assert(self.containsPoint(intersect))
             return intersect
-        
+    
+    def intersectionsWithParallelLines(self, Points : np.ndarray, 
+                                       direction : np.ndarray) -> np.ndarray:
+        PtoPoints = Points - self.p.flatten()
+        alignment = dot(-direction, self.nhat.flatten())
+        ts =  PtoPoints @ self.nhat.reshape(3,1) / alignment
+        return Points + ts*direction
     
     """ 
     Return an array containing the sides of the plane that the given line

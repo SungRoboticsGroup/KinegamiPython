@@ -9,18 +9,7 @@ from tubularOrigami import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 import dubinsPath
 from dubinsPath import *
-
-# applies to DUBINS FRAMES, where the dubins direction is column 0 (ahat)
-def elbowTranformation(rotAxis : np.ndarray,
-                       bendingAngle : float,
-                       r : float,
-                       EPSILON : float = 0.0001) -> SE3:
-    if bendingAngle < EPSILON:
-        return SE3()
-    else:
-        Forward = SE3.Tx(r*np.tan(bendingAngle/2))
-        Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
-        return Forward @ Rotate @ Forward
+from geometryHelpers import elbowTranformation
     
 def dubinsLinkPattern(numSides : int,
                       r : float,
