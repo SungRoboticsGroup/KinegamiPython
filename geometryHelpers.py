@@ -204,6 +204,11 @@ def elbowTranformation(rotAxis : np.ndarray,
         Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
         return Forward @ Rotate @ Forward
 
+
+
+    
+
+# TODO: DEBUG WHY THIS ISN'T WORKING FOR START FRAMES NOT AT ORIGIN
 class Elbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
                  rotAxisDir : np.ndarray, EPSILON : float = 0.0001):
@@ -231,7 +236,7 @@ class Elbow:
             self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDir)
             self.Transformation = self.Forward @ self.Rotate @ self.Forward
         
-        self.EndFrame = self.Transformation @ self.StartFrame
+        self.EndFrame = self.StartFrame @ self.Transformation
         
     def circleEllipseCircle(self, numSides : int = 32) -> tuple:
         count = numSides+1 # the +1 is because the first and last point will be identical
@@ -241,13 +246,15 @@ class Elbow:
         chat = self.StartFrame.R[:,2]
         u = self.r * np.cos(angle).reshape(-1,1)
         v = self.r * np.sin(angle).reshape(-1,1)
-        StartCircle = u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
+        startPoint = self.StartFrame.t
+        StartCircle = startPoint + u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
         
         HalfRotate = SE3.AngleAxis(self.bendingAngle / 2, self.rotAxisDir)
         midPlaneNormal = HalfRotate * self.StartFrame.R[:,0]
-        midPoint = self.Forward * self.StartFrame.t
+        midPoint = self.Forward * startPoint
         midPlane = Plane(midPoint, midPlaneNormal)
         MidEllipse = midPlane.intersectionsWithParallelLines(StartCircle, ahat)
+        
         
         endBhat = self.EndFrame.R[:,1]
         endChat = self.EndFrame.R[:,2]
