@@ -245,7 +245,6 @@ def elbowTranformation(rotAxis : np.ndarray,
         Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
         return Forward @ Rotate @ Forward
 
-
 def RotationAboutLine(rotAxisDir : np.ndarray,
                       rotAxisPoint : np.ndarray,
                       angle : float) -> SE3:
@@ -253,23 +252,20 @@ def RotationAboutLine(rotAxisDir : np.ndarray,
     t = (np.eye(3) - R) @ rotAxisPoint.reshape(3,1)
     return SE3.Rt(R,t)
 
-
-# TODO: DEBUG WHY THIS ISN'T WORKING FOR START FRAMES NOT AT ORIGIN
 class Elbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
-                 rotAxisDir : np.ndarray, EPSILON : float = 0.0001):
-        assert(norm(rotAxisDir) > EPSILON)
-        assert(dot(rotAxisDir, StartFrame.R[:,0]) < EPSILON)
+                 rotationalAxisAngle : float, EPSILON : float = 0.0001):
+        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
         assert(abs(bendingAngle) < np.pi)
-        assert(abs(bendingAngle) > 0.00001)
+        assert(abs(bendingAngle) > EPSILON)
         if bendingAngle < 0:
             bendingAngle = abs(bendingAngle)
-            rotAxisDir = -rotAxisDir
+            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
         
         self.StartFrame = StartFrame
         self.r = radius
-        self.rotAxisDir = rotAxisDir / norm(rotAxisDir)
+        self.rotAxisDirLocal = SO3.Rx(rotationalAxisAngle) * np.array([0,1,0])
         self.bendingAngle = bendingAngle
         self.dw = self.r * np.tan(self.bendingAngle / 2)
         
@@ -279,18 +275,14 @@ class Elbow:
             self.Transformation = SE3()
         else:
             self.Forward = SE3.Tx(self.dw)
-            self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDir) #RotationAboutLine(self.rotAxisDir, self.Forward.t, self.bendingAngle)
+            self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDirLocal) 
             self.Transformation = self.Forward @ self.Rotate @ self.Forward
-            
-            """
-            R = self.Rotate.R
-            t = self.dw*(R + np.eye(3))[:,2].reshape(3,1)
-            top = np.hstack((self.Rotate.R, t))
-            bot = np.array([0,0,0,1])
-            self.Transformation = SE3(np.vstack((top,bot)))
-            """
         
         self.EndFrame = self.StartFrame @ self.Transformation
+        
+        self.HalfRotate = SE3.AngleAxis(self.bendingAngle / 2, self.rotAxisDirLocal)
+        self.midPlaneNormal = (self.StartFrame * self.HalfRotate).R[:,0]
+        self.midPoint = (self.StartFrame * self.Forward).t
         
     def circleEllipseCircle(self, numSides : int = 32) -> tuple:
         count = numSides+1 # the +1 is because the first and last point will be identical
@@ -300,15 +292,10 @@ class Elbow:
         chat = self.StartFrame.R[:,2]
         u = self.r * np.cos(angle).reshape(-1,1)
         v = self.r * np.sin(angle).reshape(-1,1)
-        startPoint = self.StartFrame.t
-        StartCircle = startPoint + u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
+        StartCircle = self.StartFrame.t + u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
         
-        HalfRotate = SE3.AngleAxis(self.bendingAngle / 2, self.rotAxisDir)
-        midPlaneNormal = (self.StartFrame * HalfRotate).R[:,0]
-        midPoint = self.Forward * startPoint
-        midPlane = Plane(midPoint, midPlaneNormal)
+        midPlane = Plane(self.midPoint, self.midPlaneNormal)
         MidEllipse = midPlane.intersectionsWithParallelLines(StartCircle, ahat)
-        
         
         endBhat = self.EndFrame.R[:,1]
         endChat = self.EndFrame.R[:,2]
@@ -333,6 +320,9 @@ class Elbow:
             FwdRotFwd = FwdRot @ self.Forward
             Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
             addPosesToPlot(Poses, ax, axisLength=1)
+            x,y,z = Fwd.t
+            u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
+            ax.quiver(x,y,z,u,v,w,length=2,normalize=True)
         
         if wireFrame:
             return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
@@ -364,7 +354,7 @@ class Arc3D:
         self.startNormal = - self.centerToStart / self.r
                 
         self.binormal = cross(self.startTangent, self.startNormal)
-        self.rot = Rotation.from_rotvec(self.theta * self.binormal)
+        self.rot = Rotation.from_rotvec(self.theta * self.binormal) #TODO: replace this with SO3 to be consistent?
         self.centerToEnd = self.rot.apply(self.centerToStart)
         self.endPoint = self.circleCenter + self.centerToEnd
         self.endNormal = - self.centerToEnd / self.r

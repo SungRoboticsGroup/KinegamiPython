@@ -18,7 +18,6 @@ IROS 2010.
 import numpy as np
 from numpy import cross, dot, arctan2
 import scipy
-from scipy.spatial.transform import Rotation
 from scipy.linalg import null_space
 from numpy.linalg import norm
 import matplotlib.pyplot as plt
