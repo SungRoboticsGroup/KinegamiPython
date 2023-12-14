@@ -196,16 +196,15 @@ class Cylinder:
 
 class CompoundElbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
-                 rotAxisDir : np.ndarray, splitLongElbowsInto : int = 2, 
+                 rotationalAxisAngle : float, splitLongElbowsInto : int = 2, 
                  EPSILON : float = 0.0001):
-        assert(norm(rotAxisDir) > EPSILON)
-        assert(dot(rotAxisDir, StartFrame.R[:,0]) < EPSILON)
+        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
         assert(abs(bendingAngle) < np.pi)
-        assert(abs(bendingAngle) > 0.00001)
+        assert(abs(bendingAngle) > EPSILON)
         if bendingAngle < 0:
             bendingAngle = abs(bendingAngle)
-            rotAxisDir = -rotAxisDir
+            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
         
         assert(splitLongElbowsInto >= 1)
         self.elbows = []
@@ -214,22 +213,25 @@ class CompoundElbow:
             anglePerElbow = bendingAngle / splitLongElbowsInto
             for i in range(splitLongElbowsInto):
                 nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
-                                         rotAxisDir, EPSILON)
+                                         rotationalAxisAngle, EPSILON)
                 self.elbows.append(nextElbow)
                 CurrentFrame = nextElbow.EndFrame
         else:
             self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
-                                     rotAxisDir, EPSILON))
+                                     rotationalAxisAngle, EPSILON))
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
-                  alpha : float = 0.5, frame : bool = False):
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = True):
         for elbow in self.elbows:
-            elbow.addToPlot(ax, numSides, color, alpha, frame)
+            elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
     
     def plot(self, numSides : int = 32, color : str = 'black', 
-             alpha : float = 0.5, frame : bool = False):
+             alpha : float = 0.5, wireFrame : bool = False, 
+             showFrames : bool = True):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, frame)
+        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+                                     showFrames)
         ax.set_aspect('equal')
 
     
