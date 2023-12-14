@@ -192,6 +192,47 @@ class Cylinder:
     
 
 
+
+
+class CompoundElbow:
+    def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
+                 rotAxisDir : np.ndarray, splitLongElbowsInto : int = 2, 
+                 EPSILON : float = 0.0001):
+        assert(norm(rotAxisDir) > EPSILON)
+        assert(dot(rotAxisDir, StartFrame.R[:,0]) < EPSILON)
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) < np.pi)
+        assert(abs(bendingAngle) > 0.00001)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            rotAxisDir = -rotAxisDir
+        
+        assert(splitLongElbowsInto >= 1)
+        self.elbows = []
+        if bendingAngle > np.pi / splitLongElbowsInto:
+            CurrentFrame = StartFrame
+            anglePerElbow = bendingAngle / splitLongElbowsInto
+            for i in range(splitLongElbowsInto):
+                nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
+                                         rotAxisDir, EPSILON)
+                self.elbows.append(nextElbow)
+                CurrentFrame = nextElbow.EndFrame
+        else:
+            self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
+                                     rotAxisDir, EPSILON))
+    
+    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
+                  alpha : float = 0.5, frame : bool = False):
+        for elbow in self.elbows:
+            elbow.addToPlot(ax, numSides, color, alpha, frame)
+    
+    def plot(self, numSides : int = 32, color : str = 'black', 
+             alpha : float = 0.5, frame : bool = False):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, numSides, color, alpha, frame)
+        ax.set_aspect('equal')
+
+    
 # applies to DUBINS FRAMES, where the dubins direction is column 0 (ahat)
 def elbowTranformation(rotAxis : np.ndarray,
                        bendingAngle : float,
@@ -205,8 +246,13 @@ def elbowTranformation(rotAxis : np.ndarray,
         return Forward @ Rotate @ Forward
 
 
+def RotationAboutLine(rotAxisDir : np.ndarray,
+                      rotAxisPoint : np.ndarray,
+                      angle : float) -> SE3:
+    R = SO3.AngleAxis(angle, rotAxisDir)
+    t = (np.eye(3) - R) @ rotAxisPoint.reshape(3,1)
+    return SE3.Rt(R,t)
 
-    
 
 # TODO: DEBUG WHY THIS ISN'T WORKING FOR START FRAMES NOT AT ORIGIN
 class Elbow:
@@ -232,9 +278,17 @@ class Elbow:
             self.Rotate = SE3()
             self.Transformation = SE3()
         else:
-            self.Forward = SE3.Tx(self.r*np.tan(self.bendingAngle/2))
-            self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDir)
+            self.Forward = SE3.Tx(self.dw)
+            self.Rotate = SE3.AngleAxis(self.bendingAngle, self.rotAxisDir) #RotationAboutLine(self.rotAxisDir, self.Forward.t, self.bendingAngle)
             self.Transformation = self.Forward @ self.Rotate @ self.Forward
+            
+            """
+            R = self.Rotate.R
+            t = self.dw*(R + np.eye(3))[:,2].reshape(3,1)
+            top = np.hstack((self.Rotate.R, t))
+            bot = np.array([0,0,0,1])
+            self.Transformation = SE3(np.vstack((top,bot)))
+            """
         
         self.EndFrame = self.StartFrame @ self.Transformation
         
@@ -250,7 +304,7 @@ class Elbow:
         StartCircle = startPoint + u @ bhat.reshape(1,3) + v @ chat.reshape(1,3)
         
         HalfRotate = SE3.AngleAxis(self.bendingAngle / 2, self.rotAxisDir)
-        midPlaneNormal = HalfRotate * self.StartFrame.R[:,0]
+        midPlaneNormal = (self.StartFrame * HalfRotate).R[:,0]
         midPoint = self.Forward * startPoint
         midPlane = Plane(midPoint, midPlaneNormal)
         MidEllipse = midPlane.intersectionsWithParallelLines(StartCircle, ahat)
@@ -264,22 +318,33 @@ class Elbow:
         return StartCircle, MidEllipse, EndCircle
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
-                  alpha : float = 0.5, frame : bool = False):
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = False):
         
         StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
         ellipses = np.array([StartCircle, MidEllipse, EndCircle])
         X = ellipses[:,:,0]
         Y = ellipses[:,:,1]
         Z = ellipses[:,:,2]
-        if frame:
+        
+        if showFrames:
+            Fwd = self.StartFrame @ self.Forward 
+            FwdRot = Fwd @ self.Rotate
+            FwdRotFwd = FwdRot @ self.Forward
+            Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
+            addPosesToPlot(Poses, ax, axisLength=1)
+        
+        if wireFrame:
             return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
         else:
-            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)        
     
     def plot(self, numSides : int = 32, color : str = 'black', 
-             alpha : float = 0.5, frame : bool = False):
+             alpha : float = 0.5, wireFrame : bool = False, 
+             showFrames : bool = False):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, frame)
+        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+                                     showFrames)
         ax.set_aspect('equal')
         
     
