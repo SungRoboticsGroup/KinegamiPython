@@ -175,7 +175,7 @@ class Cylinder:
         circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
         return circlePoints.reshape((numCircles, radialCount, 3))
     
-    def addToPlot(self, ax, numPointsPerCircle=32, numCircles=2, color='black', alpha=0.5, frame=False):
+    def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2):
         circles = self.interpolateCircles(numPointsPerCircle, numCircles)
         X = circles[:,:,0]
         Y = circles[:,:,1]
@@ -185,13 +185,10 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
     
-    def plot(self, numPointsPerCircle=32, numCircles=2, color='black', alpha=0.5, frame=False):
+    def plot(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numPointsPerCircle, numCircles, color, alpha, frame)
+        plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
-    
-
-
 
 
 class CompoundElbow:
@@ -219,6 +216,9 @@ class CompoundElbow:
         else:
             self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
                                      rotationalAxisAngle, EPSILON))
+        
+        self.StartFrame = StartFrame
+        self.EndFrame = self.elbows[-1].EndFrame
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -234,18 +234,20 @@ class CompoundElbow:
                                      showFrames)
         ax.set_aspect('equal')
 
-    
+"""   
+I think this may be incorrect but I can't figure out why
 # applies to DUBINS FRAMES, where the dubins direction is column 0 (ahat)
-def elbowTranformation(rotAxis : np.ndarray,
+def elbowTransformation(rotAxis : np.ndarray,
                        bendingAngle : float,
                        r : float,
                        EPSILON : float = 0.0001) -> SE3:
-    if bendingAngle < EPSILON:
+    if abs(bendingAngle) < EPSILON:
         return SE3()
     else:
         Forward = SE3.Tx(r*np.tan(bendingAngle/2))
         Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
         return Forward @ Rotate @ Forward
+"""
 
 def RotationAboutLine(rotAxisDir : np.ndarray,
                       rotAxisPoint : np.ndarray,

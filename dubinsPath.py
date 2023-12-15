@@ -227,7 +227,7 @@ class PathCSC:
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
         ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
-        
+    
     
     def plot(self, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
