@@ -13,7 +13,7 @@ from scipy.optimize import NonlinearConstraint, minimize
 import queue
 import tubularOrigami
 from tubularOrigami import *
-
+from dubinsLink import LinkCSC
 
 class KinematicTree:
     """
@@ -34,8 +34,9 @@ class KinematicTree:
         self.numSides = root.numSides
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
-        self.Paths = [emptyCSC(self.r, root.proximalPosition(), \
-                                       root.pathDirection())]
+        self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
+                                      root.proximalDubinsFrame())]
+            
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(self.root.Pose.t, self.r)
@@ -96,48 +97,74 @@ class KinematicTree:
         self.Joints.append(newJoint)
         self.Children[parentIndex].append(newIndex)
         self.Children.append([])
-        self.Parents.append(parentIndex)        
-        self.Paths.append(shortestCSC(self.r, 
-                    parent.distalPosition(), parent.pathDirection(),
-                    newJoint.proximalPosition(), newJoint.pathDirection()))
+        self.Parents.append(parentIndex)
+        self.Links.append(LinkCSC(self.r, parent.distalDubinsFrame(), 
+                                  newJoint.proximalDubinsFrame()))
         
         return newIndex
     
       
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  pathColor='black', showCircles=False, sphereColor='black',
+                  linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
+                  showLinkFrames=False, showLinkPath=True, 
+                  showPathCircles=False, sphereColor='black',
                   showSpheres=True):
         jointPlotHandles = []
+        linkPlotHandles = []
         for joint in self.Joints:
             jointPlotHandles.append(joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
                                     sphereColor, showSpheres))
         
-        for path in self.Paths:
-            path.addToPlot(ax, showCircles, False, pathColor=pathColor, 
-                           cscBoundaryMarker=None)
+        for link in self.Links:
+            handles = link.addToPlot(ax, color=linkColor, 
+                                   alpha=linkOpacity, 
+                                   showPath=showLinkPath, 
+                                   showPathCircles=showPathCircles, 
+                                   showFrames=showLinkFrames,
+                                   showBoundary=showLinkBoundary)
+            if showLinkFrames:
+                for elbowHandles in handles:
+                    linkPlotHandles.append(elbowHandles)
         
         if showSpheres:
             self.boundingBall.addToPlot(ax, color=sphereColor, 
                                         alpha=0.05, frame=True)
         
-        return np.array(jointPlotHandles)
+        return np.array(jointPlotHandles), np.array(linkPlotHandles)
         
     
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
-             pathColor='black', showCircles=False):
+             linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
+             showLinkFrames=False, showLinkPath=True, 
+             showPathCircles=False, sphereColor='black',
+             showSpheres=True):
         ax = plt.figure().add_subplot(projection='3d')
-        jointPlotHandles = self.addToPlot(ax, xColor, yColor, zColor, 
+        jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
+                                    xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
-                                    pathColor, showCircles)
+                                    linkColor, linkOpacity, showLinkBoundary, 
+                                    showLinkFrames, showLinkPath, 
+                                    showPathCircles, sphereColor,
+                                    showSpheres)
         xHats = jointPlotHandles[:,0]
         yHats = jointPlotHandles[:,1]
         zHats = jointPlotHandles[:,2]
         origins = jointPlotHandles[:,3]
-        ax.legend([tuple(xHats), tuple(yHats), tuple(zHats)], 
-                  [r'$\^x$', r'$\^y$', r'$\^z$'])
+        if showLinkFrames:
+            aHats = linkPlotHandles[:,0]
+            bHats = linkPlotHandles[:,1]
+            cHats = linkPlotHandles[:,2]
+            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats),
+                       tuple(aHats), tuple(bHats), tuple(cHats)], 
+                      [r'$\^x$', r'$\^y$', r'$\^z$',
+                       r'$\^a$', r'$\^b$', r'$\^c$'])
+        else:
+            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats)], 
+                      [r'$\^x$', r'$\^y$', r'$\^z$'])
+        
         ax.set_aspect('equal')
         plt.show()
     

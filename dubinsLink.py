@@ -43,53 +43,70 @@ class LinkCSC:
                                           self.EndDubinsFrame.R[:,0])
         
         
-        self.elbow1 = CompoundElbow(self.r, self.StartDubinsFrame, 
-                                   self.path.theta1, self.rot1AxisAngle, 
-                                   self.splitLongElbowsInto, self.EPSILON)
-        self.Elbow1EndFrame = self.elbow1.EndFrame
+        if self.path.theta1 > self.EPSILON:
+            self.elbow1 = CompoundElbow(self.r, self.StartDubinsFrame, 
+                                       self.path.theta1, self.rot1AxisAngle, 
+                                       self.splitLongElbowsInto, self.EPSILON)
+            self.Elbow1EndFrame = self.elbow1.EndFrame
+        else:
+            self.Elbow1EndFrame = self.StartDubinsFrame
         assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
         assert(norm(self.Elbow1EndFrame.t - self.path.turn1end) < self.EPSILON)
         
-        Elbow2StartOrientation = SO3.AngleAxis(-self.path.theta2, self.rot2AxisDir) * self.EndDubinsFrame.R 
-        self.Elbow2StartFrame = SE3.Rt(Elbow2StartOrientation, self.path.turn2start)
-        assert(norm(self.Elbow2StartFrame.t - (self.Elbow1EndFrame * SE3.Tx(self.path.tMag)).t) < self.EPSILON)
-        assert(norm(self.Elbow2StartFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
+        if self.path.tMag > self.EPSILON:
+            self.cylinder = Cylinder(self.r, self.Elbow1EndFrame.t, 
+                            self.Elbow1EndFrame.R[:,0], self.path.tMag)
         
-        self.elbow2 = CompoundElbow(self.r, self.Elbow2StartFrame, 
-                                   self.path.theta2, self.rot2AxisAngle, 
-                                   self.splitLongElbowsInto, self.EPSILON)
-        assert(norm(self.elbow2.EndFrame - self.EndDubinsFrame) < self.EPSILON)
+        if self.path.theta2 > self.EPSILON:
+            Elbow2StartOrientation = SO3.AngleAxis(-self.path.theta2, self.rot2AxisDir) * self.EndDubinsFrame.R 
+            self.Elbow2StartFrame = SE3.Rt(Elbow2StartOrientation, self.path.turn2start)
+            assert(norm(self.Elbow2StartFrame.t - (self.Elbow1EndFrame * SE3.Tx(self.path.tMag)).t) < self.EPSILON)
+            assert(norm(self.Elbow2StartFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
+            
+            self.elbow2 = CompoundElbow(self.r, self.Elbow2StartFrame, 
+                                       self.path.theta2, self.rot2AxisAngle, 
+                                       self.splitLongElbowsInto, self.EPSILON)
+            assert(norm(self.elbow2.EndFrame - self.EndDubinsFrame) < self.EPSILON)
+        else:
+            self.Elbow2StartFrame = self.EndDubinsFrame
+        
         
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False, showPath : bool = False):
-        plotHandles = []
-        if self.path.theta1 > self.EPSILON:
-            plotHandles.append(self.elbow1.addToPlot(ax, numSides, color, 
-                                            alpha, wireFrame, showFrames))
-        
-        if self.path.tMag > self.EPSILON:
-            cylinder = Cylinder(self.r, self.Elbow1EndFrame.t, 
-                                self.Elbow1EndFrame.R[:,0], self.path.tMag)
-            plotHandles.append(cylinder.addToPlot(ax, numSides, color, alpha, 
-                                                  wireFrame))
-        
-        if self.path.theta2 > self.EPSILON:
-            plotHandles.append(self.elbow2.addToPlot(ax, numSides, color, 
-                                                alpha, wireFrame, showFrames))
+                  showFrames : bool = False, showPath : bool = True, 
+                  showPathCircles : bool = False, showBoundary : bool = True):
+        allElbowHandleSets = []
+        if showBoundary:
+            if self.path.theta1 > self.EPSILON:
+                elbow1HandleSets = self.elbow1.addToPlot(ax, numSides, color, 
+                                                alpha, wireFrame, showFrames)
+                if showFrames:
+                    allElbowHandleSets += elbow1HandleSets
+            
+            if self.path.tMag > self.EPSILON:
+                self.cylinder.addToPlot(ax, numSides, color, alpha, 
+                                                      wireFrame)
+            
+            if self.path.theta2 > self.EPSILON:
+                elbow2HandleSets = self.elbow2.addToPlot(ax, numSides, color, 
+                                                    alpha, wireFrame, showFrames)
+                if showFrames:
+                    allElbowHandleSets += elbow2HandleSets
         
         if showPath:
-            self.path.addToPlot(ax, showCircles=showFrames, showPoses=showFrames)
+            self.path.addToPlot(ax, showCircles=showPathCircles, showPoses=showFrames)
         
-        return plotHandles
+        return allElbowHandleSets
     
     
     def plot(self, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False, showPath : bool = False):
+                  showFrames : bool = False, showPath : bool = True, 
+                  showPathCircles : bool = False, showBoundary : bool = True):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
-                                     showFrames, showPath)
+        allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+                                     showFrames, showPath, showPathCircles,
+                                     showBoundary)
         ax.set_aspect('equal')
     
     def creasePattern(self, numSides : int, twistPortion : float = 0.2) -> TubularPattern:

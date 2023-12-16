@@ -223,8 +223,13 @@ class CompoundElbow:
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = True):
+        allHandleSets = []
         for elbow in self.elbows:
-            elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
+            handleSet = elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
+            if showFrames:
+                allHandleSets.append(handleSet)
+        return allHandleSets
+            
     
     def plot(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
@@ -318,20 +323,26 @@ class Elbow:
         Y = ellipses[:,:,1]
         Z = ellipses[:,:,2]
         
+        if wireFrame:
+            surfaceHandle = ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
+        else:
+            surfaceHandle = ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+        
+        frameHandles = []
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
             FwdRot = Fwd @ self.Rotate
             FwdRotFwd = FwdRot @ self.Forward
             Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
-            addPosesToPlot(Poses, ax, axisLength=1)
+            aHats, bHats, cHats, origins = addPosesToPlot(Poses, ax, 
+                                        axisLength=1, xColor='darkred', 
+                                        yColor='darkblue', zColor='darkgreen')
+            frameHandles = [aHats, bHats, cHats, origins]
             x,y,z = Fwd.t
             u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
             ax.quiver(x,y,z,u,v,w,length=2,normalize=True)
         
-        if wireFrame:
-            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)        
+        return frameHandles
     
     def plot(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
