@@ -26,7 +26,7 @@ class Joint(ABC):
         pass
     
     def boundingRadius(self):
-        return max(self.r, self.length / 2)
+        return norm([self.r, self.length / 2])
     
     def boundingBall(self):
         return Ball(self.Pose.t, self.boundingRadius())

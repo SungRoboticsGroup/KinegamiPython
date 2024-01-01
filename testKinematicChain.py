@@ -24,6 +24,9 @@ KC.addJoint(RevoluteJoint(numSides, r, np.pi,
 KC.addJoint(WayPoint(numSides, r, SE3([1,1,1])),
                 relative=True, fixedPosition=False, fixedOrientation=False) 
 
+KC.addJoint(WayPoint(numSides, r, SE3([3,1,1])),
+                relative=True, fixedPosition=True, fixedOrientation=True)
+
 KC.plot()
 pattern = KC.tubularOrigamiPattern(numSides, splitLongElbowsInto=2)
 pattern.makeDXF(show=True)

@@ -95,7 +95,7 @@ class TubularPattern():
         relative = np.vstack((ProximalBaseX, nzeros)).T
         ProximalBase = self.proximalMarker + relative
         self.proximalBaseIndices = np.arange(self.numSides)
-        self.EPSILON = self.baseSideLength * 0.00001
+        self.EPSILON = self.baseSideLength * 0.0001
 
         """
         Instance variables initialized here for an empty pattern:
@@ -107,6 +107,7 @@ class TubularPattern():
         self.EdgeLabelsMV = np.empty(0, dtype=bool) #True for M, False for V
         self.patternHeight = 0
         self.distalMarker = self.proximalMarker
+        self.assertValidationChecks()
 
     """ Add the given vertices (a numpy nx2), return their indices """    
     def addVertices(self, VerticesToAdd):
@@ -169,6 +170,9 @@ class TubularPattern():
 
     def DistalBase(self):
         return self.Vertices[self.distalBaseIndices, :]
+    
+    def isEmpty(self):
+        return self.Vertices.shape[0] == self.numSides
 
     def rollProximalIndices(self, k):
         PI = self.proximalBaseIndices
@@ -177,33 +181,50 @@ class TubularPattern():
         self.Edges[Mask] = (self.Edges[Mask] + k) % self.numSides
         self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
     
+    def assertValidationChecks(self):
+        DistalBase = self.DistalBase()
+        assert(np.all(DistalBase[:,1]==DistalBase[0,1]))
+        
+        assert(np.all(self.Vertices[:, 0] >= 0))
+        assert(np.all(self.Vertices[:, 0] <= self.width))
+    
     def append(self, other: 'TubularPattern'):
+        self.assertValidationChecks()
+        other.assertValidationChecks()
         other = copy.deepcopy(other)
         assert (other.numSides == self.numSides)
         assert (other.r == self.r)
         assert (self.Edges.dtype.kind == 'i')
         other.translate(self.distalMarker - other.proximalMarker)
-
-        """ Merge other's proximal base vertices with current distal base """
-        indexShift = self.Vertices.shape[0] - other.numSides
-        otherNonProximalVertices = np.delete(other.Vertices,
-                                             other.proximalBaseIndices, axis=0)
-        self.Vertices = np.vstack((self.Vertices, otherNonProximalVertices))
-
-        """ Reindex other's proximal base vertices such that they match
-            the current distal base vertices they correspond to """
-        k = rollToMatch(other.ProximalBase(), self.DistalBase(),
-                        EPSILON=self.EPSILON)
-        assert (not k is None)
-        other.rollProximalIndices(k)
-        EdgesToAdd = other.Edges
-        EdgesToAdd[EdgesToAdd>=self.numSides] += indexShift #non-proximal
-        EdgesToAdd[EdgesToAdd<self.numSides] += np.min(self.distalBaseIndices)
-        self.addEdges(EdgesToAdd, other.EdgeLabelsMV, deDuplicate=True)
         
-        self.distalBaseIndices = other.distalBaseIndices + indexShift
-        self.patternHeight += other.patternHeight
-        self.distalMarker = other.distalMarker
+        if not other.isEmpty():
+            """ Merge other's proximal base vertices with current distal base """
+            indexShift = self.Vertices.shape[0] - other.numSides
+            otherNonProximalVertices = np.delete(other.Vertices,
+                                                 other.proximalBaseIndices, axis=0)
+            self.Vertices = np.vstack((self.Vertices, otherNonProximalVertices))
+    
+            """ Reindex other's proximal base vertices such that they match
+                the current distal base vertices they correspond to """
+            k = rollToMatch(other.ProximalBase(), self.DistalBase(),
+                            EPSILON=self.EPSILON)
+            if k is None:
+                print(self.ProximalBase())
+                print(self.DistalBase())
+                print(other.ProximalBase())
+                print("ERROR: can't align self.DistalBase() with other.ProximalBase()")
+            
+            assert (not k is None)
+            other.rollProximalIndices(k)
+            EdgesToAdd = other.Edges
+            EdgesToAdd[EdgesToAdd>=self.numSides] += indexShift #non-proximal
+            EdgesToAdd[EdgesToAdd<self.numSides] += np.min(self.distalBaseIndices)
+            self.addEdges(EdgesToAdd, other.EdgeLabelsMV, deDuplicate=True)
+            
+            self.distalBaseIndices = other.distalBaseIndices + indexShift
+            self.patternHeight += other.patternHeight
+            self.distalMarker = other.distalMarker
+            self.assertValidationChecks()
     
     """ Plot the graph directly, without accounting for wraparound, boundary,
         or other considerations for actual manufacturing.
@@ -368,6 +389,7 @@ class TubeFittingPattern(TubularPattern):
                                         self.distalBaseIndices)).T)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
 class RevoluteJointPattern(TubularPattern):
     def __init__(self, numSides, r, totalBendingAngle, numSinkLayers=1, 
@@ -821,6 +843,7 @@ class RevoluteJointPattern(TubularPattern):
         
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
 class PrismaticJointPattern(TubularPattern):
     def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
@@ -897,6 +920,7 @@ class PrismaticJointPattern(TubularPattern):
             
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()  
+        self.assertValidationChecks()
            
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
@@ -1016,6 +1040,7 @@ class ElbowFittingPattern(TubularPattern):
                                        midOffsetIndices)).T, deDuplicate=True)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
 class TwistFittingPattern(TubularPattern):
     def __init__(self, numSides, r, twistAngle, moduleHeight,
@@ -1058,3 +1083,4 @@ class TwistFittingPattern(TubularPattern):
         self.distalMarker = self.proximalMarker + \
             np.array([referenceXshift, self.patternHeight])
         self.wrapToWidth()
+        self.assertValidationChecks()
