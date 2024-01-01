@@ -127,9 +127,6 @@ class RevoluteJoint(OrigamiJoint):
     def pathIndex(self):
         return 0 # xhat
     
-    def boundingRadius(self):
-        return self.length / 2
-    
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
                  numLayers : int, coneAngle : float, Pose : SE3):
