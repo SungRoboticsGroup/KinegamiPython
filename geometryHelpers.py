@@ -190,69 +190,65 @@ class Cylinder:
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
 
-
-class CompoundElbow:
-    def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
-                 rotationalAxisAngle : float, splitLongElbowsInto : int = 2, 
-                 EPSILON : float = 0.0001):
-        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
-        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
-        assert(abs(bendingAngle) < np.pi)
-        assert(abs(bendingAngle) > EPSILON)
-        if bendingAngle < 0:
-            bendingAngle = abs(bendingAngle)
-            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
-        
-        assert(splitLongElbowsInto >= 1)
-        self.elbows = []
-        if bendingAngle > np.pi / splitLongElbowsInto:
-            CurrentFrame = StartFrame
-            anglePerElbow = bendingAngle / splitLongElbowsInto
-            for i in range(splitLongElbowsInto):
-                nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
-                                         rotationalAxisAngle, EPSILON)
-                self.elbows.append(nextElbow)
-                CurrentFrame = nextElbow.EndFrame
+class Ball:
+    # closed ball centered at self.c of radius self.r
+    def __init__(self, center, radius):
+        self.c = center
+        self.r = radius
+    
+    def containsPoint(self, point):
+        return norm(self.c - point) <= self.r
+    
+    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
+        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
+        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
+        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
+        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
+        z = self.c[2] + self.r*np.cos(v)
+        if frame:
+            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
         else:
-            self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
-                                     rotationalAxisAngle, EPSILON))
-        
-        self.StartFrame = StartFrame
-        self.EndFrame = self.elbows[-1].EndFrame
+            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
     
-    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
-                  alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = True):
-        allHandleSets = []
-        for elbow in self.elbows:
-            handleSet = elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
-            if showFrames:
-                allHandleSets.append(handleSet)
-        return allHandleSets
-            
-    
-    def plot(self, numSides : int = 32, color : str = 'black', 
-             alpha : float = 0.5, wireFrame : bool = False, 
-             showFrames : bool = True):
+    def plot(self, color='black', alpha=1, frame=False):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
-                                     showFrames)
+        plotHandles = self.addToPlot(ax, color, alpha, frame)
         ax.set_aspect('equal')
 
-"""   
-I think this may be incorrect but I can't figure out why
-# applies to DUBINS FRAMES, where the dubins direction is column 0 (ahat)
-def elbowTransformation(rotAxis : np.ndarray,
-                       bendingAngle : float,
-                       r : float,
-                       EPSILON : float = 0.0001) -> SE3:
-    if abs(bendingAngle) < EPSILON:
-        return SE3()
-    else:
-        Forward = SE3.Tx(r*np.tan(bendingAngle/2))
-        Rotate = SE3.AngleAxis(bendingAngle, rotAxis)
-        return Forward @ Rotate @ Forward
+
 """
+Note: we don't need to guarantee minimality of our bounding balls, so we build
+bounding balls of bounding balls in a greedy fashion based on the below 
+function which takes the minimum bounding ball of 2 balls. The greedy approach
+seems to give bounding balls reasonably close to what would be minimal in our 
+application anyway. 
+
+Taking the minimum bounding ball of n balls is highly nontrivial, see:
+Fischer, Kaspar, and Bernd Gartner. "The smallest enclosing ball of balls: 
+combinatorial structure and algorithms." Proceedings of the nineteenth annual 
+symposium on Computational geometry. 2003.
+"""
+# minimum bounding ball of 2 balls
+def minBoundingBall(ball1, ball2):
+    if ball1.r <= ball2.r:
+        smaller, larger = ball1, ball2
+    else:
+        smaller, larger = ball2, ball1
+    
+    v = larger.c - smaller.c
+    if norm(v) + smaller.r <= larger.r: # if larger contains smaller
+        return larger
+    else:
+        vhat = v / norm(v)
+        p = smaller.c - smaller.r*vhat
+        q = larger.c + larger.r*vhat
+        pq = q-p
+        return Ball(p + pq/2, norm(pq)/2)
+
+def distanceBetweenBalls(ball1, ball2):
+    centerDistance = norm(ball2.c - ball1.c)
+    return max(0, centerDistance - ball1.r - ball2.r)
+
 
 def RotationAboutLine(rotAxisDir : np.ndarray,
                       rotAxisPoint : np.ndarray,
@@ -293,6 +289,16 @@ class Elbow:
         self.midPlaneNormal = (self.StartFrame * self.HalfRotate).R[:,0]
         self.midPoint = (self.StartFrame * self.Forward).t
         
+        # self.midPoint is self.dw past the center of StartCircle,
+        # so it's sqrt(self.dw**2 + self.r**2) from each point on StartCircle.
+        # Meanwhile the elbow tip is 2*self.dw forward from its corresponding 
+        # point on StartCircle, so it's self.dw forward and self.r outwards 
+        # from self.midPoint, i.e., it's also sqrt(self.dw**2 + self.r**2) away
+        self.boundingRadius = np.sqrt(self.dw**2 + self.r**2)
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.midPoint, self.boundingRadius)
+    
     def circleEllipseCircle(self, numSides : int = 32) -> tuple:
         count = numSides+1 # the +1 is because the first and last point will be identical
         angle = np.linspace(0, 2*np.pi, count) 
@@ -350,6 +356,63 @@ class Elbow:
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames)
+        ax.set_aspect('equal')
+
+class CompoundElbow:
+    def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
+                 rotationalAxisAngle : float, splitLongElbowsInto : int = 2, 
+                 EPSILON : float = 0.0001):
+        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) < np.pi)
+        assert(abs(bendingAngle) > EPSILON)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
+        
+        assert(splitLongElbowsInto >= 1)
+        self.elbows = []
+        if bendingAngle > np.pi / splitLongElbowsInto:
+            CurrentFrame = StartFrame
+            anglePerElbow = bendingAngle / splitLongElbowsInto
+            for i in range(splitLongElbowsInto):
+                nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
+                                         rotationalAxisAngle, EPSILON)
+                self.elbows.append(nextElbow)
+                CurrentFrame = nextElbow.EndFrame
+        else:
+            self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
+                                     rotationalAxisAngle, EPSILON))
+        
+        self.StartFrame = StartFrame
+        self.EndFrame = self.elbows[-1].EndFrame
+    
+    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = True, showBoundingBall : bool = False):
+        allHandleSets = []
+        for elbow in self.elbows:
+            handleSet = elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
+            if showFrames:
+                allHandleSets.append(handleSet)
+        
+        if showBoundingBall:
+            self.boundingBall().addToPlot(ax, color=color, alpha = 0.25*alpha)
+        
+        return allHandleSets
+    
+    def boundingBall(self):
+        ball = self.elbows[0].boundingBall()
+        for elbow in self.elbows[1:]:
+            ball = minBoundingBall(ball, elbow.boundingBall())
+        return ball
+    
+    def plot(self, numSides : int = 32, color : str = 'black', 
+             alpha : float = 0.5, wireFrame : bool = False, 
+             showFrames : bool = True, showBoundingBall : bool = False):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+                                     showFrames, showBoundingBall)
         ax.set_aspect('equal')
         
     
@@ -409,62 +472,6 @@ def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oC
     
     return (xHats, yHats, zHats, origins)
 
-
-class Ball:
-    # closed ball centered at self.c of radius self.r
-    def __init__(self, center, radius):
-        self.c = center
-        self.r = radius
-    
-    def containsPoint(self, point):
-        return norm(self.c - point) <= self.r
-    
-    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
-        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
-        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
-        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
-        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
-        z = self.c[2] + self.r*np.cos(v)
-        if frame:
-            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
-    
-    def plot(self, color='black', alpha=1, frame=False):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, color, alpha, frame)
-        ax.set_aspect('equal')
-
-
-"""
-I'm pretty sure the below algorithm works but I haven't proven correctness yet.
-The minimum bounding balls of balls is much more complicated for n balls, but
-fortunately we only need to deal with the n=2 case.
-For the n case, see:
-Fischer, Kaspar, and Bernd Gartner. "The smallest enclosing ball of balls: 
-combinatorial structure and algorithms." Proceedings of the nineteenth annual 
-symposium on Computational geometry. 2003.
-"""
-# minimum bounding ball of 2 balls
-def minBoundingBall(ball1, ball2):
-    if ball1.r <= ball2.r:
-        smaller, larger = ball1, ball2
-    else:
-        smaller, larger = ball2, ball1
-    
-    v = larger.c - smaller.c
-    if norm(v) <= larger.r: # if larger contains smaller
-        return larger
-    else:
-        vhat = v / norm(v)
-        p = smaller.c - smaller.r*vhat
-        q = larger.c + larger.r*vhat
-        pq = q-p
-        return Ball(p + pq/2, norm(pq)/2)
-
-def distanceBetweenBalls(ball1, ball2):
-    centerDistance = norm(ball2.c - ball1.c)
-    return max(0, centerDistance - ball1.r - ball2.r)
 
 
 """

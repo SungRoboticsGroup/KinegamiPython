@@ -48,8 +48,10 @@ class LinkCSC:
                                        self.path.theta1, self.rot1AxisAngle, 
                                        self.splitLongElbowsInto, self.EPSILON)
             self.Elbow1EndFrame = self.elbow1.EndFrame
+            self.elbow1BoundingBall = self.elbow1.boundingBall()
         else:
             self.Elbow1EndFrame = self.StartDubinsFrame
+            self.elbow1BoundingBall = Ball(self.StartDubinsFrame.t, self.r)
         assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
         assert(norm(self.Elbow1EndFrame.t - self.path.turn1end) < self.EPSILON)
         
@@ -67,19 +69,23 @@ class LinkCSC:
                                        self.path.theta2, self.rot2AxisAngle, 
                                        self.splitLongElbowsInto, self.EPSILON)
             assert(norm(self.elbow2.EndFrame - self.EndDubinsFrame) < self.EPSILON)
+            self.elbow2BoundingBall = self.elbow2.boundingBall()
         else:
             self.Elbow2StartFrame = self.EndDubinsFrame
+            self.elbow2BoundingBall = Ball(self.EndDubinsFrame.t, self.r)
         
         
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
-                  showPathCircles : bool = False, showBoundary : bool = True):
+                  showPathCircles : bool = False, showBoundary : bool = True,
+                  showElbowBoundingBalls : bool = True):
         allElbowHandleSets = []
         if showBoundary:
             if self.path.theta1 > self.EPSILON:
                 elbow1HandleSets = self.elbow1.addToPlot(ax, numSides, color, 
-                                                alpha, wireFrame, showFrames)
+                                                alpha, wireFrame, showFrames,
+                                                showElbowBoundingBalls)
                 if showFrames:
                     allElbowHandleSets += elbow1HandleSets
             
@@ -89,7 +95,8 @@ class LinkCSC:
             
             if self.path.theta2 > self.EPSILON:
                 elbow2HandleSets = self.elbow2.addToPlot(ax, numSides, color, 
-                                                    alpha, wireFrame, showFrames)
+                                                    alpha, wireFrame, showFrames,
+                                                    showElbowBoundingBalls)
                 if showFrames:
                     allElbowHandleSets += elbow2HandleSets
         
@@ -102,11 +109,12 @@ class LinkCSC:
     def plot(self, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
-                  showPathCircles : bool = False, showBoundary : bool = True):
+                  showPathCircles : bool = False, showBoundary : bool = True,
+                  showElbowBoundingBalls : bool = True):
         ax = plt.figure().add_subplot(projection='3d')
         allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames, showPath, showPathCircles,
-                                     showBoundary)
+                                     showBoundary, showElbowBoundingBalls)
         ax.set_aspect('equal')
     
     def creasePattern(self, numSides : int, twistPortion : float = 0.2) -> TubularPattern:

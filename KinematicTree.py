@@ -79,7 +79,8 @@ class KinematicTree:
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint, guarantee=False)
+                i = self.addJoint(parentIndex=i, newJoint=joint, guarantee=False,
+                                  fixedPosition=True, fixedOrientation=True)
             return i
         
         if not fixedPosition: #Algorithm 8
@@ -91,15 +92,23 @@ class KinematicTree:
                                 newJoint.Pose.t, newJoint.Pose.R[:,2],
                                 undefined=parent.Pose.R[:,0])
             newJoint.setXhatAboutZhat(xhat)
+        
+        newLink = LinkCSC(self.r, parent.distalDubinsFrame(), 
+                                  newJoint.proximalDubinsFrame())
+        
+        self.boundingBall = minBoundingBall(self.boundingBall, 
+                                            newLink.elbow2BoundingBall)
+        self.boundingBall = minBoundingBall(self.boundingBall, 
+                                            newLink.elbow1BoundingBall)
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newJoint.boundingBall())
+        
         newIndex = len(self.Joints)
         self.Joints.append(newJoint)
         self.Children[parentIndex].append(newIndex)
         self.Children.append([])
         self.Parents.append(parentIndex)
-        self.Links.append(LinkCSC(self.r, parent.distalDubinsFrame(), 
-                                  newJoint.proximalDubinsFrame()))
+        self.Links.append(newLink)
         
         return newIndex
     
