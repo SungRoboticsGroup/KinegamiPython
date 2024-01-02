@@ -66,7 +66,7 @@ class KinematicTree:
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
                  relative : bool = False, fixedPosition : bool = True, 
-                 fixedOrientation : bool =True, guarantee : bool = False):
+                 fixedOrientation : bool = True, guarantee : bool = True):
         assert(newJoint.r == self.r)
         assert(newJoint.numSides == self.numSides)
         parent = self.Joints[parentIndex]
@@ -79,7 +79,7 @@ class KinematicTree:
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint)
+                i = self.addJoint(parentIndex=i, newJoint=joint, guarantee=False)
             return i
         
         if not fixedPosition: #Algorithm 8

@@ -517,11 +517,11 @@ class Plane:
     
     # return 0 if point is on the plane, +1 if on the +nhat side, -1 otherwise
     def sideOfPoint(self, point):
-        return np.sign(self.signedDistanceToPoint(point, self.EPSILON))
+        return np.sign(self.signedDistanceToPoint(point))
     
     def containsPoint(self, point):
         # plane contains point iff self.p - point is orthogonal to self.nhat
-        return self.sideOfPoint(point, self.EPSILON) == 0
+        return self.sideOfPoint(point) == 0
     
     def intersectionWithLine(self, line):
         if abs(dot(self.nhat, line.dhat)) < self.EPSILON: 

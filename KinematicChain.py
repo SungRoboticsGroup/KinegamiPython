@@ -18,9 +18,9 @@ class KinematicChain(KinematicTree):
         super().__init__(root)
     
     """ Add the given joint to the end of the chain, return its index """
-    def addJoint(self, newJoint : Joint, relative : bool = False, 
+    def addJointToEnd(self, newJoint : Joint, relative : bool = False, 
                  fixedPosition : bool = True, fixedOrientation : bool = True, 
-                 guarantee : bool = False) -> int:
+                 guarantee : bool = True) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
                                 fixedOrientation, guarantee)

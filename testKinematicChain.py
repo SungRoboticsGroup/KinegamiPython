@@ -12,19 +12,19 @@ numSides = 6
 # tree whose root is a waypoint at the global frame
 KC = KinematicChain(WayPoint(numSides, r, SE3())) 
 
-KC.addJoint(PrismaticJoint(numSides, r, neutralLength=3, 
+KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3, 
                     numLayers=6, coneAngle=np.pi/4,
                     Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
-KC.addJoint(RevoluteJoint(numSides, r, np.pi,
+KC.addJointToEnd(RevoluteJoint(numSides, r, np.pi,
                                  SE3.Rx(np.pi/4) @ SE3([3,1,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
-KC.addJoint(WayPoint(numSides, r, SE3([1,1,1])),
+KC.addJointToEnd(WayPoint(numSides, r, SE3([1,1,1])),
                 relative=True, fixedPosition=False, fixedOrientation=False) 
 
-KC.addJoint(WayPoint(numSides, r, SE3([3,1,1])),
+KC.addJointToEnd(WayPoint(numSides, r, SE3([3,1,1])),
                 relative=True, fixedPosition=True, fixedOrientation=True)
 
 KC.plot()
