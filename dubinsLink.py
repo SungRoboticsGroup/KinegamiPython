@@ -16,9 +16,11 @@ from tubularOrigami import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 
 
+
 class LinkCSC:
     def __init__(self, r : float, StartDubinsFrame : SE3, EndDubinsFrame : SE3,
-                 splitLongElbowsInto : int = 2, EPSILON : float = 0.0001):
+                 splitLongElbowsInto : int = 2, path : PathCSC = None, 
+                 EPSILON : float = 0.0001):
         assert(r>0)
         assert(splitLongElbowsInto >= 1)
         self.r = r
@@ -26,8 +28,11 @@ class LinkCSC:
         self.EPSILON = EPSILON
         self.StartDubinsFrame = StartDubinsFrame
         self.EndDubinsFrame = EndDubinsFrame
-        self.path = shortestCSC(r, self.StartDubinsFrame.t, self.StartDubinsFrame.R[:,0],
+        if path is None:
+            self.path = shortestCSC(r, self.StartDubinsFrame.t, self.StartDubinsFrame.R[:,0],
                                 self.EndDubinsFrame.t, self.EndDubinsFrame.R[:,0])
+        else:
+            self.path = path
         assert(norm(self.path.error) < self.EPSILON)
         assert(self.path.theta1 >= 0)
         assert(self.path.theta1 <= np.pi)
@@ -73,8 +78,14 @@ class LinkCSC:
         else:
             self.Elbow2StartFrame = self.EndDubinsFrame
             self.elbow2BoundingBall = Ball(self.EndDubinsFrame.t, self.r)
-        
-        
+    
+    def newLinkTransformedBy(self, Transformation : SE3):
+        return LinkCSC(self.r, Transformation @ self.StartDubinsFrame, 
+                       Transformation @ self.EndDubinsFrame, 
+                       splitLongElbowsInto = self.splitLongElbowsInto, 
+                       EPSILON = self.EPSILON)
+    
+    
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 

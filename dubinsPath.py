@@ -104,7 +104,7 @@ class PathCSC:
     Based on the construction in S. Hota and D. Ghose, 
     "Optimal Geometrical Path in 3D with Curvature Constraint", IROS 2010.
     """
-    
+                       
     """
     r is the turn radius (a scalar)
     startPosition, startDir, endPosition, endDir define the Dubins frames
@@ -175,6 +175,20 @@ class PathCSC:
         self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
                                 cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
+    
+    """
+    NOT WORKING
+    def newPathTranformedBy(self, Transformation : SE3):
+        new_tUnit = Transformation * self.tUnit
+        new_tDirMag = np.vstack((new_tUnit, [self.tMag])).flatten()
+        new_startPosition = (Transformation * self.startPosition).flatten()
+        new_startDir = (Transformation * self.startDir).flatten()
+        new_endPosition = (Transformation * self.endPosition).flatten()
+        new_endDir = (Transformation * self.endDir).flatten()
+        return PathCSC(new_tDirMag, self.r, new_startPosition, new_startDir,
+                       new_endPosition, new_startDir, 
+                       self.circle1sign, self.circle2sign)
+    """
     
     def __str__(self):
         return str(np.append(self.tUnit, self.tMag))

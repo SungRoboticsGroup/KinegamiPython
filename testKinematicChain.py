@@ -12,12 +12,14 @@ numSides = 6
 # chain whose root is a waypoint at the global origin
 KC = KinematicChain(WayPoint(numSides, r, SE3())) 
 
-KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3, 
+prismaticIndex = KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3, 
                     numLayers=6, coneAngle=np.pi/4,
                     Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
-KC.addJointToEnd(RevoluteJoint(numSides, r, np.pi,
+minPrismaticState, maxPrismaticState = KC.Joints[prismaticIndex].stateRange()
+
+revoluteIndex = KC.addJointToEnd(RevoluteJoint(numSides, r, np.pi,
                                  SE3.Rx(np.pi/4) @ SE3([3,1,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
@@ -29,4 +31,9 @@ KC.addJointToEnd(WayPoint(numSides, r, SE3([3,1,1])),
 
 KC.plot()
 pattern = KC.tubularOrigamiPattern(numSides, splitLongElbowsInto=2)
-pattern.makeDXF(show=True)
+#pattern.makeDXF(show=True)
+
+KC.setJointState(prismaticIndex, maxPrismaticState)
+
+KC.setJointState(revoluteIndex, np.pi/3)
+KC.plot()

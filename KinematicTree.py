@@ -196,17 +196,16 @@ class KinematicTree:
         and to its descendants if recursive (defaults to True) """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        recursive : bool = True):
-        self.Joints[jointIndex].transformBy(Transformation)
+        self.Joints[jointIndex].transformPoseBy(Transformation)
+        self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
         if recursive:
             for c in self.Children[jointIndex]:
                 self.transformJoint(c, Transformation, recursive=True)
                 
     def setJointState(self, jointIndex : int, state : float):
-        self.Joints[jointIndex].setState(state)
-        Transformation = self.Joints[jointIndex].transformationFromNeutral()
-        if recursive:
-            for c in self.Children[jointIndex]:
-                self.transformJoint(c, Transformation, recursive=True)
+        Transformation = self.Joints[jointIndex].transformStateTo(state)
+        for c in self.Children[jointIndex]:
+            self.transformJoint(c, Transformation, recursive=True)
 
 
 """ 
