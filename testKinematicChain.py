@@ -9,7 +9,7 @@ from KinematicChain import *
 r = 1
 numSides = 6
 
-# tree whose root is a waypoint at the global frame
+# chain whose root is a waypoint at the global origin
 KC = KinematicChain(WayPoint(numSides, r, SE3())) 
 
 KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3, 

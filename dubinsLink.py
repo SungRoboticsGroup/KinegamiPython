@@ -79,7 +79,7 @@ class LinkCSC:
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
                   showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = True):
+                  showElbowBoundingBalls : bool = False):
         allElbowHandleSets = []
         if showBoundary:
             if self.path.theta1 > self.EPSILON:
@@ -110,7 +110,7 @@ class LinkCSC:
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
                   showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = True):
+                  showElbowBoundingBalls : bool = False):
         ax = plt.figure().add_subplot(projection='3d')
         allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames, showPath, showPathCircles,

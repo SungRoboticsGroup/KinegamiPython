@@ -71,7 +71,7 @@ class KinematicTree:
         assert(newJoint.numSides == self.numSides)
         parent = self.Joints[parentIndex]
         if relative:
-            newJoint.transformFromFrame(parent.Pose)
+            newJoint.transformPoseFromFrameToGlobal(parent.Pose)
         
         if guarantee: # Algorithm 9
             #return self.addJointWithWayPoints(parentIndex, newJoint)
@@ -193,10 +193,17 @@ class KinematicTree:
         return descendants
     
     """ Apply given transformation (SE3() object) to given joint (index), 
-        and to its descendants if recursive (defaults to False) """
+        and to its descendants if recursive (defaults to True) """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       recursive : bool = False):
+                       recursive : bool = True):
         self.Joints[jointIndex].transformBy(Transformation)
+        if recursive:
+            for c in self.Children[jointIndex]:
+                self.transformJoint(c, Transformation, recursive=True)
+                
+    def setJointState(self, jointIndex : int, state : float):
+        self.Joints[jointIndex].setState(state)
+        Transformation = self.Joints[jointIndex].transformationFromNeutral()
         if recursive:
             for c in self.Children[jointIndex]:
                 self.transformJoint(c, Transformation, recursive=True)
