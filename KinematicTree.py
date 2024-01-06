@@ -149,7 +149,7 @@ class KinematicTree:
              linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
              showLinkFrames=False, showLinkPath=True, 
              showPathCircles=False, sphereColor='black',
-             showSpheres=True):
+             showSpheres=False):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 

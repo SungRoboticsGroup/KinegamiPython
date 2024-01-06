@@ -9,6 +9,8 @@ from abc import ABC, abstractmethod
 from geometryHelpers import *
 import matplotlib.pyplot as plt
 from tubularOrigami import *
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from scipy.spatial import ConvexHull
 
 class Joint(ABC):
     """
@@ -112,7 +114,8 @@ class Joint(ABC):
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor='black', showSphere=False):
+             sphereColor='black', showSphere=False, surfaceColor='m',
+             surfaceAlpha=0.5, showSurface=True):
         Poses = np.array([self.proximalPose(), self.distalPose(), self.Pose])
         oColors = np.array([proximalColor, distalColor, centerColor])
         plotHandles = addPosesToPlot(Poses, ax, self.r, 
@@ -130,11 +133,13 @@ class Joint(ABC):
     
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor='black', showSphere=False):
+             sphereColor='black', showSphere=False, surfaceColor='m',
+             surfaceAlpha=0.5, showSurface=True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
-                                     sphereColor, showSphere)
+                                     sphereColor, showSphere, surfaceColor,
+                                     surfaceAlpha, showSurface)
         xHats, yHats, zHats, origins = plotHandles
         ax.set_aspect('equal')
         ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
@@ -177,6 +182,49 @@ class RevoluteJoint(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
+    
+    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor='black', showSphere=False, surfaceColor='m',
+             surfaceAlpha=0.5, showSurface=True):
+        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, surfaceAlpha, showSurface)
+        if showSurface:
+            CenterSegment = np.array([self.Pose.t - self.r * self.Pose.R[:,2],
+                                      self.Pose.t + self.r * self.Pose.R[:,2]])
+            #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
+            
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+            ProximalPose = self.proximalPose()
+            uhatProximal = ProximalPose.R[:,1]
+            vhatProximal = ProximalPose.R[:,2]
+            ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
+            
+            ProximalPoints = np.vstack((ProximalBase, CenterSegment))
+            ProximalHull = ConvexHull(ProximalPoints)
+            for s in ProximalHull.simplices:
+                tri = Poly3DCollection([ProximalPoints[s]])
+                tri.set_color(surfaceColor)
+                tri.set_alpha(surfaceAlpha)
+                ax.add_collection3d(tri)
+            
+            DistalPose = self.distalPose()
+            uhatDistal = DistalPose.R[:,1]
+            vhatDistal = DistalPose.R[:,2]
+            DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
+            DistalPoints = np.vstack((DistalBase, CenterSegment))
+            DistalHull = ConvexHull(DistalPoints)
+            for s in DistalHull.simplices:
+                tri = Poly3DCollection([DistalPoints[s]])
+                tri.set_color(surfaceColor)
+                tri.set_alpha(surfaceAlpha)
+                ax.add_collection3d(tri)
+            
+        return plotHandles
         
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
@@ -210,6 +258,22 @@ class PrismaticJoint(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.center(), self.boundingRadius())
+    
+    def boundingCylinder(self) -> Cylinder:
+        return Cylinder(self.r, self.proximalPose().t, self.pathDirection(), self.length())
+    
+    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor='black', showSphere=False, surfaceColor='m',
+             surfaceAlpha=0.5, showSurface=True):
+        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, surfaceAlpha, showSurface)
+        if showSurface:
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceAlpha)
+            
+        return plotHandles
+        
     
 class WayPoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
