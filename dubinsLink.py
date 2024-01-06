@@ -83,8 +83,8 @@ class LinkCSC:
         return LinkCSC(self.r, Transformation @ self.StartDubinsFrame, 
                        Transformation @ self.EndDubinsFrame, 
                        splitLongElbowsInto = self.splitLongElbowsInto, 
+                       path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
-    
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
