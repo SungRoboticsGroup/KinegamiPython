@@ -35,5 +35,5 @@ pattern = KC.tubularOrigamiPattern(numSides, splitLongElbowsInto=2)
 
 KC.setJointState(prismaticIndex, maxPrismaticState)
 
-KC.setJointState(revoluteIndex, np.pi/3)
-KC.plot()
+KC.setJointState(revoluteIndex, -np.pi/2)
+KC.plot(showSpheres=False)

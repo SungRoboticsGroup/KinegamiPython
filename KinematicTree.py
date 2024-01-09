@@ -28,15 +28,16 @@ class KinematicTree:
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : Joint):
+    def __init__(self, root : Joint, splitLongElbowsInto : int = 2):
         self.root = root
         self.r = root.r
         self.numSides = root.numSides
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
         self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
-                                      root.proximalDubinsFrame())]
-            
+                                      root.proximalDubinsFrame(),
+                                      splitLongElbowsInto)]
+        self.splitLongElbowsInto()    
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(self.root.Pose.t, self.r)
@@ -112,7 +113,19 @@ class KinematicTree:
         
         return newIndex
     
-      
+    
+    def recomputeBoundingBall(self):
+        self.boundingBall = self.Joints[0].boundingBall()
+        for joint in self.Joints[1:]:
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                joint.boundingBall())
+        for link in self.Links:
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                link.elbow1BoundingBall)
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                link.elbow2BoundingBall)
+            
+    
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
                   linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
@@ -195,17 +208,22 @@ class KinematicTree:
     """ Apply given transformation (SE3() object) to given joint (index), 
         and to its descendants if recursive (defaults to True) """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       recursive : bool = True):
+                       recursive : bool = True, recomputeBoundingBall=True):
         self.Joints[jointIndex].transformPoseBy(Transformation)
         self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
         if recursive:
             for c in self.Children[jointIndex]:
-                self.transformJoint(c, Transformation, recursive=True)
+                self.transformJoint(c, Transformation, recursive=True, 
+                                    recomputeBoundingBall=False)
+        if recomputeBoundingBall:
+            self.recomputeBoundingBall()
                 
     def setJointState(self, jointIndex : int, state : float):
         Transformation = self.Joints[jointIndex].transformStateTo(state)
         for c in self.Children[jointIndex]:
-            self.transformJoint(c, Transformation, recursive=True)
+            self.transformJoint(c, Transformation, recursive=True, 
+                                recomputeBoundingBall=False)
+        self.recomputeBoundingBall()
 
 
 """ 

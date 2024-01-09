@@ -50,17 +50,6 @@ that constructs a DXF file. (We organize in this way to separate fabrication
 details from the underlying pattern: the construction and representation of 
 TubularPattern objects is in the tubular topology).
 
-
-TODO:
-    Clip recursive sink gadgets to stay within their panels?
-    
-    Make variable naming consistent:
-        Matrices/arrays of >1 axis: Capitalize
-        Vectors/1-axis arrays: plural, don't capitalize
-        scalars: singular, don't capitalize
-    
-    Figure out how to append revolute joints (mountain folds at the bases)
-    and twist fittings (valley folds at the bases)
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -130,8 +119,6 @@ class TubularPattern():
             self.Edges, indices = np.unique(self.Edges, return_index=True, 
                                             axis=0)
             self.EdgeLabelsMV = self.EdgeLabelsMV[indices]
-            # TODO: is there a nice way to verify that duplicated edges have 
-            # the same MV label?
 
     def addMountainEdges(self, EdgesToAdd, deDuplicate=False):
         EdgesToAdd = np.array(EdgesToAdd)
@@ -845,7 +832,7 @@ class RevoluteJointPattern(TubularPattern):
         self.wrapToWidth()
         self.assertValidationChecks()
 
-class PrismaticJointPattern(TubularPattern):
+class ReboPattern(TubularPattern):
     def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
                  proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
@@ -854,28 +841,18 @@ class PrismaticJointPattern(TubularPattern):
         neutralLayerHeight = neutralLength / numLayers
         flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
         maxLength = 2*numLayers*flatLayerHalfHeight
-        self.patternHeight = 4*maxLength
+        self.patternHeight = maxLength
         flatConeAngle = (np.pi/2)*(1 - 2*np.cos(coneAngle)/numSides)
         
-        # Standard distal base setup
         ProximalBase = self.Vertices
-        DistalBase = ProximalBase + [0, self.patternHeight]
-        self.Vertices = np.vstack((ProximalBase, DistalBase))
-        self.distalBaseIndices = numSides + self.proximalBaseIndices
-        
-        Mid1 = ProximalBase + [0, maxLength]
-        mid1Indices = numSides + self.distalBaseIndices
-        self.Vertices = np.vstack((self.Vertices,Mid1))
-        
         xsTiled = np.tile(ProximalBase[:,0], numLayers+1)
-        reboY0 = proximalMarker[1] + 2*maxLength
-        layerYs = reboY0 + np.arange(numLayers+1)*2*flatLayerHalfHeight
+        layerYs = np.arange(numLayers+1)*2*flatLayerHalfHeight
         ysRepeated = np.repeat(layerYs, numSides)
         ReboLayerBoundariesVertices = np.vstack((xsTiled, ysRepeated)).T
-        ReboLayerBoundariesIndices = self.Vertices.shape[0] + \
-            np.arange((numLayers+1)*numSides).reshape((numLayers+1, numSides))
-        self.Vertices = np.vstack((self.Vertices, ReboLayerBoundariesVertices))
-        # TODO: can this be written more elegantly with np.meshgrid?
+        ReboLayerBoundariesIndices = np.arange((numLayers+1)*numSides).reshape((numLayers+1, numSides))
+        self.Vertices = ReboLayerBoundariesVertices
+        assert(np.linalg.norm(self.Vertices[:numSides,:] - ProximalBase) < self.EPSILON)
+        self.distalBaseIndices = ReboLayerBoundariesIndices[-1,:]
         
         ReboLayerMidAlignedVertices = [0, flatLayerHalfHeight] +\
                                     ReboLayerBoundariesVertices[:-numSides,:]
@@ -889,19 +866,7 @@ class PrismaticJointPattern(TubularPattern):
             np.arange(numLayers*numSides).reshape((numLayers, numSides))
         self.Vertices = np.vstack((self.Vertices, ReboLayerMidOffsetVertices))
         
-        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
-                                         mid1Indices)).T)
-        self.addMountainEdges(np.vstack((mid1Indices, 
-                                         np.roll(mid1Indices, -1, axis=0))).T)
-        
-        reboBottom = ReboLayerBoundariesIndices[0,:]
-        reboTop = ReboLayerBoundariesIndices[numLayers,:]
-        self.addMountainEdges(np.vstack((mid1Indices, reboBottom)).T)
-        self.addMountainEdges(np.vstack((reboTop, self.distalBaseIndices)).T)
-        
-        # Construct REBO folds
-        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
-        # TODO: vectortize?
+        # Construct folds
         for i in range(numLayers):
             bottom = ReboLayerBoundariesIndices[i,:]
             nextBottom = np.roll(bottom, -1)
@@ -917,10 +882,31 @@ class PrismaticJointPattern(TubularPattern):
             self.addMountainEdges(np.vstack((midAligned, nextMidOffset)).T)
             self.addMountainEdges(np.vstack((midOffset, bottom)).T)
             self.addMountainEdges(np.vstack((midOffset, top)).T)
+        reboTop = ReboLayerBoundariesIndices[numLayers,:]
+        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
             
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()  
         self.assertValidationChecks()
+
+class PrismaticJointPattern(TubularPattern):
+    def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
+                 proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        assert(coneAngle > 0 and coneAngle < np.pi/2)
+        assert(numLayers > 0)
+        neutralLayerHeight = neutralLength / numLayers
+        flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
+        maxLength = 2*numLayers*flatLayerHalfHeight
+        
+        tube = TubeFittingPattern(numSides, r, height=maxLength)
+        self.append(tube)
+        mid1Indices = self.distalBaseIndices
+        self.addMountainEdges(np.vstack((mid1Indices, 
+                                         np.roll(mid1Indices, -1, axis=0))).T)
+        self.append(tube)
+        self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle))
+        self.append(tube)
            
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
