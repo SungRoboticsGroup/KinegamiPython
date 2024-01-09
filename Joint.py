@@ -296,4 +296,77 @@ class WayPoint(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
+
+class Fingertip(OrigamiJoint):
+    
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float, forward : bool = True):
+        super().__init__(numSides, r, length, Pose)
+        self.pattern = FingertipPattern(numSides, r, length, forward)
+        self.forward = forward
+    
+    def pathIndex(self) -> int:
+        return 0 # zhat
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3()
+    
+    def stateRange(self) -> list:
+        return [0,0]
+    
+    def boundingRadius(self) -> float:
+        return norm([self.r, self.neutralLength/2])
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+    
+    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor='black', showSphere=False, surfaceColor='m',
+             surfaceAlpha=0.5, showSurface=True):
+        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, surfaceAlpha, showSurface)
+        if showSurface:
+            
+            #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
+            
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+            
+            if self.forward:
+                DistalPose = self.distalPose()
+                TipSegment = np.array([DistalPose.t - self.r * DistalPose.R[:,2],
+                                          DistalPose.t + self.r * DistalPose.R[:,2]])
+                
+                ProximalPose = self.proximalPose()
+                uhatProximal = ProximalPose.R[:,1]
+                vhatProximal = ProximalPose.R[:,2]
+                ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
+                ProximalPoints = np.vstack((ProximalBase, TipSegment))
+                ProximalHull = ConvexHull(ProximalPoints)
+                for s in ProximalHull.simplices:
+                    tri = Poly3DCollection([ProximalPoints[s]])
+                    tri.set_color(surfaceColor)
+                    tri.set_alpha(surfaceAlpha)
+                    ax.add_collection3d(tri)
+            else:
+                ProximalPose = self.proximalPose()
+                TipSegment = np.array([ProximalPose.t - self.r * ProximalPose.R[:,2],
+                                          ProximalPose.t + self.r * ProximalPose.R[:,2]])
+                
+                DistalPose = self.distalPose()
+                uhatDistal = DistalPose.R[:,1]
+                vhatDistal = DistalPose.R[:,2]
+                DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
+                DistalPoints = np.vstack((DistalBase, TipSegment))
+                DistalHull = ConvexHull(DistalPoints)
+                for s in DistalHull.simplices:
+                    tri = Poly3DCollection([DistalPoints[s]])
+                    tri.set_color(surfaceColor)
+                    tri.set_alpha(surfaceAlpha)
+                    ax.add_collection3d(tri)
+            
+        return plotHandles
     

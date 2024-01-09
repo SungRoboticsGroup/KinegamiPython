@@ -404,7 +404,7 @@ class TubeFittingPattern(TubularPattern):
         self.assertValidationChecks()
 
 class FingertipPattern(TubularPattern):
-    def __init__(self, numSides, r, length, reverse=False, proximalMarker=[0, 0]):
+    def __init__(self, numSides, r, length, forward=True, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         assert(length > 0)
         totalBendingAngle = 4 * np.arctan(length / r*np.sin(self.polygonInnerAngle))
@@ -484,7 +484,7 @@ class FingertipPattern(TubularPattern):
         self.wrapToWidth()
         self.assertValidationChecks()
 
-        if reverse:
+        if not forward:
             self.reverse()
     
 class RevoluteJointPattern(TubularPattern):
