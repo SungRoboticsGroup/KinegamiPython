@@ -71,4 +71,12 @@ revolute.makeDXF(saveas=subfolder+"revolute", show=False)
 composed.append(revolute)
 composed.append(TubeFittingPattern(numSides, r, 0.5))
 composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic_tube_revolute_tube",
+                 show=False)
+
+kresling = KreslingJointPattern(numSides, r, 3, 0.75)
+composed.append(kresling)
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic_tube_revolute_tube_kresling",
+                 show=False)
+composed.append(TubeFittingPattern(numSides, r, 0.5))
+composed.makeDXF(saveas=subfolder+"tube_twist_tube_elbow_prismatic_tube_revolute_tube_kresling_tube",
                  show=True)

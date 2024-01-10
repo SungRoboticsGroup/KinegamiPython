@@ -343,10 +343,12 @@ class TubularPattern():
             if isWrapping:
                 rightcopy = np.copy(seg)
                 leftcopy = np.copy(seg)
-                rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
+                #rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
+                rightcopy[np.argmin(seg[:,0]), 0] += self.width
                 msp.add_line(rightcopy[0, :], rightcopy[1, :],
                              dxfattribs={"layer": layer})
-                leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
+                #leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
+                leftcopy[np.argmax(seg[:,0]), 0] -= self.width
                 msp.add_line(leftcopy[0, :], leftcopy[1, :],
                              dxfattribs={"layer": layer})
             else:
@@ -1021,6 +1023,47 @@ class PrismaticJointPattern(TubularPattern):
         self.append(tube)
         self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle))
         self.append(tube)
+
+class KreslingJointPattern(TubularPattern):
+    """ Construction reference:
+        Priyanka Bhovad, Joshua Kaufmann, Suyi Li. 
+        "Peristaltic locomotion without digital controllers: 
+        Exploiting multi-stability in origami to coordinate robotic motion".
+        Extreme Mechanics Letters, 2019.
+        
+        Stiffness scales with angleRatio, which must be in (0,1).
+        Pattern is bistable if angleRatio > 0.5, and larger angleRatio
+        gives longer extended stable length.
+    """
+    def __init__(self, numSides, r, compressedStableLength, angleRatio,
+                 proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        assert(angleRatio>0 and angleRatio<1) 
+        assert(compressedStableLength > 0)
+        gamma = (np.pi/2) - (np.pi/numSides)
+        D = 2*r*np.cos(gamma*(1-angleRatio))
+        P = self.baseSideLength
+        assert(abs(r - 0.5*P/np.sin(np.pi/numSides)) < self.EPSILON) #sanity check that their R matches ours
+        L = compressedStableLength
+        valleyLength = np.sqrt(D**2 + L**2)
+        mountainLength = np.sqrt(P**2 + D**2 - 2*P*D*np.cos(gamma*angleRatio) + L**2)
+        valleyAngle = np.arccos((P**2 + valleyLength**2 - mountainLength**2) / (2*P*valleyLength))
+        
+        valleyDirection = np.array([np.cos(valleyAngle), np.sin(valleyAngle)])
+        valleyVector = valleyLength * valleyDirection
+        self.patternHeight = valleyVector[1]
+        DistalBase = self.ProximalBase() + valleyVector
+        self.distalBaseIndices = self.addVertices(DistalBase)
+        
+        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
+                                       self.distalBaseIndices)).T)
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
+                                    np.roll(self.distalBaseIndices, 1))).T)
+        
+        self.distalMarker = self.proximalMarker + valleyVector
+        self.wrapToWidth()
+        self.assertValidationChecks()
+        
            
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
