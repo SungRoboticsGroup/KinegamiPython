@@ -37,7 +37,7 @@ class KinematicTree:
         self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
                                       root.proximalDubinsFrame(),
                                       splitLongElbowsInto)]
-        self.splitLongElbowsInto()    
+        self.splitLongElbowsInto = splitLongElbowsInto 
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(self.root.Pose.t, self.r)
@@ -95,7 +95,8 @@ class KinematicTree:
             newJoint.setXhatAboutZhat(xhat)
         
         newLink = LinkCSC(self.r, parent.distalDubinsFrame(), 
-                                  newJoint.proximalDubinsFrame())
+                                  newJoint.proximalDubinsFrame(),
+                                  self.splitLongElbowsInto)
         
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newLink.elbow2BoundingBall)
@@ -135,9 +136,11 @@ class KinematicTree:
         jointPlotHandles = []
         linkPlotHandles = []
         for joint in self.Joints:
-            jointPlotHandles.append(joint.addToPlot(ax, xColor, yColor, zColor, 
+            handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
-                                    sphereColor, showSpheres))
+                                    sphereColor, showSpheres)
+            if not handles is None:
+                jointPlotHandles.append(handles)
         
         for link in self.Links:
             handles = link.addToPlot(ax, color=linkColor, 

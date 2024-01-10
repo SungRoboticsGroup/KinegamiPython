@@ -115,34 +115,41 @@ class Joint(ABC):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True):
-        Poses = np.array([self.proximalPose(), self.distalPose(), self.Pose])
-        oColors = np.array([proximalColor, distalColor, centerColor])
-        plotHandles = addPosesToPlot(Poses, ax, self.r, 
-                                     xColor, yColor, zColor, oColors)
-        scale = 5
-        zhat = self.Pose.R[:,2]
-        JointAxis = np.array([self.Pose.t - scale*self.r*zhat,
-                              self.Pose.t + scale*self.r*zhat])
-        ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
-                linestyle='--', color='silver')
+             surfaceAlpha=0.5, showSurface=True, showAxis=False, 
+             axisScale=10, showPoses=True):
+        if showAxis:
+            zhat = self.Pose.R[:,2]
+            JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
+                                  self.Pose.t + axisScale*self.r*zhat])
+            ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
+                    linestyle='--', color='silver')
         if showSphere:
             self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
+        if showPoses:
+            Poses = np.array([self.proximalPose(), self.distalPose(), self.Pose])
+            oColors = np.array([proximalColor, distalColor, centerColor])
+            plotHandles = addPosesToPlot(Poses, ax, self.r, 
+                                         xColor, yColor, zColor, oColors)
+        else:
+            plotHandles = None
         return plotHandles
         
     
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True):
+             surfaceAlpha=0.5, showSurface=True, showAxis=False,
+             axisScale=10, showPoses=True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
                                      sphereColor, showSphere, surfaceColor,
-                                     surfaceAlpha, showSurface)
-        xHats, yHats, zHats, origins = plotHandles
+                                     surfaceAlpha, showSurface, showAxis,
+                                     axisScale, showPoses)
+        if showPoses:
+            xHats, yHats, zHats, origins = plotHandles
+            ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
         ax.set_aspect('equal')
-        ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
     
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
@@ -186,13 +193,16 @@ class RevoluteJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True):
+             surfaceAlpha=0.5, showSurface=True, showAxis=True,
+             axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface)
+                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          axisScale, showPoses)
         if showSurface:
-            CenterSegment = np.array([self.Pose.t - self.r * self.Pose.R[:,2],
-                                      self.Pose.t + self.r * self.Pose.R[:,2]])
+            scale = self.pattern.baseSideLength / 2
+            CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
+                                      self.Pose.t + scale * self.Pose.R[:,2]])
             #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
             
             radialCount = self.numSides + 1
@@ -265,10 +275,12 @@ class PrismaticJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True):
+             surfaceAlpha=0.5, showSurface=True, showAxis=True, 
+             axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface)
+                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          axisScale, showPoses)
         if showSurface:
             self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceAlpha)
             
@@ -322,23 +334,24 @@ class Fingertip(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True):
+             surfaceAlpha=0.5, showSurface=True, showAxis=False,
+             axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface)
+                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          axisScale, showPoses)
         if showSurface:
-            
             #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
-            
             radialCount = self.numSides + 1
             angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
+            scale = self.pattern.baseSideLength / 2
             
             if self.forward:
                 DistalPose = self.distalPose()
-                TipSegment = np.array([DistalPose.t - self.r * DistalPose.R[:,2],
-                                          DistalPose.t + self.r * DistalPose.R[:,2]])
+                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,2],
+                                          DistalPose.t + scale * DistalPose.R[:,2]])
                 
                 ProximalPose = self.proximalPose()
                 uhatProximal = ProximalPose.R[:,1]
@@ -353,8 +366,8 @@ class Fingertip(OrigamiJoint):
                     ax.add_collection3d(tri)
             else:
                 ProximalPose = self.proximalPose()
-                TipSegment = np.array([ProximalPose.t - self.r * ProximalPose.R[:,2],
-                                          ProximalPose.t + self.r * ProximalPose.R[:,2]])
+                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:,2],
+                                          ProximalPose.t + scale * ProximalPose.R[:,2]])
                 
                 DistalPose = self.distalPose()
                 uhatDistal = DistalPose.R[:,1]

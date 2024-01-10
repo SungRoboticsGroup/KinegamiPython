@@ -14,8 +14,8 @@ from dubinsLink import LinkCSC
 A KinematicTree with no branching.
 """
 class KinematicChain(KinematicTree):
-    def __init__(self, root : Joint):
-        super().__init__(root)
+    def __init__(self, root : Joint, splitLongElbowsInto : int = 2):
+        super().__init__(root, splitLongElbowsInto)
     
     """ Add the given joint to the end of the chain, return its index """
     def addJointToEnd(self, newJoint : Joint, relative : bool = False, 
@@ -25,8 +25,7 @@ class KinematicChain(KinematicTree):
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
                                 fixedOrientation, guarantee)
     
-    def tubularOrigamiPattern(self, numSides : int, 
-                              splitLongElbowsInto : int = 1,
+    def tubularOrigamiPattern(self, numSides : int,
                               twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern
         for j in range(1, len(self.Joints)):
@@ -34,7 +33,7 @@ class KinematicChain(KinematicTree):
             thisJoint = self.Joints[j]
             link = LinkCSC(self.r, prevJoint.distalDubinsFrame(), 
                                    thisJoint.proximalDubinsFrame(),
-                                   splitLongElbowsInto)
+                                   self.splitLongElbowsInto)
             linkPattern = link.creasePattern(numSides, twistPortion)
             pattern.append(linkPattern)
             pattern.append(thisJoint.pattern)
