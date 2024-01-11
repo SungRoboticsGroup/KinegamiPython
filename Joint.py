@@ -308,13 +308,14 @@ class WayPoint(OrigamiJoint):
         return Ball(self.Pose.t, self.boundingRadius())
 
 class Fingertip(OrigamiJoint):
-    def __init__(self, numSides : int, r : float, Pose : SE3, length : float, forward : bool = True):
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
+                 forward : bool = True):
         super().__init__(numSides, r, length, Pose)
         self.pattern = FingertipPattern(numSides, r, length, forward)
         self.forward = forward
     
     def pathIndex(self) -> int:
-        return 0 # zhat
+        return 2 # zhat
     
     def stateChangeTransformation(self, stateChange : float) -> SE3:
         return SE3()
@@ -345,14 +346,16 @@ class Fingertip(OrigamiJoint):
             v = self.r * np.sin(angle)
             scale = self.pattern.baseSideLength / 2
             
+            tipSegmentIndex, uhatIndex, vhatIndex = 0,0,1
+            
             if self.forward:
                 DistalPose = self.distalPose()
-                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,2],
-                                          DistalPose.t + scale * DistalPose.R[:,2]])
+                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,tipSegmentIndex],
+                                          DistalPose.t + scale * DistalPose.R[:,tipSegmentIndex]])
                 
                 ProximalPose = self.proximalPose()
-                uhatProximal = ProximalPose.R[:,1]
-                vhatProximal = ProximalPose.R[:,2]
+                uhatProximal = ProximalPose.R[:,uhatIndex]
+                vhatProximal = ProximalPose.R[:,vhatIndex]
                 ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
                 ProximalPoints = np.vstack((ProximalBase, TipSegment))
                 ProximalHull = ConvexHull(ProximalPoints)
@@ -363,12 +366,12 @@ class Fingertip(OrigamiJoint):
                     ax.add_collection3d(tri)
             else:
                 ProximalPose = self.proximalPose()
-                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:,2],
-                                          ProximalPose.t + scale * ProximalPose.R[:,2]])
+                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:,tipSegmentIndex],
+                                          ProximalPose.t + scale * ProximalPose.R[:,tipSegmentIndex]])
                 
                 DistalPose = self.distalPose()
-                uhatDistal = DistalPose.R[:,1]
-                vhatDistal = DistalPose.R[:,2]
+                uhatDistal = DistalPose.R[:,uhatIndex]
+                vhatDistal = DistalPose.R[:,vhatIndex]
                 DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
                 DistalPoints = np.vstack((DistalBase, TipSegment))
                 DistalHull = ConvexHull(DistalPoints)

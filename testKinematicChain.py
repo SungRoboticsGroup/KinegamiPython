@@ -26,7 +26,7 @@ revoluteIndex = KC.addJointToEnd(RevoluteJoint(numSides, r, np.pi,
                 relative=True, fixedPosition=False, fixedOrientation=False, 
                 guarantee=guarantee)
 
-KC.addJointToEnd(Fingertip(numSides, r, SE3([4,0,0]), 2, forward=True),
+KC.addJointToEnd(Fingertip(numSides, r, SE3(4,0,0)@SE3.Ry(np.pi/2), 2, forward=True),
                 relative=True, fixedPosition=True, fixedOrientation=True, 
                 guarantee=False)
 
