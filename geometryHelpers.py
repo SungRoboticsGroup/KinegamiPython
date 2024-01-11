@@ -538,7 +538,7 @@ class Plane:
                 return line
             else: 
                 # line is parallel to the plane
-                return "empty"
+                return None
         else:
             # line intersects the plane at a single point
             # so the linear system constructed per wikipedia has point solution
@@ -562,7 +562,7 @@ class Plane:
     """
     def sidesOfLine(self, line):
         intersection = self.intersectionWithLine(line)
-        if intersection == 'empty':
+        if intersection is None:
             # line is parallel to plane, need to check on which side
             return [self.sideOfPoint(line.p)]
         elif type(intersection) == Line:
