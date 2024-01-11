@@ -1037,9 +1037,9 @@ class KreslingJointPattern(TubularPattern):
     """
     def __init__(self, numSides, r, compressedStableLength, angleRatio,
                  proximalMarker=[0, 0]):
-        super().__init__(numSides, r, proximalMarker)
         assert(angleRatio>0 and angleRatio<1) 
         assert(compressedStableLength > 0)
+        super().__init__(numSides, r, proximalMarker)
         gamma = (np.pi/2) - (np.pi/numSides)
         D = 2*r*np.cos(gamma*(1-angleRatio))
         P = self.baseSideLength

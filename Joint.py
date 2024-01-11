@@ -64,8 +64,9 @@ class Joint(ABC):
         minState, maxState = self.stateRange()
         assert(minState <= state and state <= maxState)
         stateChange = state - self.state
+        transformation = self.stateChangeTransformation(stateChange)
         self.state = state
-        return self.stateChangeTransformation(stateChange)
+        return transformation
     
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
@@ -88,11 +89,7 @@ class Joint(ABC):
         return self.proximalPose().t
     
     def distalPosition(self) -> np.ndarray:
-        return self.distalPose().t    
-    
-    # Frame should be an SE3 object
-    def transformPoseFromFrameToGlobal(self, Frame : SE3):
-        self.Pose = self.Pose @ Frame
+        return self.distalPose().t
     
     def transformPoseBy(self, Transformation : SE3):
         self.Pose = Transformation @ self.Pose
@@ -235,7 +232,8 @@ class RevoluteJoint(OrigamiJoint):
                 ax.add_collection3d(tri)
             
         return plotHandles
-        
+
+    
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
                  numLayers : int, coneAngle : float, Pose : SE3, 
@@ -310,7 +308,6 @@ class WayPoint(OrigamiJoint):
         return Ball(self.Pose.t, self.boundingRadius())
 
 class Fingertip(OrigamiJoint):
-    
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, forward : bool = True):
         super().__init__(numSides, r, length, Pose)
         self.pattern = FingertipPattern(numSides, r, length, forward)
@@ -334,7 +331,7 @@ class Fingertip(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=False,
+             surfaceAlpha=0.5, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,

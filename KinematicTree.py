@@ -66,13 +66,13 @@ class KinematicTree:
                 position and orientation of newJoint.
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
-                 relative : bool = False, fixedPosition : bool = True, 
-                 fixedOrientation : bool = True, guarantee : bool = True):
+                 relative : bool = False, fixedPosition : bool = False, 
+                 fixedOrientation : bool = False, guarantee : bool = True):
         assert(newJoint.r == self.r)
         assert(newJoint.numSides == self.numSides)
         parent = self.Joints[parentIndex]
         if relative:
-            newJoint.transformPoseFromFrameToGlobal(parent.Pose)
+            newJoint.transformPoseBy(parent.Pose)
         
         if guarantee: # Algorithm 9
             #return self.addJointWithWayPoints(parentIndex, newJoint)

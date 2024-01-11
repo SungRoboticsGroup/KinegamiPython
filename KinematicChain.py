@@ -19,7 +19,7 @@ class KinematicChain(KinematicTree):
     
     """ Add the given joint to the end of the chain, return its index """
     def addJointToEnd(self, newJoint : Joint, relative : bool = False, 
-                 fixedPosition : bool = True, fixedOrientation : bool = True, 
+                 fixedPosition : bool = False, fixedOrientation : bool = False, 
                  guarantee : bool = False) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
