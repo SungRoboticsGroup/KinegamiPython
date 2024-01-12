@@ -112,7 +112,7 @@ class Joint(ABC):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=False, 
+             surfaceOpacity=0.5, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:,2]
@@ -135,13 +135,13 @@ class Joint(ABC):
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=False,
+             surfaceOpacity=0.5, showSurface=True, showAxis=False,
              axisScale=10, showPoses=True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
                                      sphereColor, showSphere, surfaceColor,
-                                     surfaceAlpha, showSurface, showAxis,
+                                     surfaceOpacity, showSurface, showAxis,
                                      axisScale, showPoses)
         if showPoses:
             xHats, yHats, zHats, origins = plotHandles
@@ -190,11 +190,11 @@ class RevoluteJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=True,
+             surfaceOpacity=0.5, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          surfaceColor, surfaceOpacity, showSurface, showAxis,
                           axisScale, showPoses)
         if showSurface:
             scale = self.pattern.baseSideLength / 2
@@ -216,7 +216,7 @@ class RevoluteJoint(OrigamiJoint):
             for s in ProximalHull.simplices:
                 tri = Poly3DCollection([ProximalPoints[s]])
                 tri.set_color(surfaceColor)
-                tri.set_alpha(surfaceAlpha)
+                tri.set_alpha(surfaceOpacity)
                 ax.add_collection3d(tri)
             
             DistalPose = self.distalPose()
@@ -228,7 +228,7 @@ class RevoluteJoint(OrigamiJoint):
             for s in DistalHull.simplices:
                 tri = Poly3DCollection([DistalPoints[s]])
                 tri.set_color(surfaceColor)
-                tri.set_alpha(surfaceAlpha)
+                tri.set_alpha(surfaceOpacity)
                 ax.add_collection3d(tri)
             
         return plotHandles
@@ -273,14 +273,14 @@ class PrismaticJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=True, 
+             surfaceOpacity=0.5, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          surfaceColor, surfaceOpacity, showSurface, showAxis,
                           axisScale, showPoses)
         if showSurface:
-            self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceAlpha)
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
             
         return plotHandles
         
@@ -332,11 +332,11 @@ class Fingertip(OrigamiJoint):
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceAlpha=0.5, showSurface=True, showAxis=True,
+             surfaceOpacity=0.5, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceAlpha, showSurface, showAxis,
+                          surfaceColor, surfaceOpacity, showSurface, showAxis,
                           axisScale, showPoses)
         if showSurface:
             #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
@@ -362,7 +362,7 @@ class Fingertip(OrigamiJoint):
                 for s in ProximalHull.simplices:
                     tri = Poly3DCollection([ProximalPoints[s]])
                     tri.set_color(surfaceColor)
-                    tri.set_alpha(surfaceAlpha)
+                    tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             else:
                 ProximalPose = self.proximalPose()
@@ -378,7 +378,7 @@ class Fingertip(OrigamiJoint):
                 for s in DistalHull.simplices:
                     tri = Poly3DCollection([DistalPoints[s]])
                     tri.set_color(surfaceColor)
-                    tri.set_alpha(surfaceAlpha)
+                    tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             
         return plotHandles

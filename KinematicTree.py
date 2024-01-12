@@ -129,8 +129,10 @@ class KinematicTree:
     
     def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
-                  showLinkFrames=False, showLinkPath=True, 
+                  showJointSurface=True, jointColor='m', showJointAxes=True,
+                  jointAxisScale=10, showJointPoses=True,
+                  linkColor='black', surfaceOpacity=0.5, showLinkSurface=True, 
+                  showLinkPoses=False, showLinkPath=True, 
                   showPathCircles=False, sphereColor='black',
                   showSpheres=True):
         jointPlotHandles = []
@@ -138,18 +140,20 @@ class KinematicTree:
         for joint in self.Joints:
             handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
-                                    sphereColor, showSpheres)
+                                    sphereColor, showSpheres, jointColor,
+                                    surfaceOpacity, showJointSurface, 
+                                    showJointAxes, jointAxisScale, showJointPoses)
             if not handles is None:
                 jointPlotHandles.append(handles)
         
         for link in self.Links:
             handles = link.addToPlot(ax, color=linkColor, 
-                                   alpha=linkOpacity, 
+                                   alpha=surfaceOpacity, 
                                    showPath=showLinkPath, 
                                    showPathCircles=showPathCircles, 
-                                   showFrames=showLinkFrames,
-                                   showBoundary=showLinkBoundary)
-            if showLinkFrames:
+                                   showFrames=showLinkPoses,
+                                   showBoundary=showLinkSurface)
+            if showLinkPoses:
                 for elbowHandles in handles:
                     linkPlotHandles.append(elbowHandles)
         
@@ -162,33 +166,40 @@ class KinematicTree:
     
     def plot(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
-             linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
-             showLinkFrames=False, showLinkPath=True, 
+             showJointSurface=True, jointColor='m', showJointAxes=True,
+             jointAxisScale=10, showJointPoses=True,
+             linkColor='black', surfaceOpacity=0.5, showLinkSurface=True, 
+             showLinkPoses=False, showLinkPath=True, 
              showPathCircles=False, sphereColor='black',
              showSpheres=False):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
-                                    linkColor, linkOpacity, showLinkBoundary, 
-                                    showLinkFrames, showLinkPath, 
+                                    showJointSurface, jointColor, showJointAxes,
+                                    jointAxisScale, showJointPoses,
+                                    linkColor, surfaceOpacity, showLinkSurface, 
+                                    showLinkPoses, showLinkPath, 
                                     showPathCircles, sphereColor,
                                     showSpheres)
-        xHats = jointPlotHandles[:,0]
-        yHats = jointPlotHandles[:,1]
-        zHats = jointPlotHandles[:,2]
-        origins = jointPlotHandles[:,3]
-        if showLinkFrames:
+        
+        handleGroups = []
+        labels = []
+        if showJointPoses:
+            xHats = jointPlotHandles[:,0]
+            yHats = jointPlotHandles[:,1]
+            zHats = jointPlotHandles[:,2]
+            origins = jointPlotHandles[:,3]
+            handleGroups += [tuple(xHats), tuple(yHats), tuple(zHats)]
+            labels += [r'$\^x$', r'$\^y$', r'$\^z$']
+        if showLinkPoses:
             aHats = linkPlotHandles[:,0]
             bHats = linkPlotHandles[:,1]
             cHats = linkPlotHandles[:,2]
-            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats),
-                       tuple(aHats), tuple(bHats), tuple(cHats)], 
-                      [r'$\^x$', r'$\^y$', r'$\^z$',
-                       r'$\^a$', r'$\^b$', r'$\^c$'])
-        else:
-            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats)], 
-                      [r'$\^x$', r'$\^y$', r'$\^z$'])
+            handleGroups += [tuple(aHats), tuple(bHats), tuple(cHats)]
+            labels += [r'$\^a$', r'$\^b$', r'$\^c$']
+        if not handleGroups==[]:
+            ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
         plt.show()
@@ -211,13 +222,28 @@ class KinematicTree:
     """ Apply given transformation (SE3() object) to given joint (index), 
         and to its descendants if recursive (defaults to True) """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       recursive : bool = True, recomputeBoundingBall=True):
+                       recursive : bool = True, recomputeBoundingBall=True,
+                       recomputeLinkPath : bool = True):
         self.Joints[jointIndex].transformPoseBy(Transformation)
-        self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+        joint = self.Joints[jointIndex]
+        if recomputeLinkPath and jointIndex > 0:
+            parent = self.Joints[self.Parents[jointIndex]]
+            self.Links[jointIndex] = LinkCSC(self.r, parent.distalDubinsFrame(), 
+                                      joint.proximalDubinsFrame(),
+                                      self.splitLongElbowsInto)
+        else:
+            self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
         if recursive:
             for c in self.Children[jointIndex]:
                 self.transformJoint(c, Transformation, recursive=True, 
-                                    recomputeBoundingBall=False)
+                                    recomputeBoundingBall=False,
+                                    recomputeLinkPath=False)
+        else:
+            for c in self.Children[jointIndex]:
+                child = self.Joints[c]
+                self.Links[c] = LinkCSC(self.r, joint.distalDubinsFrame(), 
+                                          child.proximalDubinsFrame(),
+                                          self.splitLongElbowsInto)
         if recomputeBoundingBall:
             self.recomputeBoundingBall()
                 
@@ -227,6 +253,17 @@ class KinematicTree:
             self.transformJoint(c, Transformation, recursive=True, 
                                 recomputeBoundingBall=False)
         self.recomputeBoundingBall()
+        
+    def translateJointAlongAxis(self, jointIndex : int, distance : float, 
+                                recursive : bool = True):
+        Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
+        self.transformJoint(jointIndex, Translation, recursive)
+    
+    def rotateJointAboutAxis(self, jointIndex : int, angle : float,
+                             recursive : bool = True):
+        Pose = self.Joints[jointIndex].Pose
+        Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
+        self.transformJoint(jointIndex, Rotation, recursive)
 
 
 """ 

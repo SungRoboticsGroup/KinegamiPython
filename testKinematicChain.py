@@ -19,6 +19,7 @@ prismaticIndex = KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3,
                 relative=True, fixedPosition=False, fixedOrientation=False, 
                 guarantee=guarantee)
 
+
 minPrismaticState, maxPrismaticState = KC.Joints[prismaticIndex].stateRange()
 
 revoluteIndex = KC.addJointToEnd(RevoluteJoint(numSides, r, np.pi,
@@ -30,7 +31,16 @@ KC.addJointToEnd(Fingertip(numSides, r, SE3(4,0,0)@SE3.Ry(np.pi/2), 2, forward=T
                 relative=True, fixedPosition=True, fixedOrientation=True, 
                 guarantee=False)
 
-KC.plot(showSpheres=False)
+KC.plot(linkColor='orange', jointColor='blue', showJointPoses=False, 
+        showJointAxes=True, jointAxisScale=5)
+
+KC.translateJointAlongAxis(prismaticIndex, -5)
+KC.translateJointAlongAxis(revoluteIndex, -5)
+KC.rotateJointAboutAxis(revoluteIndex, -np.pi/4)
+
+KC.plot()
+
+"""
 pattern = KC.tubularOrigamiPattern(numSides)
 pattern.makeDXF(show=True)
 
@@ -38,3 +48,4 @@ KC.setJointState(prismaticIndex, maxPrismaticState)
 
 KC.setJointState(revoluteIndex, -np.pi/2)
 KC.plot(showSpheres=False)
+"""
