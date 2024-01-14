@@ -28,7 +28,7 @@ class KinematicTree:
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : Joint, splitLongElbowsInto : int = 2):
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2):
         self.root = root
         self.r = root.r
         self.numSides = root.numSides
@@ -36,8 +36,9 @@ class KinematicTree:
         self.Parents = [-1]     # root has no parent
         self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
                                       root.proximalDubinsFrame(),
-                                      splitLongElbowsInto)]
-        self.splitLongElbowsInto = splitLongElbowsInto 
+                                      maxAnglePerElbow)]
+        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
+        self.maxAnglePerElbow = maxAnglePerElbow 
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(self.root.Pose.t, self.r)
@@ -96,7 +97,7 @@ class KinematicTree:
         
         newLink = LinkCSC(self.r, parent.distalDubinsFrame(), 
                                   newJoint.proximalDubinsFrame(),
-                                  self.splitLongElbowsInto)
+                                  self.maxAnglePerElbow)
         
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newLink.elbow2BoundingBall)
@@ -230,7 +231,7 @@ class KinematicTree:
             parent = self.Joints[self.Parents[jointIndex]]
             self.Links[jointIndex] = LinkCSC(self.r, parent.distalDubinsFrame(), 
                                       joint.proximalDubinsFrame(),
-                                      self.splitLongElbowsInto)
+                                      self.maxAnglePerElbow)
         else:
             self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
         if recursive:
@@ -243,7 +244,7 @@ class KinematicTree:
                 child = self.Joints[c]
                 self.Links[c] = LinkCSC(self.r, joint.distalDubinsFrame(), 
                                           child.proximalDubinsFrame(),
-                                          self.splitLongElbowsInto)
+                                          self.maxAnglePerElbow)
         if recomputeBoundingBall:
             self.recomputeBoundingBall()
                 
@@ -255,15 +256,15 @@ class KinematicTree:
         self.recomputeBoundingBall()
         
     def translateJointAlongAxis(self, jointIndex : int, distance : float, 
-                                recursive : bool = True):
+                                propogate : bool = True):
         Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
-        self.transformJoint(jointIndex, Translation, recursive)
+        self.transformJoint(jointIndex, Translation, propogate)
     
     def rotateJointAboutAxis(self, jointIndex : int, angle : float,
-                             recursive : bool = True):
+                             propogate : bool = True):
         Pose = self.Joints[jointIndex].Pose
         Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
-        self.transformJoint(jointIndex, Rotation, recursive)
+        self.transformJoint(jointIndex, Rotation, propogate)
 
 
 """ 

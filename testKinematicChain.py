@@ -11,14 +11,14 @@ numSides = 6
 guarantee = True
 
 # chain whose root is a waypoint at the global origin
-KC = KinematicChain(Fingertip(numSides, r, SE3.Ry(np.pi/4), 2, forward=False)) 
+KC = KinematicChain(Fingertip(numSides, r, SE3.Ry(np.pi/4), 2, forward=False),
+                    maxAnglePerElbow = np.pi/2) 
 
 prismaticIndex = KC.addJointToEnd(PrismaticJoint(numSides, r, neutralLength=3, 
                     numLayers=6, coneAngle=np.pi/4,
                     Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False, 
                 guarantee=guarantee)
-
 
 minPrismaticState, maxPrismaticState = KC.Joints[prismaticIndex].stateRange()
 
@@ -32,7 +32,8 @@ KC.addJointToEnd(Fingertip(numSides, r, SE3(4,0,0)@SE3.Ry(np.pi/2), 2, forward=T
                 guarantee=False)
 
 KC.plot(linkColor='orange', jointColor='blue', showJointPoses=False, 
-        showJointAxes=True, jointAxisScale=5)
+        showJointAxes=False, jointAxisScale=5, showLinkPath=False,
+        surfaceOpacity=1, showSpheres=True)
 
 KC.translateJointAlongAxis(prismaticIndex, -5)
 KC.translateJointAlongAxis(revoluteIndex, -5)
@@ -40,7 +41,7 @@ KC.rotateJointAboutAxis(revoluteIndex, -np.pi/4)
 
 KC.plot()
 
-"""
+
 pattern = KC.tubularOrigamiPattern(numSides)
 pattern.makeDXF(show=True)
 
@@ -48,4 +49,3 @@ KC.setJointState(prismaticIndex, maxPrismaticState)
 
 KC.setJointState(revoluteIndex, -np.pi/2)
 KC.plot(showSpheres=False)
-"""

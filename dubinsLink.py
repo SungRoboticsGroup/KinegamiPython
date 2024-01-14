@@ -19,12 +19,12 @@ from tubularOrigami import TubularPattern, TubeFittingPattern, \
 
 class LinkCSC:
     def __init__(self, r : float, StartDubinsFrame : SE3, EndDubinsFrame : SE3,
-                 splitLongElbowsInto : int = 2, path : PathCSC = None, 
+                 maxAnglePerElbow : float = np.pi/2, path : PathCSC = None, 
                  EPSILON : float = 0.0001):
         assert(r>0)
-        assert(splitLongElbowsInto >= 1)
+        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.r = r
-        self.splitLongElbowsInto = splitLongElbowsInto
+        self.maxAnglePerElbow = maxAnglePerElbow
         self.EPSILON = EPSILON
         self.StartDubinsFrame = StartDubinsFrame
         self.EndDubinsFrame = EndDubinsFrame
@@ -51,7 +51,7 @@ class LinkCSC:
         if self.path.theta1 > self.EPSILON:
             self.elbow1 = CompoundElbow(self.r, self.StartDubinsFrame, 
                                        self.path.theta1, self.rot1AxisAngle, 
-                                       self.splitLongElbowsInto, self.EPSILON)
+                                       self.maxAnglePerElbow, self.EPSILON)
             self.Elbow1EndFrame = self.elbow1.EndFrame
             self.elbow1BoundingBall = self.elbow1.boundingBall()
         else:
@@ -72,7 +72,7 @@ class LinkCSC:
             
             self.elbow2 = CompoundElbow(self.r, self.Elbow2StartFrame, 
                                        self.path.theta2, self.rot2AxisAngle, 
-                                       self.splitLongElbowsInto, self.EPSILON)
+                                       self.maxAnglePerElbow, self.EPSILON)
             assert(norm(self.elbow2.EndFrame - self.EndDubinsFrame) < self.EPSILON)
             self.elbow2BoundingBall = self.elbow2.boundingBall()
         else:
@@ -82,7 +82,7 @@ class LinkCSC:
     def newLinkTransformedBy(self, Transformation : SE3):
         return LinkCSC(self.r, Transformation @ self.StartDubinsFrame, 
                        Transformation @ self.EndDubinsFrame, 
-                       splitLongElbowsInto = self.splitLongElbowsInto, 
+                       maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
     
@@ -135,18 +135,12 @@ class LinkCSC:
         composed = TubularPattern(numSides, self.r)
         
         if self.path.theta1 > self.EPSILON:
-            #w1 is the unit vector from startPosition to circle1center
-            if self.path.theta1 > np.pi/self.splitLongElbowsInto:
-                elbow1PartPattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta1/self.splitLongElbowsInto, 
+            numElbows1 = (int)(np.ceil(self.path.theta1 / self.maxAnglePerElbow)) 
+            elbow1PartPattern = ElbowFittingPattern(numSides, self.r, 
+                                    bendingAngle=self.path.theta1 / numElbows1, 
                                     rotationalAxisAngle=self.rot1AxisAngle)
-                for i in range(self.splitLongElbowsInto):
-                    composed.append(elbow1PartPattern)
-            else:
-                elbow1Pattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta1, 
-                                    rotationalAxisAngle=self.rot1AxisAngle)
-                composed.append(elbow1Pattern)
+            for i in range(numElbows1):
+                composed.append(elbow1PartPattern)
         
         twistAngle = signedAngle(self.Elbow1EndFrame.R[:,1], 
                                  self.Elbow2StartFrame.R[:,1], 
@@ -162,17 +156,11 @@ class LinkCSC:
         composed.append(tubePattern)
         
         if self.path.theta2 > self.EPSILON:
-            #w1 is the unit vector from startPosition to circle1center
-            if self.path.theta2 > np.pi/self.splitLongElbowsInto:
-                elbow2PartPattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta2/self.splitLongElbowsInto, 
+            numElbows2 = (int)(np.ceil(self.path.theta2 / self.maxAnglePerElbow)) 
+            elbow2PartPattern = ElbowFittingPattern(numSides, self.r, 
+                                    bendingAngle=self.path.theta2 / numElbows2, 
                                     rotationalAxisAngle=self.rot2AxisAngle)
-                for i in range(self.splitLongElbowsInto):
-                    composed.append(elbow2PartPattern)
-            else:
-                elbow2Pattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta2, 
-                                    rotationalAxisAngle=self.rot2AxisAngle)
-                composed.append(elbow2Pattern)
+            for i in range(numElbows2):
+                composed.append(elbow2PartPattern)
         
         return composed

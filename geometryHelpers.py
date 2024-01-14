@@ -360,7 +360,7 @@ class Elbow:
 
 class CompoundElbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
-                 rotationalAxisAngle : float, splitLongElbowsInto : int = 2, 
+                 rotationalAxisAngle : float, maxAnglePerElbow : float = np.pi/2, 
                  EPSILON : float = 0.0001):
         rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
@@ -370,19 +370,16 @@ class CompoundElbow:
             bendingAngle = abs(bendingAngle)
             rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
         
-        assert(splitLongElbowsInto >= 1)
+        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
+        numElbows = (int)(np.ceil(bendingAngle / maxAnglePerElbow)) 
+        anglePerElbow = bendingAngle / numElbows
         self.elbows = []
-        if bendingAngle > np.pi / splitLongElbowsInto:
-            CurrentFrame = StartFrame
-            anglePerElbow = bendingAngle / splitLongElbowsInto
-            for i in range(splitLongElbowsInto):
-                nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
-                                         rotationalAxisAngle, EPSILON)
-                self.elbows.append(nextElbow)
-                CurrentFrame = nextElbow.EndFrame
-        else:
-            self.elbows.append(Elbow(radius, StartFrame, bendingAngle, 
-                                     rotationalAxisAngle, EPSILON))
+        CurrentFrame = StartFrame
+        for i in range(numElbows):
+            nextElbow = Elbow(radius, CurrentFrame, anglePerElbow, 
+                                     rotationalAxisAngle, EPSILON)
+            self.elbows.append(nextElbow)
+            CurrentFrame = nextElbow.EndFrame
         
         self.StartFrame = StartFrame
         self.EndFrame = self.elbows[-1].EndFrame

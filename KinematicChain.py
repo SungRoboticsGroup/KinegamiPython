@@ -14,8 +14,8 @@ from dubinsLink import LinkCSC
 A KinematicTree with no branching.
 """
 class KinematicChain(KinematicTree):
-    def __init__(self, root : Joint, splitLongElbowsInto : int = 2):
-        super().__init__(root, splitLongElbowsInto)
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2):
+        super().__init__(root, maxAnglePerElbow)
     
     """ Add the given joint to the end of the chain, return its index """
     def addJointToEnd(self, newJoint : Joint, relative : bool = False, 
@@ -33,7 +33,7 @@ class KinematicChain(KinematicTree):
             thisJoint = self.Joints[j]
             link = LinkCSC(self.r, prevJoint.distalDubinsFrame(), 
                                    thisJoint.proximalDubinsFrame(),
-                                   self.splitLongElbowsInto)
+                                   self.maxAnglePerElbow)
             linkPattern = link.creasePattern(numSides, twistPortion)
             pattern.append(linkPattern)
             pattern.append(thisJoint.pattern)
