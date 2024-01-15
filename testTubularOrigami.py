@@ -3,10 +3,10 @@
 Created on Thu Nov 30 13:29:46 2023
 
 @author: Daniel Feshbach
-Tests for tubularOrigami.py
+Tests for TubularPattern.py
 """
-import tubularOrigami
-from tubularOrigami import *
+import TubularPattern
+from TubularPattern import *
 
 import os
 import errno

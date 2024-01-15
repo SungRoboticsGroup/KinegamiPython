@@ -4,7 +4,7 @@ Created on Thu Dec 14 18:40:04 2023
 
 @author: Daniel Feshbach
 """
-from dubinsLink import *
+from LinkCSC import *
 
 
 import os

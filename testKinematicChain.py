@@ -4,6 +4,8 @@ Created on Wed Dec  6 17:32:19 2023
 
 @author: Daniel Feshbach
 """
+import sys
+sys.path.append('..')
 from KinematicChain import *
 r = 1
 numSides = 6
@@ -41,7 +43,7 @@ KC.rotateJointAboutAxis(revoluteIndex, -np.pi/4)
 KC.show(block=False)
 
 
-pattern = KC.tubularOrigamiPattern(numSides)
+pattern = KC.TubularPatternPattern(numSides)
 pattern.show(show=True)
 
 KC.setJointState(prismaticIndex, maxPrismaticState)

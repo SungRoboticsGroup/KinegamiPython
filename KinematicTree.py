@@ -6,14 +6,14 @@ Created on Fri Jun 23 23:13:27 2023
 """
 import Joint
 from Joint import *
-import dubinsPath
-from dubinsPath import *
+import PathCSC
+from PathCSC import *
 import scipy
 from scipy.optimize import NonlinearConstraint, minimize
 import queue
-import tubularOrigami
-from tubularOrigami import *
-from dubinsLink import LinkCSC
+import TubularPattern
+from TubularPattern import *
+from LinkCSC import LinkCSC
 
 class KinematicTree:
     """

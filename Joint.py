@@ -8,7 +8,7 @@ from spatialmath import SE3
 from abc import ABC, abstractmethod
 from geometryHelpers import *
 import matplotlib.pyplot as plt
-from tubularOrigami import *
+from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 

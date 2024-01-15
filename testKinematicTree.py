@@ -4,7 +4,7 @@ Created on Fri Jun 23 23:44:41 2023
 
 @author: DanielFeshbach
 
-This file exists to test KinematicTree and by extension Joint and dubinsPath
+This file exists to test KinematicTree and by extension Joint and PathCSC
 """
 import KinematicTree
 from KinematicTree import *

@@ -6,8 +6,8 @@ Created on Wed Dec  6 14:07:27 2023
 """
 from Joint import *
 from KinematicTree import KinematicTree
-from tubularOrigami import *
-from dubinsLink import LinkCSC
+from TubularPattern import *
+from LinkCSC import LinkCSC
 
 
 """
@@ -25,7 +25,7 @@ class KinematicChain(KinematicTree):
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
                                 fixedOrientation, guarantee)
     
-    def tubularOrigamiPattern(self, numSides : int,
+    def TubularPatternPattern(self, numSides : int,
                               twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern
         for j in range(1, len(self.Joints)):

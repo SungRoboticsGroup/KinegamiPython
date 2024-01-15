@@ -8,11 +8,11 @@ import numpy as np
 from numpy import cross, dot, arctan2
 from numpy.linalg import norm
 from spatialmath import SO3, SE3
-from dubinsPath import *
+from PathCSC import *
 from geometryHelpers import *
 import matplotlib.pyplot as plt
-import tubularOrigami
-from tubularOrigami import TubularPattern, TubeFittingPattern, \
+import TubularPattern
+from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 
 
