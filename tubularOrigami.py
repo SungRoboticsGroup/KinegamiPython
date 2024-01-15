@@ -239,7 +239,7 @@ class TubularPattern():
         or other considerations for actual manufacturing.
         Mainly useful for debugging - comparing it to the result of makeDXF
         helps separate mistakes in the actual graph from bugs in makeDXF. """
-    def plotRawGraph(self, saveas="", show=True, directed=False):
+    def showRawGraph(self, saveas="", show=True, directed=False):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -283,14 +283,11 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show()
+            plt.show(block=False)
 
         return doc
-    
-    def plot(self):
-        self.makeDXF(show=True)
-    
-    def makeDXF(self, saveas="", show=False, debug=False):
+
+    def show(self, dxfName="", show=True, printGraph=False, block=True):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -320,7 +317,7 @@ class TubularPattern():
         
         Folds = self.Vertices[self.Edges]
         lastColStart = self.width - self.baseSideLength
-        if debug:
+        if printGraph:
             print("Vertices:")
             print(self.Vertices)
             print("Edges:")
@@ -370,8 +367,8 @@ class TubularPattern():
                     msp.add_line(leftcopy[0, :], leftcopy[1, :],
                                  dxfattribs={"layer": layer})
             
-        if saveas:
-            doc.saveas(saveas+".dxf")
+        if dxfName:
+            doc.saveas(dxfName+".dxf")
 
         if show:
             config = Configuration()
@@ -387,7 +384,7 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show()
+            plt.show(block=block)
 
         return doc
 

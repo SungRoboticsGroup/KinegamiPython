@@ -5,7 +5,6 @@ Created on Wed Dec  6 17:32:19 2023
 @author: Daniel Feshbach
 """
 from KinematicChain import *
-
 r = 1
 numSides = 6
 guarantee = True
@@ -31,21 +30,21 @@ KC.addJointToEnd(Fingertip(numSides, r, SE3(4,0,0)@SE3.Ry(np.pi/2), 2, forward=T
                 relative=True, fixedPosition=True, fixedOrientation=True, 
                 guarantee=False)
 
-KC.plot(linkColor='orange', jointColor='blue', showJointPoses=False, 
+KC.show(linkColor='orange', jointColor='blue', showJointPoses=False, 
         showJointAxes=False, jointAxisScale=5, showLinkPath=False,
-        surfaceOpacity=1, showSpheres=True)
+        surfaceOpacity=1, showSpheres=True, block=False)
 
 KC.translateJointAlongAxis(prismaticIndex, -5)
 KC.translateJointAlongAxis(revoluteIndex, -5)
 KC.rotateJointAboutAxis(revoluteIndex, -np.pi/4)
 
-KC.plot()
+KC.show(block=False)
 
 
 pattern = KC.tubularOrigamiPattern(numSides)
-pattern.makeDXF(show=True)
+pattern.show(show=True)
 
 KC.setJointState(prismaticIndex, maxPrismaticState)
 
 KC.setJointState(revoluteIndex, -np.pi/2)
-KC.plot(showSpheres=False)
+KC.show(block=True)

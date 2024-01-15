@@ -165,14 +165,14 @@ class KinematicTree:
         return np.array(jointPlotHandles), np.array(linkPlotHandles)
         
     
-    def plot(self, xColor='r', yColor='b', zColor='g', 
+    def show(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              showJointSurface=True, jointColor='m', showJointAxes=True,
              jointAxisScale=10, showJointPoses=True,
              linkColor='black', surfaceOpacity=0.5, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, 
              showPathCircles=False, sphereColor='black',
-             showSpheres=False):
+             showSpheres=False, block=True):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
@@ -203,22 +203,7 @@ class KinematicTree:
             ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
-        plt.show()
-    
-    
-    def isLeaf(self, jointIndex : int):
-        return len(Children[jointIndex]) == 0
-    
-    """ Returns list of indices of descendants of a given joint index, 
-        in breadth-first order"""
-    def DescendantsBreadthFirst(self, jointIndex : int):
-        descendants = Children[jointIndex].copy()
-        i = 0
-        while i < len(descendants):
-            d = descendants[i]
-            descendants += self.DescendantsBreadthFirst(d)
-            i += 0
-        return descendants
+        plt.show(block=block)
     
     """ Apply given transformation (SE3() object) to given joint (index), 
         and to its descendants if recursive (defaults to True) """

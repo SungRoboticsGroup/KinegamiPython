@@ -185,10 +185,11 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
     
-    def plot(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2):
+    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
+        plt.show(block=block)
 
 class Ball:
     # closed ball centered at self.c of radius self.r
@@ -210,10 +211,11 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
     
-    def plot(self, color='black', alpha=1, frame=False):
+    def show(self, color='black', alpha=1, frame=False, block=True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, color, alpha, frame)
         ax.set_aspect('equal')
+        plt.show(block=block)
 
 
 """
@@ -350,13 +352,14 @@ class Elbow:
         
         return frameHandles
     
-    def plot(self, numSides : int = 32, color : str = 'black', 
+    def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
-             showFrames : bool = False):
+             showFrames : bool = False, block : bool = False):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames)
         ax.set_aspect('equal')
+        plt.show(block=block)
 
 class CompoundElbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
@@ -404,13 +407,15 @@ class CompoundElbow:
             ball = minBoundingBall(ball, elbow.boundingBall())
         return ball
     
-    def plot(self, numSides : int = 32, color : str = 'black', 
+    def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
-             showFrames : bool = True, showBoundingBall : bool = False):
+             showFrames : bool = True, showBoundingBall : bool = False,
+             block : bool = True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames, showBoundingBall)
         ax.set_aspect('equal')
+        plt.show(block=block)
         
     
 class Arc3D:

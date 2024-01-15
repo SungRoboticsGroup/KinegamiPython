@@ -117,16 +117,17 @@ class LinkCSC:
         return allElbowHandleSets
     
     
-    def plot(self, numSides : int = 32, color : str = 'black', 
+    def show(self, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
                   showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = False):
+                  showElbowBoundingBalls : bool = False, block : bool = False):
         ax = plt.figure().add_subplot(projection='3d')
         allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
                                      showFrames, showPath, showPathCircles,
                                      showBoundary, showElbowBoundingBalls)
         ax.set_aspect('equal')
+        plt.show(block=block)
     
     def creasePattern(self, numSides : int, twistPortion : float = 0.2) -> TubularPattern:
         assert(numSides >= 4 and numSides%2==0)

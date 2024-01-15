@@ -132,11 +132,11 @@ class Joint(ABC):
         return plotHandles
         
     
-    def plot(self, xColor='r', yColor='b', zColor='g', 
+    def show(self, xColor='r', yColor='b', zColor='g', 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
              surfaceOpacity=0.5, showSurface=True, showAxis=False,
-             axisScale=10, showPoses=True):
+             axisScale=10, showPoses=True, block=True):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
@@ -147,6 +147,7 @@ class Joint(ABC):
             xHats, yHats, zHats, origins = plotHandles
             ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
         ax.set_aspect('equal')
+        plt.show(block=block)
     
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 

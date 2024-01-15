@@ -31,5 +31,5 @@ DistalDubinsFrame = SE3.Rz(-3*np.pi/4) @ SE3.Tx(-3*r) @ SE3.Ry(np.pi/3) @ Proxim
 
 link = LinkCSC(r, ProximalDubinsFrame, DistalDubinsFrame)
 pattern = link.creasePattern(numSides)
-pattern.makeDXF(saveas=subfolder+"dubinsLink", show=True)
-link.plot(showPath=True, showFrames=False)
+pattern.show(block=False)
+link.show(showPath=True, showFrames=False, block=True)

@@ -253,15 +253,15 @@ class PathCSC:
             ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
     
     
-    def plot(self, showCircles=True, showPoses=True, 
+    def show(self, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
-                  cscBoundaryMarker='*', showTunit=False):
+                  cscBoundaryMarker='*', showTunit=False, block=True):
         ax = plt.figure().add_subplot(projection='3d')
         self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
         ax.set_aspect('equal')
         ax.legend()
-        plt.show()
+        plt.show(block)
         
         
         
