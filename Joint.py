@@ -109,10 +109,10 @@ class Joint(ABC):
         Transform[0:3,3] = self.Pose.t
         self.Pose = SE3(Transform)
     
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=0.5, showSurface=True, showAxis=False, 
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:,2]
@@ -132,11 +132,11 @@ class Joint(ABC):
         return plotHandles
         
     
-    def show(self, xColor='r', yColor='b', zColor='g', 
+    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=0.5, showSurface=True, showAxis=False,
-             axisScale=10, showPoses=True, block=True):
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
+             axisScale=10, showPoses=True, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
@@ -188,10 +188,10 @@ class RevoluteJoint(OrigamiJoint):
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
     
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=0.5, showSurface=True, showAxis=True,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
@@ -271,10 +271,10 @@ class PrismaticJoint(OrigamiJoint):
     def boundingCylinder(self) -> Cylinder:
         return Cylinder(self.r, self.proximalPose().t, self.pathDirection(), self.length())
     
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=0.5, showSurface=True, showAxis=True, 
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
@@ -286,7 +286,7 @@ class PrismaticJoint(OrigamiJoint):
         return plotHandles
         
     
-class WayPoint(OrigamiJoint):
+class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
     def __init__(self, numSides : int, r : float, Pose : SE3, pathIndex : int = 2):
         super().__init__(numSides, r, 0, Pose)
@@ -310,10 +310,10 @@ class WayPoint(OrigamiJoint):
 
 class Fingertip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
-                 forward : bool = True):
+                 closesForward : bool = True):
         super().__init__(numSides, r, length, Pose)
-        self.pattern = FingertipPattern(numSides, r, length, forward)
-        self.forward = forward
+        self.pattern = FingertipPattern(numSides, r, length, closesForward)
+        self.forward = closesForward
     
     def pathIndex(self) -> int:
         return 2 # zhat
@@ -330,10 +330,10 @@ class Fingertip(OrigamiJoint):
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
     
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=0.5, showSurface=True, showAxis=True,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
@@ -384,3 +384,10 @@ class Fingertip(OrigamiJoint):
             
         return plotHandles
     
+class StartFingertip(Fingertip):
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
+        super().__init__(numSides, r, Pose, length, closesForward=False)
+
+class EndFingertip(Fingertip):
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
+        super().__init__(numSides, r, Pose, length, closesForward=True)

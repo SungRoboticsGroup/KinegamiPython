@@ -21,7 +21,6 @@ class KinematicTree:
     Edges are Dubins linkages from parent distal frame to child proximal frame    
     Attributes (GLOBAL COORDINATES):
         r               tubular radius
-        root            root joint
         Joints          array of Joint objects (nodes)
         Parents         array of parent indices in self.Joints
         Paths           array of CSC Dubins paths to each joint from its parent
@@ -29,7 +28,6 @@ class KinematicTree:
         Children        array of arrays of child indices of each joint
     """
     def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2):
-        self.root = root
         self.r = root.r
         self.numSides = root.numSides
         self.Joints = [root]
@@ -41,7 +39,7 @@ class KinematicTree:
         self.maxAnglePerElbow = maxAnglePerElbow 
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
-            self.boundingBall = Ball(self.root.Pose.t, self.r)
+            self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
 
     """
@@ -57,8 +55,8 @@ class KinematicTree:
                     (False) something kinematically equivalent (i.e., with the
                             same z axis) with x axis constructed as the common 
                             normal from the parent?
-    guarantee - boolean: if this is True, allow the algorithm to insert 
-                intermediate waypoints to route the path from the parent to 
+    guaranteeNoSelfIntersection - boolean: if this is True, allow the algorithm 
+                to insert intermediate waypoints to route the path from the parent to 
                 guarantee it avoids local self-intersection (i.e., run 
                 Algorithm 9 from the Kinegami paper instead of Algorithm 8).
                 This setting takes priority over fixedPosition AND 
@@ -67,22 +65,25 @@ class KinematicTree:
                 position and orientation of newJoint.
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
-                 relative : bool = False, fixedPosition : bool = False, 
-                 fixedOrientation : bool = False, guarantee : bool = True):
+                 relative : bool = True, fixedPosition : bool = False, 
+                 fixedOrientation : bool = False, 
+                 guaranteeNoSelfIntersection : bool = True):
         assert(newJoint.r == self.r)
         assert(newJoint.numSides == self.numSides)
+        assert(not (guaranteeNoSelfIntersection and fixedPosition))
+        assert(not (guaranteeNoSelfIntersection and fixedOrientation))
         parent = self.Joints[parentIndex]
         if relative:
             newJoint.transformPoseBy(parent.Pose)
         
-        if guarantee: # Algorithm 9
+        if guaranteeNoSelfIntersection: # Algorithm 9
             #return self.addJointWithWayPoints(parentIndex, newJoint)
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint, guarantee=False,
-                                  fixedPosition=True, fixedOrientation=True)
+                i = self.addJoint(parentIndex=i, newJoint=joint, guaranteeNoSelfIntersection=False,
+                                  fixedPosition=True, fixedOrientation=True, relative=False)
             return i
         
         if not fixedPosition: #Algorithm 8
@@ -128,11 +129,11 @@ class KinematicTree:
                                                 link.elbow2BoundingBall)
             
     
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  showJointSurface=True, jointColor='m', showJointAxes=True,
-                  jointAxisScale=10, showJointPoses=True,
-                  linkColor='black', surfaceOpacity=0.5, showLinkSurface=True, 
+                  showJointSurface=True, jointColor=jointColorDefault, showJointAxes=True,
+                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+                  linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, 
                   showPathCircles=False, sphereColor='black',
                   showSpheres=True):
@@ -165,14 +166,14 @@ class KinematicTree:
         return np.array(jointPlotHandles), np.array(linkPlotHandles)
         
     
-    def show(self, xColor='r', yColor='b', zColor='g', 
+    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             showJointSurface=True, jointColor='m', showJointAxes=True,
-             jointAxisScale=10, showJointPoses=True,
-             linkColor='black', surfaceOpacity=0.5, showLinkSurface=True, 
+             showJointSurface=True, jointColor=jointColorDefault, showJointAxes=True,
+             jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+             linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, 
              showPathCircles=False, sphereColor='black',
-             showSpheres=False, block=True):
+             showSpheres=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
@@ -334,7 +335,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     originW1 = tangentPlane1.intersectionWithLine(neighborPathAxis)
     # guaranteed to be a point because line is normal to plane
     PoseW1 = SE3.Rt(neighbor.Pose.R, originW1)
-    W1 = WayPoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
+    W1 = Waypoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
                   neighbor.pathIndex())
     toReturn.append(W1)
     
@@ -366,7 +367,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         originW2 = tangentPlane2.intersectionWithLine(
                                         Line(originW1 + r*nhat1, nhat2))
         PoseW2 = SE3.Rt(RotationW2, originW2)
-        W2 = WayPoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
+        W2 = Waypoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
         toReturn.append(W2)
         
         farPoint2 = s2 + nhat2 * (4*r + jointToPlace.boundingRadius())

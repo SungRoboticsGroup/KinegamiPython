@@ -13,4 +13,4 @@ Elbow(1, SE3(2,3,0)@SE3.Rx(np.pi/3), np.pi/2, np.pi/4).show(showFrames=True, blo
 Elbow(1, SE3.Ry(np.pi/3) * SE3(2,3,0), bendingAngle=3*np.pi/4, 
       rotationalAxisAngle=3*np.pi/4).show(showFrames=True, block=False)
 CompoundElbow(1, SE3.Ry(np.pi/3) * SE3(2,3,0), bendingAngle=3*np.pi/4, 
-              rotationalAxisAngle=3*np.pi/4, maxAnglePerElbow=np.pi/4).show(showFrames=True, block=True)
+              rotationalAxisAngle=3*np.pi/4, maxAnglePerElbow=np.pi/4).show(showFrames=True, block=blockDefault)

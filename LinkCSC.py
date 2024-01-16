@@ -18,7 +18,7 @@ from TubularPattern import TubularPattern, TubeFittingPattern, \
 
 
 class LinkCSC:
-    def __init__(self, r : float, StartDubinsFrame : SE3, EndDubinsFrame : SE3,
+    def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, path : PathCSC = None, 
                  EPSILON : float = 0.0001):
         assert(r>0)
@@ -26,11 +26,11 @@ class LinkCSC:
         self.r = r
         self.maxAnglePerElbow = maxAnglePerElbow
         self.EPSILON = EPSILON
-        self.StartDubinsFrame = StartDubinsFrame
-        self.EndDubinsFrame = EndDubinsFrame
+        self.StartDubinsPose = StartDubinsPose
+        self.EndDubinsPose = EndDubinsPose
         if path is None:
-            self.path = shortestCSC(r, self.StartDubinsFrame.t, self.StartDubinsFrame.R[:,0],
-                                self.EndDubinsFrame.t, self.EndDubinsFrame.R[:,0])
+            self.path = shortestCSC(r, self.StartDubinsPose.t, self.StartDubinsPose.R[:,0],
+                                self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
         else:
             self.path = path
         assert(norm(self.path.error) < self.EPSILON)
@@ -38,25 +38,25 @@ class LinkCSC:
         assert(self.path.theta1 <= np.pi)
         assert(self.path.theta2 >= 0)
         assert(self.path.theta2 <= np.pi)
-        self.rot1AxisDir = np.cross(self.StartDubinsFrame.R[:,0], self.path.w1)
-        self.rot1AxisAngle = signedAngle(self.StartDubinsFrame.R[:,1],
+        self.rot1AxisDir = np.cross(self.StartDubinsPose.R[:,0], self.path.w1)
+        self.rot1AxisAngle = signedAngle(self.StartDubinsPose.R[:,1],
                                           self.rot1AxisDir,
-                                          self.StartDubinsFrame.R[:,0])
-        self.rot2AxisDir = np.cross(self.EndDubinsFrame.R[:,0], self.path.w2)
-        self.rot2AxisAngle = signedAngle(self.EndDubinsFrame.R[:,1],
+                                          self.StartDubinsPose.R[:,0])
+        self.rot2AxisDir = np.cross(self.EndDubinsPose.R[:,0], self.path.w2)
+        self.rot2AxisAngle = signedAngle(self.EndDubinsPose.R[:,1],
                                           self.rot2AxisDir,
-                                          self.EndDubinsFrame.R[:,0])
+                                          self.EndDubinsPose.R[:,0])
         
         
         if self.path.theta1 > self.EPSILON:
-            self.elbow1 = CompoundElbow(self.r, self.StartDubinsFrame, 
+            self.elbow1 = CompoundElbow(self.r, self.StartDubinsPose, 
                                        self.path.theta1, self.rot1AxisAngle, 
                                        self.maxAnglePerElbow, self.EPSILON)
             self.Elbow1EndFrame = self.elbow1.EndFrame
             self.elbow1BoundingBall = self.elbow1.boundingBall()
         else:
-            self.Elbow1EndFrame = self.StartDubinsFrame
-            self.elbow1BoundingBall = Ball(self.StartDubinsFrame.t, self.r)
+            self.Elbow1EndFrame = self.StartDubinsPose
+            self.elbow1BoundingBall = Ball(self.StartDubinsPose.t, self.r)
         assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
         assert(norm(self.Elbow1EndFrame.t - self.path.turn1end) < self.EPSILON)
         
@@ -65,7 +65,7 @@ class LinkCSC:
                             self.Elbow1EndFrame.R[:,0], self.path.tMag)
         
         if self.path.theta2 > self.EPSILON:
-            Elbow2StartOrientation = SO3.AngleAxis(-self.path.theta2, self.rot2AxisDir) * self.EndDubinsFrame.R 
+            Elbow2StartOrientation = SO3.AngleAxis(-self.path.theta2, self.rot2AxisDir) * self.EndDubinsPose.R 
             self.Elbow2StartFrame = SE3.Rt(Elbow2StartOrientation, self.path.turn2start)
             assert(norm(self.Elbow2StartFrame.t - (self.Elbow1EndFrame * SE3.Tx(self.path.tMag)).t) < self.EPSILON)
             assert(norm(self.Elbow2StartFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
@@ -73,15 +73,15 @@ class LinkCSC:
             self.elbow2 = CompoundElbow(self.r, self.Elbow2StartFrame, 
                                        self.path.theta2, self.rot2AxisAngle, 
                                        self.maxAnglePerElbow, self.EPSILON)
-            assert(norm(self.elbow2.EndFrame - self.EndDubinsFrame) < self.EPSILON)
+            assert(norm(self.elbow2.EndFrame - self.EndDubinsPose) < self.EPSILON)
             self.elbow2BoundingBall = self.elbow2.boundingBall()
         else:
-            self.Elbow2StartFrame = self.EndDubinsFrame
-            self.elbow2BoundingBall = Ball(self.EndDubinsFrame.t, self.r)
+            self.Elbow2StartFrame = self.EndDubinsPose
+            self.elbow2BoundingBall = Ball(self.EndDubinsPose.t, self.r)
     
     def newLinkTransformedBy(self, Transformation : SE3):
-        return LinkCSC(self.r, Transformation @ self.StartDubinsFrame, 
-                       Transformation @ self.EndDubinsFrame, 
+        return LinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+                       Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)

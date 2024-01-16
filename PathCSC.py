@@ -255,7 +255,7 @@ class PathCSC:
     
     def show(self, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
-                  cscBoundaryMarker='*', showTunit=False, block=True):
+                  cscBoundaryMarker='*', showTunit=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)

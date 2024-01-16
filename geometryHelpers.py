@@ -13,6 +13,8 @@ from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 import math
 from math import remainder
+from style import *
+
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -211,7 +213,7 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
     
-    def show(self, color='black', alpha=1, frame=False, block=True):
+    def show(self, color='black', alpha=1, frame=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, color, alpha, frame)
         ax.set_aspect('equal')
@@ -456,7 +458,7 @@ class Arc3D:
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
 # returns the plot handles for the xHats, yHats, zHats, origins
-def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oColors='black'):
+def addPosesToPlot(Poses, ax, axisLength, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
     if Poses.shape == (4,4): # so it can plot a single frame
         Poses = np.array([Poses])
     
@@ -471,8 +473,27 @@ def addPosesToPlot(Poses, ax, axisLength, xColor='r', yColor='b', zColor='g', oC
     yHats = ax.quiver(ox, oy, oz, uy, vy, wy, length=axisLength, color=yColor) #plot yhat vectors
     zHats = ax.quiver(ox, oy, oz, uz, vz, wz, length=axisLength, color=zColor) #plot zhat vectors
     origins = ax.scatter(ox, oy, oz, c=oColors)
+
+    if makeAxisLimitsIncludeTips:
+        oPlusXHats = Poses[:,0:3,3] + axisLength*Poses[:,0:3,0]
+        ax.scatter(oPlusXHats[:,0], oPlusXHats[:,1], oPlusXHats[:,2], marker="")
+        oPlusYHats = Poses[:,0:3,3] + axisLength*Poses[:,0:3,1]
+        ax.scatter(oPlusYHats[:,0], oPlusYHats[:,1], oPlusYHats[:,2], marker="")
+        oPlusZHats = Poses[:,0:3,3] + axisLength*Poses[:,0:3,2]
+        ax.scatter(oPlusZHats[:,0], oPlusZHats[:,1], oPlusZHats[:,2], marker="")
     
     return (xHats, yHats, zHats, origins)
+
+def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors='black', block=blockDefault, makeAxisLimitsIncludeTips=True):
+    if type(Poses) == list:
+        Poses = np.array(Poses)
+    if Poses.shape == (4,4): # so it can plot a single frame
+        Poses = np.array([Poses])
+    ax = plt.figure().add_subplot(projection='3d')
+    handles = addPosesToPlot(Poses, ax, axisLength, xColor, yColor, zColor, oColors, makeAxisLimitsIncludeTips)
+    ax.legend(handles, [r'$\^x$', r'$\^y$', r'$\^z$'])
+    ax.set_aspect('equal')
+    plt.show(block=block)
 
 
 

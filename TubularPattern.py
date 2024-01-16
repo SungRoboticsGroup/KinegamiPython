@@ -65,6 +65,7 @@ from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
     signedAngles2D, signedAngles3D, lerpN, unit, signedAngle2D, unsignedAngle
 from spatialmath import SO3, SE3
 import copy
+from style import *
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0, 0]):
@@ -287,15 +288,17 @@ class TubularPattern():
 
         return doc
 
-    def show(self, dxfName="", show=True, printGraph=False, block=True):
+    def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
+             mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
+             boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
         msp = doc.modelspace()
-        doc.layers.add(name="Mountain", color=5)
-        doc.layers.add(name="Valley", color=1)
-        doc.layers.add(name="Boundary", color=2)
-        doc.layers.add(name="Cut", color=3)
+        doc.layers.add(name="Mountain", color=mountainColor)
+        doc.layers.add(name="Valley", color=valleyColor)
+        doc.layers.add(name="Boundary", color=boundaryColor)
+        doc.layers.add(name="Cut", color=cutColor)
 
         ymin = self.proximalMarker[0, 1]
         ymax = ymin + self.patternHeight
