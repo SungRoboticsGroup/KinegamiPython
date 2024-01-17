@@ -136,7 +136,7 @@ class Joint(ABC):
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
-             axisScale=10, showPoses=True, block=blockDefault):
+             axisScale=jointAxisScaleDefault, showPoses=True, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
                                      proximalColor, centerColor, distalColor,
@@ -333,7 +333,7 @@ class Fingertip(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor='black', showSphere=False, surfaceColor='m',
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,

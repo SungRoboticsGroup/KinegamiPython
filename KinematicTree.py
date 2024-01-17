@@ -131,7 +131,7 @@ class KinematicTree:
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  showJointSurface=True, jointColor=jointColorDefault, showJointAxes=True,
+                  showJointSurface=True, jointColor=jointColorDefault,
                   jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, 
@@ -142,9 +142,10 @@ class KinematicTree:
         for joint in self.Joints:
             handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
-                                    sphereColor, showSpheres, jointColor,
-                                    surfaceOpacity, showJointSurface, 
-                                    showJointAxes, jointAxisScale, showJointPoses)
+                                    sphereColor=sphereColor, showSphere=showSpheres, 
+                                    surfaceColor=jointColor, surfaceOpacity=surfaceOpacity,
+                                    showSurface=showJointSurface, axisScale=jointAxisScale,
+                                    showPoses=showJointPoses)
             if not handles is None:
                 jointPlotHandles.append(handles)
         
@@ -168,7 +169,7 @@ class KinematicTree:
     
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             showJointSurface=True, jointColor=jointColorDefault, showJointAxes=True,
+             showJointSurface=True, jointColor=jointColorDefault, 
              jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
              linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, 
@@ -178,7 +179,7 @@ class KinematicTree:
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
-                                    showJointSurface, jointColor, showJointAxes,
+                                    showJointSurface, jointColor, 
                                     jointAxisScale, showJointPoses,
                                     linkColor, surfaceOpacity, showLinkSurface, 
                                     showLinkPoses, showLinkPath, 
