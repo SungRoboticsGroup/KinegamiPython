@@ -15,6 +15,7 @@ import TubularPattern
 from TubularPattern import *
 from LinkCSC import LinkCSC
 
+
 class KinematicTree:
     """
     Nodes are Joint objects
@@ -41,6 +42,16 @@ class KinematicTree:
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
+    
+    def dataDeepCopy(self):
+        return copy.deepcopy([self.r, self.numSides, self.Joints, self.Parents, 
+                              self.Links, self.maxAnglePerElbow, 
+                              self.boundingBall, self.Children])
+    
+    def setTo(self, data : list):
+        self.r, self.numSides, self.Joints, self.Parents, \
+            self.Links, self.maxAnglePerElbow, \
+            self.boundingBall, self.Children = data
 
     """
     Returns the new Joint's index. 
@@ -208,59 +219,107 @@ class KinematicTree:
         ax.set_aspect('equal')
         plt.show(block=block)
     
+
+
+
     """ Apply given transformation (SE3() object) to given joint (index), 
         and to its descendants if recursive (defaults to True) """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        recursive : bool = True, recomputeBoundingBall=True,
-                       recomputeLinkPath : bool = True):
-        self.Joints[jointIndex].transformPoseBy(Transformation)
-        joint = self.Joints[jointIndex]
-        if recomputeLinkPath and jointIndex > 0:
-            parent = self.Joints[self.Parents[jointIndex]]
-            self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
-                                      joint.ProximalDubinsFrame(),
-                                      self.maxAnglePerElbow)
+                       recomputeLinkPath : bool = True, safe : bool = True):
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.transformJoint(jointIndex, Transformation, 
+                       recursive, recomputeBoundingBall,
+                       recomputeLinkPath, safe=False)
+            except ValueError as err:
+                print("Something went wrong in transformJoint:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
         else:
-            self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
-        if recursive:
-            for c in self.Children[jointIndex]:
-                self.transformJoint(c, Transformation, recursive=True, 
-                                    recomputeBoundingBall=False,
-                                    recomputeLinkPath=False)
-        else:
-            for c in self.Children[jointIndex]:
-                child = self.Joints[c]
-                self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
-                                          child.proximalDubinsFrame(),
-                                          self.maxAnglePerElbow)
-        if recomputeBoundingBall:
-            self.recomputeBoundingBall()
+            self.Joints[jointIndex].transformPoseBy(Transformation)
+            joint = self.Joints[jointIndex]
+            if recomputeLinkPath and jointIndex > 0:
+                parent = self.Joints[self.Parents[jointIndex]]
+                self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                        joint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
+            else:
+                self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            if recursive:
+                for c in self.Children[jointIndex]:
+                    self.transformJoint(c, Transformation, recursive=True, 
+                                        recomputeBoundingBall=False,
+                                        recomputeLinkPath=False,
+                                        safe=False)
+            else:
+                for c in self.Children[jointIndex]:
+                    child = self.Joints[c]
+                    self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
+                                            child.proximalDubinsFrame(),
+                                            self.maxAnglePerElbow)
+            if recomputeBoundingBall:
+                self.recomputeBoundingBall()
                 
     def setJointState(self, jointIndex : int, state : float):
         Transformation = self.Joints[jointIndex].TransformStateTo(state)
         for c in self.Children[jointIndex]:
             self.transformJoint(c, Transformation, recursive=True, 
-                                recomputeBoundingBall=False)
+                                recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
         
     def translateJointAlongAxis(self, jointIndex : int, distance : float, 
                                 propogate : bool = True, 
-                                applyToPreviousWaypoint : bool = False):
-        Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
-        if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
-            if propogate:
-                self.transformJoint(jointIndex-1, Translation, True)
-            else:
-                self.transformJoint(jointIndex-1, Translation, False)
-                self.transformJoint(jointIndex, Translation, False)
+                                applyToPreviousWaypoint : bool = False, 
+                                safe : bool = True):
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.translateJointAlongAxis(jointIndex, distance, propogate, 
+                                        applyToPreviousWaypoint, safe = False)
+            except ValueError as err:
+                print("Something went wrong in translateJointAlongAxis:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
         else:
-            self.transformJoint(jointIndex, Translation, propogate)
+            Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
+            if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
+                if propogate:
+                    self.transformJoint(jointIndex-1, Translation, True, safe=False)
+                else:
+                    self.transformJoint(jointIndex-1, Translation, False, safe=False)
+                    self.transformJoint(jointIndex, Translation, False, safe=False)
+            else:
+                self.transformJoint(jointIndex, Translation, propogate, safe=False)
     
     def rotateJointAboutAxis(self, jointIndex : int, angle : float,
-                             propogate : bool = True):
-        Pose = self.Joints[jointIndex].Pose
-        Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
-        self.transformJoint(jointIndex, Rotation, propogate)
+                             propogate : bool = True, 
+                             applyToPreviousWaypoint : bool = False,
+                             safe : bool = True):
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.rotateJointAboutAxis(jointIndex, angle, propogate, 
+                             applyToPreviousWaypoint, safe = False)
+            except ValueError as err:
+                print("Something went wrong in rotateJointAboutAxis:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
+        else:
+            Pose = self.Joints[jointIndex].Pose
+            Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
+            if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
+                if propogate:
+                    self.transformJoint(jointIndex-1, Rotation, True, safe=False)
+                else:
+                    self.transformJoint(jointIndex-1, Rotation, False, safe=False)
+                    self.transformJoint(jointIndex, Rotation, False, safe=False)
+            else:
+                self.transformJoint(jointIndex, Rotation, propogate, safe=False)
 
 
 """ 

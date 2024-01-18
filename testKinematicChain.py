@@ -10,32 +10,30 @@ numSides = 6
 
 # chain whose root is a waypoint at the global origin
 chain = KinematicChain(StartFingertip(numSides, r, Pose=SE3(), length=0.5)) 
-
-chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
+#chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
 prismaticIndex = chain.append(PrismaticJoint(numSides, r, neutralLength=3, numLayers=6, 
-                        coneAngle=np.pi/4, Pose= SE3.Trans([5,5,0]) ) )
-
-chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
+                        coneAngle=np.pi/4, Pose= SE3() ) )
+#chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
 revoluteIndex = chain.append(RevoluteJoint(numSides, r, np.pi, 
                                            SE3.Ry(np.pi/4)))
+#chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
+end = chain.append(EndFingertip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
+#chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
+chain.show(block=False)
+#chain.show(block=True, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
 
-chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
-
-chain.append(EndFingertip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
-
-chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
-
-chain.show(block=True, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
+chain.translateJointAlongAxis(prismaticIndex, -5)
+chain.show(block=False)
+chain.translateJointAlongAxis(revoluteIndex, -7)
+chain.show(block=False)
+chain.translateJointAlongAxis(end, -10, applyToPreviousWaypoint=True)
+chain.show(block=False)
+chain.rotateJointAboutAxis(revoluteIndex, -np.pi/2)
+chain.show(block=True)
 
 """
-KC.translateJointAlongAxis(prismaticIndex, -5)
-KC.translateJointAlongAxis(revoluteIndex, -5)
-KC.rotateJointAboutAxis(revoluteIndex, -np.pi/4)
-
-KC.show(block=False)
-
 pattern = KC.TubularPatternPattern(numSides)
 pattern.show(show=True, block=False)
 

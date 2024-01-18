@@ -372,8 +372,10 @@ class CompoundElbow:
                  EPSILON : float = 0.0001):
         rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
         bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
-        assert(abs(bendingAngle) < np.pi)
-        assert(abs(bendingAngle) > EPSILON)
+        if abs(bendingAngle) > np.pi+EPSILON:
+            raise ValueError("Trying to construct CompoundElbow with abs(bendingAngle) > pi")
+        if abs(bendingAngle) < EPSILON:
+            raise ValueError("Trying to construct CompoundElbow with abs(bendingAngle) < EPSILON")
         if bendingAngle < 0:
             bendingAngle = abs(bendingAngle)
             rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
