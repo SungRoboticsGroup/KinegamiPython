@@ -222,22 +222,29 @@ class KinematicTree:
 
 
 
-    """ Apply given transformation (SE3() object) to given joint (index), 
-        and to its descendants if recursive (defaults to True) """
+    """ 
+    Apply given transformation (SE3() object) to given joint (index), 
+    and to its descendants if propogate (defaults to True).
+
+    Returns True if it succeeds (the transformation gives valid links).
+    In safe=True mode (default), if it fails it will leave the chain unchanged,
+    print a warning, and return False rather than throwing an error.   
+    """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       recursive : bool = True, recomputeBoundingBall=True,
-                       recomputeLinkPath : bool = True, safe : bool = True):
+                       propogate : bool = True, recomputeBoundingBall=True,
+                       recomputeLinkPath : bool = True, safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
                 self.transformJoint(jointIndex, Transformation, 
-                       recursive, recomputeBoundingBall,
+                       propogate, recomputeBoundingBall,
                        recomputeLinkPath, safe=False)
             except ValueError as err:
                 print("Something went wrong in transformJoint:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
+                return False
         else:
             self.Joints[jointIndex].transformPoseBy(Transformation)
             joint = self.Joints[jointIndex]
@@ -248,9 +255,9 @@ class KinematicTree:
                                         self.maxAnglePerElbow)
             else:
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
-            if recursive:
+            if propogate:
                 for c in self.Children[jointIndex]:
-                    self.transformJoint(c, Transformation, recursive=True, 
+                    self.transformJoint(c, Transformation, propogate=True, 
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
                                         safe=False)
@@ -262,28 +269,34 @@ class KinematicTree:
                                             self.maxAnglePerElbow)
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
+        return True
                 
     def setJointState(self, jointIndex : int, state : float):
         Transformation = self.Joints[jointIndex].TransformStateTo(state)
         for c in self.Children[jointIndex]:
-            self.transformJoint(c, Transformation, recursive=True, 
+            self.transformJoint(c, Transformation, propogate=True, 
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
-        
-    def translateJointAlongAxis(self, jointIndex : int, distance : float, 
-                                propogate : bool = True, 
-                                applyToPreviousWaypoint : bool = False, 
-                                safe : bool = True):
+
+    # Returns True if it succeeds (the transformation gives valid links).
+    # In safe=True mode (default), if it fails it will leave the chain unchanged,
+    # print a warning, and return False rather than throwing an error.    
+    def translateJointAlongKinematicAxis(self, jointIndex : int, 
+                                         distance : float, 
+                                         propogate : bool = True, 
+                                         applyToPreviousWaypoint : bool = False, 
+                                         safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.translateJointAlongAxis(jointIndex, distance, propogate, 
-                                        applyToPreviousWaypoint, safe = False)
+                self.translateJointAlongKinematicAxis(jointIndex, distance, 
+                            propogate, applyToPreviousWaypoint, safe = False)
             except ValueError as err:
                 print("Something went wrong in translateJointAlongAxis:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
+                return False
         else:
             Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
             if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
@@ -294,21 +307,26 @@ class KinematicTree:
                     self.transformJoint(jointIndex, Translation, False, safe=False)
             else:
                 self.transformJoint(jointIndex, Translation, propogate, safe=False)
+        return True
     
-    def rotateJointAboutAxis(self, jointIndex : int, angle : float,
+    # Returns True if it succeeds (the transformation gives valid links).
+    # In safe=True mode (default), if it fails it will leave the chain unchanged,
+    # print a warning, and return False rather than throwing an error.   
+    def rotateJointAboutKinematicAxis(self, jointIndex : int, angle : float,
                              propogate : bool = True, 
                              applyToPreviousWaypoint : bool = False,
-                             safe : bool = True):
+                             safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.rotateJointAboutAxis(jointIndex, angle, propogate, 
+                self.rotateJointAboutKinematicAxis(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
             except ValueError as err:
                 print("Something went wrong in rotateJointAboutAxis:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
+                return False
         else:
             Pose = self.Joints[jointIndex].Pose
             Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
@@ -320,7 +338,7 @@ class KinematicTree:
                     self.transformJoint(jointIndex, Rotation, False, safe=False)
             else:
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
-
+        return True
 
 """ 
 Places joint along its joint axis, as close as possible to the given neighbor 

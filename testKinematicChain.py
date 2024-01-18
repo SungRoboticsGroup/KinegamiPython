@@ -24,13 +24,13 @@ end = chain.append(EndFingertip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
 chain.show(block=False)
 #chain.show(block=True, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
 
-chain.translateJointAlongAxis(prismaticIndex, -5)
+chain.translateJointAlongKinematicAxis(prismaticIndex, -5)
 chain.show(block=False)
-chain.translateJointAlongAxis(revoluteIndex, -7)
+chain.translateJointAlongKinematicAxis(revoluteIndex, -7)
 chain.show(block=False)
-chain.translateJointAlongAxis(end, -10, applyToPreviousWaypoint=True)
+chain.translateJointAlongKinematicAxis(end, -10, applyToPreviousWaypoint=True)
 chain.show(block=False)
-chain.rotateJointAboutAxis(revoluteIndex, -np.pi/2)
+chain.rotateJointAboutKinematicAxis(revoluteIndex, -np.pi/2)
 chain.show(block=True)
 
 """
