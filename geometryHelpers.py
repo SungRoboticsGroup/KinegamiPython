@@ -130,8 +130,11 @@ def signedAngles3D(A, B, n):
     return np.array([signedAngle(A[i], B[i], n) for i in range(k)]).flatten()
 
 # wrap angles to [0,2pi)
-def wrapAngle(angle):
-    return angle % (2*np.pi)
+def wrapAngle(angle, EPSILON=0.00001):
+    modResult = angle % (2*np.pi)
+    if abs(modResult-2*np.pi) < EPSILON:
+        return 0
+    return modResult
 
 class Circle3D:
     def __init__(self, radius, center, normal):

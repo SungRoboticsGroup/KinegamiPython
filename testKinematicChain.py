@@ -11,17 +11,23 @@ numSides = 6
 # chain whose root is a waypoint at the global origin
 chain = KinematicChain(StartFingertip(numSides, r, Pose=SE3(), length=0.5)) 
 
-prismaticIndex = chain.append(PrismaticJoint(numSides, r, neutralLength=3, numLayers=6, 
-                        coneAngle=np.pi/4, Pose= SE3.Ry(np.pi/4) @ SE3.Trans([1,-3,0]) ) )
+chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
+prismaticIndex = chain.append(PrismaticJoint(numSides, r, neutralLength=3, numLayers=6, 
+                        coneAngle=np.pi/4, Pose= SE3.Trans([5,5,0]) ) )
+
+chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
 revoluteIndex = chain.append(RevoluteJoint(numSides, r, np.pi, 
-                                           SE3.Ry(np.pi/4) @ SE3.Trans([3,1,0])))
+                                           SE3.Ry(np.pi/4)))
 
-chain.append(EndFingertip(numSides, r, Pose=SE3(4,0,0)@SE3.Ry(np.pi/2), length=0.5))
+chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
-chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
-chain.show(block=True, showJointSurface=False, showLinkSurface=False)
+chain.append(EndFingertip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
+
+chain.show(block=True, showJointSurface=False, showLinkSurface=False, showSpheres=True)
+
+chain.show(block=True, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
 
 """
 KC.translateJointAlongAxis(prismaticIndex, -5)

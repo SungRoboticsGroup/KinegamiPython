@@ -32,8 +32,8 @@ class KinematicTree:
         self.numSides = root.numSides
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
-        self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
-                                      root.proximalDubinsFrame(),
+        self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
+                                      root.ProximalDubinsFrame(),
                                       maxAnglePerElbow)]
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.maxAnglePerElbow = maxAnglePerElbow 
@@ -96,8 +96,8 @@ class KinematicTree:
                                 undefined=parent.Pose.R[:,0])
             newJoint.setXhatAboutZhat(xhat)
         
-        newLink = LinkCSC(self.r, parent.distalDubinsFrame(), 
-                                  newJoint.proximalDubinsFrame(),
+        newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                  newJoint.ProximalDubinsFrame(),
                                   self.maxAnglePerElbow)
         
         self.boundingBall = minBoundingBall(self.boundingBall, 
@@ -134,8 +134,8 @@ class KinematicTree:
                   showJointSurface=True, jointColor=jointColorDefault,
                   jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
-                  showLinkPoses=False, showLinkPath=True, 
-                  showPathCircles=False, sphereColor='black',
+                  showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+                  showPathCircles=False, sphereColor=sphereColorDefault,
                   showSpheres=True):
         jointPlotHandles = []
         linkPlotHandles = []
@@ -153,6 +153,7 @@ class KinematicTree:
             handles = link.addToPlot(ax, color=linkColor, 
                                    alpha=surfaceOpacity, 
                                    showPath=showLinkPath, 
+                                   pathColor=pathColor,
                                    showPathCircles=showPathCircles, 
                                    showFrames=showLinkPoses,
                                    showBoundary=showLinkSurface)
@@ -172,8 +173,8 @@ class KinematicTree:
              showJointSurface=True, jointColor=jointColorDefault, 
              jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
              linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
-             showLinkPoses=False, showLinkPath=True, 
-             showPathCircles=False, sphereColor='black',
+             showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+             showPathCircles=False, sphereColor=sphereColorDefault,
              showSpheres=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
@@ -182,7 +183,7 @@ class KinematicTree:
                                     showJointSurface, jointColor, 
                                     jointAxisScale, showJointPoses,
                                     linkColor, surfaceOpacity, showLinkSurface, 
-                                    showLinkPoses, showLinkPath, 
+                                    showLinkPoses, showLinkPath, pathColor,
                                     showPathCircles, sphereColor,
                                     showSpheres)
         
@@ -216,8 +217,8 @@ class KinematicTree:
         joint = self.Joints[jointIndex]
         if recomputeLinkPath and jointIndex > 0:
             parent = self.Joints[self.Parents[jointIndex]]
-            self.Links[jointIndex] = LinkCSC(self.r, parent.distalDubinsFrame(), 
-                                      joint.proximalDubinsFrame(),
+            self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                      joint.ProximalDubinsFrame(),
                                       self.maxAnglePerElbow)
         else:
             self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
@@ -229,23 +230,31 @@ class KinematicTree:
         else:
             for c in self.Children[jointIndex]:
                 child = self.Joints[c]
-                self.Links[c] = LinkCSC(self.r, joint.distalDubinsFrame(), 
+                self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
                                           child.proximalDubinsFrame(),
                                           self.maxAnglePerElbow)
         if recomputeBoundingBall:
             self.recomputeBoundingBall()
                 
     def setJointState(self, jointIndex : int, state : float):
-        Transformation = self.Joints[jointIndex].transformStateTo(state)
+        Transformation = self.Joints[jointIndex].TransformStateTo(state)
         for c in self.Children[jointIndex]:
             self.transformJoint(c, Transformation, recursive=True, 
                                 recomputeBoundingBall=False)
         self.recomputeBoundingBall()
         
     def translateJointAlongAxis(self, jointIndex : int, distance : float, 
-                                propogate : bool = True):
+                                propogate : bool = True, 
+                                applyToPreviousWaypoint : bool = False):
         Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
-        self.transformJoint(jointIndex, Translation, propogate)
+        if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
+            if propogate:
+                self.transformJoint(jointIndex-1, Translation, True)
+            else:
+                self.transformJoint(jointIndex-1, Translation, False)
+                self.transformJoint(jointIndex, Translation, False)
+        else:
+            self.transformJoint(jointIndex, Translation, propogate)
     
     def rotateJointAboutAxis(self, jointIndex : int, angle : float,
                              propogate : bool = True):

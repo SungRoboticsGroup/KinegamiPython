@@ -86,9 +86,10 @@ class LinkCSC:
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
     
-    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
+    def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
+                  pathColor : str = pathColorDefault,
                   showPathCircles : bool = False, showBoundary : bool = True,
                   showElbowBoundingBalls : bool = False):
         allElbowHandleSets = []
@@ -112,19 +113,21 @@ class LinkCSC:
                     allElbowHandleSets += elbow2HandleSets
         
         if showPath:
-            self.path.addToPlot(ax, showCircles=showPathCircles, showPoses=showFrames)
+            self.path.addToPlot(ax, showCircles=showPathCircles, 
+                                showPoses=showFrames, pathColor=pathColor)
         
         return allElbowHandleSets
     
     
-    def show(self, numSides : int = 32, color : str = 'black', 
+    def show(self, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
+                  pathColor : str = pathColorDefault,
                   showPathCircles : bool = False, showBoundary : bool = True,
                   showElbowBoundingBalls : bool = False, block : bool = False):
         ax = plt.figure().add_subplot(projection='3d')
         allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
-                                     showFrames, showPath, showPathCircles,
+                                     showFrames, showPath, pathColor, showPathCircles,
                                      showBoundary, showElbowBoundingBalls)
         ax.set_aspect('equal')
         plt.show(block=block)

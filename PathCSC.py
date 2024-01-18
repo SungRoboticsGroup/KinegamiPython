@@ -211,7 +211,7 @@ class PathCSC:
     
     # add to existing matplotlib axis ax
     def addToPlot(self, ax, showCircles=True, showPoses=True, 
-                  startColor='r', endColor='b', pathColor='g',
+                  startColor='r', endColor='b', pathColor=pathColorDefault,
                   cscBoundaryMarker='*', showTunit=False):
         if showPoses:
             # start pose
