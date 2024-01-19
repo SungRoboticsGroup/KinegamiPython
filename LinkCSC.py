@@ -18,9 +18,12 @@ from TubularPattern import TubularPattern, TubeFittingPattern, \
 
 
 class LinkCSC:
+    # errorIfFails : bool (defaults to True) indicates how to handle if it 
+    # fails to construct a valid path. If True, an invalid path will lead to
+    # a ValueError. If False, an invalid path will lead to returning Null.
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
-                 maxAnglePerElbow : float = np.pi/2, path : PathCSC = None, 
-                 EPSILON : float = 0.0001):
+                 maxAnglePerElbow : float = np.pi/2, errorIfFails : float=True,
+                 path : PathCSC = None, EPSILON : float = 0.0001):
         assert(r>0)
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.r = r
@@ -33,16 +36,22 @@ class LinkCSC:
                                 self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
         else:
             self.path = path
-        if norm(self.path.error) > self.EPSILON:
-            raise ValueError("Tried to generate a link for an invalid path")
-        if self.path.theta1 < -EPSILON:
-            raise ValueError("Tried to generate a link for a path with theta1 < 0")
-        if self.path.theta1 >= np.pi:
-            raise ValueError("Tried to generate a link for a path with theta1 >= pi")
-        if self.path.theta2 < -EPSILON:
-            raise ValueError("Tried to generate a link for a path with theta2 < 0")
-        if self.path.theta2 >= np.pi:
-            raise ValueError("Tried to generate a link for a path with theta2 >= pi")
+        
+        if errorIfFails:
+            if norm(self.path.error) > self.EPSILON:
+                raise ValueError("ERROR: Tried to generate a link for an invalid path")
+            if self.path.theta1 < -EPSILON:
+                raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
+            if self.path.theta1 >= np.pi:
+                raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
+            if self.path.theta2 < -EPSILON:
+                raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
+            if self.path.theta2 >= np.pi:
+                raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
+        elif norm(self.path.error) > self.EPSILON or \
+                self.path.theta1 < -EPSILON or self.path.theta1 >= np.pi or\
+                self.path.theta2 < -EPSILON or self.path.theta2 >= np.pi:
+            return None
         
         self.rot1AxisDir = np.cross(self.StartDubinsPose.R[:,0], self.path.w1)
         self.rot1AxisAngle = signedAngle(self.StartDubinsPose.R[:,1],

@@ -31,16 +31,14 @@ chain.show(block=False)
 chain.translateJointAlongKinematicAxis(end, -10, applyToPreviousWaypoint=True)
 chain.show(block=False)
 chain.rotateJointAboutKinematicAxis(revoluteIndex, -np.pi/2)
-chain.show(block=True)
+chain.show(block=False)
 
-"""
-pattern = KC.TubularPatternPattern(numSides)
+
+pattern = chain.creasePattern()
 pattern.show(show=True, block=False)
 
-
 minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
-KC.setJointState(prismaticIndex, maxPrismaticState)
+chain.setJointState(prismaticIndex, maxPrismaticState)
 
-KC.setJointState(revoluteIndex, -np.pi/2)
-KC.show(block=True)
-"""
+chain.setJointState(revoluteIndex, -np.pi/2)
+chain.show(block=True)

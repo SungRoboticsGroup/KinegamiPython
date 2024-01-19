@@ -25,17 +25,10 @@ class KinematicChain(KinematicTree):
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
                                 fixedOrientation, guaranteeNoSelfIntersection)
     
-    def TubularPatternPattern(self, numSides : int,
-                              twistPortion : float = 0.2) -> TubularPattern:
+    def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern
         for j in range(1, len(self.Joints)):
-            prevJoint = self.Joints[j-1]
-            thisJoint = self.Joints[j]
-            link = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                   thisJoint.ProximalDubinsFrame(),
-                                   self.maxAnglePerElbow)
-            linkPattern = link.creasePattern(numSides, twistPortion)
+            linkPattern = self.Links[j].creasePattern(self.numSides, twistPortion)
             pattern.append(linkPattern)
-            pattern.append(thisJoint.pattern)
-            
+            pattern.append(self.Joints[j].pattern)
         return pattern

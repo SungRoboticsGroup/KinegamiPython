@@ -66,9 +66,9 @@ class KinematicTree:
                     (False) something kinematically equivalent (i.e., with the
                             same z axis) with x axis constructed as the common 
                             normal from the parent?
-    guaranteeNoSelfIntersection - boolean: if this is True, allow the algorithm 
-                to insert intermediate waypoints to route the path from the parent to 
-                guarantee it avoids local self-intersection (i.e., run 
+    guarantee - boolean: if this is True, allow the algorithm 
+                to insert intermediate waypoints to route the path from the 
+                parent to guarantee it avoids local self-intersection (i.e., run 
                 Algorithm 9 from the Kinegami paper instead of Algorithm 8).
                 This setting takes priority over fixedPosition AND 
                 fixedOrientation, i.e., if guarantee is True then it doesn't 
@@ -78,23 +78,32 @@ class KinematicTree:
     def addJoint(self, parentIndex : int, newJoint : Joint, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 guaranteeNoSelfIntersection : bool = True):
-        assert(newJoint.r == self.r)
-        assert(newJoint.numSides == self.numSides)
-        assert(not (guaranteeNoSelfIntersection and fixedPosition))
-        assert(not (guaranteeNoSelfIntersection and fixedOrientation))
+                 guarantee : bool = True) -> int:
+        if newJoint.r != self.r:
+            raise ValueError("ERROR: newJoint.r != self.r")
+        if newJoint.numSides != self.numSides:
+            raise ValueError("ERROR: newJoint.numSides != self.numSides")
+        if guarantee and fixedPosition:
+            raise ValueError("ERROR: trying to call addJoint with \
+                guaranteeNoSelfIntersection and fixedPosition both True")
+        if guarantee and fixedOrientation:
+            raise ValueError("ERROR: trying to call addJoint with \
+                guaranteeNoSelfIntersection and fixedOrientation both True")
+        
+        newJoint = copy.deepcopy(newJoint)
+        
         parent = self.Joints[parentIndex]
         if relative:
             newJoint.transformPoseBy(parent.Pose)
         
-        if guaranteeNoSelfIntersection: # Algorithm 9
-            #return self.addJointWithWayPoints(parentIndex, newJoint)
+        if guarantee: # Algorithm 9
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint, guaranteeNoSelfIntersection=False,
-                                  fixedPosition=True, fixedOrientation=True, relative=False)
+                i = self.addJoint(parentIndex=i, newJoint=joint, 
+                                  guarantee=False, fixedPosition=True, 
+                                  fixedOrientation=True, relative=False)
             return i
         
         if not fixedPosition: #Algorithm 8
@@ -107,9 +116,14 @@ class KinematicTree:
                                 undefined=parent.Pose.R[:,0])
             newJoint.setXhatAboutZhat(xhat)
         
+
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
-                                  newJoint.ProximalDubinsFrame(),
-                                  self.maxAnglePerElbow)
+                                newJoint.ProximalDubinsFrame(),
+                                self.maxAnglePerElbow, 
+                                errorIfFails=False)
+        if newLink is None:
+            print("WARNING: no valid path found to newJoint, chain not changed.")
+            return None
         
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newLink.elbow2BoundingBall)
@@ -232,7 +246,8 @@ class KinematicTree:
     """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall=True,
-                       recomputeLinkPath : bool = True, safe : bool = True) -> bool:
+                       recomputeLinkPath : bool = True, 
+                       safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
@@ -240,7 +255,7 @@ class KinematicTree:
                        propogate, recomputeBoundingBall,
                        recomputeLinkPath, safe=False)
             except ValueError as err:
-                print("Something went wrong in transformJoint:")
+                print("WARNING: something went wrong in transformJoint:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
@@ -265,18 +280,27 @@ class KinematicTree:
                 for c in self.Children[jointIndex]:
                     child = self.Joints[c]
                     self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
-                                            child.proximalDubinsFrame(),
+                                            child.ProximalDubinsFrame(),
                                             self.maxAnglePerElbow)
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
         return True
                 
-    def setJointState(self, jointIndex : int, state : float):
-        Transformation = self.Joints[jointIndex].TransformStateTo(state)
+    def setJointState(self, jointIndex : int, newState : float) -> bool:
+        joint = self.Joints[jointIndex]
+        minState, maxState = joint.stateRange()
+        if newState < minState or newState > maxState:
+            print("WARNING: state out of range in setJointRange, "+
+                    "state unchanged.")
+            return False
+        Transformation = joint.TransformStateTo(newState)
         for c in self.Children[jointIndex]:
+            # TODO: it is possible, and would be more efficient, to make this 
+            # transform the existing links rather than recompute them
             self.transformJoint(c, Transformation, propogate=True, 
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
+        return True
 
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
@@ -292,7 +316,7 @@ class KinematicTree:
                 self.translateJointAlongKinematicAxis(jointIndex, distance, 
                             propogate, applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("Something went wrong in translateJointAlongAxis:")
+                print("WARNING: something went wrong in translateJointAlongKinematicAxis:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
@@ -322,7 +346,7 @@ class KinematicTree:
                 self.rotateJointAboutKinematicAxis(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("Something went wrong in rotateJointAboutAxis:")
+                print("WARNING: something went wrong in rotateJointAboutKinematicAxis:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)

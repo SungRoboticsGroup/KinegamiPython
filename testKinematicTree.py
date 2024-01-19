@@ -39,7 +39,7 @@ n = KT.addJoint(i, WayPoint(numSides, r, SE3.Ry(np.pi/2) @ SE3.Trans(1,-2,-3)),
 
 
 c = KT.addJoint(j, RevoluteJoint(numSides, r, np.pi,
-                             SE3.Rx(np.pi/2) @ SE3([0,-2,0])), guaranteeNoSelfIntersection=True)
+                             SE3.Rx(np.pi/2) @ SE3([0,-2,0])), guarantee=True)
 
 """
 
