@@ -20,7 +20,7 @@ in a graph structure where vertices (points on the surface) are parameterized
 in 2D by:
     x - distance about the tube modulo width=numSides*baseSideLength, i.e., the
         horizontal coordinate when cut and unwrapped to flat
-    y - distance about the tube, i.e., the vertical coordiante when flat
+    y - distance along the tube, i.e., the vertical coordinate when flat
 
 The fold segment connecting vertices (x0,y0),(x1,y1) is a shortest path 
 connecting them in the tubular topology. This is either the direct
@@ -291,6 +291,9 @@ class TubularPattern():
     def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
              mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
              boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
+        if len(dxfName) < 4 or dxfName[-4:]!=".dxf":
+            dxfName += ".dxf"
+        
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -371,7 +374,7 @@ class TubularPattern():
                                  dxfattribs={"layer": layer})
             
         if dxfName:
-            doc.saveas(dxfName+".dxf")
+            doc.saveas(dxfName)
 
         if show:
             config = Configuration()

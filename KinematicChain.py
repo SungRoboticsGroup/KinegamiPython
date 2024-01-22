@@ -28,7 +28,6 @@ class KinematicChain(KinematicTree):
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern
         for j in range(1, len(self.Joints)):
-            linkPattern = self.Links[j].creasePattern(self.numSides, twistPortion)
-            pattern.append(linkPattern)
+            pattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
             pattern.append(self.Joints[j].pattern)
         return pattern
