@@ -104,7 +104,7 @@ class PathCSC:
     Based on the construction in S. Hota and D. Ghose, 
     "Optimal Geometrical Path in 3D with Curvature Constraint", IROS 2010.
     """
-    
+                       
     """
     r is the turn radius (a scalar)
     startPosition, startDir, endPosition, endDir define the Dubins frames
@@ -176,24 +176,43 @@ class PathCSC:
                                 cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
     
+    def newPathTransformedBy(self, Transformation : SE3):
+        new_turn1end = Transformation * self.turn1end
+        new_turn1endPlusTunit = Transformation * (self.turn1end + self.tUnit)
+        new_tUnit = new_turn1endPlusTunit - new_turn1end
+        #new_tUnit = Transformation * self.tUnit
+        new_tDirMag = np.vstack((new_tUnit, [self.tMag])).flatten()
+        
+        new_startPosition = (Transformation * self.startPosition).flatten()
+        new_startPosPlusStartDir = (Transformation*(self.startPosition + self.startDir)).flatten()
+        new_startDir = new_startPosPlusStartDir - new_startPosition
+        
+        new_endPosition = (Transformation * self.endPosition).flatten()
+        new_endPosPlusEndDir = (Transformation*(self.endPosition + self.endDir)).flatten()
+        new_endDir = new_endPosPlusEndDir - new_endPosition
+        
+        return PathCSC(new_tDirMag, self.r, new_startPosition, new_startDir,
+                       new_endPosition, new_endDir, 
+                       self.circle1sign, self.circle2sign)
+    
     def __str__(self):
         return str(np.append(self.tUnit, self.tMag))
     
     def __repr__(self):
         tDirMag = np.append(self.tUnit, self.tMag)
-        return "PathCSC(tDirMag="+str(tDirMag)+\
-                        ", r="+str(self.r)+\
-                        ", startPosition="+str(self.startPosition)+\
-                        ", startDir="+str(self.startDir)+\
-                        ", endPosition="+str(self.endPosition)+\
-                        ", endDir="+str(self.endDir)+\
-                        ", circle1sign="+str(self.circle1sign)+\
-                        ", circle2sign="+str(self.circle2sign)+")"
+        return "PathCSC(tDirMag="+repr(tDirMag)+\
+                        ", r="+repr(self.r)+\
+                        ", startPosition="+repr(self.startPosition)+\
+                        ", startDir="+repr(self.startDir)+\
+                        ", endPosition="+repr(self.endPosition)+\
+                        ", endDir="+repr(self.endDir)+\
+                        ", circle1sign="+repr(self.circle1sign)+\
+                        ", circle2sign="+repr(self.circle2sign)+")"
     
     # add to existing matplotlib axis ax
     def addToPlot(self, ax, showCircles=True, showPoses=True, 
-                  startColor='r', endColor='b', pathColor='g',
-                  cscBoundaryMarker='*'):
+                  startColor='r', endColor='b', pathColor=pathColorDefault,
+                  cscBoundaryMarker='*', showTunit=False):
         if showPoses:
             # start pose
             x1,y1,z1 = self.startPosition
@@ -227,17 +246,22 @@ class PathCSC:
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
         ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
+        
+        if showTunit:
+            x,y,z = self.turn1end
+            u,v,w = self.tUnit
+            ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
     
     
-    def plot(self, showCircles=True, showPoses=True, 
+    def show(self, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
-                  cscBoundaryMarker='*'):
+                  cscBoundaryMarker='*', showTunit=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
-                       pathColor, cscBoundaryMarker)
+                       pathColor, cscBoundaryMarker, showTunit)
         ax.set_aspect('equal')
         ax.legend()
-        plt.show()
+        plt.show(block)
         
         
         

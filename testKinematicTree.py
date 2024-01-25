@@ -4,7 +4,7 @@ Created on Fri Jun 23 23:44:41 2023
 
 @author: DanielFeshbach
 
-This file exists to test KinematicTree and by extension Joint and dubinsPath
+This file exists to test KinematicTree and by extension Joint and PathCSC
 """
 import KinematicTree
 from KinematicTree import *
@@ -13,14 +13,14 @@ r = 1
 numSides = 6
 
 # tree whose root is a waypoint at the global frame
-KT = KinematicTree(WayPoint(numSides, r, SE3())) 
+KT = KinematicTree(Waypoint(numSides, r, SE3())) 
 
 j = KT.addJoint(0, PrismaticJoint(numSides, r, neutralLength=3, 
                     numLayers=6, coneAngle=np.pi/4,
                     Pose= SE3.Ry(np.pi/4) @ SE3([1,-3,0])),
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
-k = KT.addJoint(j, WayPoint(numSides, r, SE3.Rz(7*np.pi/6) @ SE3.Trans(4,4,4)), 
+k = KT.addJoint(j, Waypoint(numSides, r, SE3.Rz(7*np.pi/6) @ SE3.Trans(4,4,4)), 
                 relative=True, fixedPosition=False, fixedOrientation=False)
 
 """

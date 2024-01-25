@@ -1,4 +1,5 @@
 # KinematicTubes
+[![Powered by the Spatial Math Toolbox](https://github.com/bdaiinstitute/spatialmath-python/raw/master/.github/svg/sm_powered.min.svg)](https://github.com/bdaiinstitute/spatialmath-python)
 Much of this repo is a python rewrite of MATLAB code from the Kinegami paper:
 
 Wei-Hsi Chen, Woohyeok Yang, Lucien Peach, Daniel E. Koditschek, and Cynthia R. Sung,

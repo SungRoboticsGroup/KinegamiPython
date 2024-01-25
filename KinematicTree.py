@@ -6,14 +6,15 @@ Created on Fri Jun 23 23:13:27 2023
 """
 import Joint
 from Joint import *
-import dubinsPath
-from dubinsPath import *
+import PathCSC
+from PathCSC import *
 import scipy
 from scipy.optimize import NonlinearConstraint, minimize
 import queue
-import tubularOrigami
-from tubularOrigami import *
-from dubinsLink import LinkCSC
+import TubularPattern
+from TubularPattern import *
+from LinkCSC import LinkCSC
+
 
 class KinematicTree:
     """
@@ -21,26 +22,36 @@ class KinematicTree:
     Edges are Dubins linkages from parent distal frame to child proximal frame    
     Attributes (GLOBAL COORDINATES):
         r               tubular radius
-        root            root joint
         Joints          array of Joint objects (nodes)
         Parents         array of parent indices in self.Joints
         Paths           array of CSC Dubins paths to each joint from its parent
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : Joint):
-        self.root = root
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2):
         self.r = root.r
         self.numSides = root.numSides
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
-        self.Links = [LinkCSC(self.r, root.proximalDubinsFrame(),
-                                      root.proximalDubinsFrame())]
-            
+        self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
+                                      root.ProximalDubinsFrame(),
+                                      maxAnglePerElbow)]
+        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
+        self.maxAnglePerElbow = maxAnglePerElbow 
         self.boundingBall = root.boundingBall()
         if self.boundingBall.r < self.r:
-            self.boundingBall = Ball(self.root.Pose.t, self.r)
+            self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
+    
+    def dataDeepCopy(self):
+        return copy.deepcopy([self.r, self.numSides, self.Joints, self.Parents, 
+                              self.Links, self.maxAnglePerElbow, 
+                              self.boundingBall, self.Children])
+    
+    def setTo(self, data : list):
+        self.r, self.numSides, self.Joints, self.Parents, \
+            self.Links, self.maxAnglePerElbow, \
+            self.boundingBall, self.Children = data
 
     """
     Returns the new Joint's index. 
@@ -55,9 +66,9 @@ class KinematicTree:
                     (False) something kinematically equivalent (i.e., with the
                             same z axis) with x axis constructed as the common 
                             normal from the parent?
-    guarantee - boolean: if this is True, allow the algorithm to insert 
-                intermediate waypoints to route the path from the parent to 
-                guarantee it avoids local self-intersection (i.e., run 
+    guarantee - boolean: if this is True, allow the algorithm 
+                to insert intermediate waypoints to route the path from the 
+                parent to guarantee it avoids local self-intersection (i.e., run 
                 Algorithm 9 from the Kinegami paper instead of Algorithm 8).
                 This setting takes priority over fixedPosition AND 
                 fixedOrientation, i.e., if guarantee is True then it doesn't 
@@ -65,21 +76,34 @@ class KinematicTree:
                 position and orientation of newJoint.
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
-                 relative : bool = False, fixedPosition : bool = True, 
-                 fixedOrientation : bool =True, guarantee : bool = False):
-        assert(newJoint.r == self.r)
-        assert(newJoint.numSides == self.numSides)
+                 relative : bool = True, fixedPosition : bool = False, 
+                 fixedOrientation : bool = False, 
+                 guarantee : bool = True) -> int:
+        if newJoint.r != self.r:
+            raise ValueError("ERROR: newJoint.r != self.r")
+        if newJoint.numSides != self.numSides:
+            raise ValueError("ERROR: newJoint.numSides != self.numSides")
+        if guarantee and fixedPosition:
+            raise ValueError("ERROR: trying to call addJoint with \
+                guaranteeNoSelfIntersection and fixedPosition both True")
+        if guarantee and fixedOrientation:
+            raise ValueError("ERROR: trying to call addJoint with \
+                guaranteeNoSelfIntersection and fixedOrientation both True")
+        
+        newJoint = copy.deepcopy(newJoint)
+        
         parent = self.Joints[parentIndex]
         if relative:
-            newJoint.transformFromFrame(parent.Pose)
+            newJoint.transformPoseBy(parent.Pose)
         
         if guarantee: # Algorithm 9
-            #return self.addJointWithWayPoints(parentIndex, newJoint)
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint)
+                i = self.addJoint(parentIndex=i, newJoint=joint, 
+                                  guarantee=False, fixedPosition=True, 
+                                  fixedOrientation=True, relative=False)
             return i
         
         if not fixedPosition: #Algorithm 8
@@ -91,40 +115,74 @@ class KinematicTree:
                                 newJoint.Pose.t, newJoint.Pose.R[:,2],
                                 undefined=parent.Pose.R[:,0])
             newJoint.setXhatAboutZhat(xhat)
+        
+
+        newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                newJoint.ProximalDubinsFrame(),
+                                self.maxAnglePerElbow, 
+                                errorIfFails=False)
+        if newLink is None:
+            print("WARNING: no valid path found to newJoint, chain not changed.")
+            return None
+        
+        self.boundingBall = minBoundingBall(self.boundingBall, 
+                                            newLink.elbow2BoundingBall)
+        self.boundingBall = minBoundingBall(self.boundingBall, 
+                                            newLink.elbow1BoundingBall)
         self.boundingBall = minBoundingBall(self.boundingBall, 
                                             newJoint.boundingBall())
+        
         newIndex = len(self.Joints)
         self.Joints.append(newJoint)
         self.Children[parentIndex].append(newIndex)
         self.Children.append([])
         self.Parents.append(parentIndex)
-        self.Links.append(LinkCSC(self.r, parent.distalDubinsFrame(), 
-                                  newJoint.proximalDubinsFrame()))
+        self.Links.append(newLink)
         
         return newIndex
     
-      
-    def addToPlot(self, ax, xColor='r', yColor='b', zColor='g', 
+    
+    def recomputeBoundingBall(self):
+        self.boundingBall = self.Joints[0].boundingBall()
+        for joint in self.Joints[1:]:
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                joint.boundingBall())
+        for link in self.Links:
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                link.elbow1BoundingBall)
+            self.boundingBall = minBoundingBall(self.boundingBall,
+                                                link.elbow2BoundingBall)
+            
+    
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
-                  showLinkFrames=False, showLinkPath=True, 
-                  showPathCircles=False, sphereColor='black',
+                  showJointSurface=True, jointColor=jointColorDefault,
+                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+                  linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
+                  showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+                  showPathCircles=False, sphereColor=sphereColorDefault,
                   showSpheres=True):
         jointPlotHandles = []
         linkPlotHandles = []
         for joint in self.Joints:
-            jointPlotHandles.append(joint.addToPlot(ax, xColor, yColor, zColor, 
+            handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
-                                    sphereColor, showSpheres))
+                                    sphereColor=sphereColor, showSphere=showSpheres, 
+                                    surfaceColor=jointColor, surfaceOpacity=surfaceOpacity,
+                                    showSurface=showJointSurface, axisScale=jointAxisScale,
+                                    showPoses=showJointPoses)
+            if not handles is None:
+                jointPlotHandles.append(handles)
         
         for link in self.Links:
             handles = link.addToPlot(ax, color=linkColor, 
-                                   alpha=linkOpacity, 
+                                   alpha=surfaceOpacity, 
                                    showPath=showLinkPath, 
+                                   pathColor=pathColor,
                                    showPathCircles=showPathCircles, 
-                                   showFrames=showLinkFrames,
-                                   showBoundary=showLinkBoundary)
-            if showLinkFrames:
+                                   showFrames=showLinkPoses,
+                                   showBoundary=showLinkSurface)
+            if showLinkPoses:
                 for elbowHandles in handles:
                     linkPlotHandles.append(elbowHandles)
         
@@ -135,63 +193,176 @@ class KinematicTree:
         return np.array(jointPlotHandles), np.array(linkPlotHandles)
         
     
-    def plot(self, xColor='r', yColor='b', zColor='g', 
+    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             linkColor='black', linkOpacity=0.5, showLinkBoundary=True, 
-             showLinkFrames=False, showLinkPath=True, 
-             showPathCircles=False, sphereColor='black',
-             showSpheres=True):
+             showJointSurface=True, jointColor=jointColorDefault, 
+             jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+             linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
+             showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+             showPathCircles=False, sphereColor=sphereColorDefault,
+             showSpheres=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
-                                    linkColor, linkOpacity, showLinkBoundary, 
-                                    showLinkFrames, showLinkPath, 
+                                    showJointSurface, jointColor, 
+                                    jointAxisScale, showJointPoses,
+                                    linkColor, surfaceOpacity, showLinkSurface, 
+                                    showLinkPoses, showLinkPath, pathColor,
                                     showPathCircles, sphereColor,
                                     showSpheres)
-        xHats = jointPlotHandles[:,0]
-        yHats = jointPlotHandles[:,1]
-        zHats = jointPlotHandles[:,2]
-        origins = jointPlotHandles[:,3]
-        if showLinkFrames:
+        
+        handleGroups = []
+        labels = []
+        if showJointPoses:
+            xHats = jointPlotHandles[:,0]
+            yHats = jointPlotHandles[:,1]
+            zHats = jointPlotHandles[:,2]
+            origins = jointPlotHandles[:,3]
+            handleGroups += [tuple(xHats), tuple(yHats), tuple(zHats)]
+            labels += [r'$\^x$', r'$\^y$', r'$\^z$']
+        if showLinkPoses:
             aHats = linkPlotHandles[:,0]
             bHats = linkPlotHandles[:,1]
             cHats = linkPlotHandles[:,2]
-            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats),
-                       tuple(aHats), tuple(bHats), tuple(cHats)], 
-                      [r'$\^x$', r'$\^y$', r'$\^z$',
-                       r'$\^a$', r'$\^b$', r'$\^c$'])
-        else:
-            ax.legend([tuple(xHats), tuple(yHats), tuple(zHats)], 
-                      [r'$\^x$', r'$\^y$', r'$\^z$'])
+            handleGroups += [tuple(aHats), tuple(bHats), tuple(cHats)]
+            labels += [r'$\^a$', r'$\^b$', r'$\^c$']
+        if not handleGroups==[]:
+            ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
-        plt.show()
+        plt.show(block=block)
     
-    
-    def isLeaf(self, jointIndex : int):
-        return len(Children[jointIndex]) == 0
-    
-    """ Returns list of indices of descendants of a given joint index, 
-        in breadth-first order"""
-    def DescendantsBreadthFirst(self, jointIndex : int):
-        descendants = Children[jointIndex].copy()
-        i = 0
-        while i < len(descendants):
-            d = descendants[i]
-            descendants += self.DescendantsBreadthFirst(d)
-            i += 0
-        return descendants
-    
-    """ Apply given transformation (SE3() object) to given joint (index), 
-        and to its descendants if recursive (defaults to False) """
-    def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       recursive : bool = False):
-        self.Joints[jointIndex].transformBy(Transformation)
-        if recursive:
-            for c in self.Children[jointIndex]:
-                self.transformJoint(c, Transformation, recursive=True)
 
+
+
+    """ 
+    Apply given transformation (SE3() object) to given joint (index), 
+    and to its descendants if propogate (defaults to True).
+
+    Returns True if it succeeds (the transformation gives valid links).
+    In safe=True mode (default), if it fails it will leave the chain unchanged,
+    print a warning, and return False rather than throwing an error.   
+    """
+    def transformJoint(self, jointIndex : int, Transformation : SE3, 
+                       propogate : bool = True, recomputeBoundingBall=True,
+                       recomputeLinkPath : bool = True, 
+                       safe : bool = True) -> bool:
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.transformJoint(jointIndex, Transformation, 
+                       propogate, recomputeBoundingBall,
+                       recomputeLinkPath, safe=False)
+            except ValueError as err:
+                print("WARNING: something went wrong in transformJoint:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
+                return False
+        else:
+            self.Joints[jointIndex].transformPoseBy(Transformation)
+            joint = self.Joints[jointIndex]
+            if recomputeLinkPath and jointIndex > 0:
+                parent = self.Joints[self.Parents[jointIndex]]
+                self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                        joint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
+            else:
+                self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            if propogate:
+                for c in self.Children[jointIndex]:
+                    self.transformJoint(c, Transformation, propogate=True, 
+                                        recomputeBoundingBall=False,
+                                        recomputeLinkPath=False,
+                                        safe=False)
+            else:
+                for c in self.Children[jointIndex]:
+                    child = self.Joints[c]
+                    self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
+                                            child.ProximalDubinsFrame(),
+                                            self.maxAnglePerElbow)
+            if recomputeBoundingBall:
+                self.recomputeBoundingBall()
+        return True
+                
+    def setJointState(self, jointIndex : int, newState : float) -> bool:
+        joint = self.Joints[jointIndex]
+        minState, maxState = joint.stateRange()
+        if newState < minState or newState > maxState:
+            print("WARNING: state out of range in setJointRange, "+
+                    "state unchanged.")
+            return False
+        Transformation = joint.TransformStateTo(newState)
+        for c in self.Children[jointIndex]:
+            # TODO: it is possible, and would be more efficient, to make this 
+            # transform the existing links rather than recompute them
+            self.transformJoint(c, Transformation, propogate=True, 
+                                recomputeBoundingBall=False, safe=False)
+        self.recomputeBoundingBall()
+        return True
+
+    # Returns True if it succeeds (the transformation gives valid links).
+    # In safe=True mode (default), if it fails it will leave the chain unchanged,
+    # print a warning, and return False rather than throwing an error.    
+    def translateJointAlongKinematicAxis(self, jointIndex : int, 
+                                         distance : float, 
+                                         propogate : bool = True, 
+                                         applyToPreviousWaypoint : bool = False, 
+                                         safe : bool = True) -> bool:
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.translateJointAlongKinematicAxis(jointIndex, distance, 
+                            propogate, applyToPreviousWaypoint, safe = False)
+            except ValueError as err:
+                print("WARNING: something went wrong in translateJointAlongKinematicAxis:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
+                return False
+        else:
+            Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
+            if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
+                if propogate:
+                    self.transformJoint(jointIndex-1, Translation, True, safe=False)
+                else:
+                    self.transformJoint(jointIndex-1, Translation, False, safe=False)
+                    self.transformJoint(jointIndex, Translation, False, safe=False)
+            else:
+                self.transformJoint(jointIndex, Translation, propogate, safe=False)
+        return True
+    
+    # Returns True if it succeeds (the transformation gives valid links).
+    # In safe=True mode (default), if it fails it will leave the chain unchanged,
+    # print a warning, and return False rather than throwing an error.   
+    def rotateJointAboutKinematicAxis(self, jointIndex : int, angle : float,
+                             propogate : bool = True, 
+                             applyToPreviousWaypoint : bool = False,
+                             safe : bool = True) -> bool:
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.rotateJointAboutKinematicAxis(jointIndex, angle, propogate, 
+                             applyToPreviousWaypoint, safe = False)
+            except ValueError as err:
+                print("WARNING: something went wrong in rotateJointAboutKinematicAxis:")
+                print(err)
+                print("Reverting chain to before outer call.")
+                self.setTo(backup)
+                return False
+        else:
+            Pose = self.Joints[jointIndex].Pose
+            Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
+            if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
+                if propogate:
+                    self.transformJoint(jointIndex-1, Rotation, True, safe=False)
+                else:
+                    self.transformJoint(jointIndex-1, Rotation, False, safe=False)
+                    self.transformJoint(jointIndex, Rotation, False, safe=False)
+            else:
+                self.transformJoint(jointIndex, Rotation, propogate, safe=False)
+        return True
 
 """ 
 Places joint along its joint axis, as close as possible to the given neighbor 
@@ -275,7 +446,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     originW1 = tangentPlane1.intersectionWithLine(neighborPathAxis)
     # guaranteed to be a point because line is normal to plane
     PoseW1 = SE3.Rt(neighbor.Pose.R, originW1)
-    W1 = WayPoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
+    W1 = Waypoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
                   neighbor.pathIndex())
     toReturn.append(W1)
     
@@ -307,7 +478,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         originW2 = tangentPlane2.intersectionWithLine(
                                         Line(originW1 + r*nhat1, nhat2))
         PoseW2 = SE3.Rt(RotationW2, originW2)
-        W2 = WayPoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
+        W2 = Waypoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
         toReturn.append(W2)
         
         farPoint2 = s2 + nhat2 * (4*r + jointToPlace.boundingRadius())

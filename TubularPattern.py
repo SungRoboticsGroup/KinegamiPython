@@ -20,7 +20,7 @@ in a graph structure where vertices (points on the surface) are parameterized
 in 2D by:
     x - distance about the tube modulo width=numSides*baseSideLength, i.e., the
         horizontal coordinate when cut and unwrapped to flat
-    y - distance about the tube, i.e., the vertical coordiante when flat
+    y - distance along the tube, i.e., the vertical coordinate when flat
 
 The fold segment connecting vertices (x0,y0),(x1,y1) is a shortest path 
 connecting them in the tubular topology. This is either the direct
@@ -50,17 +50,6 @@ that constructs a DXF file. (We organize in this way to separate fabrication
 details from the underlying pattern: the construction and representation of 
 TubularPattern objects is in the tubular topology).
 
-
-TODO:
-    Clip recursive sink gadgets to stay within their panels?
-    
-    Make variable naming consistent:
-        Matrices/arrays of >1 axis: Capitalize
-        Vectors/1-axis arrays: plural, don't capitalize
-        scalars: singular, don't capitalize
-    
-    Figure out how to append revolute joints (mountain folds at the bases)
-    and twist fittings (valley folds at the bases)
 """
 import numpy as np
 import matplotlib.pyplot as plt
@@ -76,6 +65,7 @@ from geometryHelpers import rollToMatch, unsignedAngles, signedAngle, \
     signedAngles2D, signedAngles3D, lerpN, unit, signedAngle2D, unsignedAngle
 from spatialmath import SO3, SE3
 import copy
+from style import *
 
 class TubularPattern():
     def __init__(self, numSides, r, proximalMarker=[0, 0]):
@@ -95,7 +85,7 @@ class TubularPattern():
         relative = np.vstack((ProximalBaseX, nzeros)).T
         ProximalBase = self.proximalMarker + relative
         self.proximalBaseIndices = np.arange(self.numSides)
-        self.EPSILON = self.baseSideLength * 0.00001
+        self.EPSILON = self.baseSideLength * 0.0001
 
         """
         Instance variables initialized here for an empty pattern:
@@ -107,6 +97,13 @@ class TubularPattern():
         self.EdgeLabelsMV = np.empty(0, dtype=bool) #True for M, False for V
         self.patternHeight = 0
         self.distalMarker = self.proximalMarker
+        self.assertValidationChecks()
+
+    def reverse(self):
+        self.Vertices[:,1] = self.patternHeight - self.Vertices[:,1] + self.proximalMarker[:,1]
+        self.proximalBaseIndices, self.distalBaseIndices = self.distalBaseIndices, self.proximalBaseIndices
+        self.proximalMarker[0,0], self.distalMarker[0,0] = self.distalMarker[0,0], self.proximalMarker[0,0]
+        return self
 
     """ Add the given vertices (a numpy nx2), return their indices """    
     def addVertices(self, VerticesToAdd):
@@ -120,6 +117,7 @@ class TubularPattern():
     def addEdges(self, EdgesToAdd, LabelsToAdd, deDuplicate=False):
         assert(EdgesToAdd.shape[0] == LabelsToAdd.shape[0])
         assert(EdgesToAdd.shape[1] == 2)
+        assert(EdgesToAdd.dtype == int)
         nonEmpty = EdgesToAdd[:,0] != EdgesToAdd[:,1]
         self.Edges = np.vstack((self.Edges, EdgesToAdd[nonEmpty]))
         self.EdgeLabelsMV = np.hstack((self.EdgeLabelsMV, 
@@ -129,8 +127,6 @@ class TubularPattern():
             self.Edges, indices = np.unique(self.Edges, return_index=True, 
                                             axis=0)
             self.EdgeLabelsMV = self.EdgeLabelsMV[indices]
-            # TODO: is there a nice way to verify that duplicated edges have 
-            # the same MV label?
 
     def addMountainEdges(self, EdgesToAdd, deDuplicate=False):
         EdgesToAdd = np.array(EdgesToAdd)
@@ -169,6 +165,15 @@ class TubularPattern():
 
     def DistalBase(self):
         return self.Vertices[self.distalBaseIndices, :]
+    
+    def isEmpty(self):
+        return self.Vertices.shape[0] == self.numSides
+    
+    def hasProximalBase(self):
+        return not self.proximalBaseIndices is None
+    
+    def hasDistalBase(self):
+        return not self.distalBaseIndices is None
 
     def rollProximalIndices(self, k):
         PI = self.proximalBaseIndices
@@ -177,39 +182,65 @@ class TubularPattern():
         self.Edges[Mask] = (self.Edges[Mask] + k) % self.numSides
         self.proximalBaseIndices = np.roll(self.proximalBaseIndices, k)
     
+    def assertValidationChecks(self):
+        if self.hasDistalBase():
+            DistalBase = self.DistalBase()
+            assert(np.all(DistalBase[:,1]==DistalBase[0,1]))
+        if self.hasProximalBase():
+            ProximalBase = self.ProximalBase()
+            assert(np.all(ProximalBase[:,1]==ProximalBase[0,1]))
+        assert(np.all(self.Vertices[:, 0] >= 0))
+        assert(np.all(self.Vertices[:, 0] <= self.width))
+    
     def append(self, other: 'TubularPattern'):
+        assert(self.hasDistalBase() and other.hasProximalBase())
+        self.assertValidationChecks()
+        other.assertValidationChecks()
         other = copy.deepcopy(other)
         assert (other.numSides == self.numSides)
         assert (other.r == self.r)
         assert (self.Edges.dtype.kind == 'i')
         other.translate(self.distalMarker - other.proximalMarker)
-
-        """ Merge other's proximal base vertices with current distal base """
-        indexShift = self.Vertices.shape[0] - other.numSides
-        otherNonProximalVertices = np.delete(other.Vertices,
-                                             other.proximalBaseIndices, axis=0)
-        self.Vertices = np.vstack((self.Vertices, otherNonProximalVertices))
-
-        """ Reindex other's proximal base vertices such that they match
-            the current distal base vertices they correspond to """
-        k = rollToMatch(other.ProximalBase(), self.DistalBase(),
-                        EPSILON=self.EPSILON)
-        assert (not k is None)
-        other.rollProximalIndices(k)
-        EdgesToAdd = other.Edges
-        EdgesToAdd[EdgesToAdd>=self.numSides] += indexShift #non-proximal
-        EdgesToAdd[EdgesToAdd<self.numSides] += np.min(self.distalBaseIndices)
-        self.addEdges(EdgesToAdd, other.EdgeLabelsMV, deDuplicate=True)
         
-        self.distalBaseIndices = other.distalBaseIndices + indexShift
-        self.patternHeight += other.patternHeight
-        self.distalMarker = other.distalMarker
+        if not other.isEmpty():
+            """ Merge other's proximal base vertices with current distal base """
+            indexShift = self.Vertices.shape[0] - other.numSides
+            otherNonProximalVertices = np.delete(other.Vertices,
+                                                 other.proximalBaseIndices, axis=0)
+            self.Vertices = np.vstack((self.Vertices, otherNonProximalVertices))
+    
+            """ Reindex other's proximal base vertices such that they match
+                the current distal base vertices they correspond to """
+            k = rollToMatch(other.ProximalBase(), self.DistalBase(),
+                            EPSILON=self.EPSILON)
+            if k is None:
+                print(self.ProximalBase())
+                print(self.DistalBase())
+                print(other.ProximalBase())
+                print("ERROR: can't align self.DistalBase() with other.ProximalBase()")
+            
+            assert (not k is None)
+            other.rollProximalIndices(k)
+            EdgesToAdd = other.Edges
+            EdgesToAdd[EdgesToAdd>=self.numSides] += indexShift #non-proximal
+            EdgesToAdd[EdgesToAdd<self.numSides] += np.min(self.distalBaseIndices)
+            self.addEdges(EdgesToAdd, other.EdgeLabelsMV, deDuplicate=True)
+            
+            if other.hasDistalBase():
+                self.distalBaseIndices = other.distalBaseIndices + indexShift
+            else:
+                self.distalBaseIndices = None
+            self.patternHeight += other.patternHeight
+            self.distalMarker = other.distalMarker
+            self.assertValidationChecks()
+        
+        return self
     
     """ Plot the graph directly, without accounting for wraparound, boundary,
         or other considerations for actual manufacturing.
         Mainly useful for debugging - comparing it to the result of makeDXF
         helps separate mistakes in the actual graph from bugs in makeDXF. """
-    def plotRawGraph(self, saveas="", show=True, directed=False):
+    def showRawGraph(self, saveas="", show=True, directed=False):
         doc = ezdxf.new()
 
         # add new entities to the modelspace
@@ -253,19 +284,24 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show()
+            plt.show(block=False)
 
         return doc
-    
-    def makeDXF(self, saveas="", show=False, debug=False):
+
+    def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
+             mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
+             boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
+        if len(dxfName) < 4 or dxfName[-4:]!=".dxf":
+            dxfName += ".dxf"
+        
         doc = ezdxf.new()
 
         # add new entities to the modelspace
         msp = doc.modelspace()
-        doc.layers.add(name="Mountain", color=5)
-        doc.layers.add(name="Valley", color=1)
-        doc.layers.add(name="Boundary", color=2)
-        doc.layers.add(name="Cut", color=3)
+        doc.layers.add(name="Mountain", color=mountainColor)
+        doc.layers.add(name="Valley", color=valleyColor)
+        doc.layers.add(name="Boundary", color=boundaryColor)
+        doc.layers.add(name="Cut", color=cutColor)
 
         ymin = self.proximalMarker[0, 1]
         ymax = ymin + self.patternHeight
@@ -287,7 +323,7 @@ class TubularPattern():
         
         Folds = self.Vertices[self.Edges]
         lastColStart = self.width - self.baseSideLength
-        if debug:
+        if printGraph:
             print("Vertices:")
             print(self.Vertices)
             print("Edges:")
@@ -310,10 +346,12 @@ class TubularPattern():
             if isWrapping:
                 rightcopy = np.copy(seg)
                 leftcopy = np.copy(seg)
-                rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
+                #rightcopy[seg[:, 0] <= self.baseSideLength, 0] += self.width
+                rightcopy[np.argmin(seg[:,0]), 0] += self.width
                 msp.add_line(rightcopy[0, :], rightcopy[1, :],
                              dxfattribs={"layer": layer})
-                leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
+                #leftcopy[seg[:, 0] >= lastColStart, 0] -= self.width
+                leftcopy[np.argmax(seg[:,0]), 0] -= self.width
                 msp.add_line(leftcopy[0, :], leftcopy[1, :],
                              dxfattribs={"layer": layer})
             else:
@@ -335,8 +373,8 @@ class TubularPattern():
                     msp.add_line(leftcopy[0, :], leftcopy[1, :],
                                  dxfattribs={"layer": layer})
             
-        if saveas:
-            doc.saveas(saveas+".dxf")
+        if dxfName:
+            doc.saveas(dxfName)
 
         if show:
             config = Configuration()
@@ -352,7 +390,7 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show()
+            plt.show(block=block)
 
         return doc
 
@@ -368,7 +406,92 @@ class TubeFittingPattern(TubularPattern):
                                         self.distalBaseIndices)).T)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
+class FingertipPattern(TubularPattern):
+    def __init__(self, numSides, r, length, forward=True, proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        assert(length > 0)
+        totalBendingAngle = 4 * np.arctan(length / r*np.sin(self.polygonInnerAngle))
+        self.patternHeight = length / np.sin(totalBendingAngle/4)
+        
+        self.patternHeight = self.patternHeight
+        ProximalBase = self.Vertices
+        
+        self.distalBaseIndices = None #Can't append anything after a fingertip
+        
+        MidAlignedVertices = ProximalBase + [0, self.patternHeight]
+        midAlignedIndices = self.Vertices.shape[0] + np.arange(numSides)
+        self.Vertices = np.vstack((self.Vertices, MidAlignedVertices))
+        MidHalfVertices = MidAlignedVertices + [self.baseSideLength/2, 0]
+        midHalfIndices = self.Vertices.shape[0] + np.arange(numSides)
+        self.Vertices = np.vstack((self.Vertices, MidHalfVertices))
+        
+        # Base mountain folds
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices, 
+                                np.roll(self.proximalBaseIndices, -1))).T)
+        
+        # Folds of the flapping rectangles
+        
+        ep = numSides-1 # end panel index
+        mp = (numSides-1)//2 # mid panel index
+        nonSinkPanelIndices = [mp, ep]
+        
+        self.addMountainEdges([
+                    [self.proximalBaseIndices[0], midAlignedIndices[0]],
+                    [midAlignedIndices[0], midHalfIndices[0]],
+                    #######
+                    [self.proximalBaseIndices[mp], midAlignedIndices[mp]],
+                    [midHalfIndices[mp-1], midAlignedIndices[mp]],
+                    #######
+                    [self.proximalBaseIndices[mp+1], midAlignedIndices[mp+1]],
+                    [midAlignedIndices[mp+1], midHalfIndices[mp+1]],
+                    #######
+                    [self.proximalBaseIndices[ep], midAlignedIndices[ep]],
+                    [midHalfIndices[ep-1], midAlignedIndices[ep]]
+                ])
+        self.addValleyEdges([    [midAlignedIndices[mp], midHalfIndices[mp]],
+                                 [midHalfIndices[mp], midAlignedIndices[mp+1]],
+                                 [midAlignedIndices[ep], midHalfIndices[ep]],
+                                 [midHalfIndices[ep], midAlignedIndices[0]]  ])
+        
+        psi = np.arctan2(self.baseSideLength, self.patternHeight)
+        deltas = np.pi * (numSides + 2 - 4*(np.arange(numSides)+1)) / (2*numSides)
+        frontLengths = np.sqrt(length**2 + (r*np.sin(deltas))**2)
+        gammas = np.arctan(frontLengths / (r*np.abs(np.cos(deltas))))
+        tuckYs = frontLengths / np.cos((np.pi/2) - gammas - psi)
+        
+        lowerCrimpIndices = {}
+        
+        for i in range(numSides):
+            # Crimping vertices and folds
+            if not i in [0, mp, mp+1, ep]:
+                lowerCrimpVertex = ProximalBase[i] + [0,tuckYs[i]]
+                lowerCrimpIndices[i] = self.Vertices.shape[0]
+                self.Vertices = np.vstack((self.Vertices, 
+                                          [lowerCrimpVertex]))
+                self.addValleyEdges([[lowerCrimpIndices[i], midAlignedIndices[i]]])
+                self.addMountainEdges([[self.proximalBaseIndices[i], lowerCrimpIndices[i]]])
+
+        for i in range(numSides):    
+            # Check if this is a sink panel
+            # (rather than one of the 2 side flaps that stay rectangular)
+            if not i in nonSinkPanelIndices: # Tucking X folds
+                mhi = midHalfIndices[i]
+                self.addValleyEdges([[self.proximalBaseIndices[i], mhi],
+                                     [mhi, self.proximalBaseIndices[i+1]]])    
+            if not i in [0, mp, mp+1, ep]: 
+                self.addValleyEdges([[midHalfIndices[i-1], midAlignedIndices[i]],
+                                     [midAlignedIndices[i], midHalfIndices[i]]])
+                self.addMountainEdges([[midHalfIndices[i-1], lowerCrimpIndices[i]],
+                                       [lowerCrimpIndices[i], midHalfIndices[i]]])
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        self.wrapToWidth()
+        self.assertValidationChecks()
+
+        if not forward:
+            self.reverse()
+    
 class RevoluteJointPattern(TubularPattern):
     def __init__(self, numSides, r, totalBendingAngle, numSinkLayers=1, 
                  proximalMarker=[0, 0]):
@@ -378,6 +501,7 @@ class RevoluteJointPattern(TubularPattern):
                             np.tan(totalBendingAngle/4)
         flatRotAxisHeight = r*np.sin(self.polygonInnerAngle)/\
                                 np.cos(totalBendingAngle/4)
+        
         self.patternHeight = 2*flatRotAxisHeight
         ProximalBase = self.Vertices
         DistalBase = ProximalBase + [0, self.patternHeight]
@@ -389,6 +513,10 @@ class RevoluteJointPattern(TubularPattern):
         MidHalfVertices = MidAlignedVertices + [self.baseSideLength/2, 0]
         midHalfIndices = self.Vertices.shape[0] + np.arange(numSides)
         self.Vertices = np.vstack((self.Vertices, MidHalfVertices))
+        
+        # store for Fingertip construction
+        self.midAlignedIndices = midAlignedIndices 
+        self.flatRotAxisHeight = flatRotAxisHeight 
         
         # Base mountain folds
         self.addMountainEdges(np.vstack((self.proximalBaseIndices, 
@@ -821,8 +949,9 @@ class RevoluteJointPattern(TubularPattern):
         
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
-class PrismaticJointPattern(TubularPattern):
+class ReboPattern(TubularPattern):
     def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
                  proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
@@ -831,28 +960,18 @@ class PrismaticJointPattern(TubularPattern):
         neutralLayerHeight = neutralLength / numLayers
         flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
         maxLength = 2*numLayers*flatLayerHalfHeight
-        self.patternHeight = 4*maxLength
+        self.patternHeight = maxLength
         flatConeAngle = (np.pi/2)*(1 - 2*np.cos(coneAngle)/numSides)
         
-        # Standard distal base setup
         ProximalBase = self.Vertices
-        DistalBase = ProximalBase + [0, self.patternHeight]
-        self.Vertices = np.vstack((ProximalBase, DistalBase))
-        self.distalBaseIndices = numSides + self.proximalBaseIndices
-        
-        Mid1 = ProximalBase + [0, maxLength]
-        mid1Indices = numSides + self.distalBaseIndices
-        self.Vertices = np.vstack((self.Vertices,Mid1))
-        
         xsTiled = np.tile(ProximalBase[:,0], numLayers+1)
-        reboY0 = proximalMarker[1] + 2*maxLength
-        layerYs = reboY0 + np.arange(numLayers+1)*2*flatLayerHalfHeight
+        layerYs = np.arange(numLayers+1)*2*flatLayerHalfHeight
         ysRepeated = np.repeat(layerYs, numSides)
         ReboLayerBoundariesVertices = np.vstack((xsTiled, ysRepeated)).T
-        ReboLayerBoundariesIndices = self.Vertices.shape[0] + \
-            np.arange((numLayers+1)*numSides).reshape((numLayers+1, numSides))
-        self.Vertices = np.vstack((self.Vertices, ReboLayerBoundariesVertices))
-        # TODO: can this be written more elegantly with np.meshgrid?
+        ReboLayerBoundariesIndices = np.arange((numLayers+1)*numSides).reshape((numLayers+1, numSides))
+        self.Vertices = ReboLayerBoundariesVertices
+        assert(np.linalg.norm(self.Vertices[:numSides,:] - ProximalBase) < self.EPSILON)
+        self.distalBaseIndices = ReboLayerBoundariesIndices[-1,:]
         
         ReboLayerMidAlignedVertices = [0, flatLayerHalfHeight] +\
                                     ReboLayerBoundariesVertices[:-numSides,:]
@@ -866,19 +985,7 @@ class PrismaticJointPattern(TubularPattern):
             np.arange(numLayers*numSides).reshape((numLayers, numSides))
         self.Vertices = np.vstack((self.Vertices, ReboLayerMidOffsetVertices))
         
-        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
-                                         mid1Indices)).T)
-        self.addMountainEdges(np.vstack((mid1Indices, 
-                                         np.roll(mid1Indices, -1, axis=0))).T)
-        
-        reboBottom = ReboLayerBoundariesIndices[0,:]
-        reboTop = ReboLayerBoundariesIndices[numLayers,:]
-        self.addMountainEdges(np.vstack((mid1Indices, reboBottom)).T)
-        self.addMountainEdges(np.vstack((reboTop, self.distalBaseIndices)).T)
-        
-        # Construct REBO folds
-        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
-        # TODO: vectortize?
+        # Construct folds
         for i in range(numLayers):
             bottom = ReboLayerBoundariesIndices[i,:]
             nextBottom = np.roll(bottom, -1)
@@ -894,9 +1001,72 @@ class PrismaticJointPattern(TubularPattern):
             self.addMountainEdges(np.vstack((midAligned, nextMidOffset)).T)
             self.addMountainEdges(np.vstack((midOffset, bottom)).T)
             self.addMountainEdges(np.vstack((midOffset, top)).T)
+        reboTop = ReboLayerBoundariesIndices[numLayers,:]
+        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
             
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()  
+        self.assertValidationChecks()
+
+class PrismaticJointPattern(TubularPattern):
+    def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
+                 proximalMarker=[0, 0]):
+        super().__init__(numSides, r, proximalMarker)
+        assert(coneAngle > 0 and coneAngle < np.pi/2)
+        assert(numLayers > 0)
+        neutralLayerHeight = neutralLength / numLayers
+        flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
+        maxLength = 2*numLayers*flatLayerHalfHeight
+        
+        tube = TubeFittingPattern(numSides, r, height=maxLength)
+        self.append(tube)
+        mid1Indices = self.distalBaseIndices
+        self.addMountainEdges(np.vstack((mid1Indices, 
+                                         np.roll(mid1Indices, -1, axis=0))).T)
+        self.append(tube)
+        self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle))
+        self.append(tube)
+
+class KreslingJointPattern(TubularPattern):
+    """ Construction reference:
+        Priyanka Bhovad, Joshua Kaufmann, Suyi Li. 
+        "Peristaltic locomotion without digital controllers: 
+        Exploiting multi-stability in origami to coordinate robotic motion".
+        Extreme Mechanics Letters, 2019.
+        
+        Stiffness scales with angleRatio, which must be in (0,1).
+        Pattern is bistable if angleRatio > 0.5, and larger angleRatio
+        gives longer extended stable length.
+    """
+    def __init__(self, numSides, r, compressedStableLength, angleRatio,
+                 proximalMarker=[0, 0]):
+        assert(angleRatio>0 and angleRatio<1) 
+        assert(compressedStableLength > 0)
+        super().__init__(numSides, r, proximalMarker)
+        gamma = (np.pi/2) - (np.pi/numSides)
+        D = 2*r*np.cos(gamma*(1-angleRatio))
+        P = self.baseSideLength
+        assert(abs(r - 0.5*P/np.sin(np.pi/numSides)) < self.EPSILON) #sanity check that their R matches ours
+        L = compressedStableLength
+        valleyLength = np.sqrt(D**2 + L**2)
+        mountainLength = np.sqrt(P**2 + D**2 - 2*P*D*np.cos(gamma*angleRatio) + L**2)
+        valleyAngle = np.arccos((P**2 + valleyLength**2 - mountainLength**2) / (2*P*valleyLength))
+        
+        valleyDirection = np.array([np.cos(valleyAngle), np.sin(valleyAngle)])
+        valleyVector = valleyLength * valleyDirection
+        self.patternHeight = valleyVector[1]
+        DistalBase = self.ProximalBase() + valleyVector
+        self.distalBaseIndices = self.addVertices(DistalBase)
+        
+        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
+                                       self.distalBaseIndices)).T)
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
+                                    np.roll(self.distalBaseIndices, 1))).T)
+        
+        self.distalMarker = self.proximalMarker + valleyVector
+        self.wrapToWidth()
+        self.assertValidationChecks()
+        
            
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
@@ -1016,6 +1186,7 @@ class ElbowFittingPattern(TubularPattern):
                                        midOffsetIndices)).T, deDuplicate=True)
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()
+        self.assertValidationChecks()
 
 class TwistFittingPattern(TubularPattern):
     def __init__(self, numSides, r, twistAngle, moduleHeight,
@@ -1058,3 +1229,4 @@ class TwistFittingPattern(TubularPattern):
         self.distalMarker = self.proximalMarker + \
             np.array([referenceXshift, self.patternHeight])
         self.wrapToWidth()
+        self.assertValidationChecks()
