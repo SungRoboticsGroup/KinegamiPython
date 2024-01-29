@@ -91,11 +91,19 @@ class KinematicTree:
                 guaranteeNoSelfIntersection and fixedOrientation both True")
         
         newJoint = copy.deepcopy(newJoint)
-        
         parent = self.Joints[parentIndex]
         if relative:
             newJoint.transformPoseBy(parent.Pose)
         
+        if not fixedOrientation:
+            xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
+                                newJoint.Pose.t, newJoint.Pose.R[:,2],
+                                undefined=newJoint.Pose.R[:,0])
+            newJoint.setXhatAboutZhat(xhat)
+            outwardDirection = newJoint.Pose.t - parent.Pose.t
+            if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
+                newJoint.reversePathDirection()
+
         if guarantee: # Algorithm 9
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
@@ -103,18 +111,12 @@ class KinematicTree:
             for joint in jointsToAdd:
                 i = self.addJoint(parentIndex=i, newJoint=joint, 
                                   guarantee=False, fixedPosition=True, 
-                                  fixedOrientation=True, relative=False)
+                                  fixedOrientation=False, relative=False)
             return i
         
         if not fixedPosition: #Algorithm 8
             newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
                                                           self.boundingBall)
-        
-        if not fixedOrientation:
-            xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
-                                newJoint.Pose.t, newJoint.Pose.R[:,2],
-                                undefined=parent.Pose.R[:,0])
-            newJoint.setXhatAboutZhat(xhat)
         
 
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 

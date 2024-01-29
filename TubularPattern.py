@@ -154,10 +154,10 @@ class TubularPattern():
         self.proximalMarker[0, 0] %= self.width
         self.distalMarker[0, 0] %= self.width
 
-    def translate(self, v):
-        self.Vertices += v
-        self.proximalMarker = self.proximalMarker + v
-        self.distalMarker = self.distalMarker + v
+    def translate(self, vector):
+        self.Vertices += vector
+        self.proximalMarker = self.proximalMarker + vector
+        self.distalMarker = self.distalMarker + vector
         self.wrapToWidth()
 
     def ProximalBase(self):
@@ -287,6 +287,14 @@ class TubularPattern():
             plt.show(block=False)
 
         return doc
+
+    def save(self, dxfName, mountainColor=mountainColorDefault, 
+             valleyColor=valleyColorDefault, boundaryColor=boundaryColorDefault, 
+             cutColor=cutColorDefault):
+        return self.show(dxfName=dxfName, show=False, printGraph=False,
+                         block=False, mountainColor=mountainColor,
+                         valleyColor=valleyColor, boundaryColor=boundaryColor,
+                         cutColor=cutColor) 
 
     def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
              mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
@@ -1026,47 +1034,6 @@ class PrismaticJointPattern(TubularPattern):
         self.append(tube)
         self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle))
         self.append(tube)
-
-class KreslingJointPattern(TubularPattern):
-    """ Construction reference:
-        Priyanka Bhovad, Joshua Kaufmann, Suyi Li. 
-        "Peristaltic locomotion without digital controllers: 
-        Exploiting multi-stability in origami to coordinate robotic motion".
-        Extreme Mechanics Letters, 2019.
-        
-        Stiffness scales with angleRatio, which must be in (0,1).
-        Pattern is bistable if angleRatio > 0.5, and larger angleRatio
-        gives longer extended stable length.
-    """
-    def __init__(self, numSides, r, compressedStableLength, angleRatio,
-                 proximalMarker=[0, 0]):
-        assert(angleRatio>0 and angleRatio<1) 
-        assert(compressedStableLength > 0)
-        super().__init__(numSides, r, proximalMarker)
-        gamma = (np.pi/2) - (np.pi/numSides)
-        D = 2*r*np.cos(gamma*(1-angleRatio))
-        P = self.baseSideLength
-        assert(abs(r - 0.5*P/np.sin(np.pi/numSides)) < self.EPSILON) #sanity check that their R matches ours
-        L = compressedStableLength
-        valleyLength = np.sqrt(D**2 + L**2)
-        mountainLength = np.sqrt(P**2 + D**2 - 2*P*D*np.cos(gamma*angleRatio) + L**2)
-        valleyAngle = np.arccos((P**2 + valleyLength**2 - mountainLength**2) / (2*P*valleyLength))
-        
-        valleyDirection = np.array([np.cos(valleyAngle), np.sin(valleyAngle)])
-        valleyVector = valleyLength * valleyDirection
-        self.patternHeight = valleyVector[1]
-        DistalBase = self.ProximalBase() + valleyVector
-        self.distalBaseIndices = self.addVertices(DistalBase)
-        
-        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
-                                       self.distalBaseIndices)).T)
-        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
-                                    np.roll(self.distalBaseIndices, 1))).T)
-        
-        self.distalMarker = self.proximalMarker + valleyVector
-        self.wrapToWidth()
-        self.assertValidationChecks()
-        
            
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
@@ -1230,3 +1197,45 @@ class TwistFittingPattern(TubularPattern):
             np.array([referenceXshift, self.patternHeight])
         self.wrapToWidth()
         self.assertValidationChecks()
+
+
+class KreslingJointPattern(TubularPattern):
+    """ Construction reference:
+        Priyanka Bhovad, Joshua Kaufmann, Suyi Li. 
+        "Peristaltic locomotion without digital controllers: 
+        Exploiting multi-stability in origami to coordinate robotic motion".
+        Extreme Mechanics Letters, 2019.
+        
+        Stiffness scales with angleRatio, which must be in (0,1).
+        Pattern is bistable if angleRatio > 0.5, and larger angleRatio
+        gives longer extended stable length.
+    """
+    def __init__(self, numSides, r, compressedStableLength, angleRatio,
+                 proximalMarker=[0, 0]):
+        assert(angleRatio>0 and angleRatio<1) 
+        assert(compressedStableLength > 0)
+        super().__init__(numSides, r, proximalMarker)
+        gamma = (np.pi/2) - (np.pi/numSides)
+        D = 2*r*np.cos(gamma*(1-angleRatio))
+        P = self.baseSideLength
+        assert(abs(r - 0.5*P/np.sin(np.pi/numSides)) < self.EPSILON) #sanity check that their R matches ours
+        L = compressedStableLength
+        valleyLength = np.sqrt(D**2 + L**2)
+        mountainLength = np.sqrt(P**2 + D**2 - 2*P*D*np.cos(gamma*angleRatio) + L**2)
+        valleyAngle = np.arccos((P**2 + valleyLength**2 - mountainLength**2) / (2*P*valleyLength))
+        
+        valleyDirection = np.array([np.cos(valleyAngle), np.sin(valleyAngle)])
+        valleyVector = valleyLength * valleyDirection
+        self.patternHeight = valleyVector[1]
+        DistalBase = self.ProximalBase() + valleyVector
+        self.distalBaseIndices = self.addVertices(DistalBase)
+        
+        self.addValleyEdges(np.vstack((self.proximalBaseIndices,
+                                       self.distalBaseIndices)).T)
+        self.addMountainEdges(np.vstack((self.proximalBaseIndices,
+                                    np.roll(self.distalBaseIndices, 1))).T)
+        
+        self.distalMarker = self.proximalMarker + valleyVector
+        self.wrapToWidth()
+        self.assertValidationChecks()
+        

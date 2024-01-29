@@ -52,7 +52,7 @@ elbow.show(dxfName=subfolder+"elbow", show=False)
 composed.append(elbow)
 composed.show(dxfName=subfolder+"tube_twist_tube_elbow", show=False)
 
-prismatic = PrismaticJointPattern(numSides, r, 1, 3, np.pi/3)
+prismatic = PrismaticJointPattern(numSides, r, 1, 2, np.pi/4)
 #prismatic.plotRawGraph(saveas=subfolder+"prismatic_raw_graph", directed=True)
 prismatic.show(dxfName=subfolder+"prismatic", show=False)
 composed.append(prismatic)
