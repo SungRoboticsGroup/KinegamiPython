@@ -20,10 +20,10 @@ class KinematicChain(KinematicTree):
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 guaranteeNoSelfIntersection : bool = True) -> int:
+                 guarantee : bool = True) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, guaranteeNoSelfIntersection)
+                                fixedOrientation, guarantee)
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern
@@ -31,3 +31,33 @@ class KinematicChain(KinematicTree):
             pattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
             pattern.append(self.Joints[j].pattern)
         return pattern
+    
+    def delete(self, jointIndex : int, safe : bool = True) -> bool:
+        assert(jointIndex>=0)
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.delete(jointIndex, safe=False)
+            except ValueError as err:
+                print("WARNING: something went wrong in delete:")
+                print(err)
+                print("Deletion canceled.")
+                self.setTo(backup)
+                return False
+        else:
+            nextJoint = self.Joints[jointIndex+1]
+            prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
+            newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                    nextJoint.ProximalDubinsFrame(),
+                                    self.maxAnglePerElbow)
+            linksBefore = self.Links[:jointIndex]
+            linksAfter = self.Links[jointIndex+2:]
+            self.Links = linksBefore + [newLink] + linksAfter
+            self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
+            self.recomputeBoundingBall()
+            
+            self.Children = []
+            for i in range(len(self.Joints)-1):
+                self.Children.append([i+1])
+            self.Children.append([])
+            

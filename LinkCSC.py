@@ -18,11 +18,8 @@ from TubularPattern import TubularPattern, TubeFittingPattern, \
 
 
 class LinkCSC:
-    # errorIfFails : bool (defaults to True) indicates how to handle if it 
-    # fails to construct a valid path. If True, an invalid path will lead to
-    # a ValueError. If False, an invalid path will lead to returning Null.
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
-                 maxAnglePerElbow : float = np.pi/2, errorIfFails : float=True,
+                 maxAnglePerElbow : float = np.pi/2, 
                  path : PathCSC = None, EPSILON : float = 0.0001):
         assert(r>0)
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
@@ -37,21 +34,17 @@ class LinkCSC:
         else:
             self.path = path
         
-        if errorIfFails:
-            if norm(self.path.error) > self.EPSILON:
-                raise ValueError("ERROR: Tried to generate a link for an invalid path")
-            if self.path.theta1 < -EPSILON:
-                raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
-            if self.path.theta1 >= np.pi:
-                raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
-            if self.path.theta2 < -EPSILON:
-                raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
-            if self.path.theta2 >= np.pi:
-                raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
-        elif norm(self.path.error) > self.EPSILON or \
-                self.path.theta1 < -EPSILON or self.path.theta1 >= np.pi or\
-                self.path.theta2 < -EPSILON or self.path.theta2 >= np.pi:
-            return None
+        if norm(self.path.error) > self.EPSILON:
+            raise ValueError("ERROR: Tried to generate a link for an invalid path")
+        if self.path.theta1 < -EPSILON:
+            raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
+        if self.path.theta1 >= np.pi:
+            raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
+        if self.path.theta2 < -EPSILON:
+            raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
+        if self.path.theta2 >= np.pi:
+            raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
+
         
         self.rot1AxisDir = np.cross(self.StartDubinsPose.R[:,0], self.path.w1)
         self.rot1AxisAngle = signedAngle(self.StartDubinsPose.R[:,1],
@@ -70,6 +63,7 @@ class LinkCSC:
             self.Elbow1EndFrame = self.elbow1.EndFrame
             self.elbow1BoundingBall = self.elbow1.boundingBall()
         else:
+            self.elbow1 = None
             self.Elbow1EndFrame = self.StartDubinsPose
             self.elbow1BoundingBall = Ball(self.StartDubinsPose.t, self.r)
         assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
@@ -91,6 +85,7 @@ class LinkCSC:
             assert(norm(self.elbow2.EndFrame - self.EndDubinsPose) < self.EPSILON)
             self.elbow2BoundingBall = self.elbow2.boundingBall()
         else:
+            self.elbow2 = None
             self.Elbow2StartFrame = self.EndDubinsPose
             self.elbow2BoundingBall = Ball(self.EndDubinsPose.t, self.r)
     
@@ -109,7 +104,7 @@ class LinkCSC:
                   showElbowBoundingBalls : bool = False):
         allElbowHandleSets = []
         if showBoundary:
-            if self.path.theta1 > self.EPSILON:
+            if not self.elbow1 is None:
                 elbow1HandleSets = self.elbow1.addToPlot(ax, numSides, color, 
                                                 alpha, wireFrame, showFrames,
                                                 showElbowBoundingBalls)
@@ -120,7 +115,7 @@ class LinkCSC:
                 self.cylinder.addToPlot(ax, numSides, color, alpha, 
                                                       wireFrame)
             
-            if self.path.theta2 > self.EPSILON:
+            if not self.elbow2 is None:
                 elbow2HandleSets = self.elbow2.addToPlot(ax, numSides, color, 
                                                     alpha, wireFrame, showFrames,
                                                     showElbowBoundingBalls)

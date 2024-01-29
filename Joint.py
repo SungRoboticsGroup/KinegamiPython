@@ -71,6 +71,12 @@ class Joint(ABC):
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
     
+    def reversePathDirection(self):
+        if self.pathIndex() == 2:
+            self.Pose = self.Pose @ SE3.Rx(np.pi)
+        else:
+            self.Pose = self.Pose @ SE3.Rz(np.pi)
+
     # Indices 0,1,2,3 with 0,1,2 cycled to begin with pathDirection
     def dubinsColumnOrder(self) -> np.ndarray:
         return np.hstack((np.roll(np.arange(3), -self.pathIndex()),[3]))
@@ -108,7 +114,7 @@ class Joint(ABC):
         Transform[0:3,2] = zhat
         Transform[0:3,3] = self.Pose.t
         self.Pose = SE3(Transform)
-    
+
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',

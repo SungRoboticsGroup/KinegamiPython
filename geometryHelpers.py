@@ -506,7 +506,7 @@ def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, z
 Returns the common normal from line 1 to line 2, input in point-direction form.
 If the lines intersect, return the given value representing undefined.
 """
-def commonNormal(point1, direction1, point2, direction2, undefined="undefined"):
+def commonNormal(point1, direction1, point2, direction2, undefined=None):
     direction1 = direction1 / norm(direction1)
     direction2 = direction2 / norm(direction2)
     
