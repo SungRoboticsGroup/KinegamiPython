@@ -8,8 +8,8 @@ from KinematicChain import *
 import inspect
 r = 1
 numSides = 6
-spacing = 5
-numJoints = 7
+spacing = 4
+numJoints = 5
 
 # chain whose root is a waypoint at the global origin
 chain = KinematicChain(RevoluteJoint(numSides, r, np.pi, SE3()))
@@ -17,7 +17,7 @@ for i in range(numJoints-1):
     #chain.show(showSpheres=True, block=False)
     chain.append(RevoluteJoint(numSides, r, np.pi, SE3.Trans(spacing,0,0)))
 
-chain.show()
+chain.show(block=False)
 
 # Delete waypoints
 i = 0
