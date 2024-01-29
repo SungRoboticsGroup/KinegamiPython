@@ -94,7 +94,22 @@ class KinematicTree:
         parent = self.Joints[parentIndex]
         if relative:
             newJoint.transformPoseBy(parent.Pose)
+
+        if guarantee: # Algorithm 9
+            jointsToAdd = placeJointAndWayPoints(newJoint, parent,
+                                                          self.boundingBall)
+            i = parentIndex
+            for joint in jointsToAdd:
+                i = self.addJoint(parentIndex=i, newJoint=joint, 
+                                  guarantee=False, fixedPosition=True, 
+                                  fixedOrientation=True, relative=False)
+            return i
         
+        if not fixedPosition: #Algorithm 8
+            newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
+                                                          self.boundingBall)
+        
+
         if not fixedOrientation:
             xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
                                 newJoint.Pose.t, newJoint.Pose.R[:,2],
@@ -104,25 +119,9 @@ class KinematicTree:
             if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
                 newJoint.reversePathDirection()
 
-        if guarantee: # Algorithm 9
-            jointsToAdd = placeJointAndWayPoints(newJoint, parent,
-                                                          self.boundingBall)
-            i = parentIndex
-            for joint in jointsToAdd:
-                i = self.addJoint(parentIndex=i, newJoint=joint, 
-                                  guarantee=False, fixedPosition=True, 
-                                  fixedOrientation=False, relative=False)
-            return i
-        
-        if not fixedPosition: #Algorithm 8
-            newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
-                                                          self.boundingBall)
-        
-
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
-                                self.maxAnglePerElbow, 
-                                errorIfFails=False)
+                                self.maxAnglePerElbow)
         if newLink is None:
             print("WARNING: no valid path found to newJoint, chain not changed.")
             return None
@@ -303,7 +302,7 @@ class KinematicTree:
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
         return True
-
+    
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
     # print a warning, and return False rather than throwing an error.    
@@ -457,6 +456,10 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     farPoint1 = s1 + nhat1 * (4*jointToPlace.r + jointToPlace.boundingRadius())
     farPlane1 = Plane(farPoint1, nhat1)
     zhatNew = jointToPlace.Pose.R[:,2]
+    if backwards:
+        nhat2 = -zhatNew
+    else:
+        nhat2 = zhatNew
     zAxisNew = Line(jointToPlace.Pose.t, zhatNew)
     if farPlane1.sidesOfLine(zAxisNew) == [-1]:
         """ The new joint's Z axis is entirely on the near side of 
@@ -465,14 +468,10 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         constructing points and planes in the direction of the
         new joint's Z rather than the neighbor's path direction,
         and the waypoint path direction is also along zhatNew. """
-        if backwards:
-            nhat2 = -zhatNew
-        else:
-            nhat2 = zhatNew
+        
                 
         s2 = ball.c + ball.r*nhat2
         tangentPlane2 = Plane(s2, nhat2)
-        
         # TODO: think through what this is doing and if it's correct given 
         # that I'm not using the separate [a b c] frames
         R_NeighborToW2 = SO3.AngleAxis(np.pi/2, cross(nhat1, nhat2))
@@ -510,6 +509,10 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     result = minimize(distanceFromW2, 0, constraints=(beyondFarPlane2))
     zChange = result.x[0]
     jointToPlace.translateAlongZ(zChange)
+
+    if np.dot(jointToPlace.pathDirection(), nhat2) < 0:
+        jointToPlace.reversePathDirection()
+
     toReturn.append(jointToPlace)
     return toReturn
     
