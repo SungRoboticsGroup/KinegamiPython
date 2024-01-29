@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Dec  6 17:32:19 2023
-
-@author: Daniel Feshbach
-"""
 from KinematicChain import *
 r = 1
 numSides = 6

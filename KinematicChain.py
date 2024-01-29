@@ -20,10 +20,10 @@ class KinematicChain(KinematicTree):
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 guaranteeNoSelfIntersection : bool = True) -> int:
+                 guarantee : bool = True) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, guaranteeNoSelfIntersection)
+                                fixedOrientation, guarantee)
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         pattern = self.Joints[0].pattern

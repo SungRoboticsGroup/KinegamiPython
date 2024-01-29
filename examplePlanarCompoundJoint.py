@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Dec  6 17:32:19 2023
-
-@author: Daniel Feshbach
-"""
 from KinematicChain import *
 import inspect
 r = 1
@@ -11,7 +6,6 @@ numSides = 6
 spacing = 4
 numJoints = 5
 
-# chain whose root is a waypoint at the global origin
 chain = KinematicChain(RevoluteJoint(numSides, r, np.pi, SE3()))
 for i in range(numJoints-1):
     #chain.show(showSpheres=True, block=False)
