@@ -201,7 +201,7 @@ class KinematicTree:
              linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
              showPathCircles=False, sphereColor=sphereColorDefault,
-             showSpheres=False, block=blockDefault):
+             showSpheres=False, block=blockDefault, showAxes=True):
         ax = plt.figure().add_subplot(projection='3d')
         jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
                                     xColor, yColor, zColor, 
@@ -232,6 +232,8 @@ class KinematicTree:
             ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
+        if not showAxes:
+            plt.axis('off')
         plt.show(block=block)
     
 

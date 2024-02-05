@@ -961,7 +961,7 @@ class RevoluteJointPattern(TubularPattern):
 
 class ReboPattern(TubularPattern):
     def __init__(self, numSides, r, neutralLength, numLayers, coneAngle,
-                 proximalMarker=[0, 0]):
+                 proximalValleys = False, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         assert(coneAngle > 0 and coneAngle < np.pi/2)
         assert(numLayers > 0)
@@ -1002,15 +1002,20 @@ class ReboPattern(TubularPattern):
             nextMidOffset = np.roll(midOffset, -1)
             top = ReboLayerBoundariesIndices[i+1,:]
             
-            self.addValleyEdges(np.vstack((bottom, nextBottom)).T)
-            self.addValleyEdges(np.vstack((bottom, midAligned)).T)
-            self.addValleyEdges(np.vstack((midAligned, top)).T)
-            self.addValleyEdges(np.vstack((midOffset, midAligned)).T)
-            self.addMountainEdges(np.vstack((midAligned, nextMidOffset)).T)
-            self.addMountainEdges(np.vstack((midOffset, bottom)).T)
-            self.addMountainEdges(np.vstack((midOffset, top)).T)
+            if proximalValleys and i==0:
+                self.addValleyEdges(np.vstack((bottom, nextBottom)).T)
+            else:    
+                self.addMountainEdges(np.vstack((bottom, nextBottom)).T)
+                
+            self.addMountainEdges(np.vstack((bottom, midAligned)).T)
+            self.addMountainEdges(np.vstack((midAligned, top)).T)
+            self.addMountainEdges(np.vstack((midOffset, midAligned)).T)
+
+            self.addValleyEdges(np.vstack((midAligned, nextMidOffset)).T)
+            self.addValleyEdges(np.vstack((midOffset, bottom)).T)
+            self.addValleyEdges(np.vstack((midOffset, top)).T)
         reboTop = ReboLayerBoundariesIndices[numLayers,:]
-        self.addValleyEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
+        self.addMountainEdges(np.vstack((reboTop, np.roll(reboTop,-1))).T)
             
         self.distalMarker = self.proximalMarker + [0, self.patternHeight]
         self.wrapToWidth()  
@@ -1031,8 +1036,10 @@ class PrismaticJointPattern(TubularPattern):
         mid1Indices = self.distalBaseIndices
         self.addMountainEdges(np.vstack((mid1Indices, 
                                          np.roll(mid1Indices, -1, axis=0))).T)
-        self.append(tube)
-        self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle))
+        valleyTube = copy.deepcopy(tube)
+        valleyTube.EdgeLabelsMV = np.logical_not(valleyTube.EdgeLabelsMV)
+        self.append(valleyTube)
+        self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle, True))
         self.append(tube)
            
 class ElbowFittingPattern(TubularPattern):

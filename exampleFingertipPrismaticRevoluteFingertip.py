@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from KinematicChain import *
 r = 1
-numSides = 6
+numSides = 4
 chain = KinematicChain(StartFingertip(numSides, r, Pose=SE3(), length=0.5)) 
 # TODO: switch to 3 layers, replace all figures accordingly
-prismatic = PrismaticJoint(numSides, r, neutralLength=3, numLayers=6, coneAngle=np.pi/4, Pose= SE3.Trans([5,5,0]))
+prismatic = PrismaticJoint(numSides, r, neutralLength=3, numLayers=3, coneAngle=np.pi/4, Pose= SE3.Trans([5,5,0]))
 prismaticIndex = chain.append(prismatic)
 revolute = RevoluteJoint(numSides, r, np.pi, SE3.Ry(np.pi/4))
 revoluteIndex = chain.append(revolute)
@@ -21,7 +21,8 @@ chain.show()
 chain.translateJointAlongKinematicAxis(prismaticIndex, -5, propogate=False)
 chain.show()
 
-chain.creasePattern().show()
+pattern = chain.creasePattern()
+pattern.show(dxfName="exampleFingertipPrismaticRevoluteFingertip")
 
 minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
 chain.setJointState(prismaticIndex, maxPrismaticState)

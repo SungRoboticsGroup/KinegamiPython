@@ -3,7 +3,7 @@ from KinematicChain import *
 from numpy import sin, cos
 r = 100 #units: mm
 numSides = 6
-guarantee = False
+guarantee = True
 
 
 """
@@ -27,12 +27,13 @@ Poses = [relativePoseFromDHOriginal(np.pi/2, -np.pi/2, 0, 0),
          relativePoseFromDHOriginal(0, np.pi/2, 0, 0),
          relativePoseFromDHOriginal(0, 0, 0, 56.25)]
 
-chain = KinematicChain(Waypoint(numSides, r, SE3()))
+chain = KinematicChain(Waypoint(numSides, r, SE3.Rz(np.pi)))
 chain.append(RevoluteJoint(numSides, r, np.pi, SE3.Trans(0,0,660.4)), guarantee=guarantee)
 for Pose in Poses[:-1]:
     chain.append(RevoluteJoint(numSides, r, np.pi, Pose), guarantee=guarantee)
 chain.append(EndFingertip(numSides, r, Poses[-1], 50), guarantee=guarantee)
-chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
+chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxes=False)
+
 chain.translateJointAlongKinematicAxis(2, 400)
 chain.translateJointAlongKinematicAxis(3, 600)
 chain.translateJointAlongKinematicAxis(4, -550)
@@ -40,7 +41,7 @@ chain.rotateJointAboutKinematicAxis(4, np.pi/2, propogate=False)
 chain.translateJointAlongKinematicAxis(5, -550)
 chain.translateJointAlongKinematicAxis(6, -400)
 chain.translateJointAlongKinematicAxis(7, -300)
-chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False)
+chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxes=False)
 chain.creasePattern().show()
 
 
