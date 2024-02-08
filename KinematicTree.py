@@ -232,6 +232,7 @@ class KinematicTree:
             ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
+        #show the plot but put it in a Qwindow 
         plt.show(block=block)
     
 

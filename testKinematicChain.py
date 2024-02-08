@@ -33,7 +33,6 @@ chain.show(block=False)
 chain.rotateJointAboutKinematicAxis(revoluteIndex, -np.pi/2)
 chain.show(block=False)
 
-
 pattern = chain.creasePattern()
 pattern.show(show=True, block=False)
 
