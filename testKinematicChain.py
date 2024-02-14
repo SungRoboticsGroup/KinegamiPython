@@ -9,7 +9,7 @@ r = 1
 numSides = 6
 
 # chain whose root is a waypoint at the global origin
-chain = KinematicChain(StartFingertip(numSides, r, Pose=SE3(), length=0.5)) 
+chain = KinematicChain(StartTip(numSides, r, Pose=SE3(), length=0.5)) 
 #chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 
 prismaticIndex = chain.append(PrismaticJoint(numSides, r, neutralLength=3, numLayers=6, 
@@ -19,7 +19,7 @@ prismaticIndex = chain.append(PrismaticJoint(numSides, r, neutralLength=3, numLa
 revoluteIndex = chain.append(RevoluteJoint(numSides, r, np.pi, 
                                            SE3.Ry(np.pi/4)))
 #chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
-end = chain.append(EndFingertip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
+end = chain.append(EndTip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5))
 #chain.show(block=False, showJointSurface=False, showLinkSurface=False, showSpheres=True)
 chain.show(block=False)
 #chain.show(block=True, showLinkPath=False, showJointPoses=False, showLinkPoses=False)

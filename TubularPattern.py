@@ -416,7 +416,7 @@ class TubeFittingPattern(TubularPattern):
         self.wrapToWidth()
         self.assertValidationChecks()
 
-class FingertipPattern(TubularPattern):
+class TipPattern(TubularPattern):
     def __init__(self, numSides, r, length, forward=True, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         assert(length > 0)
@@ -426,7 +426,7 @@ class FingertipPattern(TubularPattern):
         self.patternHeight = self.patternHeight
         ProximalBase = self.Vertices
         
-        self.distalBaseIndices = None #Can't append anything after a fingertip
+        self.distalBaseIndices = None #Can't append anything after a Tip
         
         MidAlignedVertices = ProximalBase + [0, self.patternHeight]
         midAlignedIndices = self.Vertices.shape[0] + np.arange(numSides)
@@ -522,7 +522,7 @@ class RevoluteJointPattern(TubularPattern):
         midHalfIndices = self.Vertices.shape[0] + np.arange(numSides)
         self.Vertices = np.vstack((self.Vertices, MidHalfVertices))
         
-        # store for Fingertip construction
+        # store for Tip construction
         self.midAlignedIndices = midAlignedIndices 
         self.flatRotAxisHeight = flatRotAxisHeight 
         

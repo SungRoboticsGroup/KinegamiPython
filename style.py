@@ -13,6 +13,7 @@ surfaceOpacityDefault=0.5
 jointColorDefault='magenta'
 
 jointAxisScaleDefault=10
+globalAxisScaleDefault=10
 
 blockDefault=True
 

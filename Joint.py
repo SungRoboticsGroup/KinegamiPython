@@ -337,11 +337,11 @@ class Waypoint(OrigamiJoint):
             plotHandles = None
         return plotHandles
 
-class Fingertip(OrigamiJoint):
+class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
                  closesForward : bool = True):
         super().__init__(numSides, r, length, Pose)
-        self.pattern = FingertipPattern(numSides, r, length, closesForward)
+        self.pattern = TipPattern(numSides, r, length, closesForward)
         self.forward = closesForward
     
     def pathIndex(self) -> int:
@@ -413,10 +413,10 @@ class Fingertip(OrigamiJoint):
             
         return plotHandles
     
-class StartFingertip(Fingertip):
+class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=False)
 
-class EndFingertip(Fingertip):
+class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=True)
