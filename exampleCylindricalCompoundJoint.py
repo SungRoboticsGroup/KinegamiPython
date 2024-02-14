@@ -12,4 +12,4 @@ chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=
 
 # Manual adjustments to make more compact (optional)
 chain.translateJointAlongKinematicAxis(prismaticIndex, -2)
-chain.show(showLinkPath=False, showJointPoses=False, showLinkPoses=False, jointAxisScale=jointAxisScale, showAxes=False)
+chain.show(showLinkPath=False, showJointPoses=False, showLinkPoses=False, jointAxisScale=jointAxisScale, showAxisGrids=False)

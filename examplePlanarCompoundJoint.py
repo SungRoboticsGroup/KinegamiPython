@@ -27,4 +27,4 @@ chain.show(block=False)
 # Move joints to x axis
 for i in range(len(chain.Joints)):
     chain.translateJointAlongKinematicAxis(i,-chain.Joints[i].Pose.t[2])
-chain.show(showLinkPath=False, showJointPoses=False, showLinkPoses=False, jointAxisScale=jointAxisScale, showAxes=False)
+chain.show(showLinkPath=False, showJointPoses=False, showLinkPoses=False, jointAxisScale=jointAxisScale, showAxisGrids=False)
