@@ -315,6 +315,9 @@ class Waypoint(OrigamiJoint):
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
     
+    def _setView(self, v):
+        self.__view = v
+    
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
