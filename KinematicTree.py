@@ -82,10 +82,10 @@ class KinematicTree:
             raise ValueError("ERROR: newJoint.numSides != self.numSides")
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
-                guaranteeNoSelfIntersection and fixedPosition both True")
+                safe and fixedPosition both True")
         if safe and fixedOrientation:
             raise ValueError("ERROR: trying to call addJoint with \
-                guaranteeNoSelfIntersection and fixedOrientation both True")
+                safe and fixedOrientation both True")
         
         newJoint = copy.deepcopy(newJoint)
         parent = self.Joints[parentIndex]

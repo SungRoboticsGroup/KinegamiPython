@@ -28,10 +28,10 @@ Poses = [relativePoseFromDHOriginal(np.pi/2, -np.pi/2, 0, 0),
          relativePoseFromDHOriginal(0, 0, 0, 56.25)]
 
 chain = KinematicChain(Waypoint(numSides, r, SE3.Rz(np.pi)))
-chain.append(RevoluteJoint(numSides, r, np.pi, SE3.Trans(0,0,660.4)), guarantee=guarantee)
+chain.append(RevoluteJoint(numSides, r, np.pi, SE3.Trans(0,0,660.4)), safe=guarantee)
 for Pose in Poses[:-1]:
-    chain.append(RevoluteJoint(numSides, r, np.pi, Pose), guarantee=guarantee)
-chain.append(EndTip(numSides, r, Poses[-1], 50), guarantee=guarantee)
+    chain.append(RevoluteJoint(numSides, r, np.pi, Pose), safe=guarantee)
+chain.append(EndTip(numSides, r, Poses[-1], 50), safe=guarantee)
 chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxisGrids=False)
 
 chain.translateJointAlongKinematicAxis(2, 400)
