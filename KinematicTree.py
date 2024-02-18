@@ -311,7 +311,7 @@ class KinematicTree:
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
     # print a warning, and return False rather than throwing an error.    
-    def translateJointAlongKinematicAxis(self, jointIndex : int, 
+    def translateJointAlongAxisOfMotion(self, jointIndex : int, 
                                          distance : float, 
                                          propogate : bool = True, 
                                          applyToPreviousWaypoint : bool = False, 
@@ -319,10 +319,10 @@ class KinematicTree:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.translateJointAlongKinematicAxis(jointIndex, distance, 
+                self.translateJointAlongAxisOfMotion(jointIndex, distance, 
                             propogate, applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("WARNING: something went wrong in translateJointAlongKinematicAxis:")
+                print("WARNING: something went wrong in translateJointAlongAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
@@ -342,17 +342,17 @@ class KinematicTree:
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
     # print a warning, and return False rather than throwing an error.   
-    def rotateJointAboutKinematicAxis(self, jointIndex : int, angle : float,
+    def rotateJointAboutAxisOfMotion(self, jointIndex : int, angle : float,
                              propogate : bool = True, 
                              applyToPreviousWaypoint : bool = False,
                              safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.rotateJointAboutKinematicAxis(jointIndex, angle, propogate, 
+                self.rotateJointAboutAxisOfMotion(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("WARNING: something went wrong in rotateJointAboutKinematicAxis:")
+                print("WARNING: something went wrong in rotateJointAboutAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
