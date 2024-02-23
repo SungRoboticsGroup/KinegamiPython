@@ -8,9 +8,9 @@ zColorDefault='darkblue'
 pathColorDefault='black'
 sphereColorDefault='black'
 
-linkColorDefault='black'
+linkColorDefault='lightgray'
 surfaceOpacityDefault=0.5
-jointColorDefault='magenta'
+jointColorDefault='darkblue'
 
 jointAxisScaleDefault=10
 globalAxisScaleDefault=10

@@ -48,17 +48,17 @@ class Joint(ABC):
     def boundingBall(self) -> Ball:
         pass
     
-    def ProximalPose(self) -> SE3:
+    def ProximalFrame(self) -> SE3:
         return SE3.Trans(-(self.neutralLength/2) * self.pathDirection()) @ self.Pose
     
-    def NeutralDistalPose(self) -> SE3:
+    def NeutralDistalFrame(self) -> SE3:
         return SE3.Trans((self.neutralLength/2) * self.pathDirection()) @ self.Pose
     
     def StateTransformationFromNeutral(self) -> SE3:
         return self.stateChangeTransformation(self.state)
     
-    def DistalPose(self) -> SE3:
-        return self.StateTransformationFromNeutral() @ self.NeutralDistalPose()        
+    def DistalFrame(self) -> SE3:
+        return self.StateTransformationFromNeutral() @ self.NeutralDistalFrame()        
     
     def TransformStateTo(self, state : float) -> SE3:
         minState, maxState = self.stateRange()
@@ -86,16 +86,16 @@ class Joint(ABC):
         return SE3(self.Pose.A[:,self.dubinsColumnOrder()])
     
     def ProximalDubinsFrame(self) -> SE3():
-        return SE3(self.ProximalPose().A[:,self.dubinsColumnOrder()])
+        return SE3(self.ProximalFrame().A[:,self.dubinsColumnOrder()])
     
     def DistalDubinsFrame(self) -> SE3():
-        return SE3(self.DistalPose().A[:,self.dubinsColumnOrder()])
+        return SE3(self.DistalFrame().A[:,self.dubinsColumnOrder()])
     
     def proximalPosition(self) -> np.ndarray:
-        return self.ProximalPose().t
+        return self.ProximalFrame().t
     
     def distalPosition(self) -> np.ndarray:
-        return self.DistalPose().t
+        return self.DistalFrame().t
     
     def transformPoseBy(self, Transformation : SE3):
         self.Pose = Transformation @ self.Pose
@@ -129,7 +129,7 @@ class Joint(ABC):
         if showSphere:
             self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
         if showPoses:
-            Poses = np.array([self.ProximalPose(), self.DistalPose(), self.Pose])
+            Poses = np.array([self.ProximalFrame(), self.DistalFrame(), self.Pose])
             oColors = np.array([proximalColor, distalColor, centerColor])
             plotHandles = addPosesToPlot(Poses, ax, self.r, 
                                          xColor, yColor, zColor, oColors)
@@ -213,7 +213,7 @@ class RevoluteJoint(OrigamiJoint):
             angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
-            ProximalPose = self.ProximalPose()
+            ProximalPose = self.ProximalFrame()
             uhatProximal = ProximalPose.R[:,1]
             vhatProximal = ProximalPose.R[:,2]
             ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
@@ -226,7 +226,7 @@ class RevoluteJoint(OrigamiJoint):
                 tri.set_alpha(surfaceOpacity)
                 ax.add_collection3d(tri)
             
-            DistalPose = self.DistalPose()
+            DistalPose = self.DistalFrame()
             uhatDistal = DistalPose.R[:,1]
             vhatDistal = DistalPose.R[:,2]
             DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
@@ -275,7 +275,7 @@ class PrismaticJoint(OrigamiJoint):
         return Ball(self.center(), self.boundingRadius())
     
     def boundingCylinder(self) -> Cylinder:
-        return Cylinder(self.r, self.ProximalPose().t, self.pathDirection(), self.length())
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), self.length())
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
@@ -379,11 +379,11 @@ class Tip(OrigamiJoint):
             tipSegmentIndex, uhatIndex, vhatIndex = 0,0,1
             
             if self.forward:
-                DistalPose = self.DistalPose()
+                DistalPose = self.DistalFrame()
                 TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,tipSegmentIndex],
                                           DistalPose.t + scale * DistalPose.R[:,tipSegmentIndex]])
                 
-                ProximalPose = self.ProximalPose()
+                ProximalPose = self.ProximalFrame()
                 uhatProximal = ProximalPose.R[:,uhatIndex]
                 vhatProximal = ProximalPose.R[:,vhatIndex]
                 ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
@@ -395,11 +395,11 @@ class Tip(OrigamiJoint):
                     tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             else:
-                ProximalPose = self.ProximalPose()
+                ProximalPose = self.ProximalFrame()
                 TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:,tipSegmentIndex],
                                           ProximalPose.t + scale * ProximalPose.R[:,tipSegmentIndex]])
                 
-                DistalPose = self.DistalPose()
+                DistalPose = self.DistalFrame()
                 uhatDistal = DistalPose.R[:,uhatIndex]
                 vhatDistal = DistalPose.R[:,vhatIndex]
                 DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
