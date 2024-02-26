@@ -261,7 +261,7 @@ class PathCSC:
                        pathColor, cscBoundaryMarker, showTunit)
         ax.set_aspect('equal')
         ax.legend()
-        plt.show(block)
+        plt.show(block=block)
         
         
         

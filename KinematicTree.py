@@ -66,42 +66,39 @@ class KinematicTree:
                     (False) something kinematically equivalent (i.e., with the
                             same z axis) with x axis constructed as the common 
                             normal from the parent?
-    guarantee - boolean: if this is True, allow the algorithm 
-                to insert intermediate waypoints to route the path from the 
-                parent to guarantee it avoids local self-intersection (i.e., run 
-                Algorithm 9 from the Kinegami paper instead of Algorithm 8).
-                This setting takes priority over fixedPosition AND 
-                fixedOrientation, i.e., if guarantee is True then it doesn't 
-                matter what you set those to, the algorithm will adjust the
-                position and orientation of newJoint.
+    safe - boolean: if this is True, allow the algorithm 
+            to insert intermediate waypoints to route the path from the 
+            parent to guarantee it avoids local self-intersection (i.e., run 
+            Algorithm 9 from the Kinegami paper instead of Algorithm 8).
+            Not compatible with fixedPosition or fixedOrientation.
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 guarantee : bool = True) -> int:
+                 safe : bool = True) -> int:
         if newJoint.r != self.r:
             raise ValueError("ERROR: newJoint.r != self.r")
         if newJoint.numSides != self.numSides:
             raise ValueError("ERROR: newJoint.numSides != self.numSides")
-        if guarantee and fixedPosition:
+        if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
-                guaranteeNoSelfIntersection and fixedPosition both True")
-        if guarantee and fixedOrientation:
+                safe and fixedPosition both True")
+        if safe and fixedOrientation:
             raise ValueError("ERROR: trying to call addJoint with \
-                guaranteeNoSelfIntersection and fixedOrientation both True")
+                safe and fixedOrientation both True")
         
         newJoint = copy.deepcopy(newJoint)
         parent = self.Joints[parentIndex]
         if relative:
             newJoint.transformPoseBy(parent.Pose)
 
-        if guarantee: # Algorithm 9
+        if safe: # Algorithm 9
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
             i = parentIndex
             for joint in jointsToAdd:
                 i = self.addJoint(parentIndex=i, newJoint=joint, 
-                                  guarantee=False, fixedPosition=True, 
+                                  safe=False, fixedPosition=True, 
                                   fixedOrientation=True, relative=False)
             return i
         
@@ -162,9 +159,15 @@ class KinematicTree:
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=True):
-        jointPlotHandles = []
-        linkPlotHandles = []
+                  showSpheres=True, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
+        xyzHandles = []
+        abcHandles = []
+        
+        if showGlobalFrame:
+            handles = addPosesToPlot(SE3(), ax, globalAxisScale, xColor, yColor, zColor)
+            if not handles is None:
+                xyzHandles.append(handles)
+        
         for joint in self.Joints:
             handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
@@ -173,7 +176,7 @@ class KinematicTree:
                                     showSurface=showJointSurface, axisScale=jointAxisScale,
                                     showPoses=showJointPoses)
             if not handles is None:
-                jointPlotHandles.append(handles)
+                xyzHandles.append(handles)
         
         for link in self.Links:
             handles = link.addToPlot(ax, color=linkColor, 
@@ -185,13 +188,13 @@ class KinematicTree:
                                    showBoundary=showLinkSurface)
             if showLinkPoses:
                 for elbowHandles in handles:
-                    linkPlotHandles.append(elbowHandles)
+                    abcHandles.append(elbowHandles)
         
         if showSpheres:
             self.boundingBall.addToPlot(ax, color=sphereColor, 
                                         alpha=0.05, frame=True)
         
-        return np.array(jointPlotHandles), np.array(linkPlotHandles)
+        return np.array(xyzHandles), np.array(abcHandles)
         
     
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
@@ -201,41 +204,54 @@ class KinematicTree:
              linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
              showPathCircles=False, sphereColor=sphereColorDefault,
-             showSpheres=False, block=blockDefault):
+             showSpheres=False, block=blockDefault, showAxisGrids=False, 
+             showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault,
+             showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault):
         ax = plt.figure().add_subplot(projection='3d')
-        jointPlotHandles, linkPlotHandles = self.addToPlot(ax, 
-                                    xColor, yColor, zColor, 
+        xyzHandles, abcHandles = self.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
                                     showJointSurface, jointColor, 
                                     jointAxisScale, showJointPoses,
                                     linkColor, surfaceOpacity, showLinkSurface, 
                                     showLinkPoses, showLinkPath, pathColor,
                                     showPathCircles, sphereColor,
-                                    showSpheres)
+                                    showSpheres, showGlobalFrame, globalAxisScale)
         
         handleGroups = []
         labels = []
-        if showJointPoses:
-            xHats = jointPlotHandles[:,0]
-            yHats = jointPlotHandles[:,1]
-            zHats = jointPlotHandles[:,2]
-            origins = jointPlotHandles[:,3]
+        if showJointPoses or showGlobalFrame:
+            xHats = xyzHandles[:,0]
+            yHats = xyzHandles[:,1]
+            zHats = xyzHandles[:,2]
+            origins = xyzHandles[:,3]
             handleGroups += [tuple(xHats), tuple(yHats), tuple(zHats)]
             labels += [r'$\^x$', r'$\^y$', r'$\^z$']
         if showLinkPoses:
-            aHats = linkPlotHandles[:,0]
-            bHats = linkPlotHandles[:,1]
-            cHats = linkPlotHandles[:,2]
+            aHats = abcHandles[:,0]
+            bHats = abcHandles[:,1]
+            cHats = abcHandles[:,2]
             handleGroups += [tuple(aHats), tuple(bHats), tuple(cHats)]
             labels += [r'$\^a$', r'$\^b$', r'$\^c$']
         if not handleGroups==[]:
             ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
+        if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
+            xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
+            xx = xx - groundPlaneScale/2
+            yy = yy - groundPlaneScale/2
+            z = 0*xx #(9 - xx - yy) / 2 
+
+            # plot the plane
+            ax.plot_surface(xx, yy, z, alpha=0.5)
+
+        if not showAxisGrids:
+            plt.axis('off')
         plt.show(block=block)
     
 
-
+    def transformAll(self, Transformation : SE3):
+        self.transformJoint(0, Transformation, safe=False)
 
     """ 
     Apply given transformation (SE3() object) to given joint (index), 
@@ -306,7 +322,7 @@ class KinematicTree:
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
     # print a warning, and return False rather than throwing an error.    
-    def translateJointAlongKinematicAxis(self, jointIndex : int, 
+    def translateJointAlongAxisOfMotion(self, jointIndex : int, 
                                          distance : float, 
                                          propogate : bool = True, 
                                          applyToPreviousWaypoint : bool = False, 
@@ -314,10 +330,10 @@ class KinematicTree:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.translateJointAlongKinematicAxis(jointIndex, distance, 
+                self.translateJointAlongAxisOfMotion(jointIndex, distance, 
                             propogate, applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("WARNING: something went wrong in translateJointAlongKinematicAxis:")
+                print("WARNING: something went wrong in translateJointAlongAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
@@ -337,17 +353,17 @@ class KinematicTree:
     # Returns True if it succeeds (the transformation gives valid links).
     # In safe=True mode (default), if it fails it will leave the chain unchanged,
     # print a warning, and return False rather than throwing an error.   
-    def rotateJointAboutKinematicAxis(self, jointIndex : int, angle : float,
+    def rotateJointAboutAxisOfMotion(self, jointIndex : int, angle : float,
                              propogate : bool = True, 
                              applyToPreviousWaypoint : bool = False,
                              safe : bool = True) -> bool:
         if safe:
             backup = self.dataDeepCopy()
             try:
-                self.rotateJointAboutKinematicAxis(jointIndex, angle, propogate, 
+                self.rotateJointAboutAxisOfMotion(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
             except ValueError as err:
-                print("WARNING: something went wrong in rotateJointAboutKinematicAxis:")
+                print("WARNING: something went wrong in rotateJointAboutAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
                 self.setTo(backup)
@@ -399,7 +415,6 @@ def moveJointNearNeighborBut4rFromBall(jointToPlace, neighbor, ball):
     zChange = result.x[0]
     jointToPlace.translateAlongZ(zChange)
     return jointToPlace
-
 
 """
 Places jointToPlace along its joint axis, as close as possible to the given 

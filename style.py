@@ -8,17 +8,19 @@ zColorDefault='darkblue'
 pathColorDefault='black'
 sphereColorDefault='black'
 
-linkColorDefault='black'
+linkColorDefault='lightgray'
 surfaceOpacityDefault=0.5
-jointColorDefault='magenta'
+jointColorDefault='darkblue'
 
 jointAxisScaleDefault=10
+globalAxisScaleDefault=10
+groundPlaneScaleDefault=10
 
 blockDefault=True
 
 # in AutoCAD Color Index 
 # https://ezdxf.readthedocs.io/en/stable/concepts/aci.html#aci
-mountainColorDefault=174  #dark blue
+mountainColorDefault=5 #174  #dark blue
 valleyColorDefault=1 #red
 boundaryColorDefault=2 #yellow
-cutColorDefault=101 #green 3
+cutColorDefault=3 #101 #green 3

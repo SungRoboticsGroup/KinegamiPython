@@ -190,7 +190,7 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
     
-    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
+    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
