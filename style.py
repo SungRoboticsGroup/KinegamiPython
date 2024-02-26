@@ -14,6 +14,7 @@ jointColorDefault='darkblue'
 
 jointAxisScaleDefault=10
 globalAxisScaleDefault=10
+groundPlaneScaleDefault=10
 
 blockDefault=True
 

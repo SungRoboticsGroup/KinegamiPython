@@ -53,8 +53,13 @@ for Pose in GlobalPoses[:-1]:
 # The last DH parameters (and thus pose matrix) is for the end effector
 chain.append(EndTip(numSides, r, GlobalPoses[-1], 50), safe=False, relative=False)
 
+chain.transformAll(SE3.Trans(0,0,660.4))
+
 # Plot the resulting chain
-chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxisGrids=False)
+chain.show(block=False, showLinkPath=False, showJointPoses=False, 
+           showLinkPoses=False, showAxisGrids=False, 
+           showGlobalFrame=True, globalAxisScale=1000, 
+           showGroundPlane=True, groundPlaneScale=2000)
 
 
 # Adjust the resulting chain to shorten links
@@ -66,7 +71,10 @@ chain.translateJointAlongAxisOfMotion(5, -2100, propogate=False)
 chain.translateJointAlongAxisOfMotion(6, -1500, propogate=True)
 
 # Plot the chain structure
-chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxisGrids=False)
+chain.show(showLinkPath=False, showJointPoses=False, 
+           showLinkPoses=False, showAxisGrids=False, 
+           showGlobalFrame=True, globalAxisScale=1000, 
+           showGroundPlane=True, groundPlaneScale=2000)
 # Plot the crease pattern
-chain.creasePattern().show()
+#chain.creasePattern().show()
 
