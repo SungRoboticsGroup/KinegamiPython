@@ -23,8 +23,9 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 import geometryHelpers
 from geometryHelpers import *
+from spatialmath import SE3
 
-
+import pyqtgraph.opengl as gl
 
 
 """
@@ -209,64 +210,74 @@ class PathCSC:
                         ", circle1sign="+repr(self.circle1sign)+\
                         ", circle2sign="+repr(self.circle2sign)+")"
     
-    # add to existing matplotlib axis ax
-    def addToPlot(self, ax, showCircles=True, showPoses=True, 
+    # add to existing GLViewWidget ax
+    def addToPlot(self, plot, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor=pathColorDefault,
                   cscBoundaryMarker='*', showTunit=False):
         if showPoses:
             # start pose
-            x1,y1,z1 = self.startPosition
-            u1,v1,w1 = self.startDir
-            ax.quiver(x1,y1,z1,u1,v1,w1,
-                      length=self.r, color=startColor, label='start')
+            lineStart = gl.GLLinePlotItem(pos=(self.startPosition, self.startPosition + self.startDir), color=startColor, width=2) 
+            plot.addItem(lineStart)
+
             # end pose
-            x2,y2,z2 = self.endPosition
-            u2,v2,w2 = self.endDir
-            ax.quiver(x2,y2,z2,u2,v2,w2,
-                      length=self.r, color=endColor, label='end')
-        
+            lineEnd = gl.GLLinePlotItem(pos=(self.endPosition, self.endPosition + self.endDir), color=endColor, width=2) 
+            plot.addItem(lineEnd)
+
         if showCircles:
-            # circles
+            # start circle
             c1x, c1y, c1z = Circle3D(self.r, 
                             self.circleCenter1, self.circleNormal1).interpolate().T
-            ax.plot(c1x, c1y, c1z, color = startColor)
+
+            pointsStart = np.vstack([c1x, c1y, c1z]).transpose()
+            circleStart = gl.GLLinePlotItem(pos=pointsStart, color=startColor, width=1)
+            plot.addItem(circleStart)
+
+            # end circle
             c2x, c2y, c2z = Circle3D(self.r, 
                             self.circleCenter2, self.circleNormal2).interpolate().T
-            ax.plot(c2x, c2y, c2z, color = endColor)
-        
+            pointsEnd = np.vstack([c2x, c2y, c2z]).transpose()
+            circleEnd = gl.GLLinePlotItem(pos=pointsEnd, color=endColor, width=1)
+            plot.addItem(circleEnd)
         
         # path arcs (C components)
         a1x, a1y, a1z = Arc3D(self.circleCenter1, 
                 self.startPosition, self.startDir, self.theta1).interpolate().T
-        ax.plot(a1x, a1y, a1z, color = pathColor)
+        arcPoints1 = np.vstack([a1x, a1y, a1z]).transpose()
+        arc1 = gl.GLLinePlotItem(pos=arcPoints1, color=pathColor, width=2)
+        plot.addItem(arc1)
+
         a2x, a2y, a2z = Arc3D(self.circleCenter2, 
                 self.turn2start, self.tUnit, self.theta2).interpolate().T
-        ax.plot(a2x, a2y, a2z, color = pathColor)
+        arcPoints2 = np.vstack([a2x, a2y, a2z]).transpose()
+        arc2 = gl.GLLinePlotItem(pos=arcPoints2, color=pathColor, width=2)
+        plot.addItem(arc2)
         
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
-        ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
+        pathSPoints = np.vstack([sx, sy, sz]).transpose()
+        pathS = gl.GLLinePlotItem(pos=pathSPoints, color=pathColor, width=2)
+        plot.addItem(pathS)
+
+        point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=(1,1,1,1), size=10)
+        plot.addItem(point1)
+        point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=(1,1,1,1), size=10)
+        plot.addItem(point2)
+
+        #print(pathSPoints[0][0])
+
+        #ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
         
+        '''
         if showTunit:
             x,y,z = self.turn1end
             u,v,w = self.tUnit
             ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
+        '''
     
     
-    def show(self, showCircles=True, showPoses=True, 
+    def show(self, plot, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
                   cscBoundaryMarker='*', showTunit=False, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
+
+        self.addToPlot(plot, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
-        ax.set_aspect('equal')
-        ax.legend()
-        plt.show(block)
-        
-        
-        
-        
-        
-        
-        
-        

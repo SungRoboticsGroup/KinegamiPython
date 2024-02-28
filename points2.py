@@ -5,11 +5,11 @@
 import sys
 import numpy as np
 import pyqtgraph.opengl as gl
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel
-from PyQt5.QtGui import QColor
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout
 from PyQt5.QtCore import Qt
 from spatialmath import SE3
 import math
+from PathCSC import *
 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -27,6 +27,9 @@ class PointEditorWindow(QMainWindow):
 
         self.points = []
         self.poses = []
+
+        path = shortestCSC(1, np.array([0,0,0]), np.array([0,0,1]), np.array([3,0,0]), np.array([0,1,0]))
+        path.show(plot=self.plot_widget, showCircles=False)
 
         self.add_point_button = QPushButton("Add Point")
         self.add_point_button.clicked.connect(self.add_point)
