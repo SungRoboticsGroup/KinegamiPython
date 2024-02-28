@@ -29,7 +29,7 @@ class PointEditorWindow(QMainWindow):
         self.poses = []
 
         path = shortestCSC(1, np.array([0,0,0]), np.array([0,0,1]), np.array([3,0,0]), np.array([0,1,0]))
-        path.show(plot=self.plot_widget, showCircles=False)
+        path.show(plot=self.plot_widget, showCircles=True, showTunit=True)
 
         self.add_point_button = QPushButton("Add Point")
         self.add_point_button.clicked.connect(self.add_point)

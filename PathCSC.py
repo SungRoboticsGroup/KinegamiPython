@@ -263,16 +263,13 @@ class PathCSC:
         point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=(1,1,1,1), size=10)
         plot.addItem(point2)
 
-        #print(pathSPoints[0][0])
-
-        #ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
-        
-        '''
         if showTunit:
-            x,y,z = self.turn1end
-            u,v,w = self.tUnit
-            ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
-        '''
+            #x,y,z = self.turn1end
+            #u,v,w = self.tUnit
+            tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=(1,1,1,1), width=2) 
+            plot.addItem(tUnit)
+            #ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
+        
     
     
     def show(self, plot, showCircles=True, showPoses=True, 
