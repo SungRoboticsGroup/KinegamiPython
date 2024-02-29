@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Assorted geometry-related helper functions and classes
+Assorted geometry-related helper functions and classes 
+Andy was here
 """
 
 import numpy as np
