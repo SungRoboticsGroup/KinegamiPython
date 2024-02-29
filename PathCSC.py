@@ -211,7 +211,7 @@ class PathCSC:
                         ", circle2sign="+repr(self.circle2sign)+")"
     
     # add to existing GLViewWidget ax
-    def addToPlot(self, plot, showCircles=True, showPoses=True, 
+    def add(self, plot, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor=pathColorDefault,
                   cscBoundaryMarker='*', showTunit=False):
         if showPoses:
@@ -269,12 +269,11 @@ class PathCSC:
             tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=(1,1,1,1), width=2) 
             plot.addItem(tUnit)
             #ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
-        
     
-    
-    def show(self, plot, showCircles=True, showPoses=True, 
+    def addToWidget(self, plot, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
                   cscBoundaryMarker='*', showTunit=False, block=blockDefault):
 
-        self.addToPlot(plot, showCircles, showPoses, startColor, endColor, 
+        #make a new plot and then call add to plot, then display that plot
+        self.add(plot, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
