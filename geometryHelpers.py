@@ -157,7 +157,8 @@ class Circle3D:
 
 class Cylinder:
     def __init__(self, radius : float, start : np.ndarray, 
-                 direction : np.ndarray, length : float):
+                 direction : np.ndarray, length : float, 
+                 uhat : np.ndarray = None):
         assert(length > 0)
         assert(norm(direction)>0)
         self.start = start
@@ -165,32 +166,43 @@ class Cylinder:
         self.length = length
         self.end = start + self.length * self.direction
         self.r = radius
+        if uhat is None:
+            uhat = null_space([self.direction])[:,0]
+        else:
+            uhat = uhat.reshape((3))    
+        self.uhat = uhat / norm(uhat)
     
     def interpolateCircles(self, numPointsPerCircle=32, numCircles=2):
         radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
         angle = np.linspace(0, 2*np.pi, radialCount) 
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
+        """
         circlePlaneBasis = null_space([self.direction])
         uhat = circlePlaneBasis[:,0]
         vhat = circlePlaneBasis[:,1]
+        """
+        uhat = self.uhat
+        vhat = cross(self.direction, uhat)
         circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
         
         segment = np.linspace(self.start, self.end, numCircles)
         circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
         return circlePoints.reshape((numCircles, radialCount, 3))
     
-    def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2):
+    def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, edgeColor=None):
         circles = self.interpolateCircles(numPointsPerCircle, numCircles)
         X = circles[:,:,0]
         Y = circles[:,:,1]
         Z = circles[:,:,2]
         if frame:
-            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
-        else:
+            return ax.plot_wireframe(X, Y, Z, color=edgeColor, alpha=alpha)
+        elif edgeColor is None:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+        else:
+            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, edgecolor=edgeColor)
     
-    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=blockDefault):
+    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=blockDefault, edgeColor='black'):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')

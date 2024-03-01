@@ -112,8 +112,7 @@ class LinkCSC:
                     allElbowHandleSets += elbow1HandleSets
             
             if self.path.tMag > self.EPSILON:
-                self.cylinder.addToPlot(ax, numSides, color, alpha, 
-                                                      wireFrame)
+                self.cylinder.addToPlot(ax, numSides, color, alpha, wireFrame)
             
             if not self.elbow2 is None:
                 elbow2HandleSets = self.elbow2.addToPlot(ax, numSides, color, 

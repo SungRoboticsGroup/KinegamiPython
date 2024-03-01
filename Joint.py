@@ -117,7 +117,8 @@ class Joint(ABC):
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:
@@ -196,7 +197,8 @@ class RevoluteJoint(OrigamiJoint):
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -234,7 +236,8 @@ class RevoluteJoint(OrigamiJoint):
             DistalHull = ConvexHull(DistalPoints)
             for s in DistalHull.simplices:
                 tri = Poly3DCollection([DistalPoints[s]])
-                tri.set_color(surfaceColor)
+                tri.set_facecolor(surfaceColor)
+                tri.set_edgecolor(edgeColor)
                 tri.set_alpha(surfaceOpacity)
                 ax.add_collection3d(tri)
             
@@ -275,11 +278,14 @@ class PrismaticJoint(OrigamiJoint):
         return Ball(self.center(), self.boundingRadius())
     
     def boundingCylinder(self) -> Cylinder:
-        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), self.length())
+        uhat = (SE3.Rz(np.pi/self.numSides) @ self.Pose).R[:,1]
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
+                        self.length(), uhat)
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -287,7 +293,10 @@ class PrismaticJoint(OrigamiJoint):
                           surfaceColor, surfaceOpacity, showSurface, showAxis,
                           axisScale, showPoses)
         if showSurface:
-            self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
+                                              alpha=surfaceOpacity, 
+                                              edgeColor=edgeColor,
+                                              numPointsPerCircle=self.numSides)
             
         return plotHandles
         
@@ -317,7 +326,8 @@ class Waypoint(OrigamiJoint):
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:
@@ -358,10 +368,11 @@ class Tip(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
-    
+
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -376,7 +387,7 @@ class Tip(OrigamiJoint):
             v = self.r * np.sin(angle)
             scale = self.pattern.baseSideLength / 2
             
-            tipSegmentIndex, uhatIndex, vhatIndex = 0,0,1
+            tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
             
             if self.forward:
                 DistalPose = self.DistalFrame()
@@ -391,7 +402,8 @@ class Tip(OrigamiJoint):
                 ProximalHull = ConvexHull(ProximalPoints)
                 for s in ProximalHull.simplices:
                     tri = Poly3DCollection([ProximalPoints[s]])
-                    tri.set_color(surfaceColor)
+                    tri.set_facecolor(surfaceColor)
+                    tri.set_edgecolor(edgeColor)
                     tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             else:
@@ -407,7 +419,8 @@ class Tip(OrigamiJoint):
                 DistalHull = ConvexHull(DistalPoints)
                 for s in DistalHull.simplices:
                     tri = Poly3DCollection([DistalPoints[s]])
-                    tri.set_color(surfaceColor)
+                    tri.set_facecolor(surfaceColor)
+                    tri.set_edgecolor(edgeColor)
                     tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             

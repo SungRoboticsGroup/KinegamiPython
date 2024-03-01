@@ -26,11 +26,11 @@ class KinematicChain(KinematicTree):
                                 fixedOrientation, safe)
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
-        pattern = self.Joints[0].pattern
+        chainPattern = copy.deepcopy(self.Joints[0].pattern)
         for j in range(1, len(self.Joints)):
-            pattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
-            pattern.append(self.Joints[j].pattern)
-        return pattern
+            chainPattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
+            chainPattern.append(self.Joints[j].pattern)
+        return chainPattern
     
     def delete(self, jointIndex : int, safe : bool = True) -> bool:
         assert(jointIndex>=0)

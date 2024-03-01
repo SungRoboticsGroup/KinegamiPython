@@ -9,8 +9,10 @@ pathColorDefault='black'
 sphereColorDefault='black'
 
 linkColorDefault='lightgray'
-surfaceOpacityDefault=0.5
+surfaceOpacityDefault= 0.5
 jointColorDefault='darkblue'
+jointEdgeColorDefault='darkblue'
+groundPlaneColorDefault='black'
 
 jointAxisScaleDefault=10
 globalAxisScaleDefault=10

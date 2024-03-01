@@ -420,7 +420,7 @@ class TipPattern(TubularPattern):
     def __init__(self, numSides, r, length, forward=True, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         assert(length > 0)
-        totalBendingAngle = 4 * np.arctan(length / r*np.sin(self.polygonInnerAngle))
+        totalBendingAngle = 4 * np.arctan2(length, r*np.sin(self.polygonInnerAngle))
         self.patternHeight = length / np.sin(totalBendingAngle/4)
         
         self.patternHeight = self.patternHeight

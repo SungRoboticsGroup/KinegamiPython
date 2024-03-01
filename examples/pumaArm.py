@@ -58,9 +58,8 @@ chain.transformAll(SE3.Trans(0,0,660.4))
 # Plot the resulting chain
 chain.show(block=False, showLinkPath=False, showJointPoses=False, 
            showLinkPoses=False, showAxisGrids=False, 
-           showGlobalFrame=True, globalAxisScale=1000, 
-           showGroundPlane=True, groundPlaneScale=2000)
-
+           showGroundPlane=True, groundPlaneScale=800,
+           surfaceOpacity=0.5)
 
 # Adjust the resulting chain to shorten links
 chain.translateJointAlongAxisOfMotion(1, -200, propogate=False)
@@ -73,8 +72,8 @@ chain.translateJointAlongAxisOfMotion(6, -1500, propogate=True)
 # Plot the chain structure
 chain.show(showLinkPath=False, showJointPoses=False, 
            showLinkPoses=False, showAxisGrids=False, 
-           showGlobalFrame=True, globalAxisScale=1000, 
-           showGroundPlane=True, groundPlaneScale=2000)
+           showGroundPlane=True, groundPlaneScale=800,
+           surfaceOpacity=0.5)
 # Plot the crease pattern
 #chain.creasePattern().show()
 

@@ -206,8 +206,17 @@ class KinematicTree:
              showPathCircles=False, sphereColor=sphereColorDefault,
              showSpheres=False, block=blockDefault, showAxisGrids=False, 
              showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault,
-             showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault):
+             showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault,
+             groundPlaneColor=groundPlaneColorDefault):
         ax = plt.figure().add_subplot(projection='3d')
+        if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
+            xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
+            xx = xx - groundPlaneScale/2
+            yy = yy - groundPlaneScale/2
+            z = 0*xx #(9 - xx - yy) / 2 
+
+            # plot the plane
+            ax.plot_surface(xx, yy, z, alpha=surfaceOpacity/4, color=groundPlaneColor)
         xyzHandles, abcHandles = self.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor,
                                     showJointSurface, jointColor, 
@@ -236,15 +245,6 @@ class KinematicTree:
             ax.legend(handleGroups, labels)
         
         ax.set_aspect('equal')
-        if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
-            xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
-            xx = xx - groundPlaneScale/2
-            yy = yy - groundPlaneScale/2
-            z = 0*xx #(9 - xx - yy) / 2 
-
-            # plot the plane
-            ax.plot_surface(xx, yy, z, alpha=0.5)
-
         if not showAxisGrids:
             plt.axis('off')
         plt.show(block=block)
