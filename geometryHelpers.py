@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Assorted geometry-related helper functions and classes 
-Andy was here
 """
 
 import numpy as np
@@ -15,7 +14,7 @@ import matplotlib.pyplot as plt
 import math
 from math import remainder
 from style import *
-
+import pyqtgraph.opengl as gl
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -190,6 +189,42 @@ class Cylinder:
             return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+        
+    def interpolateQtCircles(self, numPointsPerCircle=32, numCircles=10):
+
+        angle = np.linspace(0, 2 * np.pi, numPointsPerCircle, endpoint=False)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        n = null_space([self.direction])
+        uhat = n[:, 0]
+        vhat = n[:, 1]
+
+        circlePoints = np.outer(u, uhat) + np.outer(v, vhat)
+
+        vertices = []
+        for i in range(numCircles):
+            t = i / float(numCircles - 1)
+            p = self.start + t * self.direction * self.length
+            vertices.append(circlePoints + p)
+
+        vertices = np.vstack(vertices)
+
+        indices = []
+        for i in range(numCircles - 1):
+            for j in range(numPointsPerCircle):
+                next_j = (j + 1) % numPointsPerCircle
+                indices.extend([
+                    [i * numPointsPerCircle + j, i * numPointsPerCircle + next_j, (i + 1) * numPointsPerCircle + j],
+                    [(i + 1) * numPointsPerCircle + j, i * numPointsPerCircle + next_j, (i + 1) * numPointsPerCircle + next_j]
+                ])
+
+        return vertices, np.array(indices)
+
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10):
+        vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
+        meshdata = gl.MeshData(vertexes=vertices, faces=indices)
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1, 0, 0, 1), shader="balloon", drawEdges=True)
+        widget.plot_widget.addItem(meshitem)
     
     def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
         ax = plt.figure().add_subplot(projection='3d')
@@ -216,6 +251,13 @@ class Ball:
             return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
+        
+    def addToWidget(self, widget):
+        md = gl.MeshData.sphere(rows=20, cols=20)
+        sphere = gl.GLMeshItem(meshdata=md, color=(1, 0, 0, 1), smooth=True)
+        sphere.scale(self.r, self.r, self.r)
+        sphere.translate(*self.c)
+        widget.plot_widget.addItem(sphere)
     
     def show(self, color='black', alpha=1, frame=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
