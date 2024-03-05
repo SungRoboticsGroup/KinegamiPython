@@ -211,17 +211,17 @@ class PathCSC:
                         ", circle2sign="+repr(self.circle2sign)+")"
     
     # add to existing GLViewWidget ax
-    def add(self, plot, showCircles=True, showPoses=True, 
+    def add(self, widget, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor=pathColorDefault,
                   cscBoundaryMarker='*', showTunit=False):
         if showPoses:
             # start pose
             lineStart = gl.GLLinePlotItem(pos=(self.startPosition, self.startPosition + self.startDir), color=startColor, width=2) 
-            plot.addItem(lineStart)
+            widget.addItem(lineStart)
 
             # end pose
             lineEnd = gl.GLLinePlotItem(pos=(self.endPosition, self.endPosition + self.endDir), color=endColor, width=2) 
-            plot.addItem(lineEnd)
+            widget.addItem(lineEnd)
 
         if showCircles:
             # start circle
@@ -230,50 +230,47 @@ class PathCSC:
 
             pointsStart = np.vstack([c1x, c1y, c1z]).transpose()
             circleStart = gl.GLLinePlotItem(pos=pointsStart, color=startColor, width=1)
-            plot.addItem(circleStart)
+            widget.addItem(circleStart)
 
             # end circle
             c2x, c2y, c2z = Circle3D(self.r, 
                             self.circleCenter2, self.circleNormal2).interpolate().T
             pointsEnd = np.vstack([c2x, c2y, c2z]).transpose()
             circleEnd = gl.GLLinePlotItem(pos=pointsEnd, color=endColor, width=1)
-            plot.addItem(circleEnd)
+            widget.addItem(circleEnd)
         
         # path arcs (C components)
         a1x, a1y, a1z = Arc3D(self.circleCenter1, 
                 self.startPosition, self.startDir, self.theta1).interpolate().T
         arcPoints1 = np.vstack([a1x, a1y, a1z]).transpose()
         arc1 = gl.GLLinePlotItem(pos=arcPoints1, color=pathColor, width=2)
-        plot.addItem(arc1)
+        widget.addItem(arc1)
 
         a2x, a2y, a2z = Arc3D(self.circleCenter2, 
                 self.turn2start, self.tUnit, self.theta2).interpolate().T
         arcPoints2 = np.vstack([a2x, a2y, a2z]).transpose()
         arc2 = gl.GLLinePlotItem(pos=arcPoints2, color=pathColor, width=2)
-        plot.addItem(arc2)
+        widget.addItem(arc2)
         
         # path S component
         sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
         pathSPoints = np.vstack([sx, sy, sz]).transpose()
         pathS = gl.GLLinePlotItem(pos=pathSPoints, color=pathColor, width=2)
-        plot.addItem(pathS)
+        widget.addItem(pathS)
 
         point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=(1,1,1,1), size=10)
-        plot.addItem(point1)
+        widget.addItem(point1)
         point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=(1,1,1,1), size=10)
-        plot.addItem(point2)
+        widget.addItem(point2)
 
         if showTunit:
-            #x,y,z = self.turn1end
-            #u,v,w = self.tUnit
             tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=(1,1,1,1), width=2) 
-            plot.addItem(tUnit)
-            #ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
+            widget.addItem(tUnit)
     
-    def addToWidget(self, plot, showCircles=True, showPoses=True, 
+    def addToWidget(self, widget, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor='g',
                   cscBoundaryMarker='*', showTunit=False, block=blockDefault):
 
         #make a new plot and then call add to plot, then display that plot
-        self.add(plot, showCircles, showPoses, startColor, endColor, 
+        self.add(widget, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
