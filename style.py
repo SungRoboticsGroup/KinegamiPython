@@ -11,6 +11,7 @@ sphereColorDefault='black'
 linkColorDefault='black'
 surfaceOpacityDefault=0.5
 jointColorDefault='magenta'
+jointEdgeColorDefault='darkblue'
 
 jointAxisScaleDefault=10
 globalAxisScaleDefault=10

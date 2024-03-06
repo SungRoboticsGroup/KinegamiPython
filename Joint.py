@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
+import pyqtgraph.opengl as gl
 
 class Joint(ABC):
     """
@@ -136,8 +137,38 @@ class Joint(ABC):
         else:
             plotHandles = None
         return plotHandles
-        
-    
+
+    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1), 
+                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
+                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
+                    surfaceOpacity=0.5, showSurface=True, showAxis=True, 
+                    axisScale=10, showPoses=True):
+
+        if showAxis:
+            for i, color in enumerate([xColor, yColor, zColor]):
+                start_point = self.Pose.t
+                end_point = start_point + axisScale * self.Pose.R[:, i]
+                points = np.array([start_point, end_point])
+                line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+
+        if showSphere:
+            ball = self.boundingBall()
+            sphere = gl.MeshData.sphere(rows=20, cols=20)
+            globe = gl.GLMeshItem(meshdata=sphere, smooth=True, color=sphereColor, shader='shaded', glOptions='translucent')
+            globe.translate(*ball.c)
+            globe.scale(ball.r, ball.r, ball.r)
+            widget.plot_widget.addItem(globe)
+
+        if showPoses:
+            for pose, color in zip([self.ProximalPose(), self.DistalPose(), self.Pose], [proximalColor, distalColor, centerColor]):
+                for i, axis_color in enumerate([xColor, yColor, zColor]):
+                    start_point = pose.t
+                    end_point = start_point + axisScale * pose.R[:, i]
+                    points = np.array([start_point, end_point])
+                    line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
@@ -239,8 +270,45 @@ class RevoluteJoint(OrigamiJoint):
                 ax.add_collection3d(tri)
             
         return plotHandles
+        
+    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
+                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
+                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
+                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    axisScale=10, showPoses=True):
 
-    
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
+
+        if showSurface:
+            scale = self.pattern.baseSideLength / 2
+            centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
+                                    self.Pose.t + scale * self.Pose.R[:, 2]])
+
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+
+            for pose in [self.ProximalPose(), self.DistalPose()]:
+                uhat = pose.R[:, 1]
+                vhat = pose.R[:, 2]
+                basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
+                allPoints = np.vstack([basePoints, centerSegment])
+
+                hull = ConvexHull(allPoints)
+                vertices = allPoints[hull.vertices]
+                faces = hull.simplices
+
+                color_list = [int(c * 255) for c in surfaceColor[:3]] + [int(surfaceOpacity * 255)]
+
+                meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+                item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+                item.setGLOptions('translucent')
+                widget.plot_widget.addItem(item)
+        
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
                  numLayers : int, coneAngle : float, Pose : SE3, 
@@ -290,8 +358,20 @@ class PrismaticJoint(OrigamiJoint):
             self.boundingCylinder().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
             
         return plotHandles
-        
     
+    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
+                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
+                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
+                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    axisScale=10, showPoses=True):
+        
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
+        if showSurface:
+            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=32, numCircles=10)
+                        
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
     def __init__(self, numSides : int, r : float, Pose : SE3, pathIndex : int = 2):
