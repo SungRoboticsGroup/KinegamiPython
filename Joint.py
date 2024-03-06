@@ -305,7 +305,7 @@ class RevoluteJoint(OrigamiJoint):
                 color_list = [int(c * 255) for c in surfaceColor[:3]] + [int(surfaceOpacity * 255)]
 
                 meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-                item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+                item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=False, drawEdges=True)
                 item.setGLOptions('translucent')
                 widget.plot_widget.addItem(item)
         
