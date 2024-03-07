@@ -220,10 +220,11 @@ class Cylinder:
 
         return vertices, np.array(indices)
 
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5)):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
-        meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1, 0, 0, 1), shader="balloon", drawEdges=True)
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+        meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
     
     def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):

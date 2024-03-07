@@ -302,7 +302,7 @@ class RevoluteJoint(OrigamiJoint):
                 vertices = allPoints[hull.vertices]
                 faces = hull.simplices
 
-                color_list = [int(c * 255) for c in surfaceColor[:3]] + [int(surfaceOpacity * 255)]
+                color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
 
                 meshdata = gl.MeshData(vertexes=vertices, faces=faces)
                 item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=False, drawEdges=True)
@@ -370,7 +370,8 @@ class PrismaticJoint(OrigamiJoint):
                             surfaceColor, surfaceOpacity, showSurface, showAxis,
                             axisScale, showPoses)
         if showSurface:
-            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=32, numCircles=10)
+            color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
+            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=32, numCircles=10, color_list=tuple(color_list))
                         
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
@@ -419,6 +420,35 @@ class Waypoint(OrigamiJoint):
         else:
             plotHandles = None
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
+                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
+                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
+                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    axisScale=10, showPoses=True):
+        
+        if showAxis:
+            for i, color in enumerate([xColor, yColor, zColor]):
+                start_point = self.Pose.t
+                end_point = start_point + axisScale * self.Pose.R[:, i]
+                points = np.array([start_point, end_point])
+                line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+
+        if showSphere:
+            sphere = gl.MeshData.sphere(rows=20, cols=20)
+            globe = gl.GLMeshItem(meshdata=sphere, smooth=True, color=sphereColor, shader='shaded', glOptions='translucent')
+            globe.translate(*self.Pose.t)
+            globe.scale(self.r, self.r, self.r) 
+            widget.plot_widget.addItem(globe)
+
+        if showPoses:
+            for i, axis_color in enumerate([xColor, yColor, zColor]):
+                start_point = self.Pose.t
+                end_point = start_point + axisScale * self.Pose.R[:, i]
+                points = np.array([start_point, end_point])
+                line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -495,6 +525,38 @@ class Tip(OrigamiJoint):
                     ax.add_collection3d(tri)
             
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
+                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
+                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
+                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    axisScale=10, showPoses=True):
+        
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
+
+        if showSurface:
+            radialCount = self.numSides
+            angle = np.linspace(0, 2 * np.pi, radialCount, endpoint=False)
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+
+            basePose = self.ProximalPose() if self.forward else self.DistalPose()
+            tipPoint = self.DistalPose().t if self.forward else self.ProximalPose().t
+
+            basePoints = np.array([basePose.t + u[i] * basePose.R[:, 0] + v[i] * basePose.R[:, 1] for i in range(radialCount)])
+
+            for i in range(radialCount):
+                next_index = (i + 1) % radialCount  
+                vertices = np.array([basePoints[i], basePoints[next_index], tipPoint])
+
+                meshdata = gl.MeshData(vertexes=vertices, faces=[[0, 1, 2]])
+                color = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
+                item = gl.GLMeshItem(meshdata=meshdata, color=color, shader='shaded', smooth=True, drawEdges=True)
+                item.setGLOptions('translucent')
+                widget.plot_widget.addItem(item)
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
