@@ -544,42 +544,31 @@ class Tip(OrigamiJoint):
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
             scale = self.pattern.baseSideLength / 2
-            
-            tipSegmentIndex, uhatIndex, vhatIndex = 0,0,1
-            
+
+            # Create base points for both proximal and distal poses
+            proximalPose = self.ProximalPose()
+            distalPose = self.DistalPose()
+            proximalBase = proximalPose.t + np.outer(u, proximalPose.R[:, 0]) + np.outer(v, proximalPose.R[:, 1])
+            distalBase = distalPose.t + np.outer(u, distalPose.R[:, 0]) + np.outer(v, distalPose.R[:, 1])
+
+            # Depending on the direction of the tip, create the tip segment
             if self.forward:
-                distalPose = self.DistalPose()
-                tipSegment = np.array([distalPose.t - scale * distalPose.R[:, tipSegmentIndex],
-                                    distalPose.t + scale * distalPose.R[:, tipSegmentIndex]])
-                
-                proximalPose = self.ProximalPose()
-                uhatProximal = proximalPose.R[:, uhatIndex]
-                vhatProximal = proximalPose.R[:, vhatIndex]
-                proximalBase = proximalPose.t + u.reshape(-1, 1) @ uhatProximal.reshape(1, 3) + v.reshape(-1, 1) @ vhatProximal.reshape(1, 3)
-                proximalPoints = np.vstack((proximalBase, tipSegment))
-                proximalHull = ConvexHull(proximalPoints)
-                for s in proximalHull.simplices:
-                    vertices = proximalPoints[s]
-                    meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
-                    item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
-                    widget.plot_widget.addItem(item)
+                tipSegment = np.array([distalPose.t - scale * distalPose.R[:, 0],
+                                    distalPose.t + scale * distalPose.R[:, 0]])
+                tipPoints = np.vstack((proximalBase, tipSegment))
             else:
-                proximalPose = self.ProximalPose()
-                tipSegment = np.array([proximalPose.t - scale * proximalPose.R[:, tipSegmentIndex],
-                                    proximalPose.t + scale * proximalPose.R[:, tipSegmentIndex]])
-                
-                distalPose = self.DistalPose()
-                uhatDistal = distalPose.R[:, uhatIndex]
-                vhatDistal = distalPose.R[:, vhatIndex]
-                distalBase = distalPose.t + u.reshape(-1, 1) @ uhatDistal.reshape(1, 3) + v.reshape(-1, 1) @ vhatDistal.reshape(1, 3)
-                distalPoints = np.vstack((distalBase, tipSegment))
-                distalHull = ConvexHull(distalPoints)
-                for s in distalHull.simplices:
-                    vertices = distalPoints[s]
-                    meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
-                    item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
-                    widget.plot_widget.addItem(item)
-                
+                tipSegment = np.array([proximalPose.t - scale * proximalPose.R[:, 0],
+                                    proximalPose.t + scale * proximalPose.R[:, 0]])
+                tipPoints = np.vstack((distalBase, tipSegment))
+
+            # Create the mesh for the tip and add it to the widget
+            hull = ConvexHull(tipPoints)
+            for s in hull.simplices:
+                vertices = tipPoints[s]
+                meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
+                item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
+                widget.plot_widget.addItem(item)
+
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=False)
