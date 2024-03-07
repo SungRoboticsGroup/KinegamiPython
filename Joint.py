@@ -538,26 +538,48 @@ class Tip(OrigamiJoint):
                             axisScale, showPoses)
 
         if showSurface:
-            radialCount = self.numSides
-            angle = np.linspace(0, 2 * np.pi, radialCount, endpoint=False)
+            color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
-
-            basePose = self.ProximalPose() if self.forward else self.DistalPose()
-            tipPoint = self.DistalPose().t if self.forward else self.ProximalPose().t
-
-            basePoints = np.array([basePose.t + u[i] * basePose.R[:, 0] + v[i] * basePose.R[:, 1] for i in range(radialCount)])
-
-            for i in range(radialCount):
-                next_index = (i + 1) % radialCount  
-                vertices = np.array([basePoints[i], basePoints[next_index], tipPoint])
-
-                meshdata = gl.MeshData(vertexes=vertices, faces=[[0, 1, 2]])
-                color = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
-                item = gl.GLMeshItem(meshdata=meshdata, color=color, shader='shaded', smooth=True, drawEdges=True)
-                item.setGLOptions('translucent')
-                widget.plot_widget.addItem(item)
-    
+            scale = self.pattern.baseSideLength / 2
+            
+            tipSegmentIndex, uhatIndex, vhatIndex = 0,0,1
+            
+            if self.forward:
+                distalPose = self.DistalPose()
+                tipSegment = np.array([distalPose.t - scale * distalPose.R[:, tipSegmentIndex],
+                                    distalPose.t + scale * distalPose.R[:, tipSegmentIndex]])
+                
+                proximalPose = self.ProximalPose()
+                uhatProximal = proximalPose.R[:, uhatIndex]
+                vhatProximal = proximalPose.R[:, vhatIndex]
+                proximalBase = proximalPose.t + u.reshape(-1, 1) @ uhatProximal.reshape(1, 3) + v.reshape(-1, 1) @ vhatProximal.reshape(1, 3)
+                proximalPoints = np.vstack((proximalBase, tipSegment))
+                proximalHull = ConvexHull(proximalPoints)
+                for s in proximalHull.simplices:
+                    vertices = proximalPoints[s]
+                    meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
+                    item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
+                    widget.plot_widget.addItem(item)
+            else:
+                proximalPose = self.ProximalPose()
+                tipSegment = np.array([proximalPose.t - scale * proximalPose.R[:, tipSegmentIndex],
+                                    proximalPose.t + scale * proximalPose.R[:, tipSegmentIndex]])
+                
+                distalPose = self.DistalPose()
+                uhatDistal = distalPose.R[:, uhatIndex]
+                vhatDistal = distalPose.R[:, vhatIndex]
+                distalBase = distalPose.t + u.reshape(-1, 1) @ uhatDistal.reshape(1, 3) + v.reshape(-1, 1) @ vhatDistal.reshape(1, 3)
+                distalPoints = np.vstack((distalBase, tipSegment))
+                distalHull = ConvexHull(distalPoints)
+                for s in distalHull.simplices:
+                    vertices = distalPoints[s]
+                    meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
+                    item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
+                    widget.plot_widget.addItem(item)
+                
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=False)
