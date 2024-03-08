@@ -143,7 +143,6 @@ class Joint(ABC):
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
                     surfaceOpacity=0.5, showSurface=True, showAxis=True, 
                     axisScale=10, showPoses=True):
-
         if showAxis:
             for i, color in enumerate([xColor, yColor, zColor]):
                 start_point = self.Pose.t
@@ -151,14 +150,6 @@ class Joint(ABC):
                 points = np.array([start_point, end_point])
                 line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
-
-        if showSphere:
-            ball = self.boundingBall()
-            sphere = gl.MeshData.sphere(rows=20, cols=20)
-            globe = gl.GLMeshItem(meshdata=sphere, smooth=True, color=sphereColor, shader='shaded', glOptions='translucent')
-            globe.translate(*ball.c)
-            globe.scale(ball.r, ball.r, ball.r)
-            widget.plot_widget.addItem(globe)
 
         if showPoses:
             for pose, color in zip([self.ProximalPose(), self.DistalPose(), self.Pose], [proximalColor, distalColor, centerColor]):
@@ -308,6 +299,11 @@ class RevoluteJoint(OrigamiJoint):
                 item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=False, drawEdges=True)
                 item.setGLOptions('translucent')
                 widget.plot_widget.addItem(item)
+
+        if showSphere:
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            self.boundingBall().addToWidget(widget, color_list)
+
         
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
@@ -372,6 +368,10 @@ class PrismaticJoint(OrigamiJoint):
         if showSurface:
             color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
             self.boundingCylinder().addToWidget(widget, numPointsPerCircle=32, numCircles=10, color_list=tuple(color_list))
+
+        if showSphere:
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            self.boundingBall().addToWidget(widget, color_list)
                         
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
@@ -435,13 +435,6 @@ class Waypoint(OrigamiJoint):
                 line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
 
-        if showSphere:
-            sphere = gl.MeshData.sphere(rows=20, cols=20)
-            globe = gl.GLMeshItem(meshdata=sphere, smooth=True, color=sphereColor, shader='shaded', glOptions='translucent')
-            globe.translate(*self.Pose.t)
-            globe.scale(self.r, self.r, self.r) 
-            widget.plot_widget.addItem(globe)
-
         if showPoses:
             for i, axis_color in enumerate([xColor, yColor, zColor]):
                 start_point = self.Pose.t
@@ -449,6 +442,10 @@ class Waypoint(OrigamiJoint):
                 points = np.array([start_point, end_point])
                 line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+
+        if showSphere:
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            self.boundingBall().addToWidget(widget, color_list)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -568,6 +565,10 @@ class Tip(OrigamiJoint):
                 meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
                 item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
                 widget.plot_widget.addItem(item)
+        
+        if showSphere:
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            self.boundingBall().addToWidget(widget, color_list)
 
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):

@@ -253,9 +253,10 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
         
-    def addToWidget(self, widget):
+    def addToWidget(self, widget, color_list=(1, 0, 0, 1)):
         md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = gl.GLMeshItem(meshdata=md, color=(1, 0, 0, 1), smooth=True)
+        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color_list), shader='shaded', smooth=True)
+        sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)
         widget.plot_widget.addItem(sphere)
