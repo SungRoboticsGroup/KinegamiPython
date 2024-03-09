@@ -265,6 +265,8 @@ class KinematicTree:
                        propogate : bool = True, recomputeBoundingBall=True,
                        recomputeLinkPath : bool = True, 
                        safe : bool = True) -> bool:
+        if jointIndex < 0 and jointIndex >= -len(self.Joints):
+            jointIndex = len(self.Joints)+jointIndex
         if safe:
             backup = self.dataDeepCopy()
             try:
