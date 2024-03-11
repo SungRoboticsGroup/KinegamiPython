@@ -28,9 +28,6 @@ class PointEditorWindow(QMainWindow):
         self.points = []
         self.poses = []
 
-        path = shortestCSC(1, np.array([0,0,0]), np.array([0,0,1]), np.array([3,0,0]), np.array([0,1,0]))
-        path.addToWidget(plot=self.plot_widget)
-
         self.add_point_button = QPushButton("Add Point")
         self.add_point_button.clicked.connect(self.add_point)
         self.select_point_options = QComboBox()
