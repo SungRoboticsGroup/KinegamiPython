@@ -5,8 +5,9 @@
 import sys
 import numpy as np
 import pyqtgraph.opengl as gl
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap, QPainter
 from spatialmath import SE3
 import math
 from PathCSC import *
@@ -87,6 +88,22 @@ class PointEditorWindow(QMainWindow):
         dock = QDockWidget("title")
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
+
+        axis_key_layout = QVBoxLayout()
+        self.axis_key_widget = QWidget()
+        self.axis_key_widget.setLayout(axis_key_layout)
+
+        self.x_axis_widget = self.create_axis_label('x̂', Qt.red)
+        self.y_axis_widget = self.create_axis_label('ŷ', Qt.green)
+        self.z_axis_widget = self.create_axis_label('ẑ', Qt.blue)
+
+        axis_key_layout.addWidget(self.x_axis_widget)
+        axis_key_layout.addWidget(self.y_axis_widget)
+        axis_key_layout.addWidget(self.z_axis_widget)
+
+        axis_key_dock = QDockWidget("Axis Key", self)
+        axis_key_dock.setWidget(self.axis_key_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
 
     def add_point(self):
 
@@ -203,6 +220,23 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.addItem(zLine)
 
             index = index + 1
+
+    def create_axis_label(self, text, color):
+        line_pixmap = QPixmap(20, 2)
+        line_pixmap.fill(color)
+        line_label = QLabel()
+        line_label.setPixmap(line_pixmap)
+
+        text_label = QLabel(text)
+
+        layout = QHBoxLayout()
+        layout.addWidget(line_label)
+        layout.addWidget(text_label)
+        layout.setContentsMargins(0, 0, 0, 0) 
+
+        widget = QWidget()
+        widget.setLayout(layout)
+        return widget
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
