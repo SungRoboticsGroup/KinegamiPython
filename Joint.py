@@ -141,15 +141,14 @@ class Joint(ABC):
     def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1), 
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=True, 
-                    axisScale=10, showPoses=True):
+                    surfaceOpacity=0.5, showSurface=True, showAxis=False, 
+                    axisScale=0.75, showPoses=True):
         if showAxis:
-            for i, color in enumerate([xColor, yColor, zColor]):
-                start_point = self.Pose.t
-                end_point = start_point + axisScale * self.Pose.R[:, i]
-                points = np.array([start_point, end_point])
-                line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
-                widget.plot_widget.addItem(line)
+            zhat = self.Pose.R[:, 2] 
+            jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
+                                self.Pose.t + 10 * self.r * zhat])
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            widget.plot_widget.addItem(line_item)
 
         if showPoses:
             for pose, color in zip([self.ProximalPose(), self.DistalPose(), self.Pose], [proximalColor, distalColor, centerColor]):
@@ -266,7 +265,7 @@ class RevoluteJoint(OrigamiJoint):
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
-                    axisScale=10, showPoses=True):
+                    axisScale=0.75, showPoses=True):
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -359,7 +358,7 @@ class PrismaticJoint(OrigamiJoint):
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
-                    axisScale=10, showPoses=True):
+                    axisScale=0.75, showPoses=True):
         
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -403,7 +402,7 @@ class Waypoint(OrigamiJoint):
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
-             axisScale=10, showPoses=True):
+             axisScale=0.75, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:,2]
             JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
@@ -425,15 +424,14 @@ class Waypoint(OrigamiJoint):
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
-                    axisScale=10, showPoses=True):
+                    axisScale=0.75, showPoses=True):
         
         if showAxis:
-            for i, color in enumerate([xColor, yColor, zColor]):
-                start_point = self.Pose.t
-                end_point = start_point + axisScale * self.Pose.R[:, i]
-                points = np.array([start_point, end_point])
-                line = gl.GLLinePlotItem(pos=points, color=color, width=2, antialias=True)
-                widget.plot_widget.addItem(line)
+            zhat = self.Pose.R[:, 2] 
+            jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
+                                self.Pose.t + 10 * self.r * zhat])
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            widget.plot_widget.addItem(line_item)
 
         if showPoses:
             for i, axis_color in enumerate([xColor, yColor, zColor]):
@@ -527,7 +525,7 @@ class Tip(OrigamiJoint):
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
-                    axisScale=10, showPoses=True):
+                    axisScale=0.75, showPoses=True):
         
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -542,13 +540,11 @@ class Tip(OrigamiJoint):
             v = self.r * np.sin(angle)
             scale = self.pattern.baseSideLength / 2
 
-            # Create base points for both proximal and distal poses
             proximalPose = self.ProximalPose()
             distalPose = self.DistalPose()
             proximalBase = proximalPose.t + np.outer(u, proximalPose.R[:, 0]) + np.outer(v, proximalPose.R[:, 1])
             distalBase = distalPose.t + np.outer(u, distalPose.R[:, 0]) + np.outer(v, distalPose.R[:, 1])
 
-            # Depending on the direction of the tip, create the tip segment
             if self.forward:
                 tipSegment = np.array([distalPose.t - scale * distalPose.R[:, 0],
                                     distalPose.t + scale * distalPose.R[:, 0]])
@@ -558,7 +554,6 @@ class Tip(OrigamiJoint):
                                     proximalPose.t + scale * proximalPose.R[:, 0]])
                 tipPoints = np.vstack((distalBase, tipSegment))
 
-            # Create the mesh for the tip and add it to the widget
             hull = ConvexHull(tipPoints)
             for s in hull.simplices:
                 vertices = tipPoints[s]
