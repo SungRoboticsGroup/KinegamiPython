@@ -402,6 +402,54 @@ class Elbow:
         
         return frameHandles
     
+    def circleEllipseCircleQT(self, numSides : int = 32):
+        StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
+        vertices = np.vstack((StartCircle, MidEllipse, EndCircle))
+
+        faces = []
+        for i in range(2):
+            for j in range(numSides):
+                next_index = (j + 1) % numSides
+                faces.append([i * numSides + j, i * numSides + next_index, (i + 1) * numSides + j])
+                faces.append([(i + 1) * numSides + j, i * numSides + next_index, (i + 1) * numSides + next_index])
+
+        faces = np.array(faces)
+
+        return vertices, faces
+    
+    def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = False):
+        vertices, faces = self.circleEllipseCircleQT(numSides)
+        meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+
+        if (wireFrame):
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=True, shader='shaded', smooth=True)
+        else:
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+
+        #ax = plt.figure().add_subplot(projection='3d')
+
+        frameHandles = []
+        if showFrames:
+            Fwd = self.StartFrame @ self.Forward 
+            FwdRot = Fwd @ self.Rotate
+            FwdRotFwd = FwdRot @ self.Forward
+            Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
+
+            ax = plt.figure().add_subplot(projection='3d')
+            addPosesToPlotQT(Poses, ax, widget.plot_widget,
+                                        axisLength=1, xColor='darkred', 
+                                        yColor='darkblue', zColor='darkgreen')
+
+            x,y,z = Fwd.t
+            u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
+            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [u*2,v*2,w*2]]), color=(1, 0, 0, 1), width=5) 
+            widget.plot_widget.addItem(line)
+
+        meshitem.setGLOptions('translucent')
+        widget.plot_widget.addItem(meshitem)
+    
     def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
              showFrames : bool = False, block : bool = False):
@@ -410,6 +458,43 @@ class Elbow:
                                      showFrames)
         ax.set_aspect('equal')
         plt.show(block=block)
+
+def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor=yColorDefault, 
+                     zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
+    if Poses.shape == (4,4): # so it can plot a single frame
+        Poses = np.array([Poses])
+    
+    print(Poses)
+
+    ux, vx, wx = Poses[:,0:3,0].T # frame xhat coordinates
+    uy, vy, wy = Poses[:,0:3,1].T # frame yhat coordinates
+    uz, vz, wz = Poses[:,0:3,2].T # frame zhat coordinates
+    ox, oy, oz = Poses[:,0:3,3].T # frame origin coordinates
+
+    print(ux)
+
+    xPoints = [[ux[i], vx[i], wx[i]] for i in range(len(ux))]
+    yPoints = [[uy[i], vy[i], wy[i]] for i in range(len(ux))]
+    zPoints = [[uz[i], vz[i], wz[i]] for i in range(len(ux))]
+    origins = [[ox[i], oy[i], oz[i]] for i in range(len(ox))]
+
+    #plot origin points
+    for i in range(len(origins)):
+        point1 = gl.GLScatterPlotItem(pos=origins[i], color=(1,1,1,1), size=10)
+        widget.addItem(point1)
+
+    xPoints = np.column_stack((ox + ux, oy + vx, oz + wx))
+    yPoints = np.column_stack((ox + uy, oy + vy, oz + wy))
+    zPoints = np.column_stack((ox + uz, oy + vz, oz + wz))
+    origins = np.column_stack((ox, oy, oz))
+
+    for i in range(len(ux)):
+        xHats = gl.GLLinePlotItem(pos=np.array([origins[i], xPoints[i]]), color=xColor, width=5)
+        yHats = gl.GLLinePlotItem(pos=np.array([origins[i], yPoints[i]]), color=yColor, width=5)
+        zHats = gl.GLLinePlotItem(pos=np.array([origins[i], zPoints[i]]), color=zColor, width=5)
+        widget.addItem(xHats)
+        widget.addItem(yHats)
+        widget.addItem(zHats)
 
 class CompoundElbow:
     def __init__(self, radius : float, StartFrame : SE3, bendingAngle : float, 
@@ -503,7 +588,6 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
-        
         
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
