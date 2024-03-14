@@ -267,7 +267,6 @@ class Ball:
         ax.set_aspect('equal')
         plt.show(block=block)
 
-
 """
 Note: we don't need to guarantee minimality of our bounding balls, so we build
 bounding balls of bounding balls in a greedy fashion based on the below 
