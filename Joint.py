@@ -159,6 +159,10 @@ class Joint(ABC):
                     line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
                     widget.plot_widget.addItem(line)
 
+        if showSphere:
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            self.boundingBall().addToWidget(widget, color_list)
+
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
@@ -267,11 +271,6 @@ class RevoluteJoint(OrigamiJoint):
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
                     axisScale=0.75, showPoses=True):
 
-        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
-                            centerColor, distalColor, sphereColor, showSphere,
-                            surfaceColor, surfaceOpacity, showSurface, showAxis,
-                            axisScale, showPoses)
-
         if showSurface:
             scale = self.pattern.baseSideLength / 2
             centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
@@ -299,11 +298,11 @@ class RevoluteJoint(OrigamiJoint):
                 item.setGLOptions('translucent')
                 widget.plot_widget.addItem(item)
 
-        if showSphere:
-            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
-            self.boundingBall().addToWidget(widget, color_list)
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
 
-        
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
                  numLayers : int, coneAngle : float, Pose : SE3, 
@@ -360,17 +359,14 @@ class PrismaticJoint(OrigamiJoint):
                     surfaceOpacity=0.5, showSurface=True, showAxis=True,
                     axisScale=0.75, showPoses=True):
         
-        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
-                            centerColor, distalColor, sphereColor, showSphere,
-                            surfaceColor, surfaceOpacity, showSurface, showAxis,
-                            axisScale, showPoses)
         if showSurface:
             color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
             self.boundingCylinder().addToWidget(widget, numPointsPerCircle=32, numCircles=10, color_list=tuple(color_list))
 
-        if showSphere:
-            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
-            self.boundingBall().addToWidget(widget, color_list)
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
                         
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
@@ -423,7 +419,7 @@ class Waypoint(OrigamiJoint):
     def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    surfaceOpacity=0.5, showSurface=True, showAxis=False,
                     axisScale=0.75, showPoses=True):
         
         if showAxis:
@@ -524,14 +520,9 @@ class Tip(OrigamiJoint):
     def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
                     proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
                     sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+                    surfaceOpacity=0.5, showSurface=True, showAxis=False,
                     axisScale=0.75, showPoses=True):
         
-        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
-                            centerColor, distalColor, sphereColor, showSphere,
-                            surfaceColor, surfaceOpacity, showSurface, showAxis,
-                            axisScale, showPoses)
-
         if showSurface:
             color_list = (surfaceColor[0], surfaceColor[1], surfaceColor[2], surfaceOpacity)
             radialCount = self.numSides + 1
@@ -561,9 +552,10 @@ class Tip(OrigamiJoint):
                 item = gl.GLMeshItem(meshdata=meshdata, color=color_list, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
                 widget.plot_widget.addItem(item)
         
-        if showSphere:
-            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
-            self.boundingBall().addToWidget(widget, color_list)
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, surfaceOpacity, showSurface, showAxis,
+                            axisScale, showPoses)
 
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
