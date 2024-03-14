@@ -20,9 +20,11 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget = gl.GLViewWidget()
         self.setCentralWidget(self.plot_widget)
+        self.plot_widget.setBackgroundColor(255,255,255, 255)
 
         grid = gl.GLGridItem()
         self.plot_widget.addItem(grid)
+        grid.setColor((0,0,0,255))
 
         self.current_point = 0
 
