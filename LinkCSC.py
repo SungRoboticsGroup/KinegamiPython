@@ -98,7 +98,7 @@ class LinkCSC:
     
     def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False, showPath : bool = True, 
+                  showFrames : bool = False, showPath : bool = False, 
                   pathColor : str = pathColorDefault,
                   showPathCircles : bool = False, showBoundary : bool = True,
                   showElbowBoundingBalls : bool = False):
@@ -128,7 +128,34 @@ class LinkCSC:
         
         return allElbowHandleSets
     
-    
+    def addToWidget(self, widget, numSides : int = 32, color_list = (1, 1, 1, 0.5), 
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = False, showPath : bool = False, 
+                  pathColor : str = pathColorDefault,
+                  showPathCircles : bool = False, showBoundary : bool = True,
+                  showElbowBoundingBalls : bool = False):
+        allElbowHandleSets = []
+        if showBoundary:
+            if not self.elbow1 is None:
+                self.elbow1.addToWidget(widget, numSides, color_list, 
+                  alpha, wireFrame, 
+                  showFrames)
+            
+            if self.path.tMag > self.EPSILON:
+                #(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5))
+                self.cylinder.addToWidget(widget, numSides, 10, color_list)
+            
+            if not self.elbow2 is None:
+                self.elbow2.addToWidget(widget, numSides, color_list, 
+                  alpha, wireFrame, 
+                  showFrames)
+        
+        #if showPath:
+        #    self.path.addToPlot(ax, showCircles=showPathCircles, 
+        #                        showPoses=showFrames, pathColor=pathColor)
+        
+        return allElbowHandleSets
+
     def show(self, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 

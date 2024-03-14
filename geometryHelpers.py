@@ -418,7 +418,7 @@ class Elbow:
         return vertices, faces
     
     def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
-                  alpha : float = 0.5, wireFrame : bool = False, 
+                  alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = False):
         vertices, faces = self.circleEllipseCircleQT(numSides)
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
@@ -428,9 +428,6 @@ class Elbow:
         else:
             meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
 
-        #ax = plt.figure().add_subplot(projection='3d')
-
-        frameHandles = []
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
             FwdRot = Fwd @ self.Rotate
@@ -444,8 +441,8 @@ class Elbow:
 
             x,y,z = Fwd.t
             u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
-            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [u*2,v*2,w*2]]), color=(1, 0, 0, 1), width=5) 
-            widget.plot_widget.addItem(line)
+            #line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=(1, 0, 0, 1), width=5) 
+            #widget.plot_widget.addItem(line)
 
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
@@ -463,15 +460,11 @@ def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor
                      zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
     if Poses.shape == (4,4): # so it can plot a single frame
         Poses = np.array([Poses])
-    
-    print(Poses)
 
     ux, vx, wx = Poses[:,0:3,0].T # frame xhat coordinates
     uy, vy, wy = Poses[:,0:3,1].T # frame yhat coordinates
     uz, vz, wz = Poses[:,0:3,2].T # frame zhat coordinates
     ox, oy, oz = Poses[:,0:3,3].T # frame origin coordinates
-
-    print(ux)
 
     xPoints = [[ux[i], vx[i], wx[i]] for i in range(len(ux))]
     yPoints = [[uy[i], vy[i], wy[i]] for i in range(len(ux))]
@@ -479,9 +472,8 @@ def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor
     origins = [[ox[i], oy[i], oz[i]] for i in range(len(ox))]
 
     #plot origin points
-    for i in range(len(origins)):
-        point1 = gl.GLScatterPlotItem(pos=origins[i], color=(1,1,1,1), size=10)
-        widget.addItem(point1)
+    originPlot = gl.GLScatterPlotItem(pos=origins, color=(1,1,1,1), size=10)
+    widget.addItem(originPlot)
 
     xPoints = np.column_stack((ox + ux, oy + vx, oz + wx))
     yPoints = np.column_stack((ox + uy, oy + vy, oz + wy))
@@ -538,18 +530,32 @@ class CompoundElbow:
         
         return allHandleSets
     
+    def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
+                  alpha : float = 1.0, wireFrame : bool = False, 
+                  showFrames : bool = True, showBoundingBall : bool = False):
+        allHandleSets = []
+        for elbow in self.elbows:
+            elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames)
+            #if showFrames:
+                #allHandleSets.append(handleSet)
+        
+        if showBoundingBall:
+            self.boundingBall().addToWidget(widget, color=color, alpha = 0.25*alpha)
+        
+        return allHandleSets
+
     def boundingBall(self):
         ball = self.elbows[0].boundingBall()
         for elbow in self.elbows[1:]:
             ball = minBoundingBall(ball, elbow.boundingBall())
         return ball
     
-    def show(self, numSides : int = 32, color : str = 'black', 
+    def show(self, numSides : int = 32, color_list=(1, 1, 1, 0.5),
              alpha : float = 0.5, wireFrame : bool = False, 
              showFrames : bool = True, showBoundingBall : bool = False,
              block : bool = True):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+        plotHandles = self.addToPlot(ax, numSides, color_list, alpha, wireFrame, 
                                      showFrames, showBoundingBall)
         ax.set_aspect('equal')
         plt.show(block=block)
