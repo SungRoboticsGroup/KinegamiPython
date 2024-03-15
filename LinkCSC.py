@@ -128,7 +128,7 @@ class LinkCSC:
         
         return allElbowHandleSets
     
-    def addToWidget(self, widget, numSides : int = 32, color_list = (1, 1, 1, 0.5), 
+    def addToWidget(self, widget, numSides : int = 32, color = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = False, 
                   pathColor : str = pathColorDefault,
@@ -137,18 +137,17 @@ class LinkCSC:
         allElbowHandleSets = []
         if showBoundary:
             if not self.elbow1 is None:
-                self.elbow1.addToWidget(widget, numSides, color_list, 
+                self.elbow1.addToWidget(widget, numSides, color, 
                   alpha, wireFrame, 
                   showFrames)
             
             if self.path.tMag > self.EPSILON:
                 #(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5))
-                self.cylinder.addToWidget(widget, numSides, 10, color_list)
+                self.cylinder.addToWidget(widget, numSides, 2, color)
             
             if not self.elbow2 is None:
-                self.elbow2.addToWidget(widget, numSides, color_list, 
-                  alpha, wireFrame, 
-                  showFrames)
+                self.elbow2.addToWidget(widget, numSides, color, 
+                  alpha, wireFrame, showFrames)
         
         #if showPath:
         #    self.path.addToPlot(ax, showCircles=showPathCircles, 

@@ -157,7 +157,8 @@ class Circle3D:
 
 class Cylinder:
     def __init__(self, radius : float, start : np.ndarray, 
-                 direction : np.ndarray, length : float):
+                 direction : np.ndarray, length : float, 
+                 uhat : np.ndarray = None):
         assert(length > 0)
         assert(norm(direction)>0)
         self.start = start
@@ -165,15 +166,19 @@ class Cylinder:
         self.length = length
         self.end = start + self.length * self.direction
         self.r = radius
+        if uhat is None:
+            uhat = null_space([self.direction])[:,0]
+        else:
+            uhat = uhat.reshape((3))    
+        self.uhat = uhat / norm(uhat)
     
     def interpolateCircles(self, numPointsPerCircle=32, numCircles=2):
         radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
         angle = np.linspace(0, 2*np.pi, radialCount) 
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
-        circlePlaneBasis = null_space([self.direction])
-        uhat = circlePlaneBasis[:,0]
-        vhat = circlePlaneBasis[:,1]
+        uhat = self.uhat
+        vhat = cross(self.direction, uhat)
         circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
         
         segment = np.linspace(self.start, self.end, numCircles)
@@ -195,9 +200,14 @@ class Cylinder:
         angle = np.linspace(0, 2 * np.pi, numPointsPerCircle, endpoint=False)
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
+        
+        """
         n = null_space([self.direction])
         uhat = n[:, 0]
         vhat = n[:, 1]
+        """
+        uhat = self.uhat
+        vhat = cross(self.direction, uhat)
 
         circlePoints = np.outer(u, uhat) + np.outer(v, vhat)
 
@@ -253,9 +263,9 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
         
-    def addToWidget(self, widget, color_list=(1, 0, 0, 1)):
+    def addToWidget(self, widget, color=(0,0,0,0.5)):
         md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color_list), shader='shaded', smooth=True)
+        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
         sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)

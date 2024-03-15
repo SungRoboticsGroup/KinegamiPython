@@ -151,7 +151,34 @@ class KinematicTree:
             self.boundingBall = minBoundingBall(self.boundingBall,
                                                 link.elbow2BoundingBall)
             
-    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                  proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                  showJointSurface=True, jointColor=jointColorDefault,
+                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+                  linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
+                  showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+                  showPathCircles=False, sphereColor=sphereColorDefault,
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
+        # TODO: IMPLEMENT showGlobalFrame
+        for joint in self.Joints:
+            joint.addToWidget(widget, xColor, yColor, zColor, 
+                        proximalColor, centerColor, distalColor, 
+                        sphereColor=sphereColor, showSphere=showSpheres, 
+                        surfaceColor=jointColor, showSurface=showJointSurface, 
+                        axisScale=jointAxisScale, showPoses=showJointPoses)
+        for link in self.Links:
+            link.addToWidget(widget, color=linkColor, 
+                        alpha=surfaceOpacity, 
+                        showPath=showLinkPath, 
+                        pathColor=pathColor,
+                        showPathCircles=showPathCircles, 
+                        showFrames=showLinkPoses,
+                        showBoundary=showLinkSurface)
+        if showSpheres:
+            self.boundingBall.addToWidget(widget, color=sphereColor)
+            
+
+
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
                   showJointSurface=True, jointColor=jointColorDefault,
