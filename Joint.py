@@ -138,10 +138,10 @@ class Joint(ABC):
             plotHandles = None
         return plotHandles
 
-    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1), 
-                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
-                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=False, 
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=surfaceColorDefault,
+                    surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
                     axisScale=0.75, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:, 2] 
@@ -160,7 +160,7 @@ class Joint(ABC):
                     widget.plot_widget.addItem(line)
 
         if showSphere:
-            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], surfaceOpacityDefault)
             self.boundingBall().addToWidget(widget, color_list)
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
@@ -265,10 +265,10 @@ class RevoluteJoint(OrigamiJoint):
             
         return plotHandles
         
-    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
-                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
-                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=surfaceColorDefault,
+                    surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
                     axisScale=0.75, showPoses=True):
 
         if showSurface:
@@ -353,10 +353,10 @@ class PrismaticJoint(OrigamiJoint):
             
         return plotHandles
     
-    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
-                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
-                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=True,
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=surfaceColorDefault,
+                    surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
                     axisScale=0.75, showPoses=True):
         
         if showSurface:
@@ -416,10 +416,10 @@ class Waypoint(OrigamiJoint):
             plotHandles = None
         return plotHandles
     
-    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
-                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
-                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=False,
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=surfaceColorDefault,
+                    surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
                     axisScale=0.75, showPoses=True):
         
         if showAxis:
@@ -436,9 +436,9 @@ class Waypoint(OrigamiJoint):
                 points = np.array([start_point, end_point])
                 line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
-
+        
         if showSphere:
-            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], sphereColor[3])
+            color_list = (sphereColor[0], sphereColor[1], sphereColor[2], surfaceOpacity)
             self.boundingBall().addToWidget(widget, color_list)
 
 class Tip(OrigamiJoint):
@@ -517,10 +517,10 @@ class Tip(OrigamiJoint):
             
         return plotHandles
     
-    def addToWidget(self, widget, xColor=(1, 0, 0, 1), yColor=(0, 1, 0, 1), zColor=(0, 0, 1, 1),
-                    proximalColor=(0, 1, 1, 1), centerColor=(1, 0, 1, 1), distalColor=(1, 1, 0, 1),
-                    sphereColor=(1, 0, 0, 0.3), showSphere=False, surfaceColor=(1, 0, 1, 0.5),
-                    surfaceOpacity=0.5, showSurface=True, showAxis=False,
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=surfaceColorDefault,
+                    surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
                     axisScale=0.75, showPoses=True):
         
         if showSurface:
