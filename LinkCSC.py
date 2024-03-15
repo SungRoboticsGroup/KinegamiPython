@@ -20,12 +20,13 @@ from TubularPattern import TubularPattern, TubeFittingPattern, \
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, 
-                 path : PathCSC = None, EPSILON : float = 0.0001):
+                 path : PathCSC = None, EPSILON : float = 0.01):
         assert(r>0)
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.r = r
         self.maxAnglePerElbow = maxAnglePerElbow
         self.EPSILON = EPSILON
+        self.DISTANCE_EPSILON = self.r * self.EPSILON
         self.StartDubinsPose = StartDubinsPose
         self.EndDubinsPose = EndDubinsPose
         if path is None:
@@ -34,7 +35,7 @@ class LinkCSC:
         else:
             self.path = path
         
-        if norm(self.path.error) > self.EPSILON:
+        if norm(self.path.error) > self.DISTANCE_EPSILON:
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
         if self.path.theta1 < -EPSILON:
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
@@ -66,10 +67,10 @@ class LinkCSC:
             self.elbow1 = None
             self.Elbow1EndFrame = self.StartDubinsPose
             self.elbow1BoundingBall = Ball(self.StartDubinsPose.t, self.r)
-        assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
-        assert(norm(self.Elbow1EndFrame.t - self.path.turn1end) < self.EPSILON)
+        assert(norm(self.Elbow1EndFrame.R[:,0] - self.path.tUnit) < self.DISTANCE_EPSILON) # verify alignment
+        assert(norm(self.Elbow1EndFrame.t - self.path.turn1end) < self.DISTANCE_EPSILON)
         
-        if self.path.tMag > self.EPSILON:
+        if self.path.tMag > self.DISTANCE_EPSILON:
             self.cylinder = Cylinder(self.r, self.Elbow1EndFrame.t, 
                             self.Elbow1EndFrame.R[:,0], self.path.tMag)
         
@@ -77,12 +78,12 @@ class LinkCSC:
             Elbow2StartOrientation = SO3.AngleAxis(-self.path.theta2, self.rot2AxisDir) * self.EndDubinsPose.R 
             self.Elbow2StartFrame = SE3.Rt(Elbow2StartOrientation, self.path.turn2start)
             assert(norm(self.Elbow2StartFrame.t - (self.Elbow1EndFrame * SE3.Tx(self.path.tMag)).t) < self.EPSILON)
-            assert(norm(self.Elbow2StartFrame.R[:,0] - self.path.tUnit) < self.EPSILON) # verify alignment
+            assert(norm(self.Elbow2StartFrame.R[:,0] - self.path.tUnit) < self.DISTANCE_EPSILON) # verify alignment
             
             self.elbow2 = CompoundElbow(self.r, self.Elbow2StartFrame, 
                                        self.path.theta2, self.rot2AxisAngle, 
                                        self.maxAnglePerElbow, self.EPSILON)
-            assert(norm(self.elbow2.EndFrame - self.EndDubinsPose) < self.EPSILON)
+            assert(norm(self.elbow2.EndFrame - self.EndDubinsPose) < self.DISTANCE_EPSILON)
             self.elbow2BoundingBall = self.elbow2.boundingBall()
         else:
             self.elbow2 = None
@@ -111,7 +112,7 @@ class LinkCSC:
                 if showFrames:
                     allElbowHandleSets += elbow1HandleSets
             
-            if self.path.tMag > self.EPSILON:
+            if self.path.tMag > self.DISTANCE_EPSILON:
                 self.cylinder.addToPlot(ax, numSides, color, alpha, wireFrame)
             
             if not self.elbow2 is None:
