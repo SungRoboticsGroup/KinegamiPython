@@ -176,8 +176,7 @@ class KinematicTree:
                         showBoundary=showLinkSurface)
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
-            
-
+        widget.add_chain(self)
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
