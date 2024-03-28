@@ -374,7 +374,7 @@ class PointEditorWindow(QMainWindow):
             error_dialog = ErrorDialog('Please initialize a chain.')
             error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
-            safe = dialog.safeDeleteCheckbox.isChecked()
+            safe = dialog.safeDeleteCheckbox.isChecked
             self.selected_joint = self.select_joint_options.currentIndex() 
 
             if self.chain.delete(self.selected_joint, safe):
