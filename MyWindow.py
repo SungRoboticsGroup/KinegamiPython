@@ -17,26 +17,22 @@ from KinematicTree import KinematicTree
 class RotationDialog(QDialog):
     propogateRotation = True
     applyToPreviousWaypointRotation = False
-    safeRotation = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Rotate Joint')
+        self.setWindowTitle('Rotate Joint Along Axis Of Motion')
         self.setGeometry(100, 100, 200, 100)
 
         layout = QVBoxLayout()
 
         self.propogateRotationCheckbox = QCheckBox("Propogate")
         self.applyToPreviousWaypointRotationCheckbox = QCheckBox("Apply to Previous Waypoint")
-        self.safeRotationCheckbox = QCheckBox("Safe")
 
         self.propogateRotationCheckbox.setChecked(RotationDialog.propogateRotation)
         self.applyToPreviousWaypointRotationCheckbox.setChecked(RotationDialog.applyToPreviousWaypointRotation)
-        self.safeRotationCheckbox.setChecked(RotationDialog.safeRotation)
 
         layout.addWidget(self.propogateRotationCheckbox)
         layout.addWidget(self.applyToPreviousWaypointRotationCheckbox)
-        layout.addWidget(self.safeRotationCheckbox)
 
         self.setupAngleInputAndButtons(layout)
         self.setLayout(layout)
@@ -58,7 +54,6 @@ class RotationDialog(QDialog):
     def onApplyClicked(self):
         RotationDialog.propogateRotation = self.propogateRotationCheckbox.isChecked()
         RotationDialog.applyToPreviousWaypointRotation = self.applyToPreviousWaypointRotationCheckbox.isChecked()
-        RotationDialog.safeRotation = self.safeRotationCheckbox.isChecked()
         self.accept()
 
     def get_angle(self):
@@ -74,26 +69,22 @@ class RotationDialog(QDialog):
 class TranslationDialog(QDialog):
     propogateTranslation = True
     applyToPreviousWaypointTranslation = False
-    safeTranslation = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Translate Joint')
+        self.setWindowTitle('Translate Joint Along Axis of Motion')
         self.setGeometry(100, 100, 200, 100)
 
         layout = QVBoxLayout()
 
         self.propogateTranslationCheckbox = QCheckBox("Propogate")
         self.applyToPreviousWaypointTranslationCheckbox = QCheckBox("Apply to Previous Waypoint")
-        self.safeTranslationCheckbox = QCheckBox("Safe")
 
         self.propogateTranslationCheckbox.setChecked(TranslationDialog.propogateTranslation)
         self.applyToPreviousWaypointTranslationCheckbox.setChecked(TranslationDialog.applyToPreviousWaypointTranslation)
-        self.safeTranslationCheckbox.setChecked(TranslationDialog.safeTranslation)
 
         layout.addWidget(self.propogateTranslationCheckbox)
         layout.addWidget(self.applyToPreviousWaypointTranslationCheckbox)
-        layout.addWidget(self.safeTranslationCheckbox)
 
         self.setupDistanceInputAndButtons(layout)
         self.setLayout(layout)
@@ -115,7 +106,6 @@ class TranslationDialog(QDialog):
     def onApplyClicked(self):
         TranslationDialog.propogateTranslation = self.propogateTranslationCheckbox.isChecked()
         TranslationDialog.applyToPreviousWaypointTranslation = self.applyToPreviousWaypointTranslationCheckbox.isChecked()
-        TranslationDialog.safeTranslation = self.safeTranslationCheckbox.isChecked()
         self.accept()
 
     def get_distance(self):
@@ -129,7 +119,6 @@ class TranslationDialog(QDialog):
                 return None
 
 class DeleteDialog(QDialog):
-    safeDelete = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -138,10 +127,6 @@ class DeleteDialog(QDialog):
 
         layout = QVBoxLayout()
         layout.addWidget(QLabel('Are you sure you want to delete the joint?'))
-
-        self.safeDeleteCheckbox = QCheckBox("Safe")
-        self.safeDeleteCheckbox.setChecked(DeleteDialog.safeDelete)
-        layout.addWidget(self.safeDeleteCheckbox)
 
         apply_button = QPushButton('Delete')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -154,7 +139,6 @@ class DeleteDialog(QDialog):
         self.setLayout(layout)
 
     def onApplyClicked(self):
-        DeleteDialog.safeDelete = self.safeDeleteCheckbox.isChecked()
         self.accept()
 
 class SuccessDialog(QDialog):
@@ -242,8 +226,8 @@ class PointEditorWindow(QMainWindow):
         self.rotate_button_z.clicked.connect(self.rotate_point_z)
 
         self.select_joint_options = QComboBox()
-        self.rotate_joint_button = QPushButton("Rotate Joint")
-        self.translate_joint_button = QPushButton("Translate Joint")
+        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
+        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
 
         button_layout = QVBoxLayout()
@@ -318,12 +302,25 @@ class PointEditorWindow(QMainWindow):
         self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
 
-        self.selected_joint = 0
+        self.selected_joint = -1
+
+        self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
+
+    def joint_selection_changed(self, index):
+        if index != self.selected_joint:
+            self.selected_joint = index
+            self.update_joint()
+
 
     def add_chain(self, chain):
         self.chain = chain
-        for i in range(1, len(self.chain.Joints) + 1):
-            self.select_joint_options.addItem("Joint " + str(i))
+        self.select_joint_options.blockSignals(True)
+        self.select_joint_options.clear() 
+    
+        for index, joint in enumerate(self.chain.Joints):
+            self.select_joint_options.addItem("Joint " + str(index) + " - " + joint.__class__.__name__)
+    
+        self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
 
     def rotate_joint(self):
@@ -331,15 +328,17 @@ class PointEditorWindow(QMainWindow):
         if not self.chain:
             error_dialog = ErrorDialog('Please initialize a chain.')
             error_dialog.exec_()
+        if self.selected_joint == -1:
+            error_dialog = ErrorDialog('Please select a joint.')
+            error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
             angle = dialog.get_angle()
             if angle is not None:
                 propogate = dialog.propogateRotationCheckbox.isChecked()
                 apply_to_previous_waypoint = dialog.applyToPreviousWaypointRotationCheckbox.isChecked()
-                safe = dialog.safeRotationCheckbox.isChecked()
                 self.selected_joint = self.select_joint_options.currentIndex()
 
-                if self.chain.rotateJointAboutAxisOfMotion(self.selected_joint, math.radians(angle), propogate, apply_to_previous_waypoint, safe):
+                if self.chain.rotateJointAboutAxisOfMotion(self.selected_joint, math.radians(angle), propogate, apply_to_previous_waypoint):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint successfully rotated!')
                     success_dialog.exec_()
@@ -352,15 +351,17 @@ class PointEditorWindow(QMainWindow):
         if not self.chain:
             error_dialog = ErrorDialog('Please initialize a chain.')
             error_dialog.exec_()
+        if self.selected_joint == -1:
+            error_dialog = ErrorDialog('Please select a joint.')
+            error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
             distance = dialog.get_distance()
             if distance is not None:
                 propogate = dialog.propogateTranslationCheckbox.isChecked()
                 apply_to_previous_waypoint = dialog.applyToPreviousWaypointTranslationCheckbox.isChecked()
-                safe = dialog.safeTranslationCheckbox.isChecked()
                 self.selected_joint = self.select_joint_options.currentIndex()
 
-                if self.chain.translateJointAlongAxisOfMotion(self.selected_joint, distance, propogate, apply_to_previous_waypoint, safe):
+                if self.chain.translateJointAlongAxisOfMotion(self.selected_joint, distance, propogate, apply_to_previous_waypoint):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint successfully translated!')
                     success_dialog.exec_()
@@ -373,13 +374,13 @@ class PointEditorWindow(QMainWindow):
         if not self.chain:
             error_dialog = ErrorDialog('Please initialize a chain.')
             error_dialog.exec_()
+        if self.selected_joint == -1:
+            error_dialog = ErrorDialog('Please select a joint.')
+            error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
-            safe = dialog.safeDeleteCheckbox.isChecked
             self.selected_joint = self.select_joint_options.currentIndex() 
-
-            if self.chain.delete(self.selected_joint, safe):
+            if self.chain.delete(self.selected_joint):
                 self.update_joint()
-                self.select_joint_options.removeItem(self.selected_joint)
                 success_dialog = SuccessDialog('Joint successfully deleted!')
                 success_dialog.exec_()
             else:
@@ -387,15 +388,20 @@ class PointEditorWindow(QMainWindow):
                 error_dialog.exec_()
 
     def update_joint(self):
+
+        self.select_joint_options.blockSignals(True)
+
         self.plot_widget.clear()
+        self.select_joint_options.clear()
+
         grid = gl.GLGridItem()
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
-
-        self.select_joint_options.clear()
-
+        
         if self.chain:
-            self.chain.addToWidget(self)
+            self.chain.addToWidget(self, selectedJoint=self.selected_joint)
+
+        self.select_joint_options.blockSignals(False)
 
     def add_point(self):
                 
