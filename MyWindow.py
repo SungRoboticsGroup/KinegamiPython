@@ -251,7 +251,6 @@ class PointEditorWindow(QMainWindow):
             self.selected_joint = index
             self.update_joint()
 
-
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
