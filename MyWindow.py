@@ -197,71 +197,9 @@ class PointEditorWindow(QMainWindow):
         self.points = []
         self.poses = []
 
-        self.add_point_button = QPushButton("Add Point")
-        self.add_point_button.clicked.connect(self.add_point)
-        self.select_point_options = QComboBox()
-        self.select_point_options.activated.connect(self.index_changed)
-        self.select_point_options.currentIndexChanged.connect(self.index_changed)
-
-        self.move_x_pos = QPushButton("+X")
-        self.move_x_pos.clicked.connect(self.move_point_x_pos)
-        self.move_x_neg = QPushButton("-X")
-        self.move_x_neg.clicked.connect(self.move_point_x_neg)
-
-        self.move_y_pos = QPushButton("+Y")
-        self.move_y_pos.clicked.connect(self.move_point_y_pos)
-        self.move_y_neg = QPushButton("-Y")
-        self.move_y_neg.clicked.connect(self.move_point_y_neg)
-
-        self.move_z_pos = QPushButton("+Z")
-        self.move_z_pos.clicked.connect(self.move_point_z_pos)
-        self.move_z_neg = QPushButton("-Z")
-        self.move_z_neg.clicked.connect(self.move_point_z_neg)
-
-        self.rotate_button_x = QPushButton("Rotate X")
-        self.rotate_button_x.clicked.connect(self.rotate_point_x)
-        self.rotate_button_y = QPushButton("Rotate Y")
-        self.rotate_button_y.clicked.connect(self.rotate_point_y)
-        self.rotate_button_z = QPushButton("Rotate Z")
-        self.rotate_button_z.clicked.connect(self.rotate_point_z)
-
-        self.select_joint_options = QComboBox()
-        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
-        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
-        self.delete_joint_button = QPushButton("Delete Joint")
-
-        button_layout = QVBoxLayout()
-        button_layout.addWidget(self.select_point_options)
-        button_layout.addWidget(self.add_point_button)
-
-        x_layout = QHBoxLayout()
-        x_layout.addWidget(self.move_x_neg)
-        x_layout.addWidget(self.move_x_pos) 
-
-        y_layout = QHBoxLayout()
-        y_layout.addWidget(self.move_y_neg)
-        y_layout.addWidget(self.move_y_pos) 
-
-        z_layout = QHBoxLayout()
-        z_layout.addWidget(self.move_z_neg)
-        z_layout.addWidget(self.move_z_pos) 
-
-        rotate_layout = QHBoxLayout()
-        rotate_layout.addWidget(self.rotate_button_x)
-        rotate_layout.addWidget(self.rotate_button_y)
-        rotate_layout.addWidget(self.rotate_button_z)
-
-        button_layout.addLayout(x_layout)
-        button_layout.addLayout(y_layout)
-        button_layout.addLayout(z_layout)
-        button_layout.addLayout(rotate_layout)
-
-        button_widget = QWidget()
-        button_widget.setLayout(button_layout)
-        dock = QDockWidget("Edit Points")
-        self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        dock.setWidget(button_widget)
-
+        # //////////////////////////////////////////////////////////////////////////////////////
+        # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
+        # //////////////////////////////////////////////////////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
         self.axis_key_widget.setLayout(axis_key_layout)
@@ -278,17 +216,19 @@ class PointEditorWindow(QMainWindow):
         axis_key_dock.setWidget(self.axis_key_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
 
+        # //////////////////////////////////////////////////////////////////////////////////////
+        # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
+        # //////////////////////////////////////////////////////////////////////////////////////
+        self.select_joint_options = QComboBox()
+        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
+        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
+        self.delete_joint_button = QPushButton("Delete Joint")
+
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
         joint_layout.addWidget(self.rotate_joint_button)
         joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
-
-        button_widget = QWidget()
-        button_widget.setLayout(button_layout)
-        self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        dock.setWidget(button_widget)
-
         main_layout = QVBoxLayout()
         main_layout.addLayout(joint_layout)
 
