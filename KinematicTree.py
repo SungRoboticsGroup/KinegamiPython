@@ -158,10 +158,17 @@ class KinematicTree:
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint = None):
         # TODO: IMPLEMENT showGlobalFrame
-        for joint in self.Joints:
-            joint.addToWidget(widget, xColor, yColor, zColor, 
+        for index, joint in enumerate(self.Joints):
+            if index == selectedJoint:
+                joint.addToWidget(widget, xColor, yColor, zColor, 
+                        proximalColor, centerColor, distalColor, 
+                        sphereColor=(1.0, 1.0, 0.5, 0.75), showSphere=True, 
+                        surfaceColor=jointColor, showSurface=showJointSurface, 
+                        axisScale=jointAxisScale, showPoses=showJointPoses)
+            else:
+                joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor=sphereColor, showSphere=showSpheres, 
                         surfaceColor=jointColor, showSurface=showJointSurface, 
@@ -176,8 +183,7 @@ class KinematicTree:
                         showBoundary=showLinkSurface)
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
-            
-
+        widget.add_chain(self)
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',

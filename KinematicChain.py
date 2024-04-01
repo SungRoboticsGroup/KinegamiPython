@@ -64,3 +64,4 @@ class KinematicChain(KinematicTree):
             self.Parents = []
             for i in range(len(self.Joints)):
                 self.Parents.append(i-1)
+        return True

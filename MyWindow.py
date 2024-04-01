@@ -197,8 +197,6 @@ class PointEditorWindow(QMainWindow):
         self.points = []
         self.poses = []
 
-        # testing
-
         # //////////////////////////////////////////////////////////////////////////////////////
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         # //////////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +250,6 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_joint:
             self.selected_joint = index
             self.update_joint()
-
 
     def add_chain(self, chain):
         self.chain = chain
