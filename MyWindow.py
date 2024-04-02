@@ -14,6 +14,91 @@ from PathCSC import *
 from KinematicChain import KinematicChain
 from KinematicTree import KinematicTree
 
+class TransformDialog(QDialog):
+    propogateTransform = True
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Transform Joint')
+        self.setGeometry(100, 100, 300, 250)  
+
+        layout = QVBoxLayout()
+
+        self.operationSelection = QComboBox(self)
+        self.operationSelection.addItems(["Translate", "Rotate"])
+        layout.addWidget(QLabel('Operation:'))
+        layout.addWidget(self.operationSelection)
+
+        self.axisSelection = QComboBox(self)
+        self.axisSelection.addItems(["X", "Y", "Z"])
+        self.axisSelectionLabel = QLabel('Axis:')
+        layout.addWidget(self.axisSelectionLabel)
+        layout.addWidget(self.axisSelection)
+        self.axisSelection.setVisible(False) 
+        self.axisSelectionLabel.setVisible(False)  
+
+        self.operationSelection.currentTextChanged.connect(self.toggleAxisSelection)
+
+        self.propogateTransformCheckbox = QCheckBox("Propagate")
+
+        self.propogateTransformCheckbox.setChecked(TransformDialog.propogateTransform)
+
+        layout.addWidget(self.propogateTransformCheckbox)
+
+        self.setupTransformInputAndButtons(layout)
+        self.setLayout(layout)
+
+    def toggleAxisSelection(self):
+        isRotateSelected = self.operationSelection.currentText() == "Rotate"
+        self.axisSelection.setVisible(isRotateSelected)
+        self.axisSelectionLabel.setVisible(isRotateSelected)
+
+    def setupTransformInputAndButtons(self, layout):
+        self.transform_input = QLineEdit(self)
+        self.transform_input.setPlaceholderText('Enter values for Translate or rotation angle for Rotate:')
+        layout.addWidget(QLabel('Values:'))
+        layout.addWidget(self.transform_input)
+
+        self.apply_button = QPushButton('Apply', self)
+        self.apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(self.apply_button)
+
+        self.cancel_button = QPushButton('Cancel', self)
+        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(self.cancel_button)
+
+    def onApplyClicked(self):
+        TransformDialog.propogateTransform = self.propogateTransformCheckbox.isChecked()
+        self.accept()
+
+
+    def get_transform(self):
+        while True:
+            try:
+                operation = self.operationSelection.currentText()
+                input_text = self.transform_input.text()
+                values = [float(val.strip()) for val in input_text.split(',')]
+                if operation == "Translate":
+                    if len(values) != 3:
+                        raise ValueError("Please enter exactly 3 values for translation.")
+                    transformation = SE3.Trans(values[0], values[1], values[2])
+                else:
+                    if len(values) != 1:
+                        raise ValueError("Please enter exactly 1 value for rotation angle in degrees.")
+                    angle_degrees = values[0]
+                    angle_radians = math.radians(angle_degrees) 
+                    axis = self.axisSelection.currentText()
+                    if axis == "X":
+                        transformation = SE3.Rx(angle_radians)
+                    elif axis == "Y":
+                        transformation = SE3.Ry(angle_radians)
+                    else:
+                        transformation = SE3.Rz(angle_radians)
+                return transformation
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid Input", str(e))
+                self.exec_()
+
 class RotationDialog(QDialog):
     propogateRotation = True
     applyToPreviousWaypointRotation = False
@@ -220,12 +305,14 @@ class PointEditorWindow(QMainWindow):
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         # //////////////////////////////////////////////////////////////////////////////////////
         self.select_joint_options = QComboBox()
+        self.transform_joint_button = QPushButton("Transform Joint")
         self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
         self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
+        joint_layout.addWidget(self.transform_joint_button)
         joint_layout.addWidget(self.rotate_joint_button)
         joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
@@ -238,6 +325,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
 
+        self.transform_joint_button.clicked.connect(self.transform_joint)
         self.rotate_joint_button.clicked.connect(self.rotate_joint)
         self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
@@ -261,6 +349,27 @@ class PointEditorWindow(QMainWindow):
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
+
+    def transform_joint(self):
+        dialog = TransformDialog(self) 
+        if not self.chain:
+            error_dialog = ErrorDialog('Please initialize a chain.')
+            error_dialog.exec_()
+        if self.selected_joint == -1:
+            error_dialog = ErrorDialog('Please select a joint.')
+            error_dialog.exec_()
+        elif dialog.exec_() == QDialog.Accepted:
+            transformation = dialog.get_transform()
+            if transformation is not None:
+                propagate = dialog.propogateTransformCheckbox.isChecked()
+
+                if self.chain.transformJoint(self.selected_joint, transformation, propagate):
+                    self.update_joint()
+                    success_dialog = SuccessDialog('Joint successfully transformed!')
+                    success_dialog.exec_()
+                else:
+                    error_dialog = ErrorDialog('Error transforming joint.')
+                    error_dialog.exec_()
 
     def rotate_joint(self):
         dialog = RotationDialog(self)
