@@ -80,11 +80,11 @@ class TransformDialog(QDialog):
                 values = [float(val.strip()) for val in input_text.split(',')]
                 if operation == "Translate":
                     if len(values) != 3:
-                        raise ValueError("Please enter exactly 3 values for translation.")
+                        raise ValueError("Invalid Input", "Please enter exactly 3 values for translation.")
                     transformation = SE3.Trans(values[0], values[1], values[2])
                 else:
                     if len(values) != 1:
-                        raise ValueError("Please enter exactly 1 value for rotation angle in degrees.")
+                        raise ValueError("Invalid Input", "Please enter exactly 1 value for rotation angle in degrees.")
                     angle_degrees = values[0]
                     angle_radians = math.radians(angle_degrees) 
                     axis = self.axisSelection.currentText()
@@ -98,6 +98,7 @@ class TransformDialog(QDialog):
             except ValueError as e:
                 QMessageBox.warning(self, "Invalid Input", str(e))
                 self.exec_()
+                return None
 
 class RotationDialog(QDialog):
     propogateRotation = True
