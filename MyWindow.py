@@ -795,27 +795,22 @@ class PointEditorWindow(QMainWindow):
             self.update_plot()
 
     def add_prismatic_func(self):
-        print("prismatic")
         dialog = AddPrismaticDialog(self.numSides, self.r)
         self.add_joint(dialog)
 
     def add_revolute_func(self):
-        print("revolute")
         dialog = AddRevoluteDialog(self.numSides, self.r)
         self.add_joint(dialog)
 
     def add_waypoint_func(self):
-        print("waypoint")
         dialog = AddWaypointDialog(self.numSides, self.r)
         self.add_joint(dialog)
 
     def add_tip_func(self):
-        print("tip")
         dialog = AddTipDialog(self.numSides, self.r)
         self.add_joint(dialog)
 
     def create_new_chain_func(self):
-        print("create new chain")
         dialog = CreateNewChainDialog()
         if dialog.exec_() == QDialog.Accepted:
             self.chain = None
