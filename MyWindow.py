@@ -56,7 +56,7 @@ class TransformDialog(QDialog):
 
     def setupTransformInputAndButtons(self, layout):
         self.transform_input = QLineEdit(self)
-        self.transform_input.setPlaceholderText('Enter values for Translate or rotation angle for Rotate:')
+        self.transform_input.setPlaceholderText('x, y, z for Translate or degree for Rotate:')
         layout.addWidget(QLabel('Values:'))
         layout.addWidget(self.transform_input)
 
