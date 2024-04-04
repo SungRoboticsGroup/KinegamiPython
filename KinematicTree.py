@@ -158,7 +158,7 @@ class KinematicTree:
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint = None):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint=None):
         # TODO: IMPLEMENT showGlobalFrame
         for index, joint in enumerate(self.Joints):
             if index == selectedJoint:
