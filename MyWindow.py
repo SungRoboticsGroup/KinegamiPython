@@ -598,9 +598,9 @@ class PointEditorWindow(QMainWindow):
         self.axis_key_widget = QWidget()
         self.axis_key_widget.setLayout(axis_key_layout)
 
-        self.x_axis_widget = self.create_axis_label('x̂', Qt.red)
-        self.y_axis_widget = self.create_axis_label('ŷ', Qt.green)
-        self.z_axis_widget = self.create_axis_label('ẑ', Qt.blue)
+        self.x_axis_widget = self.create_axis_label('x', Qt.red)
+        self.y_axis_widget = self.create_axis_label('y', Qt.green)
+        self.z_axis_widget = self.create_axis_label('z', Qt.blue)
 
         axis_key_layout.addWidget(self.x_axis_widget)
         axis_key_layout.addWidget(self.y_axis_widget)
