@@ -72,7 +72,6 @@ class TransformDialog(QDialog):
         TransformDialog.propogateTransform = self.propogateTransformCheckbox.isChecked()
         self.accept()
 
-
     def get_transform(self):
         while True:
             try:
@@ -286,43 +285,13 @@ class AddJointDialog(QDialog):
             print("Error:", e)
             return None
     
-    def parse_individual_pose(self, exp):
+    def parse_pose(self, exp):
         try:
-            if exp.startswith("SE3.Trans"):
-                translation_str = exp.split('([')[1].split('])')[0]
-                translation = [int(val) for val in translation_str.split(',')]
-                return SE3.Trans(translation)
-            
-            if exp.startswith("SE3.Rx"):
-                rot_str = exp.split('(')[1].split(')')[0]
-                rotation = self.parse_angle(rot_str)
-                return SE3.Rx(rotation)
-            
-            if exp.startswith("SE3.Ry"):
-                rot_str = exp.split('(')[1].split(')')[0]
-                rotation = self.parse_angle(rot_str)
-                return SE3.Ry(rotation)
-            
-            if exp.startswith("SE3.Rz"):
-                rot_str = exp.split('(')[1].split(')')[0]
-                rotation = self.parse_angle(rot_str)
-                return SE3.Rz(rotation)
-            
+            return eval(exp)
         except Exception as e:
             print("Error:", e)
             return None
-    
-    def parse_pose(self, exp):
-        pattern = r'\s*\*\s*'
-        poses = re.split(pattern, exp)
         
-        result = SE3()
-        for pose in poses:
-            parsedPose = self.parse_individual_pose(pose)
-            result = result * parsedPose
-
-        return result
-
 class AddPrismaticDialog(AddJointDialog):
     def __init__(self, numSides, r, parent=None):
         super().__init__(parent)
