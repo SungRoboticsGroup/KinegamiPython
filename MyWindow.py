@@ -10,9 +10,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter
 from spatialmath import SE3
 import math
+from Joint import *
 from PathCSC import *
-from KinematicChain import KinematicChain
-from KinematicTree import KinematicTree
+from KinematicChain import *
+import re
 
 class TransformDialog(QDialog):
     propogateTransform = True
@@ -263,6 +264,285 @@ class ErrorDialog(QDialog):
 
         self.setLayout(layout)
 
+class AddJointDialog(QDialog):
+    jointToAdd = None
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def getJoint(self):
+        try:
+            return self.jointToAdd
+        except ValueError:
+            QMessageBox.warning(self, "ERROR", "Invalid input")
+            self.exec_() 
+            return None
+        
+    def parse_angle(self, exp):
+        try:
+            result = eval(exp, {'np': np})
+            return result
+        except Exception as e:
+            print("Error:", e)
+            return None
+    
+    def parse_individual_pose(self, exp):
+        try:
+            if exp.startswith("SE3.Trans"):
+                translation_str = exp.split('([')[1].split('])')[0]
+                translation = [int(val) for val in translation_str.split(',')]
+                return SE3.Trans(translation)
+            
+            if exp.startswith("SE3.Rx"):
+                rot_str = exp.split('(')[1].split(')')[0]
+                rotation = self.parse_angle(rot_str)
+                return SE3.Rx(rotation)
+            
+            if exp.startswith("SE3.Ry"):
+                rot_str = exp.split('(')[1].split(')')[0]
+                rotation = self.parse_angle(rot_str)
+                return SE3.Ry(rotation)
+            
+            if exp.startswith("SE3.Rz"):
+                rot_str = exp.split('(')[1].split(')')[0]
+                rotation = self.parse_angle(rot_str)
+                return SE3.Rz(rotation)
+            
+        except Exception as e:
+            print("Error:", e)
+            return None
+    
+    def parse_pose(self, exp):
+        pattern = r'\s*\*\s*'
+        poses = re.split(pattern, exp)
+        
+        result = SE3()
+        for pose in poses:
+            parsedPose = self.parse_individual_pose(pose)
+            result = result * parsedPose
+
+        return result
+
+class AddPrismaticDialog(AddJointDialog):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Add new prismatic joint')
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+        
+        length_layout = QHBoxLayout()
+        length_label = QLabel("Neutral Length:")
+        self.length_input = QLineEdit()
+        length_layout.addWidget(length_label)
+        length_layout.addWidget(self.length_input)
+        layout.addLayout(length_layout)
+
+        numLayers_layout = QHBoxLayout()
+        numLayers_label = QLabel("Number of Layers:")
+        self.numLayers_input = QLineEdit()
+        numLayers_layout.addWidget(numLayers_label)
+        numLayers_layout.addWidget(self.numLayers_input)
+        layout.addLayout(numLayers_layout)
+
+        angle_layout = QHBoxLayout()
+        angle_label = QLabel("Cone Angle (radians):")
+        self.angle_input = QLineEdit()
+        angle_layout.addWidget(angle_label)
+        angle_layout.addWidget(self.angle_input)
+        layout.addLayout(angle_layout)
+
+        pose_layout = QHBoxLayout()
+        pose_label = QLabel("Pose (SE3):")
+        self.pose_input = QLineEdit()
+        pose_layout.addWidget(pose_label)
+        pose_layout.addWidget(self.pose_input)
+        layout.addLayout(pose_layout)
+
+        apply_button = QPushButton('Add')
+        apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(apply_button)
+
+        self.setLayout(layout)
+
+        self.numSides = numSides
+        self.r = r
+    
+    def onApplyClicked(self):
+        try:
+            neutralLength = int(self.length_input.text())
+            numLayers = int(self.numLayers_input.text())
+            coneAngleText = self.angle_input.text()
+            poseText = self.pose_input.text()
+
+            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, self.parse_angle(coneAngleText), self.parse_pose(poseText))
+            self.accept()
+        except ValueError:
+            error_dialog = ErrorDialog('Please enter valid integers.')
+            error_dialog.exec_()
+        
+class AddRevoluteDialog(AddJointDialog):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Add new joint')
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+        
+        angle_layout = QHBoxLayout()
+        angle_label = QLabel("Total Bending Angle (radians):")
+        self.angle_input = QLineEdit()
+        angle_layout.addWidget(angle_label)
+        angle_layout.addWidget(self.angle_input)
+        layout.addLayout(angle_layout)
+
+        pose_layout = QHBoxLayout()
+        pose_label = QLabel("Pose (SE3):")
+        self.pose_input = QLineEdit()
+        pose_layout.addWidget(pose_label)
+        pose_layout.addWidget(self.pose_input)
+        layout.addLayout(pose_layout)
+        
+        apply_button = QPushButton('Add')
+        apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(apply_button)
+
+        self.setLayout(layout)
+
+        self.numSides = numSides
+        self.r = r
+
+    def onApplyClicked(self):
+        bendingAngleText = self.angle_input.text()
+        poseText = self.pose_input.text()
+
+        self.jointToAdd = RevoluteJoint(self.numSides, self.r, self.parse_angle(bendingAngleText), self.parse_pose(poseText))
+        self.accept()
+        
+class AddWaypointDialog(AddJointDialog):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Add new joint')
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+        
+        pose_layout = QHBoxLayout()
+        pose_label = QLabel("Pose (SE3):")
+        self.pose_input = QLineEdit()
+        pose_layout.addWidget(pose_label)
+        pose_layout.addWidget(self.pose_input)
+        layout.addLayout(pose_layout)
+        
+        apply_button = QPushButton('Add')
+        apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(apply_button)
+
+        self.setLayout(layout)
+
+        self.numSides = numSides
+        self.r = r
+
+    def onApplyClicked(self):
+        poseText = self.pose_input.text()
+
+        self.jointToAdd = Waypoint(self.numSides, self.r, Pose=self.parse_pose(poseText))
+        self.accept()
+
+class AddTipDialog(AddJointDialog):
+    isStart = True
+
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Add new joint')
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+
+        length_layout = QHBoxLayout()
+        length_label = QLabel("Length:")
+        self.length_input = QLineEdit()
+        length_layout.addWidget(length_label)
+        length_layout.addWidget(self.length_input)
+        layout.addLayout(length_layout)
+        
+        pose_layout = QHBoxLayout()
+        pose_label = QLabel("Pose (SE3):")
+        self.pose_input = QLineEdit()
+        pose_layout.addWidget(pose_label)
+        pose_layout.addWidget(self.pose_input)
+        layout.addLayout(pose_layout)
+        
+        apply_button = QPushButton('Add')
+        apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(apply_button)
+
+        self.setLayout(layout)
+
+        self.numSides = numSides
+        self.r = r
+
+    def onApplyClicked(self):
+        try:
+            neutralLength = float(self.length_input.text())
+            poseText = self.pose_input.text()
+
+            if (self.isStart):
+                self.jointToAdd = StartTip(self.numSides, self.r, self.parse_pose(poseText), length=neutralLength)
+            else:
+                self.jointToAdd = EndTip(self.numSides, self.r, self.parse_pose(poseText), length=neutralLength)
+
+            self.accept()
+        except ValueError:
+            error_dialog = ErrorDialog('Please enter valid integers.')
+            error_dialog.exec_()
+
+class CreateNewChainDialog(QDialog):
+    numSides = 4
+    r = 1
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Create new chain')
+        self.setGeometry(100, 100, 300, 100)
+
+        layout = QVBoxLayout()
+
+        numSides_layout = QHBoxLayout()
+        numSides_label = QLabel("Number of Sides:")
+        self.numSides_input = QLineEdit()
+        numSides_layout.addWidget(numSides_label)
+        numSides_layout.addWidget(self.numSides_input)
+        layout.addLayout(numSides_layout)
+
+        r_layout = QHBoxLayout()
+        r_label = QLabel("Radius:")
+        self.r_input = QLineEdit()
+        r_layout.addWidget(r_label)
+        r_layout.addWidget(self.r_input)
+        layout.addLayout(r_layout)
+        
+        create_button = QPushButton('Create')
+        create_button.clicked.connect(self.onCreateClicked)
+        layout.addWidget(create_button)
+
+        self.setLayout(layout)
+
+    def onCreateClicked(self):
+        try:
+            self.numSides = int(self.numSides_input.text())
+            self.r = int(self.r_input.text())
+            self.accept()
+        except ValueError:
+            error_dialog = ErrorDialog('Please enter valid integers.')
+            error_dialog.exec_()
+
+    def getNumSides(self):
+        return self.numSides
+    
+    def getR(self):
+        return self.r
+
 class PointEditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -283,9 +563,37 @@ class PointEditorWindow(QMainWindow):
         self.points = []
         self.poses = []
 
-        # //////////////////////////////////////////////////////////////////////////////////////
+        self.numSides = 4
+        self.r = 1
+
+        # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
+        self.add_prismatic = QPushButton("Add Prismatic Joint")
+        self.add_revolute = QPushButton("Add Revolute Joint")
+        self.add_waypoint = QPushButton("Add Waypoint")
+        self.add_tip = QPushButton("Add Tip")
+        self.create_new_chain = QPushButton("Create New Chain")
+
+        add_joints_layout = QVBoxLayout()
+        add_joints_layout.addWidget(self.add_prismatic)
+        add_joints_layout.addWidget(self.add_revolute)
+        add_joints_layout.addWidget(self.add_waypoint)
+        add_joints_layout.addWidget(self.add_tip)
+        add_joints_layout.addWidget(self.create_new_chain)
+
+        self.add_prismatic.clicked.connect(self.add_prismatic_func)
+        self.add_revolute.clicked.connect(self.add_revolute_func)
+        self.add_waypoint.clicked.connect(self.add_waypoint_func)
+        self.add_tip.clicked.connect(self.add_tip_func)
+        self.create_new_chain.clicked.connect(self.create_new_chain_func)
+
+        add_joints_dock = QDockWidget("Add joints", self)
+        self.add_joints_widget = QWidget()
+        self.add_joints_widget.setLayout(add_joints_layout)
+        add_joints_dock.setWidget(self.add_joints_widget)
+
+        self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
+
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
-        # //////////////////////////////////////////////////////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
         self.axis_key_widget.setLayout(axis_key_layout)
@@ -302,9 +610,7 @@ class PointEditorWindow(QMainWindow):
         axis_key_dock.setWidget(self.axis_key_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
 
-        # //////////////////////////////////////////////////////////////////////////////////////
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
-        # //////////////////////////////////////////////////////////////////////////////////////
         self.select_joint_options = QComboBox()
         self.transform_joint_button = QPushButton("Transform Joint")
         self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
@@ -437,7 +743,6 @@ class PointEditorWindow(QMainWindow):
                 error_dialog.exec_()
 
     def update_joint(self):
-
         self.select_joint_options.blockSignals(True)
 
         self.plot_widget.clear()
@@ -447,71 +752,10 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
         
-        if self.chain:
+        if self.chain is not None:
             self.chain.addToWidget(self, selectedJoint=self.selected_joint)
 
         self.select_joint_options.blockSignals(False)
-
-    def add_point(self):
-                
-        #initialize pose
-        pose = SE3()
-        point = gl.GLScatterPlotItem(pos=pose.t, color=(1, 1, 1, 1), size=10)
-
-        self.points.append(point)
-        self.poses.append(pose)
-
-        self.select_point_options.addItem(str(len(self.points)))
-
-        self.update_plot()
-
-    def move_point_x_pos(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Tx(.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def move_point_x_neg(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Tx(-.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def move_point_y_pos(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Ty(.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def move_point_y_neg(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Ty(-.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def move_point_z_pos(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Tz(.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def move_point_z_neg(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Tz(-.2)
-        self.points[self.current_point].pos = self.poses[self.current_point].t 
-        self.update_plot()
-
-    def rotate_point_x(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Rx(math.pi/12)
-        self.update_plot()
-
-    def rotate_point_y(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Ry(math.pi/12)
-        self.update_plot()
-
-    def rotate_point_z(self):
-        self.poses[self.current_point] = self.poses[self.current_point] * SE3.Rz(math.pi/12)
-        self.update_plot()
-
-    def index_changed(self, index):
-        self.points[self.current_point].color = (1,1,1,1)
-        self.current_point = index
-        self.points[self.current_point].color = (1,0,0,1)
-        self.update_plot()
 
     def update_plot(self):
         self.plot_widget.clear()
@@ -519,54 +763,9 @@ class PointEditorWindow(QMainWindow):
 
         grid = gl.GLGridItem()
         self.plot_widget.addItem(grid)
+        grid.setColor((0,0,0,255))
 
-        index = 0
-        for point in self.points:
-            md = gl.MeshData.sphere(rows=10, cols=20, radius=0.9)
-            center = point.pos
-            
-            #plot sphere
-            m1 = gl.GLMeshItem(
-                meshdata=md,
-                smooth=True,
-                color=(0.4, 0.4, 0.4, 0.1),
-                shader="balloon",
-                glOptions="additive",
-            )
-            m1.translate(*center)
-            self.plot_widget.addItem(m1)
-
-            #plot point
-            self.plot_widget.addItem(point)
-
-            # -------- plot all the poses --------
-            pose = self.poses[index]
-            center = np.append(point.pos, 1)
-
-            #endpoints
-            p_x = np.append(point.pos + [1,0,0], 1)
-            p_y = np.append(point.pos + [0,1,0], 1)
-            p_z = np.append(point.pos + [0,0,1], 1)
-
-            #apply transformation to a centered point
-            rotated_point_x = np.dot(pose, p_x - center)
-            rotated_point_y = np.dot(pose, p_y - center)
-            rotated_point_z = np.dot(pose, p_z - center)
-    
-            #translate back from center
-            rotated_point_x += center
-            rotated_point_y += center
-            rotated_point_z += center
-
-            xLine = gl.GLLinePlotItem(pos=np.array([point.pos, rotated_point_x[:3]]), color=(1, 0, 0, 1)) 
-            yLine = gl.GLLinePlotItem(pos=np.array([point.pos, rotated_point_y[:3]]), color=(0, 1, 0, 1)) 
-            zLine = gl.GLLinePlotItem(pos=np.array([point.pos, rotated_point_z[:3]]), color=(0, 0, 1, 1)) 
-
-            self.plot_widget.addItem(xLine)
-            self.plot_widget.addItem(yLine)
-            self.plot_widget.addItem(zLine)
-
-            index = index + 1
+        self.chain.addToWidget(self)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -584,6 +783,45 @@ class PointEditorWindow(QMainWindow):
         widget = QWidget()
         widget.setLayout(layout)
         return widget
+    
+    def add_joint(self, dialog):
+        if dialog.exec_() == QDialog.Accepted:
+            joint = dialog.getJoint()
+            if (self.chain == None) :
+                self.chain = KinematicChain(joint)
+            else :
+                self.chain.append(joint)
+            
+            self.update_plot()
+
+    def add_prismatic_func(self):
+        print("prismatic")
+        dialog = AddPrismaticDialog(self.numSides, self.r)
+        self.add_joint(dialog)
+
+    def add_revolute_func(self):
+        print("revolute")
+        dialog = AddRevoluteDialog(self.numSides, self.r)
+        self.add_joint(dialog)
+
+    def add_waypoint_func(self):
+        print("waypoint")
+        dialog = AddWaypointDialog(self.numSides, self.r)
+        self.add_joint(dialog)
+
+    def add_tip_func(self):
+        print("tip")
+        dialog = AddTipDialog(self.numSides, self.r)
+        self.add_joint(dialog)
+
+    def create_new_chain_func(self):
+        print("create new chain")
+        dialog = CreateNewChainDialog()
+        if dialog.exec_() == QDialog.Accepted:
+            self.chain = None
+            self.numSides = dialog.getNumSides()
+            self.r = dialog.getR()
+            self.update_plot()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
