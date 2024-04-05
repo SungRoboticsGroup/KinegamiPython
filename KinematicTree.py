@@ -288,8 +288,6 @@ class KinematicTree:
                        recomputeLinkPath : bool = True, 
                        safe : bool = True, relative : bool = False) -> bool:
         if relative:
-            print(Transformation)
-            print(self.Joints[jointIndex].Pose)
             Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
         
         if safe:
@@ -297,7 +295,7 @@ class KinematicTree:
             try:
                 self.transformJoint(jointIndex, Transformation, 
                        propogate, recomputeBoundingBall,
-                       recomputeLinkPath, safe=False)
+                       recomputeLinkPath, safe=False, relative=False)
             except ValueError as err:
                 print("WARNING: something went wrong in transformJoint:")
                 print(err)
@@ -319,7 +317,7 @@ class KinematicTree:
                     self.transformJoint(c, Transformation, propogate=True, 
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
-                                        safe=False)
+                                        safe=False, relative=False)
             else:
                 for c in self.Children[jointIndex]:
                     child = self.Joints[c]
@@ -342,7 +340,7 @@ class KinematicTree:
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
             self.transformJoint(c, Transformation, propogate=True, 
-                                recomputeBoundingBall=False, safe=False)
+                                recomputeBoundingBall=False, safe=False, relative=False)
         self.recomputeBoundingBall()
         return True
     
@@ -369,12 +367,12 @@ class KinematicTree:
             Translation = SE3(distance * self.Joints[jointIndex].Pose.R[:,2])
             if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
                 if propogate:
-                    self.transformJoint(jointIndex-1, Translation, True, safe=False)
+                    self.transformJoint(jointIndex-1, Translation, True, safe=False, relative=False)
                 else:
-                    self.transformJoint(jointIndex-1, Translation, False, safe=False)
-                    self.transformJoint(jointIndex, Translation, False, safe=False)
+                    self.transformJoint(jointIndex-1, Translation, False, safe=False, relative=False)
+                    self.transformJoint(jointIndex, Translation, False, safe=False, relative=False)
             else:
-                self.transformJoint(jointIndex, Translation, propogate, safe=False)
+                self.transformJoint(jointIndex, Translation, propogate, safe=False, relative=False)
         return True
     
     # Returns True if it succeeds (the transformation gives valid links).
@@ -400,12 +398,12 @@ class KinematicTree:
             Rotation = RotationAboutLine(Pose.R[:,2], Pose.t, angle)
             if applyToPreviousWaypoint and type(self.Joints[jointIndex-1])==Waypoint:
                 if propogate:
-                    self.transformJoint(jointIndex-1, Rotation, True, safe=False)
+                    self.transformJoint(jointIndex-1, Rotation, True, safe=False, relative=False)
                 else:
-                    self.transformJoint(jointIndex-1, Rotation, False, safe=False)
-                    self.transformJoint(jointIndex, Rotation, False, safe=False)
+                    self.transformJoint(jointIndex-1, Rotation, False, safe=False, relative=False)
+                    self.transformJoint(jointIndex, Rotation, False, safe=False, relative=False)
             else:
-                self.transformJoint(jointIndex, Rotation, propogate, safe=False)
+                self.transformJoint(jointIndex, Rotation, propogate, safe=False, relative=False)
         return True
 
 """ 

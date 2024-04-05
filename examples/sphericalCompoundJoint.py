@@ -29,5 +29,5 @@ chain.show(block=False, showLinkPath=False, showJointPoses=False,
 chain.translateJointAlongAxisOfMotion(i, 2, propogate=False)
 chain.translateJointAlongAxisOfMotion(j, 5, propogate=False)
 # Move a waypoint to make that link more compact
-chain.transformJoint(len(chain.Joints)-2, SE3.Trans(-1,-2,0), propogate=False)
+chain.transformJoint(len(chain.Joints)-2, SE3.Trans(-1,-2,0), propogate=False, relative=False)
 chain.show(showLinkPath=False, showJointPoses=False, showLinkPoses=False)

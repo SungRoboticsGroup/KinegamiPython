@@ -639,7 +639,7 @@ class PointEditorWindow(QMainWindow):
             if transformation is not None:
                 propagate = dialog.propogateTransformCheckbox.isChecked()
 
-                if self.chain.transformJoint(self.selected_joint, transformation, propagate):
+                if self.chain.transformJoint(self.selected_joint, transformation, propagate, relative=True):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint successfully transformed!')
                     success_dialog.exec_()
