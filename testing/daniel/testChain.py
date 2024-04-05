@@ -32,6 +32,11 @@ end = EndTip(numSides, r, Pose=SE3.Ry(np.pi/2), length=0.5)
 endIndex = chain.append(end)
 #chain.show(showGlobalFrame=True)
 
+
+chain.transformJoint(prismaticIndex, SE3.Trans([0,0,-4]), relative=True, propogate=True)
+
+chain.transformJoint(revoluteIndex, SE3.Trans([0,0,-6]), relative=False, propogate=True)
+
 """
 # Example 1B
 chain.translateJointAlongAxisOfMotion(revoluteIndex, -7)

@@ -286,7 +286,12 @@ class KinematicTree:
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall=True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True) -> bool:
+                       safe : bool = True, relative : bool = False) -> bool:
+        if relative:
+            print(Transformation)
+            print(self.Joints[jointIndex].Pose)
+            Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+        
         if safe:
             backup = self.dataDeepCopy()
             try:
