@@ -17,6 +17,7 @@ import re
 
 class TransformDialog(QDialog):
     propogateTransform = True
+    relativeTransform = True
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -41,10 +42,13 @@ class TransformDialog(QDialog):
         self.operationSelection.currentTextChanged.connect(self.toggleAxisSelection)
 
         self.propogateTransformCheckbox = QCheckBox("Propagate")
+        self.relativeTransformCheckbox = QCheckBox("Relative")
 
         self.propogateTransformCheckbox.setChecked(TransformDialog.propogateTransform)
+        self.relativeTransformCheckbox.setChecked(TransformDialog.relativeTransform)
 
         layout.addWidget(self.propogateTransformCheckbox)
+        layout.addWidget(self.relativeTransformCheckbox)
 
         self.setupTransformInputAndButtons(layout)
         self.setLayout(layout)
@@ -70,6 +74,7 @@ class TransformDialog(QDialog):
 
     def onApplyClicked(self):
         TransformDialog.propogateTransform = self.propogateTransformCheckbox.isChecked()
+        TransformDialog.relativeTransform = self.relativeTransformCheckbox.isChecked()
         self.accept()
 
     def get_transform(self):
@@ -638,8 +643,9 @@ class PointEditorWindow(QMainWindow):
             transformation = dialog.get_transform()
             if transformation is not None:
                 propagate = dialog.propogateTransformCheckbox.isChecked()
+                relative = dialog.relativeTransformCheckbox.isChecked()
 
-                if self.chain.transformJoint(self.selected_joint, transformation, propagate, relative=True):
+                if self.chain.transformJoint(self.selected_joint, transformation, propagate, relative=relative):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint successfully transformed!')
                     success_dialog.exec_()

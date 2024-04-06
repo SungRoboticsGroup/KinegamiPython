@@ -33,9 +33,9 @@ endIndex = chain.append(end)
 #chain.show(showGlobalFrame=True)
 
 
-chain.transformJoint(prismaticIndex, SE3.Trans([0,0,-4]), relative=True, propogate=True, relative=False)
+# chain.transformJoint(prismaticIndex, SE3.Trans([0,0,-4]), relative=True, propogate=True, relative=False)
 
-chain.transformJoint(revoluteIndex, SE3.Trans([0,0,-6]), relative=False, propogate=True, relative=False)
+# chain.transformJoint(revoluteIndex, SE3.Trans([0,0,-6]), relative=False, propogate=True, relative=False)
 
 """
 # Example 1B

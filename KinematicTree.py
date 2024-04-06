@@ -162,25 +162,35 @@ class KinematicTree:
         # TODO: IMPLEMENT showGlobalFrame
         for index, joint in enumerate(self.Joints):
             if index == selectedJoint:
-                joint.addToWidget(widget, xColor, yColor, zColor, 
-                        proximalColor, centerColor, distalColor, 
-                        sphereColor=(1.0, 1.0, 0.5, 0.75), showSphere=True, 
-                        surfaceColor=jointColor, showSurface=showJointSurface, 
-                        axisScale=jointAxisScale, showPoses=showJointPoses)
+                if joint.__class__.__name__ != "Waypoint":
+                    joint.addToWidget(widget, xColor, yColor, zColor, 
+                            proximalColor, centerColor, distalColor, 
+                            sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True, 
+                            surfaceColor=jointColor, showSurface=showJointSurface, 
+                            axisScale=jointAxisScale, showPoses=showJointPoses)
             else:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor=sphereColor, showSphere=showSpheres, 
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
-        for link in self.Links:
-            link.addToWidget(widget, color=linkColor, 
-                        alpha=surfaceOpacity, 
-                        showPath=showLinkPath, 
-                        pathColor=pathColor,
-                        showPathCircles=showPathCircles, 
-                        showFrames=showLinkPoses,
-                        showBoundary=showLinkSurface)
+        for index, link in enumerate(self.Links):
+            if index == selectedJoint and self.Joints[index].__class__.__name__ == "Waypoint":
+                link.addToWidget(widget, color=(1.0, 1.0, 0.5, 0.5), 
+                            alpha=surfaceOpacity, 
+                            showPath=showLinkPath, 
+                            pathColor=pathColor,
+                            showPathCircles=showPathCircles, 
+                            showFrames=showLinkPoses,
+                            showBoundary=showLinkSurface)
+            else:
+                link.addToWidget(widget, color=linkColor, 
+                            alpha=surfaceOpacity, 
+                            showPath=showLinkPath, 
+                            pathColor=pathColor,
+                            showPathCircles=showPathCircles, 
+                            showFrames=showLinkPoses,
+                            showBoundary=showLinkSurface)
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
         widget.add_chain(self)
