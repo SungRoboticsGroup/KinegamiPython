@@ -34,7 +34,7 @@ thumbEnd = tree.addJoint(thumb1, EndTip(numSides, r,
 
 
 pointer1 = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi, 
-                        SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)),
+                        SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
@@ -48,7 +48,7 @@ pointerEnd = tree.addJoint(pointer2, EndTip(numSides, r,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle0 = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi/2, 
+middle0 = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi, 
                         SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -68,5 +68,27 @@ middleEnd = tree.addJoint(middle2, EndTip(numSides, r,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-tree.show(showGlobalFrame=True)
+tree.show(block=False)
 
+# Spherical grasp
+tree.setJointState(middle0, np.pi/2)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False)
+
+# Cylindrical grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False)
+
+# Pinch grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle2, pointer2, thumb1]:
+    tree.setJointState(i, 0)
+for i in [middle1, pointer1, thumb0]:
+    tree.setJointState(i, np.pi/2)
+tree.show()
