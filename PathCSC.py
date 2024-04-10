@@ -175,7 +175,7 @@ class PathCSC:
         self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
                                 cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
-    
+
     def newPathTransformedBy(self, Transformation : SE3):
         new_turn1end = Transformation * self.turn1end
         new_turn1endPlusTunit = Transformation * (self.turn1end + self.tUnit)

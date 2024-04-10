@@ -197,6 +197,13 @@ class KinematicTree:
         return np.array(xyzHandles), np.array(abcHandles)
         
     
+    def branchingParametersFrom(self, parentIndex : int):
+        params = []
+        for link in self.Links[self.Children[parentIndex]]:
+            # TODO: calculate twist relative to start pose
+            # TODO: express angles in degrees, not radians
+            params.append([twist1, theta1, self.r, twist2, theta2, self.r])
+    
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              showJointSurface=True, jointColor=jointColorDefault, 
