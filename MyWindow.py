@@ -5,7 +5,7 @@
 import sys
 import numpy as np
 import pyqtgraph.opengl as gl
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QPainter
 from spatialmath import SE3
@@ -270,17 +270,24 @@ class ErrorDialog(QDialog):
 
 class AddJointDialog(QDialog):
     jointToAdd = None
+    relative = True
+    fixedPosition = False
+    fixedOrientation = False
 
     def __init__(self, parent=None):
         super().__init__(parent)
     
     def getJoint(self):
-        try:
-            return self.jointToAdd
-        except ValueError:
-            QMessageBox.warning(self, "ERROR", "Invalid input")
-            self.exec_() 
-            return None
+        return self.jointToAdd
+        
+    def getIsRelative(self):
+        return self.relative
+    
+    def getFixedPosition(self):
+        return self.fixedPosition
+    
+    def getFixedOrientation(self):
+        return self.fixedOrientation
         
     def parse_angle(self, exp):
         try:
@@ -296,6 +303,18 @@ class AddJointDialog(QDialog):
         except Exception as e:
             print("Error:", e)
             return None
+        
+    def on_relative_clicked(self):
+        self.relative = True
+
+    def on_absolute_clicked(self):
+        self.relative = False
+
+    def on_fixed_position_toggled(self):
+        self.fixedPosition = not self.fixedPosition
+
+    def on_fixed_orientation_toggled(self):
+        self.fixedOrientation = not self.fixedOrientation
         
 class AddPrismaticDialog(AddJointDialog):
     def __init__(self, numSides, r, parent=None):
@@ -333,6 +352,25 @@ class AddPrismaticDialog(AddJointDialog):
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
 
+        relative_layout = QHBoxLayout()
+        self.radio_group = QButtonGroup()
+        self.relative = QRadioButton('Relative')
+        self.absolute = QRadioButton('Absolute')
+        self.relative.setChecked(True)
+        self.relative.clicked.connect(self.on_relative_clicked)
+        self.absolute.clicked.connect(self.on_absolute_clicked)
+        relative_layout.addWidget(self.relative)
+        relative_layout.addWidget(self.absolute)
+        layout.addLayout(relative_layout)
+
+        self.position_checkbox = QCheckBox('Fixed Position')
+        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
+        layout.addWidget(self.position_checkbox)
+
+        self.orientation_checkbox = QCheckBox('Fixed Orientation')
+        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
+        layout.addWidget(self.orientation_checkbox)
+
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -341,7 +379,7 @@ class AddPrismaticDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
-    
+
     def onApplyClicked(self):
         try:
             neutralLength = int(self.length_input.text())
@@ -376,7 +414,26 @@ class AddRevoluteDialog(AddJointDialog):
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
-        
+
+        relative_layout = QHBoxLayout()
+        self.radio_group = QButtonGroup()
+        self.relative = QRadioButton('Relative')
+        self.absolute = QRadioButton('Absolute')
+        self.relative.setChecked(True)
+        self.relative.clicked.connect(self.on_relative_clicked)
+        self.absolute.clicked.connect(self.on_absolute_clicked)
+        relative_layout.addWidget(self.relative)
+        relative_layout.addWidget(self.absolute)
+        layout.addLayout(relative_layout)
+
+        self.position_checkbox = QCheckBox('Fixed Position')
+        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
+        layout.addWidget(self.position_checkbox)
+
+        self.orientation_checkbox = QCheckBox('Fixed Orientation')
+        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
+        layout.addWidget(self.orientation_checkbox)
+
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -407,6 +464,25 @@ class AddWaypointDialog(AddJointDialog):
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+
+        relative_layout = QHBoxLayout()
+        self.radio_group = QButtonGroup()
+        self.relative = QRadioButton('Relative')
+        self.absolute = QRadioButton('Absolute')
+        self.relative.setChecked(True)
+        self.relative.clicked.connect(self.on_relative_clicked)
+        self.absolute.clicked.connect(self.on_absolute_clicked)
+        relative_layout.addWidget(self.relative)
+        relative_layout.addWidget(self.absolute)
+        layout.addLayout(relative_layout)
+
+        self.position_checkbox = QCheckBox('Fixed Position')
+        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
+        layout.addWidget(self.position_checkbox)
+
+        self.orientation_checkbox = QCheckBox('Fixed Orientation')
+        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
+        layout.addWidget(self.orientation_checkbox)
         
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -446,6 +522,25 @@ class AddTipDialog(AddJointDialog):
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+
+        relative_layout = QHBoxLayout()
+        self.radio_group = QButtonGroup()
+        self.relative = QRadioButton('Relative')
+        self.absolute = QRadioButton('Absolute')
+        self.relative.setChecked(True)
+        self.relative.clicked.connect(self.on_relative_clicked)
+        self.absolute.clicked.connect(self.on_absolute_clicked)
+        relative_layout.addWidget(self.relative)
+        relative_layout.addWidget(self.absolute)
+        layout.addLayout(relative_layout)
+
+        self.position_checkbox = QCheckBox('Fixed Position')
+        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
+        layout.addWidget(self.position_checkbox)
+
+        self.orientation_checkbox = QCheckBox('Fixed Orientation')
+        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
+        layout.addWidget(self.orientation_checkbox)
         
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -533,6 +628,7 @@ class PointEditorWindow(QMainWindow):
 
         self.current_point = 0
         self.chain = None
+        self.chain_created = False
 
         self.points = []
         self.poses = []
@@ -762,36 +858,70 @@ class PointEditorWindow(QMainWindow):
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
             joint = dialog.getJoint()
+            isRelative = dialog.getIsRelative()
+            isFixedPosition = dialog.getFixedPosition()
+            isFixedOrientation = dialog.getFixedOrientation()
+            isSafe = True
+
+            if (isFixedPosition or isFixedOrientation):
+                isSafe = False
+
             if (self.chain == None) :
                 self.chain = KinematicChain(joint)
             else :
-                self.chain.append(joint)
+                self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             
             self.update_plot()
 
+    def chain_not_created(self):
+        error_dialog = ErrorDialog('Please create a chain first.')
+        error_dialog.exec_()
+        self.create_new_chain_func()
+
     def add_prismatic_func(self):
-        dialog = AddPrismaticDialog(self.numSides, self.r)
-        self.add_joint(dialog)
+        if (not self.chain_created) :
+            self.chain_not_created()
+        else:
+            dialog = AddPrismaticDialog(self.numSides, self.r)
+            self.add_joint(dialog)
 
     def add_revolute_func(self):
-        dialog = AddRevoluteDialog(self.numSides, self.r)
-        self.add_joint(dialog)
+        if (not self.chain_created) :
+            self.chain_not_created()
+        else:
+            dialog = AddRevoluteDialog(self.numSides, self.r)
+            self.add_joint(dialog)
 
     def add_waypoint_func(self):
-        dialog = AddWaypointDialog(self.numSides, self.r)
-        self.add_joint(dialog)
+        if (not self.chain_created) :
+            self.chain_not_created()
+        else:
+            dialog = AddWaypointDialog(self.numSides, self.r)
+            self.add_joint(dialog)
 
     def add_tip_func(self):
-        dialog = AddTipDialog(self.numSides, self.r)
-        self.add_joint(dialog)
+        if (not self.chain_created) :
+            self.chain_not_created()
+        else:
+            dialog = AddTipDialog(self.numSides, self.r)
+            self.add_joint(dialog)
 
     def create_new_chain_func(self):
         dialog = CreateNewChainDialog()
         if dialog.exec_() == QDialog.Accepted:
             self.chain = None
+            self.chain_created = True
             self.numSides = dialog.getNumSides()
             self.r = dialog.getR()
-            self.update_plot()
+            self.plot_widget.clear()
+            self.setCentralWidget(self.plot_widget)
+
+            grid = gl.GLGridItem()
+            self.plot_widget.addItem(grid)
+            grid.setColor((0,0,0,255))
+
+            success_dialog = SuccessDialog('Chain created!')
+            success_dialog.exec_()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
