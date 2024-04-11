@@ -85,10 +85,10 @@ class Joint(ABC):
     def DubinsFrame(self) -> SE3:
         return SE3(self.Pose.A[:,self.dubinsColumnOrder()])
     
-    def ProximalDubinsFrame(self) -> SE3():
+    def ProximalDubinsFrame(self) -> SE3:
         return SE3(self.ProximalFrame().A[:,self.dubinsColumnOrder()])
     
-    def DistalDubinsFrame(self) -> SE3():
+    def DistalDubinsFrame(self) -> SE3:
         return SE3(self.DistalFrame().A[:,self.dubinsColumnOrder()])
     
     def proximalPosition(self) -> np.ndarray:
