@@ -208,7 +208,6 @@ class Cylinder:
         """
         uhat = self.uhat
         vhat = cross(self.direction, uhat)
-
         circlePoints = np.outer(u, uhat) + np.outer(v, vhat)
 
         vertices = []
