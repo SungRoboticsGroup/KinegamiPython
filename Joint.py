@@ -140,7 +140,7 @@ class Joint(ABC):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
-                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True):
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         if showAxis:
             zhat = self.Pose.R[:, 2] 
             jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
@@ -152,6 +152,8 @@ class Joint(ABC):
             for pose, color in zip([self.ProximalFrame(), self.DistalFrame(), self.Pose], [proximalColor, distalColor, centerColor]):
                 for i, axis_color in enumerate([xColor, yColor, zColor]):
                     poseAxisScale = self.r
+                    if poseAxisScaleMultipler:
+                        poseAxisScale *= poseAxisScaleMultipler
                     start_point = pose.t
                     end_point = start_point + poseAxisScale * pose.R[:, i]
                     points = np.array([start_point, end_point])
@@ -266,7 +268,7 @@ class RevoluteJoint(OrigamiJoint):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
-                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True):
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
 
         if showSurface:
             scale = self.pattern.baseSideLength / 2
@@ -296,7 +298,7 @@ class RevoluteJoint(OrigamiJoint):
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
                             surfaceColor, showSurface, showAxis,
-                            axisScale, showPoses)
+                            axisScale, showPoses, poseAxisScaleMultipler)
 
 class PrismaticJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, neutralLength : float, 
@@ -357,7 +359,7 @@ class PrismaticJoint(OrigamiJoint):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
-                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True):
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         
         if showSurface:
             self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor)
@@ -365,7 +367,7 @@ class PrismaticJoint(OrigamiJoint):
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
                             surfaceColor, showSurface, showAxis,
-                            axisScale, showPoses)
+                            axisScale, showPoses, poseAxisScaleMultipler)
                         
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
@@ -418,7 +420,7 @@ class Waypoint(OrigamiJoint):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
-                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True):
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         
         if showAxis:
             zhat = self.Pose.R[:, 2] 
@@ -429,8 +431,11 @@ class Waypoint(OrigamiJoint):
 
         if showPoses:
             for i, axis_color in enumerate([xColor, yColor, zColor]):
+                poseAxisScale = self.r
+                if poseAxisScaleMultipler:
+                    poseAxisScale *= poseAxisScaleMultipler
                 start_point = self.Pose.t
-                end_point = start_point + self.r * self.Pose.R[:, i]
+                end_point = start_point + poseAxisScale * self.Pose.R[:, i]
                 points = np.array([start_point, end_point])
                 line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
@@ -517,7 +522,7 @@ class Tip(OrigamiJoint):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
-                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True):
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         
         if showSurface:
             radialCount = self.numSides + 1
@@ -550,7 +555,7 @@ class Tip(OrigamiJoint):
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
                             surfaceColor, showSurface, showAxis,
-                            axisScale, showPoses)
+                            axisScale, showPoses, poseAxisScaleMultipler)
 
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
