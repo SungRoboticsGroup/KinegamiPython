@@ -37,7 +37,7 @@ endIndex = chain.append(end)
 
 # chain.transformJoint(revoluteIndex, SE3.Trans([0,0,-6]), relative=False, propogate=True, relative=False)
 
-"""
+
 # Example 1B
 chain.translateJointAlongAxisOfMotion(revoluteIndex, -7)
 #chain.show(showGlobalFrame=True)
@@ -49,14 +49,14 @@ chain.translateJointAlongAxisOfMotion(prismaticIndex, -2, propogate=False)
 #chain.show(showGlobalFrame=True)
 #chain.show(showGlobalFrame=False, showJointPoses=False, showLinkPath=False)
 pattern = chain.creasePattern()
-pattern.save(dxfName="examplePatterns/example1.dxf")
+
 
 # Example 1C
 minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
 chain.setJointState(prismaticIndex, maxPrismaticState)
 chain.setJointState(revoluteIndex, np.pi/2)
 #chain.show(showGlobalFrame=True)
-"""
+
 
 chain.addToWidget(window)
 window.show()
