@@ -15,6 +15,45 @@ from PathCSC import *
 from KinematicChain import *
 import re
 
+class EditJointStateDialog(QDialog):
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Edit Joint State')
+        self.setGeometry(100, 100, 200, 100)
+
+        layout = QVBoxLayout()
+
+        self.setupStateInput(layout)
+        self.setLayout(layout)
+
+    def setupStateInput(self, layout):
+        self.state_input = QLineEdit(self)
+        self.state_input.setPlaceholderText('Enter new joint state')
+        layout.addWidget(QLabel('State:'))
+        layout.addWidget(self.state_input)
+
+        self.apply_button = QPushButton('Apply', self)
+        self.apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(self.apply_button)
+
+        self.cancel_button = QPushButton('Cancel', self)
+        self.cancel_button.clicked.connect(self.reject)
+        layout.addWidget(self.cancel_button)
+
+    def onApplyClicked(self):
+        self.accept()
+
+    def get_state(self):
+        while True:
+            try:
+                state = float(self.state_input.text())
+                return state
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
+                self.exec_() 
+                return None
+
 class TransformDialog(QDialog):
     propogateTransform = True
     relativeTransform = True
@@ -60,7 +99,7 @@ class TransformDialog(QDialog):
 
     def setupTransformInputAndButtons(self, layout):
         self.transform_input = QLineEdit(self)
-        self.transform_input.setPlaceholderText('x, y, z for Translate or degree for Rotate:')
+        self.transform_input.setPlaceholderText('x, y, z for Translate or degree for Rotate')
         layout.addWidget(QLabel('Values:'))
         layout.addWidget(self.transform_input)
 
@@ -635,6 +674,7 @@ class PointEditorWindow(QMainWindow):
 
         self.numSides = 4
         self.r = 1
+        self.crease_pattern = None
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -656,7 +696,7 @@ class PointEditorWindow(QMainWindow):
         self.add_tip.clicked.connect(self.add_tip_func)
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
 
-        add_joints_dock = QDockWidget("Add joints", self)
+        add_joints_dock = QDockWidget("Add Joints", self)
         self.add_joints_widget = QWidget()
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
@@ -686,6 +726,8 @@ class PointEditorWindow(QMainWindow):
         self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
         self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
+        self.edit_joint_state_button = QPushButton("Edit Joint State")
+        self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
@@ -693,6 +735,8 @@ class PointEditorWindow(QMainWindow):
         joint_layout.addWidget(self.rotate_joint_button)
         joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
+        joint_layout.addWidget(self.edit_joint_state_button)
+        joint_layout.addWidget(self.current_state_label)
         main_layout = QVBoxLayout()
         main_layout.addLayout(joint_layout)
 
@@ -706,15 +750,47 @@ class PointEditorWindow(QMainWindow):
         self.rotate_joint_button.clicked.connect(self.rotate_joint)
         self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
+        self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
         self.selected_joint = -1
 
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
+        # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
+        crease_dock_layout = QVBoxLayout()
+        self.crease_pattern_name_input = QLineEdit()
+        self.crease_pattern_name_input.setPlaceholderText('Name')
+        crease_dock_layout.addWidget(self.crease_pattern_name_input)
+
+        self.save_crease_pattern_button = QPushButton('Save Crease Pattern')
+        self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
+        crease_dock_layout.addWidget(self.save_crease_pattern_button)  
+
+        crease_button_widget = QWidget()
+        crease_button_widget.setLayout(crease_dock_layout) 
+
+        crease_dock = QDockWidget("Crease Pattern", self)
+        crease_dock.setWidget(crease_button_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+
+    def save_crease_pattern(self):
+        crease_pattern_name = self.crease_pattern_name_input.text()
+        if self.crease_pattern == None:
+            self.crease_pattern = self.chain.creasePattern()
+        if len(crease_pattern_name) > 0:
+            self.crease_pattern.show(dxfName=crease_pattern_name)
+        else:
+             self.crease_pattern.show()
+
+
     def joint_selection_changed(self, index):
         if index != self.selected_joint:
             self.selected_joint = index
             self.update_joint()
+            min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            current = self.chain.Joints[self.selected_joint].state
+            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
 
     def add_chain(self, chain):
         self.chain = chain
@@ -726,6 +802,30 @@ class PointEditorWindow(QMainWindow):
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
+
+    def edit_joint_state(self):
+        dialog = EditJointStateDialog(self) 
+        if not self.chain:
+            error_dialog = ErrorDialog('Please initialize a chain.')
+            error_dialog.exec_()
+        if self.selected_joint == -1:
+            error_dialog = ErrorDialog('Please select a joint.')
+            error_dialog.exec_()
+        elif dialog.exec_() == QDialog.Accepted:
+            edit = dialog.get_state()
+            if edit is not None:
+
+                if self.chain.setJointState(self.selected_joint, edit):
+                    self.update_joint()
+                    success_dialog = SuccessDialog('Joint state successfully edited!')
+                    success_dialog.exec_()
+                    min = self.chain.Joints[self.selected_joint].stateRange()[0]
+                    max = self.chain.Joints[self.selected_joint].stateRange()[1]
+                    current = self.chain.Joints[self.selected_joint].state
+                    self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+                else:
+                    error_dialog = ErrorDialog('Error editing joint state.')
+                    error_dialog.exec_()
 
     def transform_joint(self):
         dialog = TransformDialog(self) 

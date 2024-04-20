@@ -39,22 +39,22 @@ endIndex = chain.append(end)
 
 
 # Example 1B
-chain.translateJointAlongAxisOfMotion(revoluteIndex, -7)
+# chain.translateJointAlongAxisOfMotion(revoluteIndex, -7)
 #chain.show(showGlobalFrame=True)
-chain.translateJointAlongAxisOfMotion(endIndex, -10, applyToPreviousWaypoint=True)
+# chain.translateJointAlongAxisOfMotion(endIndex, -10, applyToPreviousWaypoint=True)
 #chain.show(showGlobalFrame=True)
-chain.rotateJointAboutAxisOfMotion(revoluteIndex, -np.pi/3)
+# chain.rotateJointAboutAxisOfMotion(revoluteIndex, -np.pi/3)
 #chain.show(showGlobalFrame=True)
-chain.translateJointAlongAxisOfMotion(prismaticIndex, -2, propogate=False)
+# chain.translateJointAlongAxisOfMotion(prismaticIndex, -2, propogate=False)
 #chain.show(showGlobalFrame=True)
 #chain.show(showGlobalFrame=False, showJointPoses=False, showLinkPath=False)
-pattern = chain.creasePattern()
+# pattern = chain.creasePattern()
 
 
 # Example 1C
-minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
-chain.setJointState(prismaticIndex, maxPrismaticState)
-chain.setJointState(revoluteIndex, np.pi/2)
+# minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
+# chain.setJointState(prismaticIndex, maxPrismaticState)
+# chain.setJointState(revoluteIndex, np.pi/2)
 #chain.show(showGlobalFrame=True)
 
 
