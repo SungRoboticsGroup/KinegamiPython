@@ -1,4 +1,4 @@
-# Kinegami8OSME
+# KinegamiPython
 [![Powered by the Spatial Math Toolbox](https://github.com/bdaiinstitute/spatialmath-python/raw/master/.github/svg/sm_powered.min.svg)](https://github.com/bdaiinstitute/spatialmath-python)
 
 Daniel A. Feshbach, Wei-Hsi Chen, Daniel E. Koditschek, Cynthia R. Sung. “Kinegami: Open-source Software for Creating Kinematic Chains from Tubular Origami.” Submitted to Origami 8: Eigth International Meeting on Origami in Science, Mathematics and Education, 2024 (under review).
