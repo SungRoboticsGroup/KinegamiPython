@@ -72,6 +72,13 @@ print("Branching parameters from root:")
 print(np.round(tree.branchingParametersFrom(0), decimals=3))
 tree.show(block=False, showJointPoses=False)
 
+print("Straight link lengths:")
+
+
+for i in [thumb1, thumbEnd, pointer2, pointerEnd, middle1, middle2, middleEnd]:
+    print(np.round(tree.Links[i].path.tMag, 3))
+
+
 # Spherical grasp
 tree.setJointState(middle0, np.pi/2)
 tree.setJointState(palm, -np.pi/2)
