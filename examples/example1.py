@@ -37,7 +37,7 @@ chain.setJointState(prismaticIndex, maxPrismaticState)
 chain.setJointState(revoluteIndex, np.pi/2)
 chain.show(showGlobalFrame=True)
 
-pattern = chain.creasePattern()
+# Example 1D
 pattern = chain.creasePattern()
 pattern.save(dxfName="examplePatterns/example1.dxf")
 pattern.show()
