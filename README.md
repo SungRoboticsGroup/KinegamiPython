@@ -55,4 +55,23 @@ when implementing a C component with turn angle
 θ >`maxAnglePerElbow`, 
 it will concatenate *k*= ceil(θ/`maxAnglePerElbow`) elbow patterns each with turn angle θ/*k*.
 
-### TODO: insert rest of paper
+### Chain Generation
+The `KinematicChain` class stores on a list `Joints` of `Joint` objects and a list `Links` of `LinkCSC` objects. Specifically, `Links[i]` stores the link from the distal frame of joint `i-1` to the proximal frame of joint `i` (`Links[0]` is an empty path at the proximal frame of joint 0). `KinematicChain` also stores and maintains a `boundingBall` encompassing the whole structure. Chains are initialized with a given `startJoint`. The constructor also has optional parameter `maxAnglePerElbow`, defaulting to `np.pi/2`, which it uses when constructing links as described above.
+
+Chains are constructed by repeatedly adding joints to the end of the chain with the `append` method (details below), for example (examples/example1.py):
+
+```python
+# Example 1A
+from KinematicChain import *
+r = 1
+numSides = 4
+chain = KinematicChain(StartTip(numSides, r, Pose=SE3.Trans(3,3,0), length=1.5)) 
+prismatic = PrismaticJoint(numSides, r, neutralLength=3,
+            numLayers=3, coneAngle=np.pi/4, Pose=SE3.Trans([5,5,0]))
+prismaticIndex = chain.append(prismatic)
+revolute = RevoluteJoint(numSides, r, np.pi, SE3.Ry(np.pi/4))
+revoluteIndex = chain.append(revolute)
+end = EndTip(numSides, r, Pose=SE3.Ry(np.pi/2), length=1.5)
+endIndex = chain.append(end)
+chain.show(showGlobalFrame=True)
+```
