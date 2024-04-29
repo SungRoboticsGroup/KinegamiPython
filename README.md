@@ -75,3 +75,76 @@ end = EndTip(numSides, r, Pose=SE3.Ry(np.pi/2), length=1.5)
 endIndex = chain.append(end)
 chain.show(showGlobalFrame=True)
 ```
+<img src="figures/example1/example1A.png" width="600" />
+The `show` method has a variety of optional parameters controlling which features are displayed and with what colors. Color and opacity default values are defined in `style.py`.
+
+The `append` method takes parameter `newJoint` (a `Joint` object) and adds it to the end of the chain. It returns the index of the new joint. Depending on the following optional parameters, it will either use a joint placement algorithm (described above) to find the joint pose on its axis of motion (its **z** axis), or use `newJoint`'s pose exactly as given.
+ - `relative`, defaulting to `True`, indicates whether `newJoint.Pose` should be interpreted as relative to the previous joint's frame (`True`) or as already in the global frame (`False`). `KinematicChain` stores joints in global coordinates, so if `relative=True` it converts the input from local to global coordinates.
+    
+ - `safe`, defaulting to `True`, indicates whether it should use the safe version of the joint placement algorithm. If `safe` is `False`, it will use the compact joint placement algorithm instead, unless `fixedPosition` is `True` in which case it does not algorithmically find joint placement at all.
+    
+ - `fixedPosition`, defaulting to `False`, indicates whether the joint should be placed exactly at the position in its given pose (`True`) or should use the joint placement algorithms to choose somewhere kinematically equivalent (i.e., along its **z** axis). This and `safe` cannot both be `True`.
+    
+ - `fixedOrientation`, defaulting to `False`, indicates whether the joint should be placed with exactly its given orientation (`True`) or with a kinematically equivalent orientation (i.e., rotated about its **z** axis) such that its **x** points along the common normal from the previous joint's **z** to the new joint's **z**. This choice is to match how frames are specified by [Denavit-Hartenberg parameters](https://en.wikipedia.org/wiki/Denavit%E2%80%93Hartenberg_parameters). This and `safe` cannot both be `True`.   
+
+The safe algorithm is guaranteed to find a valid path to the new joint, but if `safe` is `False` it may fail to find a path. In this case it will print a warning and return `None`, leaving the chain unchanged. 
+
+### Adjusting an Existing Chain
+`KinematicChain` has several methods to edit existing joints:
+ - `translateJointAlongAxisOfMotion` takes parameters `jointIndex` (int) and `distance` (float). 
+ - `rotateJointAboutAxisOfMotion` takes parameters `jointIndex` and `angle` (radians).
+ - `transformJoint` takes parameters `jointIndex` and `Transformation` (SE3).
+ - `delete` removes joint `jointIndex` and recomputes links accordingly.
+Each method returns whether it succeeded in finding new paths for the links: if it succeeds it edits the chain accordingly, and if it fails it leaves the chain unchanged and prints a warning. Each method has optional parameter `propogate`, defaulting to `True`, indicating whether to apply the same transformation to the rest of the chain (`True` case) or only to the given joint (`False` case).
+
+Continuing the above example:
+```python
+# Example 1B
+chain.translateJointAlongAxisOfMotion(revoluteIndex, -7)
+chain.show(showGlobalFrame=True)
+```
+<img src="figures/example1/example1B1.png" width="600" />
+
+Kinematic-preserving methods `translateJointAlongAxisOfMotion` and `rotateJointAboutAxisOfMotion` each have an additional optional parameter `applyToPreviousWaypoint` defaulting to `False`. If set to `True`, this will check if joint `jointIndex-1` is a waypoint: if so, it will apply the same transformation matrix it applied to joint `jointIndex`.
+
+```python
+chain.translateJointAlongAxisOfMotion(endIndex, -10, applyToPreviousWaypoint=True)
+chain.show(showGlobalFrame=True)
+```
+<img src="figures/example1/example1B2.png" width="600" />
+
+```python
+chain.rotateJointAboutAxisOfMotion(revoluteIndex, -np.pi/3)
+chain.show(showGlobalFrame=True)
+```
+
+<img src="figures/example1/example1B3.png" width="600" />
+
+```python
+chain.translateJointAlongAxisOfMotion(prismaticIndex, -2, propogate=False)
+chain.show(showGlobalFrame=True)
+```
+
+<img src="figures/example1/example1B4.png" width="600" />
+
+### Changing Joint States
+The state of a joint in a `KinematicChain` can be adjusted by the chain method `setJointState`, which takes parameters `jointIndex` and `newState`. It will return whether this succeeded, i.e., whether `newState` is in the joint's valid state range  - and if it fails it will also print a warning. `Joint` has a `stateRange` method to help with this. Continuing from the above example:
+
+```python
+# Example 1C
+minPrismaticState, maxPrismaticState = chain.Joints[prismaticIndex].stateRange()
+chain.setJointState(prismaticIndex, maxPrismaticState)
+chain.setJointState(revoluteIndex, np.pi/2)
+chain.show(showGlobalFrame=True)
+```
+<img src="figures/example1/example1C.png" width="600" />
+
+### Tubular Origami Pattern Generation
+The method `creasePattern` on `KinematicChain` outputs the tubular origami crease pattern implementing the chain as a `TubularPattern` object. This class has a `show` method to plot and a `save` method to create a DXF file. To display the wraparound, it duplicates the starting panel (and all folds crossing it) along each end. This also creates area along which to adhere a flat sheet into a tube. From the above example:
+```python
+# Example 1D
+pattern = chain.creasePattern()
+pattern.save(dxfName="examplePatterns/example1.dxf")
+pattern.show()
+```
+<img src="figures/example1/example1pattern.png" width="600" />
