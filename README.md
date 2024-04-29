@@ -148,3 +148,7 @@ pattern.save(dxfName="examplePatterns/example1.dxf")
 pattern.show()
 ```
 <img src="figures/example1/example1pattern.png" width="600" />
+
+Red is valley folds, blue is mountain folds, yellow is the boundary of the pattern, green is the boundary extended outwards in each direction to have the first/last panel duplicated. We used a laser cutter to etch the folds and cut along the green boundary, then folded it into the desired chain:
+
+<img src="figures/example1/example1.png" width="600" />
