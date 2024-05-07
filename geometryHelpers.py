@@ -508,7 +508,15 @@ def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, z
         Poses = np.array([Poses])
     ax = plt.figure().add_subplot(projection='3d')
     handles = addPosesToPlot(Poses, ax, axisLength, xColor, yColor, zColor, oColors, makeAxisLimitsIncludeTips)
+    """
     ax.legend(handles, [r'$\^x$', r'$\^y$', r'$\^z$'])
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    """
+    ax.set_xticks(np.arange(3))
+    ax.set_yticks(np.arange(3))
+    ax.set_zticks(np.arange(3))
     ax.set_aspect('equal')
     plt.show(block=block)
 

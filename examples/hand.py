@@ -11,18 +11,23 @@ sys.path.append(parent_dir)
 from KinematicTree import *
 r = 1
 numSides = 4
+jointLength = 0.45/0.245
+unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutralLength
+extensionLength = (jointLength - unextendedRevoluteJointLength)/2
+print(extensionLength)
+
 tree = KinematicTree(Waypoint(numSides, r, Pose=SE3()))
-palm = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi, 
-                        SE3.Trans(2.25,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4)),
+palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(2.5,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
+palm = tree.addJoint(0, palmJoint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-thumb0 = tree.addJoint(palm, RevoluteJoint(numSides, r, np.pi,
-                                           SE3.Trans(1.5,0,0)@SE3.Rx(np.pi/2)),
+thumb0Joint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(jointLength,0,0)@SE3.Rx(np.pi/2))
+thumb0 = tree.addJoint(palm, thumb0Joint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-thumb1 = tree.addJoint(thumb0, RevoluteJoint(numSides, r, np.pi,
+thumb1 = tree.addJoint(thumb0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                                            SE3.Trans(4,0,0)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -33,12 +38,12 @@ thumbEnd = tree.addJoint(thumb1, EndTip(numSides, r,
               fixedPosition=True, fixedOrientation=True)
 
 
-pointer1 = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi, 
-                        SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi)),
+pointer1 = tree.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
+            SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-pointer2 = tree.addJoint(pointer1, RevoluteJoint(numSides, r, np.pi, 
+pointer2 = tree.addJoint(pointer1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                         SE3.Trans(4,0,0)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -48,17 +53,17 @@ pointerEnd = tree.addJoint(pointer2, EndTip(numSides, r,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle0 = tree.addJoint(0, RevoluteJoint(numSides, r, np.pi, 
-                        SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)),
+middle0 = tree.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
+        SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle1 = tree.addJoint(middle0, RevoluteJoint(numSides, r, np.pi, 
+middle1 = tree.addJoint(middle0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                         SE3.Trans(4,0,0)@SE3.Rx(np.pi/2)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle2 = tree.addJoint(middle1, RevoluteJoint(numSides, r, np.pi, 
+middle2 = tree.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                         SE3.Trans(4,0,0)),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
