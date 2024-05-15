@@ -97,9 +97,12 @@ class Joint(ABC):
     def distalPosition(self) -> np.ndarray:
         return self.DistalFrame().t
     
-    def transformPoseBy(self, Transformation : SE3):
-        self.Pose = Transformation @ self.Pose
+    def transformPoseIntoFrame(self, Frame : SE3):
+        self.Pose = Frame @ self.Pose
     
+    def applyTransformationToPose(self, Transformation : SE3):
+        self.Pose = self.Pose @ Transformation
+
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
     

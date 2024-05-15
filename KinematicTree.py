@@ -60,22 +60,25 @@ class KinematicTree:
     fixedPosition - boolean: should the joint be located
                     (True) exactly at its given position, or
                     (False) somewhere kinematically equivalent (i.e., on the
-                            same z axis) chosen by the placement algorithm?
+                            same z axis) chosen by the placement algorithm
     fixedOrientation - boolean: should the joint be oriented
                     (True) exactly at its given orientation, or
                     (False) something kinematically equivalent (i.e., with the
                             same z axis) with x axis constructed as the common 
-                            normal from the parent?
+                            normal from the parent
     safe - boolean: if this is True, allow the algorithm 
             to insert intermediate waypoints to route the path from the 
             parent to guarantee it avoids local self-intersection (i.e., run 
             Algorithm 9 from the Kinegami paper instead of Algorithm 8).
             Not compatible with fixedPosition or fixedOrientation.
+    endPlane - Plane: defaults to None, but if this is specified and 
+            fixedPosition is False, the algorithm will place the new joint such
+            that its whole bounding sphere is >= 4r from this plane.
     """
     def addJoint(self, parentIndex : int, newJoint : Joint, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 safe : bool = True) -> int:
+                 safe : bool = True, endPlane : Plane = None) -> int:
         if newJoint.r != self.r:
             raise ValueError("ERROR: newJoint.r != self.r")
         if newJoint.numSides != self.numSides:
@@ -90,9 +93,9 @@ class KinematicTree:
         newJoint = copy.deepcopy(newJoint)
         parent = self.Joints[parentIndex]
         if relative:
-            newJoint.transformPoseBy(parent.Pose)
+            newJoint.transformPoseIntoFrame(parent.Pose)
 
-        if safe: # Algorithm 9
+        if safe: # Algorithm 9 from [Chen et al. 2023]
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
                                                           self.boundingBall)
             i = parentIndex
@@ -102,19 +105,33 @@ class KinematicTree:
                                   fixedOrientation=True, relative=False)
             return i
         
-        if not fixedPosition: #Algorithm 8
-            newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
+        if not fixedPosition: 
+            if endPlane is None: #Algorithm 8 from [Chen et al. 2023]
+                newJoint = moveJointNearNeighborBut4rFromBall(newJoint, parent,
                                                           self.boundingBall)
-        
+            else: # Tree algorithm for WAFR
+                newJoint = moveJointNearNeighborBut4rPastPlane(newJoint, parent,
+                                                            endPlane)
 
         if not fixedOrientation:
-            xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
-                                newJoint.Pose.t, newJoint.Pose.R[:,2],
-                                undefined=newJoint.Pose.R[:,0])
-            newJoint.setXhatAboutZhat(xhat)
-            outwardDirection = newJoint.Pose.t - parent.Pose.t
-            if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
-                newJoint.reversePathDirection()
+            if endPlane is None:
+                xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
+                                    newJoint.Pose.t, newJoint.Pose.R[:,2],
+                                    undefined=newJoint.Pose.R[:,0])
+                newJoint.setXhatAboutZhat(xhat)
+                outwardDirection = newJoint.Pose.t - parent.Pose.t
+                if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
+                    newJoint.reversePathDirection()
+            else: # make xhat point as forward as possible
+                def newXhat(angleToRotateAboutZ):
+                    return (SE3.Rz(angleToRotateAboutZ) * parent.Pose.R[:,0]).flatten()
+                def objective(angleToRotateAboutZ):
+                    return -np.dot(newXhat(angleToRotateAboutZ), endPlane.nhat)
+                result = minimize(objective, 0)
+                xhat = newXhat(result.x[0])
+                newJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
+
+
 
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
@@ -284,7 +301,7 @@ class KinematicTree:
                 self.setTo(backup)
                 return False
         else:
-            self.Joints[jointIndex].transformPoseBy(Transformation)
+            self.Joints[jointIndex].transformPoseIntoFrame(Transformation)
             joint = self.Joints[jointIndex]
             if recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
@@ -421,6 +438,38 @@ def moveJointNearNeighborBut4rFromBall(jointToPlace, neighbor, ball):
     zChange = result.x[0]
     jointToPlace.translateAlongZ(zChange)
     return jointToPlace
+
+"""
+Places joint along its joint axis, as close as possible to the given neighbor
+(parent) while ensuring its whole bounding sphere is >= 4r from the given plane.
+Modifies and returns joint.
+ - joint is interpreted in global coordinates.
+ - plane is intended to represent the end plane of the bounding cylinder
+    in the tree construction algorithm.
+"""
+def moveJointNearNeighborBut4rPastPlane(jointToPlace, neighbor, plane : Plane):
+    def newPosition(zChange):
+        return jointToPlace.Pose.t + zChange*jointToPlace.Pose.R[:,2]
+
+    # optimization objective
+    def distanceFromNeighbor(zChange): 
+        return norm(neighbor.Pose.t - newPosition(zChange))
+    
+    # for constraint 
+    def distanceInFront(zChange):
+        return plane.signedDistanceToPoint(newPosition(zChange))
+        
+    farEnough = NonlinearConstraint(distanceInFront, 
+        lb= 4*jointToPlace.r + jointToPlace.boundingRadius(), 
+        ub= np.inf)
+        
+    result = minimize(distanceFromNeighbor, 0, constraints=(farEnough))
+    zChange = result.x[0]
+    newPos = newPosition(zChange)
+    jointToPlace.translateAlongZ(zChange)
+    return jointToPlace
+
+
 
 """
 Places jointToPlace along its joint axis, as close as possible to the given 

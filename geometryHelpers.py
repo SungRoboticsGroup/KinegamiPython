@@ -236,7 +236,22 @@ class Plane:
             # line crosses the plane at a point
             return [-1,0,1]
     
+    def parallelPlane(self, distance):
+        return Plane(self.p + distance*self.nhat, self.nhat, self.EPSILON)
 
+    def addToPlot(self, ax, color='red', alpha=0.5, scale=20):
+        numPoints = 9
+        range = np.linspace(-scale, scale, numPoints)
+        basis = null_space([self.nhat])
+        uhat = basis[:,0]
+        vhat = basis[:,1]
+        X = np.zeros((numPoints, numPoints))
+        Y = np.zeros((numPoints, numPoints))
+        Z = np.zeros((numPoints, numPoints))
+        for u in np.arange(numPoints):
+            for v in np.arange(numPoints):
+                X[u,v], Y[u,v], Z[u,v] = self.p + range[u]*uhat + range[v]*vhat
+        ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
 
 class Circle3D:
     def __init__(self, radius, center, normal):
@@ -340,17 +355,26 @@ class Cylinder:
             uhat = uhat.reshape((3))    
         self.uhat = uhat / norm(uhat)
     
+    def orientation(self) -> SO3:
+        return SO3(np.vstack((self.uhat, 
+                              cross(self.direction, self.uhat), 
+                              self.direction)).T)
+    
     def end(self):
         return self.start + self.length * self.direction
+
+    def startPlane(self) -> Plane:
+        return Plane(self.start, self.direction)
+    
+    def endPlane(self) -> Plane:
+        return Plane(self.end(), self.direction)
 
     # Keeping self.direction constant, expand cylinder to include ball
     def expandToIncludeBall(self, ball : Ball):
         ballStart = ball.c - ball.r * self.direction
         ballEnd = ball.c + ball.r * self.direction
-        StartPlane = Plane(self.start, self.direction)
-        distanceInBack = StartPlane.signedDistanceToPoint(ballStart)
-        EndPlane = Plane(self.end(), self.direction)
-        distanceInFront = EndPlane.signedDistanceToPoint(ballEnd)
+        distanceInBack = self.startPlane().signedDistanceToPoint(ballStart)
+        distanceInFront = self.endPlane().signedDistanceToPoint(ballEnd)
 
         # Update cylinder forward/backward
         if distanceInFront > 0:
@@ -358,10 +382,9 @@ class Cylinder:
         if distanceInBack < 0:
             self.start = self.start + (distanceInBack * self.direction)
             self.length -= distanceInBack
-            StartPlane = Plane(self.start, self.direction)
             
         # Update cylinder circular cross-section
-        ballTranslatedToStartPlane = ball.translationToCenterOnPlane(StartPlane)
+        ballTranslatedToStartPlane = ball.translationToCenterOnPlane(self.startPlane())
         cylinderStartBall = Ball(self.start, self.r)
         expandedStartBall = minBoundingBall(cylinderStartBall, ballTranslatedToStartPlane)
         self.start = expandedStartBall.c
@@ -402,8 +425,6 @@ class Cylinder:
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
         plt.show(block=block)
-
-
 
 def RotationAboutLine(rotAxisDir : np.ndarray,
                       rotAxisPoint : np.ndarray,
@@ -644,12 +665,6 @@ def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, z
         Poses = np.array([Poses])
     ax = plt.figure().add_subplot(projection='3d')
     handles = addPosesToPlot(Poses, ax, axisLength, xColor, yColor, zColor, oColors, makeAxisLimitsIncludeTips)
-    """
-    ax.legend(handles, [r'$\^x$', r'$\^y$', r'$\^z$'])
-    ax.set_xlabel('x')
-    ax.set_ylabel('y')
-    ax.set_zlabel('z')
-    """
     ax.set_xticks(np.arange(3))
     ax.set_yticks(np.arange(3))
     ax.set_zticks(np.arange(3))
