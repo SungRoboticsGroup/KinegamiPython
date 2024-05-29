@@ -46,6 +46,15 @@ Output: a KinematicTree object that instantiates the desired kinematics
 def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False) -> KinematicTree:
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
+    # Set orientation appropriately
+    if np.dot(rootJoint.Pose.R[:,2], planeNormal) < 0:
+        rootJoint.reverseZhat()
+    def newXhat(angleToRotateAboutZ):
+        return (SE3.Rz(angleToRotateAboutZ) * rootJoint.Pose.R[:,0]).flatten()
+    def objective(angleToRotateAboutZ):
+        return -np.dot(newXhat(angleToRotateAboutZ), planeNormal)
+    result = minimize(objective, 0)
+    rootJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
 
     # set up bounding cylinder
     rootBB = jointSpecs.Joints[0].boundingBall()
@@ -99,6 +108,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
                                     relative=False, fixedPosition=True, 
                                     fixedOrientation=True, safe=False)
             boundingCylinder.expandToIncludeBall(Waypoint2.boundingBall())
+            # TODO: ALSO EXPAND TO INCLUDE THE LINKS!!!
         
         jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
                     relative=False, fixedPosition=False, fixedOrientation=False, 

@@ -124,11 +124,11 @@ class KinematicTree:
                     newJoint.reversePathDirection()
             else: # make xhat point as forward as possible
                 def newXhat(angleToRotateAboutZ):
-                    return (SE3.Rz(angleToRotateAboutZ) * parent.Pose.R[:,0]).flatten()
+                    return (SE3.Rz(angleToRotateAboutZ) * newJoint.Pose.R[:,0]).flatten()
                 def objective(angleToRotateAboutZ):
                     return -np.dot(newXhat(angleToRotateAboutZ), endPlane.nhat)
                 result = minimize(objective, 0)
-                xhat = newXhat(result.x[0])
+                # xhat = newXhat(result.x[0])
                 newJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
 
 

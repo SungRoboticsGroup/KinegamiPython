@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import math
 from math import remainder
 from style import *
-
+from matplotlib import cm
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -105,7 +105,6 @@ def signedAngle(a, b, n):
         
     return arctan2(dot(cross(a,b),n), dot(a,b))
 
-
 """
 For A and B matrices (of the same shape) storing 2D vectors as rows,
 return the signed angle between corresponding rows
@@ -139,9 +138,37 @@ def wrapAngle(angle, EPSILON=0.00001):
 
 
 class Line:
-    def __init__(self, point, direction):
-        self.p = point
+    def __init__(self, point, direction, EPSILON=1e-8):
+        self.p = np.array(point)
+        direction = np.array(direction)
+        self.EPSILON = EPSILON
+        assert(norm(direction) > self.EPSILON)
         self.dhat = direction / norm(direction)
+
+    def distanceToPoint(self, point):
+        point = np.array(point)
+        return norm(cross(point - self.p, self.dhat))
+    
+    def contains(self, point):
+        return self.distanceToPoint(point) < self.EPSILON
+    
+class Ray:
+    def __init__(self, startPoint, direction, EPSILON=1e-8):
+        self.startPoint = np.array(startPoint)
+        direction = np.array(direction)
+        self.EPSILON = EPSILON
+        assert(norm(direction) > self.EPSILON)
+        self.dhat = direction / norm(direction)
+
+    def distanceToPoint(self, point): 
+        if Plane(self.startPoint, self.dhat).sideOfPoint(point) < 0:
+            return norm(point - self.startPoint)
+        else:
+            return Line(self.startPoint, self.dhat).distanceToPoint(point)
+    
+    def contains(self, point):
+        return self.distanceToPoint(point) < self.EPSILON
+
 
 
 def unitSphereParameterization(theta, phi):
@@ -239,19 +266,27 @@ class Plane:
     def parallelPlane(self, distance):
         return Plane(self.p + distance*self.nhat, self.nhat, self.EPSILON)
 
-    def addToPlot(self, ax, color='red', alpha=0.5, scale=20):
-        numPoints = 9
+    def grid(self, scale=20, numPoints=9):
         range = np.linspace(-scale, scale, numPoints)
         basis = null_space([self.nhat])
         uhat = basis[:,0]
         vhat = basis[:,1]
-        X = np.zeros((numPoints, numPoints))
-        Y = np.zeros((numPoints, numPoints))
-        Z = np.zeros((numPoints, numPoints))
+        grid = np.zeros((numPoints, numPoints, 3))
         for u in np.arange(numPoints):
             for v in np.arange(numPoints):
-                X[u,v], Y[u,v], Z[u,v] = self.p + range[u]*uhat + range[v]*vhat
+                grid[u,v] = self.p + range[u]*uhat + range[v]*vhat
+        return grid
+
+    def addToPlot(self, ax, color='red', alpha=0.5, scale=20):
+        grid = self.grid(scale, numPoints=9)
+        X = grid[:,:,0]
+        Y = grid[:,:,1]
+        Z = grid[:,:,2]
         ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
+
+def planeFromThreePoints(p1, p2, p3):
+    normal = unit(cross(p2-p1, p3-p1))
+    return Plane(p1, normal)
 
 class Circle3D:
     def __init__(self, radius, center, normal):
@@ -337,7 +372,6 @@ def minBoundingBall(ball1, ball2):
 def distanceBetweenBalls(ball1, ball2):
     centerDistance = norm(ball2.c - ball1.c)
     return max(0, centerDistance - ball1.r - ball2.r)
-
 
 class Cylinder:
     def __init__(self, radius : float, start : np.ndarray, 
@@ -627,6 +661,16 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
+    
+    def addToPlot(self, ax, color='black', alpha=1):
+        X,Y,Z = self.interpolate().T
+        return ax.plot(X, Y, Z, color=color, alpha=alpha)
+
+    def show(self, color='black', alpha=1, block=blockDefault):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandle = self.addToPlot(ax, color, alpha)
+        ax.set_aspect('equal')
+        plt.show(block=block)
         
         
 # add given reference frames to matplotlib figure ax with a 3d subplot
@@ -702,3 +746,44 @@ def commonNormal(point1, direction1, point2, direction2, undefined=None):
         return undefined
 
 
+class Torus:
+    def __init__(self, majorRadius, minorRadius, center, axisDirection):
+        self.R = majorRadius
+        self.r = minorRadius
+        self.c = center
+        self.dhat = axisDirection / norm(axisDirection)
+        self.uhat, self.vhat = null_space([self.dhat]).T
+
+    def point(self, turnAngle, azumith):
+        u = (self.R + self.r*np.cos(turnAngle))*np.cos(azumith)*self.uhat
+        v = (self.R + self.r*np.cos(turnAngle))*np.sin(azumith)*self.vhat
+        d = self.r*np.sin(turnAngle)*self.dhat
+        return self.c + u + v + d
+    
+    def interpolate(self, numTurnTicks=32, numAzumithTicks=32):
+        numTurnTicks += 1
+        numAzumithTicks += 1
+        turnAngles = np.linspace(0, 2*np.pi, numTurnTicks)
+        azumiths = np.linspace(0, 2*np.pi, numAzumithTicks)
+        grid = np.zeros((numTurnTicks, numAzumithTicks, 3))
+        for i, turnAngle in enumerate(turnAngles):
+            for j, azumith in enumerate(azumiths):
+                grid[i,j] = self.point(turnAngle, azumith)
+        return grid
+    
+    def addToPlot(self, ax, numTurnTicks=32, numAzumithTicks=32, colorMap=cm.Blues, alpha=0.5):
+        grid = self.interpolate(numTurnTicks, numAzumithTicks)
+        X = grid[:,:,0]
+        Y = grid[:,:,1]
+        Z = grid[:,:,2]
+        return ax.plot_surface(X, Y, Z, cmap=colorMap, alpha=alpha)
+
+    def show(self, numTurnTicks=32, numAzumithTicks=32, colorMap=cm.Blues, alpha=0.5, block=blockDefault):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandle = self.addToPlot(ax, numTurnTicks, numAzumithTicks, colorMap, alpha)
+        ax.set_aspect('equal')
+        plt.show(block=block)
+
+class HornTorus(Torus):
+    def __init__(self, radius, center, axisDirection):
+        super().__init__(radius, radius, center, axisDirection)

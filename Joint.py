@@ -71,6 +71,9 @@ class Joint(ABC):
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
     
+    def reverseZhat(self):
+        self.Pose = self.Pose @ SE3.Rx(np.pi)
+    
     def reversePathDirection(self):
         if self.pathIndex() == 2:
             self.Pose = self.Pose @ SE3.Rx(np.pi)

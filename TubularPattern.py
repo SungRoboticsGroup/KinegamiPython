@@ -299,7 +299,7 @@ class TubularPattern():
     def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
              mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
              boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
-        if len(dxfName) < 4 or dxfName[-4:]!=".dxf":
+        if dxfName and (len(dxfName) < 4 or dxfName[-4:]!=".dxf"):
             dxfName += ".dxf"
         
         doc = ezdxf.new()
