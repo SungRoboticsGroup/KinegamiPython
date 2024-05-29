@@ -70,6 +70,7 @@ middleEnd = tree.addJoint(middle2, EndTip(numSides, r,
 
 print("Branching parameters from root:")
 print(np.round(tree.branchingParametersFrom(0), decimals=3))
+tree.branchModuleFrom(0, "test", 0.045, 0.03, 0.3, 0.25)
 tree.show(block=False, showJointPoses=False)
 
 # Spherical grasp
