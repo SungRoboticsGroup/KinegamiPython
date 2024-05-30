@@ -7,7 +7,10 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QPainter
+from PyQt5.QtGui import QPixmap, QSurfaceFormat
+from pyqtgraph.Qt import QtCore
+from OpenGL.GL import *
+from OpenGL.GLU import *
 from spatialmath import SE3
 import math
 from Joint import *
@@ -650,6 +653,119 @@ class CreateNewChainDialog(QDialog):
     
     def getR(self):
         return self.r
+    
+class ClickableGLViewWidget(gl.GLViewWidget):
+    def __init__(self, parent=None):
+        super(ClickableGLViewWidget, self).__init__(parent)
+        fmt = QSurfaceFormat()
+        fmt.setDepthBufferSize(24)
+        fmt.setVersion(3, 3)
+        fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        self.setFormat(fmt)
+        self.locked = False
+        self.mesh = None 
+
+        self.bounding_balls = []
+        self.radius = 1
+
+        dist = self.opts['distance']
+        self.near_clip = dist * 0.001
+        self.far_clip = dist * 1000.
+
+    def toggle_lock(self):
+        self.locked = not self.locked
+        print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
+
+    def mousePressEvent(self, event):
+        if self.locked and event.button() == QtCore.Qt.LeftButton:
+            for ball in self.bounding_balls:
+                test = self.project_click(event.pos(), ball, self.radius)
+                print(test)
+        else:
+            super(ClickableGLViewWidget, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not self.locked:
+            super(ClickableGLViewWidget, self).mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if not self.locked:
+            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
+
+    def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Method returns the ray origin (current camera position) and ray unit vector for
+        selection of triangulated meshes in the GLViewWidget.
+
+        :param x_coord: Mouse click local x coordinate within the widget.
+        :param y_coord: Mouse click local y coordinate within the widget.
+
+        Note: Mouse click coordinate system origin is top left of the GLViewWidget.
+
+        from @gordankos on github
+        https://github.com/pyqtgraph/pyqtgraph/issues/2647
+        """
+        x0, y0, width, height = self.getViewport()
+        ray_origin = np.array(self.cameraPosition())
+
+        projection_matrix = np.array(self.projectionMatrix(region=None).data()).reshape(4, 4)
+        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
+        view_matrix = np.transpose(view_matrix)
+
+        #screen space coords
+        ndc_x = (x_coord / width) * 2.0 - 1.0
+        ndc_y = 1.0 - (y_coord / height) * 2.0
+        clip_coords = np.array([ndc_x, ndc_y, 1.0, 1.0])
+
+        P = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ (clip_coords * self.far_clip)
+
+        eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
+        eye_coords /= eye_coords[3]
+        eye_coords = np.array([eye_coords[0], eye_coords[1], -1.0, 0.0])
+
+        ray_direction = np.linalg.inv(view_matrix) @ eye_coords
+        ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
+
+        return ray_origin, ray_origin - ray_direction
+
+    def project_click(self, pos, s, r):
+        """
+        pos: (local X coord within widget, local Y coord within widget)
+        - The top left corner is the origin point
+
+        s: center of the sphere that is being tested
+        r: radius of the sphere that is being tested
+        """
+
+        o, d = self.get_ray(pos.x(), pos.y())
+
+        print("origin:")
+        print(o)
+        print("direction:")
+        print(d)
+
+        a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
+        b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
+        c = (o[0] - s[0]) ** 2 + (o[1] - s[1]) ** 2 + (o[2] - s[2]) ** 2 - r * r
+
+        discrim = b * b - 4 * a * c
+
+        return discrim
+
+        root_discrim = math.sqrt(discrim)
+
+        t = 0
+
+        t0 = (-b - root_discrim) / (2 * a)
+        if (t0 < 0) :
+            t1 = (-b + root_discrim) / (2 * a)
+            t = t1
+        else:
+            t = t0
+
+        p = o + t * d
+        return p
 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -657,9 +773,14 @@ class PointEditorWindow(QMainWindow):
         self.setWindowTitle("Point Editor")
         self.setGeometry(100, 100, 800, 600)
 
-        self.plot_widget = gl.GLViewWidget()
+        self.plot_widget = ClickableGLViewWidget()
         self.setCentralWidget(self.plot_widget)
         self.plot_widget.setBackgroundColor(255,255,255, 255)
+
+        self.toggleButton = QPushButton('Toggle Lock', self)
+        self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
+        self.toggleButton.setGeometry(20, 20, 140, 40)
+        self.toggleButton.setStyleSheet('background-color: black; color: white;')
 
         grid = gl.GLGridItem()
         self.plot_widget.addItem(grid)
@@ -669,11 +790,9 @@ class PointEditorWindow(QMainWindow):
         self.chain = None
         self.chain_created = False
 
-        self.points = []
-        self.poses = []
-
         self.numSides = 4
         self.r = 1
+        self.plot_widget.radius = 1
         self.crease_pattern = None
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
@@ -780,8 +899,7 @@ class PointEditorWindow(QMainWindow):
         if len(crease_pattern_name) > 0:
             self.crease_pattern.show(dxfName=crease_pattern_name)
         else:
-             self.crease_pattern.show()
-
+            self.crease_pattern.show()
 
     def joint_selection_changed(self, index):
         if index != self.selected_joint:
@@ -938,6 +1056,12 @@ class PointEditorWindow(QMainWindow):
 
         self.chain.addToWidget(self)
 
+        self.plot_widget.bounding_balls = []
+
+        for joint in self.chain.Joints:
+            center = joint.boundingBall().c
+            self.plot_widget.bounding_balls.append((center[0], center[1], center[2]))
+
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
         line_pixmap.fill(color)
@@ -1009,11 +1133,15 @@ class PointEditorWindow(QMainWindow):
     def create_new_chain_func(self):
         dialog = CreateNewChainDialog()
         if dialog.exec_() == QDialog.Accepted:
+
+            # clears everything
             self.chain = None
             self.chain_created = True
             self.numSides = dialog.getNumSides()
+            self.selected_joint = -1
             self.r = dialog.getR()
             self.plot_widget.clear()
+            self.plot_widget.radius = self.r
             self.setCentralWidget(self.plot_widget)
 
             grid = gl.GLGridItem()
