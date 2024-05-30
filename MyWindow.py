@@ -5,10 +5,12 @@
 import sys
 import numpy as np
 import pyqtgraph.opengl as gl
+from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QSurfaceFormat
 from pyqtgraph.Qt import QtCore
+import pyqtgraph as pg
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from spatialmath import SE3
@@ -673,15 +675,31 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
 
+    mousePressSignal = qc.pyqtSignal(int)
+
     def toggle_lock(self):
         self.locked = not self.locked
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
         if self.locked and event.button() == QtCore.Qt.LeftButton:
-            for ball in self.bounding_balls:
-                test = self.project_click(event.pos(), ball, self.radius)
-                print(test)
+
+            min_t = self.far_clip
+            index = -1
+
+            for x in range (0, len(self.bounding_balls)):
+                ball = self.bounding_balls[x]
+                center = ball.c
+                t = self.project_click(event.pos(), center, 1)
+
+                if (t < min_t):
+                    min_t = t
+                    index = x
+
+            print(index)
+
+            self.mousePressSignal.emit(index)
+
         else:
             super(ClickableGLViewWidget, self).mousePressEvent(event)
 
@@ -709,16 +727,15 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         x0, y0, width, height = self.getViewport()
         ray_origin = np.array(self.cameraPosition())
 
-        projection_matrix = np.array(self.projectionMatrix(region=None).data()).reshape(4, 4)
+        projection_matrix = np.array(self.projectionMatrix().data()).reshape(4, 4)
         view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
         view_matrix = np.transpose(view_matrix)
 
-        #screen space coords
-        ndc_x = (x_coord / width) * 2.0 - 1.0
-        ndc_y = 1.0 - (y_coord / height) * 2.0
-        clip_coords = np.array([ndc_x, ndc_y, 1.0, 1.0])
+        ndc_x = (2.0 * x_coord) / width - 1.0                         # Mouse click x coordinate in NDC space
+        ndc_y = 1.0 - (2.0 * y_coord) / height                        # Mouse click y coordinate in NDC space
+        clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
 
-        P = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ (clip_coords * self.far_clip)
+        P = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
 
         eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
         eye_coords /= eye_coords[3]
@@ -727,7 +744,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         ray_direction = np.linalg.inv(view_matrix) @ eye_coords
         ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
 
-        return ray_origin, ray_origin - ray_direction
+        return ray_origin, ray_direction
 
     def project_click(self, pos, s, r):
         """
@@ -737,13 +754,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         s: center of the sphere that is being tested
         r: radius of the sphere that is being tested
         """
-
         o, d = self.get_ray(pos.x(), pos.y())
 
-        print("origin:")
-        print(o)
-        print("direction:")
-        print(d)
+        # print("origin:")
+        # print(o)
+        # print("direction:")
+        # print(d)
 
         a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
         b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
@@ -751,8 +767,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         discrim = b * b - 4 * a * c
 
-        return discrim
-
+        if (discrim < 0): 
+            return -1
+        
         root_discrim = math.sqrt(discrim)
 
         t = 0
@@ -765,7 +782,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             t = t0
 
         p = o + t * d
-        return p
+        return t
 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -794,6 +811,9 @@ class PointEditorWindow(QMainWindow):
         self.r = 1
         self.plot_widget.radius = 1
         self.crease_pattern = None
+        self.selected_joint = -1
+
+        self.plot_widget.mousePressSignal.connect(self.joint_selection_changed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -871,8 +891,6 @@ class PointEditorWindow(QMainWindow):
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
-        self.selected_joint = -1
-
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
@@ -901,6 +919,7 @@ class PointEditorWindow(QMainWindow):
         else:
             self.crease_pattern.show()
 
+    @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
         if index != self.selected_joint:
             self.selected_joint = index
@@ -1059,8 +1078,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.bounding_balls = []
 
         for joint in self.chain.Joints:
-            center = joint.boundingBall().c
-            self.plot_widget.bounding_balls.append((center[0], center[1], center[2]))
+            self.plot_widget.bounding_balls.append(joint.boundingBall())
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)

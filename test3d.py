@@ -51,7 +51,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             x, y, z = gluUnProject(winX, winY, winZ, modelview, projection, viewport)
             print(f"Clicked 3D coordinates: {x}, {y}, {z}")
 
-            sphere_center = (-1.5, 0.5)  
+            sphere_center = (-0.5, 0.5)  
             sphere_radius = 0.1  
             distance = ((x - sphere_center[0]) ** 2 + (y - sphere_center[1]) ** 2) ** 0.5
 
