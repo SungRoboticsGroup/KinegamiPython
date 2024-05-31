@@ -88,25 +88,25 @@ for i in [thumb1, thumbEnd, pointer2, pointerEnd, middle1, middle2, middleEnd]:
     print(np.round(tree.Links[i].path.tMag, 3))
 
 
-# # Spherical grasp
-# tree.setJointState(middle0, np.pi/2)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-#     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
+# Spherical grasp
+tree.setJointState(middle0, np.pi/2)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False, showJointPoses=False)
 
-# # Cylindrical grasp
-# tree.setJointState(middle0, 0)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-#     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
+# Cylindrical grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False, showJointPoses=False)
 
-# # Pinch grasp
-# tree.setJointState(middle0, 0)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle2, pointer2, thumb1]:
-#     tree.setJointState(i, 0)
-# for i in [middle1, pointer1, thumb0]:
-#     tree.setJointState(i, np.pi/2)
-# tree.show(showJointPoses=False)
+# Pinch grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle2, pointer2, thumb1]:
+    tree.setJointState(i, 0)
+for i in [middle1, pointer1, thumb0]:
+    tree.setJointState(i, np.pi/2)
+tree.show(showJointPoses=False)
