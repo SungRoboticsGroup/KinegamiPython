@@ -687,16 +687,16 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             min_t = self.far_clip
             index = -1
 
-            for x in range (0, len(self.bounding_balls)):
-                ball = self.bounding_balls[x]
+            for i in range (0, len(self.bounding_balls)):
+                ball = self.bounding_balls[i]
                 center = ball.c
                 t = self.project_click(event.pos(), center, 1)
 
-                if (t < min_t):
+                if (t < min_t and t > 0):
                     min_t = t
-                    index = x
+                    index = i
 
-            print(index)
+            # print(index)
 
             self.mousePressSignal.emit(index)
 
@@ -731,11 +731,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
         view_matrix = np.transpose(view_matrix)
 
-        ndc_x = (2.0 * x_coord) / width - 1.0                         # Mouse click x coordinate in NDC space
-        ndc_y = 1.0 - (2.0 * y_coord) / height                        # Mouse click y coordinate in NDC space
+        ndc_x = (4.0 * x_coord / width) - 1.0                        # Mouse click x coordinate in NDC space
+        ndc_y = (4.0 * y_coord) / height - 1.0                   # Mouse click y coordinate in NDC space
+
         clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
 
-        P = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
+        p = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
 
         eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
         eye_coords /= eye_coords[3]
@@ -756,10 +757,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         """
         o, d = self.get_ray(pos.x(), pos.y())
 
-        # print("origin:")
-        # print(o)
-        # print("direction:")
-        # print(d)
+        print("origin:")
+        print(o)
+        print("direction:")
+        print(d)
 
         a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
         b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
