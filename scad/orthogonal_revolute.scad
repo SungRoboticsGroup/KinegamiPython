@@ -208,8 +208,8 @@ module joint_top() {
                         
                         //holes for screws
                         translate([0,0,next_hole_attach_height + next_hole_radius]) {
-                            angled_cylinder(0, (next_inner + thickness + eps) * 2,  hole_radius, 90);
-                            angled_cylinder(90, (next_inner + thickness + eps) * 2, hole_radius, 0);
+                            angled_cylinder(0, (next_inner + thickness + eps) * 2,  next_hole_radius, 90);
+                            angled_cylinder(90, (next_inner + thickness + eps) * 2, next_hole_radius, 0);
                         }
                     }
 

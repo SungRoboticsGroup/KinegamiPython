@@ -173,9 +173,10 @@ module branch(branch_list, _outer, _inner) {
     }
 }
 
-branch([
-//[  0.,     43.465,   outer_radius,      2.264*outer_radius,  -45.,      1.535,   1.   ],
- [180.,      0.,      outer_radius,      7.082*outer_radius, 180.,      0.,      1., hole_radius, 0.02, 0.15  ],
-
- [180.,     44.945,   outer_radius,      2.358*outer_radius, 180.,     44.945,   1.   , hole_radius, 0.05, 0.5]
-], outer_radius, inner_radius);
+branch([[0,0,0,1,0,0,0,hole_radius,hole_attach_height,inner_radius]],outer_radius,inner_radius);
+//branch([
+////[  0.,     43.465,   outer_radius,      2.264*outer_radius,  -45.,      1.535,   1.   ],
+// [180.,      0.,      outer_radius,      7.082*outer_radius, 180.,      0.,      1., hole_radius, 0.02, 0.15  ],
+//
+// [180.,     44.945,   outer_radius,      2.358*outer_radius, 180.,     44.945,   1.   , hole_radius, 0.05, 0.5]
+//], outer_radius, inner_radius);
