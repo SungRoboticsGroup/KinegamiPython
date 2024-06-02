@@ -101,6 +101,27 @@ class LinkCSC:
         twist2Deg = np.rad2deg(twist2)
         theta2Deg = np.rad2deg(self.path.theta2)
         return [twist1Deg, theta1Deg, self.r, self.path.tMag, twist2Deg, theta2Deg, self.r]
+    
+    # def cscModule(self, name : str, hole, grid_hole, outer, inner):
+    #     path = self.branchingParameters()
+        
+    #     eps = grid_hole/100
+    #     defs = [f"eps={eps};\n", f"hole_radius={hole};\n", f"grid_hole_radius={grid_hole};\n", f"outer_radius={outer};\n", f"inner_radius={inner};\n"]
+
+    #     with open("scad/branch.scad", "r") as file:
+    #         lines = file.readlines()
+    #     truncated = lines[5:121] #first 5 are parameter definitions, first 121 lines are simply function definitions, replace if necessary
+
+    #     new_lines = ["branch([\n"]
+    #     new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius],\n")
+    #     new_lines.append("],outer_radius,inner_radius);")
+
+    #     with open(f"scad_output/{name}.scad", "w") as file:
+    #         truncated.extend(new_lines)
+    #         defs.extend(truncated)
+    #         file.writelines(defs)
+        
+    #     os.system(f"openscad -o scad_output/{name}.stl scad_output/{name}.scad")
 
     def newLinkTransformedBy(self, Transformation : SE3):
         return LinkCSC(self.r, Transformation @ self.StartDubinsPose, 

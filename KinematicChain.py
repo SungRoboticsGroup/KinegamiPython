@@ -5,6 +5,7 @@ Created on Wed Dec  6 14:07:27 2023
 @author: Daniel Feshbach
 """
 from Joint import *
+from OrigamiJoint import *
 from KinematicTree import KinematicTree
 from TubularPattern import *
 from LinkCSC import LinkCSC

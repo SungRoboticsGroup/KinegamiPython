@@ -6,6 +6,7 @@ Created on Fri Jun 23 23:13:27 2023
 """
 import Joint
 from Joint import *
+from OrigamiJoint import *
 import PathCSC
 from PathCSC import *
 import scipy
@@ -14,6 +15,7 @@ import queue
 import TubularPattern
 from TubularPattern import *
 from LinkCSC import LinkCSC
+import os
 
 
 class KinematicTree:
@@ -217,6 +219,28 @@ class KinematicTree:
     def branchingParametersFrom(self, parentIndex : int):
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
         return [link.branchingParameters() for link in linksToChildren]
+    
+    # def branchModuleFrom(self, parentIndex : int, name : str, hole, grid_hole, outer, inner):
+    #     params = np.round(self.branchingParametersFrom(parentIndex), 9)
+
+    #     eps = grid_hole/100
+    #     defs = [f"eps={eps};\n", f"hole_radius={hole};\n", f"grid_hole_radius={grid_hole};\n", f"outer_radius={outer};\n", f"inner_radius={inner};\n"]
+
+    #     with open("scad/branch.scad", "r") as file:
+    #         lines = file.readlines()
+    #     truncated = lines[5:121] #first 5 are parameter definitions, first 121 lines are simply function definitions, replace if necessary
+
+    #     new_lines = ["branch([\n"]
+    #     for path in params:
+    #         new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius],\n")
+    #     new_lines.append("],outer_radius,inner_radius);")
+
+    #     with open(f"scad_output/{name}.scad", "w") as file:
+    #         truncated.extend(new_lines)
+    #         defs.extend(truncated)
+    #         file.writelines(defs)
+        
+    #     os.system(f"openscad -o scad_output/{name}.stl scad_output/{name}.scad")
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
