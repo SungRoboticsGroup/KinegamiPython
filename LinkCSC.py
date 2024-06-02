@@ -140,7 +140,11 @@ class LinkCSC:
         
         return allElbowHandleSets
     
-    
+    def endBoundingBalls2r(self):
+        startBall = Ball(self.path.circleCenter1, 2*self.r) if self.elbow1 else Ball(self.StartDubinsPose.t, self.r)
+        endBall = Ball(self.path.circleCenter2, 2*self.r) if self.elbow2 else Ball(self.EndDubinsPose.t, self.r)
+        return startBall, endBall
+
     def show(self, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 

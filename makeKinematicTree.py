@@ -33,6 +33,20 @@ class JointSpecificationTree:
     def zHats(self):
         return np.array([joint.Pose.R[:,2] for joint in self.Joints])
 
+
+def orientJoint(joint : Joint, planeNormal : np.ndarray):
+    if np.dot(joint.Pose.R[:,2], planeNormal) < 0:
+        joint.reverseZhat()
+    def newXhat(angleToRotateAboutZ):
+        return (joint.Pose @ SE3.Rz(angleToRotateAboutZ)).R[:,0]
+    def objective(angleToRotateAboutZ):
+        return np.arccos(np.dot(newXhat(angleToRotateAboutZ), planeNormal))
+    result = minimize(objective, 0, method='Nelder-Mead')
+    xhatSolution = newXhat(result.x[0])
+    joint.setXhatAboutZhat(xhatSolution)
+    assert(np.dot(joint.Pose.R[:,0], planeNormal) >= -1e-6)
+    assert(np.dot(joint.Pose.R[:,2], planeNormal) >= -1e-6)
+
 """
 Input: 
     jointSpecs, a tree of Joint objects interpreted as specifying their
@@ -47,14 +61,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
     # Set orientation appropriately
-    if np.dot(rootJoint.Pose.R[:,2], planeNormal) < 0:
-        rootJoint.reverseZhat()
-    def newXhat(angleToRotateAboutZ):
-        return (SE3.Rz(angleToRotateAboutZ) * rootJoint.Pose.R[:,0]).flatten()
-    def objective(angleToRotateAboutZ):
-        return -np.dot(newXhat(angleToRotateAboutZ), planeNormal)
-    result = minimize(objective, 0)
-    rootJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
+    orientJoint(rootJoint, planeNormal)
 
     # set up bounding cylinder
     rootBB = jointSpecs.Joints[0].boundingBall()
@@ -63,7 +70,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
     
     cylinders = [copy.deepcopy(boundingCylinder)]
 
-    KT = KinematicTree(rootJoint)
+    KT = KinematicTree(rootJoint, maxAnglePerElbow=np.pi/10)
 
     # map from joint indices in jointSpecs to indices in KT 
     jointIndexSpecsToKT = {0:0} 
@@ -97,7 +104,10 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint1, 
                                     relative=False, fixedPosition=True, 
                                     fixedOrientation=True, safe=False)
-            boundingCylinder.expandToIncludeBall(Waypoint1.boundingBall())
+            ball1,ball2 = KT.Links[parentIndexInKT].endBoundingBalls2r()
+            boundingCylinder.expandToIncludeBall(ball1)
+            boundingCylinder.expandToIncludeBall(ball2)
+
 
             nDist = boundingCylinder.endPlane().signedDistanceToPoint(o1)
             assert(nDist < 0)
@@ -107,9 +117,13 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint2, 
                                     relative=False, fixedPosition=True, 
                                     fixedOrientation=True, safe=False)
-            boundingCylinder.expandToIncludeBall(Waypoint2.boundingBall())
-            # TODO: ALSO EXPAND TO INCLUDE THE LINKS!!!
+            boundingCylinder.expandToIncludeBall(Waypoint2.boundingBall()) 
+            # this call suffices and avoids redundency because
+            # ball1 here is the same as ball2 from the previous waypoint,
+            # which is waypoint1's bounding ball. 
+            # Meanwhile ball2 here is this waypoint bounding ball
         
+        orientJoint(newJointSpec, planeNormal)
         jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
                     relative=False, fixedPosition=False, fixedOrientation=False, 
                     safe=False, endPlane=boundingCylinder.endPlane())
@@ -121,11 +135,12 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             boundingCylinder.addToPlot(ax)
             boundingCylinder.endPlane().addToPlot(ax)
             ax.set_aspect('equal')
+            plt.axis('off')
             plt.show(block=False)
         
-            
         boundingCylinder.expandToIncludeBall(KT.Joints[jInKT].boundingBall())
-        boundingCylinder.expandToIncludeBall(KT.Links[jInKT].elbow1BoundingBall)
-        boundingCylinder.expandToIncludeBall(KT.Links[jInKT].elbow2BoundingBall)
+        ball1,ball2 = KT.Links[jInKT].endBoundingBalls2r()
+        boundingCylinder.expandToIncludeBall(ball1)
+        boundingCylinder.expandToIncludeBall(ball2)
     
     return KT

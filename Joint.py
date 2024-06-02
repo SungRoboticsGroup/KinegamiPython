@@ -411,7 +411,7 @@ class PrismaticJoint(OrigamiJoint):
         return Ball(self.center(), self.boundingRadius())
     
     def boundingCylinder(self) -> Cylinder:
-        uhat = (SE3.Rz(np.pi/self.numSides) @ self.Pose).R[:,1]
+        uhat = (self.Pose @ SE3.Rz(np.pi/self.numSides)).R[:,1]
         return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
                         self.length(), uhat)
     
