@@ -178,7 +178,7 @@ class KinematicTree:
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=True, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
         xyzHandles = []
         abcHandles = []
         

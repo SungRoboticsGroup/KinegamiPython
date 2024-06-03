@@ -3,9 +3,9 @@
 # https://tutorpython.com/tutorial/python-import-from-parent-directory
 import os
 import sys
-child_dir = os.path.dirname(__file__)
-parent_dir = os.path.abspath(os.path.join(child_dir, '..'))
-sys.path.append(parent_dir)
+this_dir = os.path.dirname(__file__)
+main_dir = os.path.abspath(os.path.join(this_dir, '../..'))
+sys.path.append(main_dir)
 
 # Example 1A
 from KinematicTree import *
