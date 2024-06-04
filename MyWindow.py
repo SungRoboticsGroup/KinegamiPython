@@ -705,6 +705,78 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     break
         
             self.click_signal.emit(index)
+    
+    def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Method returns the ray origin (current camera position) and ray unit vector for
+        selection of triangulated meshes in the GLViewWidget.
+
+        :param x_coord: Mouse click local x coordinate within the widget.
+        :param y_coord: Mouse click local y coordinate within the widget.
+
+        Note: Mouse click coordinate system origin is top left of the GLViewWidget.
+
+        from @gordankos on github
+        https://github.com/pyqtgraph/pyqtgraph/issues/2647
+        """
+        x0, y0, width, height = self.getViewport()
+        ray_origin = np.array(self.cameraPosition())
+
+        projection_matrix = np.array(self.projectionMatrix().data()).reshape(4, 4)
+        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
+        view_matrix = np.transpose(view_matrix)
+
+        ndc_x = (4.0 * x_coord / width) - 1.0                        # Mouse click x coordinate in NDC space
+        ndc_y = (4.0 * y_coord) / height - 1.0                   # Mouse click y coordinate in NDC space
+
+        clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
+
+        p = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
+
+        eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
+        eye_coords /= eye_coords[3]
+        eye_coords = np.array([eye_coords[0], eye_coords[1], -1.0, 0.0])
+
+        ray_direction = np.linalg.inv(view_matrix) @ eye_coords
+        ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
+
+        return ray_origin, ray_direction
+
+    def project_click(self, pos, s, r):
+        """
+        pos: (local X coord within widget, local Y coord within widget)
+        - The top left corner is the origin point
+
+        s: center of the sphere that is being tested
+        r: radius of the sphere that is being tested
+        """
+        o, d = self.get_ray(pos.x(), pos.y())
+
+        print("origin:")
+        print(o)
+        print("direction:")
+        print(d)
+
+        a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
+        b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
+        c = (o[0] - s[0]) ** 2 + (o[1] - s[1]) ** 2 + (o[2] - s[2]) ** 2 - r * r
+
+        discrim = b * b - 4 * a * c
+
+        if (discrim < 0): 
+            root_discrim = math.sqrt(discrim)
+
+        t = 0
+
+        t0 = (-b - root_discrim) / (2 * a)
+        if (t0 < 0) :
+            t1 = (-b + root_discrim) / (2 * a)
+            t = t1
+        else:
+            t = t0
+
+        p = o + t * d
+        return t
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
