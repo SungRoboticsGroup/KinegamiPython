@@ -675,32 +675,14 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
 
-    mousePressSignal = qc.pyqtSignal(int)
+    click_signal = qc.pyqtSignal(int)
 
     def toggle_lock(self):
         self.locked = not self.locked
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
-        if self.locked and event.button() == QtCore.Qt.LeftButton:
-
-            min_t = self.far_clip
-            index = -1
-
-            for i in range (0, len(self.bounding_balls)):
-                ball = self.bounding_balls[i]
-                center = ball.c
-                t = self.project_click(event.pos(), center, 1)
-
-                if (t < min_t and t > 0):
-                    min_t = t
-                    index = i
-
-            # print(index)
-
-            self.mousePressSignal.emit(index)
-
-        else:
+        if not self.locked:
             super(ClickableGLViewWidget, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -708,9 +690,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             super(ClickableGLViewWidget, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if not self.locked:
-            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
+        if self.locked:
+            lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            # itemsAt seems to take in device pixels
+            dpr = self.devicePixelRatioF()
+            region = tuple([x * dpr for x in region])
 
+            index = -1
+
+            for item in self.itemsAt(region):
+                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
+                    index = item.id
+                    break
+        
+            self.click_signal.emit(index)
+    
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
         Method returns the ray origin (current camera position) and ray unit vector for
@@ -769,9 +764,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         discrim = b * b - 4 * a * c
 
         if (discrim < 0): 
-            return -1
-        
-        root_discrim = math.sqrt(discrim)
+            root_discrim = math.sqrt(discrim)
 
         t = 0
 
@@ -784,7 +777,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         p = o + t * d
         return t
-
+ 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -801,6 +794,7 @@ class PointEditorWindow(QMainWindow):
         self.toggleButton.setStyleSheet('background-color: black; color: white;')
 
         grid = gl.GLGridItem()
+
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
@@ -814,7 +808,7 @@ class PointEditorWindow(QMainWindow):
         self.crease_pattern = None
         self.selected_joint = -1
 
-        self.plot_widget.mousePressSignal.connect(self.joint_selection_changed)
+        self.plot_widget.click_signal.connect(self.joint_selection_changed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -925,18 +919,18 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_joint:
             self.selected_joint = index
             self.update_joint()
-            min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            max = self.chain.Joints[self.selected_joint].stateRange()[1]
-            current = self.chain.Joints[self.selected_joint].state
-            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+            # min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            # max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            # current = self.chain.Joints[self.selected_joint].state
+            # self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
 
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
         self.select_joint_options.clear() 
     
-        for index, joint in enumerate(self.chain.Joints):
-            self.select_joint_options.addItem("Joint " + str(index) + " - " + joint.__class__.__name__)
+        for joint in self.chain.Joints:
+            self.select_joint_options.addItem("Joint " + str(joint.id) + " - " + joint.__class__.__name__)
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
@@ -1074,12 +1068,10 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
+        for index, joint in enumerate(self.chain.Joints):
+            joint.id = index
+
         self.chain.addToWidget(self)
-
-        self.plot_widget.bounding_balls = []
-
-        for joint in self.chain.Joints:
-            self.plot_widget.bounding_balls.append(joint.boundingBall())
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1100,7 +1092,13 @@ class PointEditorWindow(QMainWindow):
     
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
-            joint = dialog.getJoint()
+            joint : Joint = dialog.getJoint()
+
+            if (self.chain == None):
+                joint.id = 0
+            else:
+                joint.id = len(self.chain.Joints)
+                
             isRelative = dialog.getIsRelative()
             isFixedPosition = dialog.getFixedPosition()
             isFixedOrientation = dialog.getFixedOrientation()

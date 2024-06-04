@@ -12,6 +12,7 @@ from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import pyqtgraph.opengl as gl
+from meshHelpers import *
 
 class Joint(ABC):
     """
@@ -28,6 +29,7 @@ class Joint(ABC):
         self.neutralLength = neutralLength
         self.state = 0
         self.TransformStateTo(initialState)
+        self.id = 0
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -182,7 +184,7 @@ class Joint(ABC):
     
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
-                 initialState : float = 0):
+                 initialState : float = 0, id : int = 0):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         super().__init__(r, neutralLength, Pose)
@@ -269,7 +271,6 @@ class RevoluteJoint(OrigamiJoint):
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
-
         if showSurface:
             scale = self.pattern.baseSideLength / 2
             centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
@@ -280,20 +281,31 @@ class RevoluteJoint(OrigamiJoint):
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
 
-            for pose in [self.ProximalFrame(), self.DistalFrame()]:
-                uhat = pose.R[:, 1]
-                vhat = pose.R[:, 2]
-                basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
-                allPoints = np.vstack([basePoints, centerSegment])
+            pose = self.ProximalFrame()
+            uhat = pose.R[:, 1]
+            vhat = pose.R[:, 2]
+            basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
+            allPoints = np.vstack([basePoints, centerSegment])
 
-                hull = ConvexHull(allPoints)
-                vertices = allPoints[hull.vertices]
-                faces = hull.simplices
+            hull = ConvexHull(allPoints)
+            vertices = allPoints[hull.vertices]
+            faces = hull.simplices
 
-                meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-                item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
-                item.setGLOptions('translucent')
-                widget.plot_widget.addItem(item)
+            pose2 = self.DistalFrame()
+            uhat2 = pose2.R[:, 1]
+            vhat2 = pose2.R[:, 2]
+            basePoints2 = np.array([pose2.t + u[i] * uhat2 + v[i] * vhat2 for i in range(radialCount - 1)])
+            allPoints2 = np.vstack([basePoints2, centerSegment])
+
+            hull2 = ConvexHull(allPoints2)
+            vertices = np.append(vertices, allPoints2[hull2.vertices], axis=0)
+            faces = np.append(faces, hull2.simplices + 6, axis=0)
+
+            meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+            item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True, id=self.id)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -362,7 +374,8 @@ class PrismaticJoint(OrigamiJoint):
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         
         if showSurface:
-            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor)
+            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor, 
+                                                is_joint=True, id=self.id)
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -441,7 +454,9 @@ class Waypoint(OrigamiJoint):
                 widget.plot_widget.addItem(line)
         
         if showSphere:
-            self.boundingBall().addToWidget(widget, sphereColor)
+            self.boundingBall().addToWidget(widget, sphereColor, is_waypoint=True, id=self.id)
+        else:
+            self.boundingBall().addToWidget(widget, (0,0,0,0.5), is_waypoint=True, id=self.id)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -549,7 +564,7 @@ class Tip(OrigamiJoint):
             for s in hull.simplices:
                 vertices = tipPoints[s]
                 meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
-                item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
+                item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent', id=self.id)
                 widget.plot_widget.addItem(item)
         
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
