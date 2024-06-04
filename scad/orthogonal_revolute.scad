@@ -10,8 +10,8 @@ top_rotation_height = 0.7;
 next_hole_radius = 0.045;
 next_hole_attach_height = 0.02;
 next_inner = 0.2;
-max_turn = 120;
-min_turn = 10;
+max_turn = 60;
+min_turn = -30;
 
 //parameters that don't have to be defined explicitly
 eps = tolerance/100;

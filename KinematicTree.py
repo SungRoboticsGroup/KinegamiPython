@@ -220,7 +220,7 @@ class KinematicTree:
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
         return [link.branchingParameters() for link in linksToChildren]
     
-    def exportLink3DFile(self, parentIndex : int, fileFormat = "stl"):
+    def exportLink3DFile(self, parentIndex : int, folder = "", fileFormat = "stl"):
         name = f"linkfrom_{parentIndex}_to_"
         for endpointIndex in self.Children[parentIndex]:
             name += f"{endpointIndex}_"
@@ -251,12 +251,21 @@ class KinematicTree:
             new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius, {nextScrewRadius}, {nextHoleMargin}, {nextInnerRadius}],\n")
         new_lines.append("],outer_radius,inner_radius);")
 
-        with open(f"scad_output/{name}", "w") as file:
+        with open(f"scad_output/{folder}{name}", "w") as file:
             truncated.extend(new_lines)
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -o scad_output/{name} scad_output/{name}.scad")
+        os.system(f"openscad -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad")
+
+    def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
+        #export all the links
+        for i in range(0,len(self.Children)):
+            if len(self.Children[i] > 0):
+                exportLink3DFile(i,folder,fileFormat)
+        #export all the joints
+        for i in range(0,len(self.Joints)):
+            self.Joints[i].export3DFile(i,folder,fileFormat)
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
