@@ -682,25 +682,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
-        if self.locked and event.button() == QtCore.Qt.LeftButton:
-
-            min_t = self.far_clip
-            index = -1
-
-            for i in range (0, len(self.bounding_balls)):
-                ball = self.bounding_balls[i]
-                center = ball.c
-                t = self.project_click(event.pos(), center, 1)
-
-                if (t < min_t and t > 0):
-                    min_t = t
-                    index = i
-
-            # print(index)
-
-            self.mousePressSignal.emit(index)
-
-        else:
+        if not self.locked:
             super(ClickableGLViewWidget, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -708,83 +690,19 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             super(ClickableGLViewWidget, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if not self.locked:
-            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
-
-    def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Method returns the ray origin (current camera position) and ray unit vector for
-        selection of triangulated meshes in the GLViewWidget.
-
-        :param x_coord: Mouse click local x coordinate within the widget.
-        :param y_coord: Mouse click local y coordinate within the widget.
-
-        Note: Mouse click coordinate system origin is top left of the GLViewWidget.
-
-        from @gordankos on github
-        https://github.com/pyqtgraph/pyqtgraph/issues/2647
-        """
-        x0, y0, width, height = self.getViewport()
-        ray_origin = np.array(self.cameraPosition())
-
-        projection_matrix = np.array(self.projectionMatrix().data()).reshape(4, 4)
-        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
-        view_matrix = np.transpose(view_matrix)
-
-        ndc_x = (4.0 * x_coord / width) - 1.0                        # Mouse click x coordinate in NDC space
-        ndc_y = (4.0 * y_coord) / height - 1.0                   # Mouse click y coordinate in NDC space
-
-        clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
-
-        p = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
-
-        eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
-        eye_coords /= eye_coords[3]
-        eye_coords = np.array([eye_coords[0], eye_coords[1], -1.0, 0.0])
-
-        ray_direction = np.linalg.inv(view_matrix) @ eye_coords
-        ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
-
-        return ray_origin, ray_direction
-
-    def project_click(self, pos, s, r):
-        """
-        pos: (local X coord within widget, local Y coord within widget)
-        - The top left corner is the origin point
-
-        s: center of the sphere that is being tested
-        r: radius of the sphere that is being tested
-        """
-        o, d = self.get_ray(pos.x(), pos.y())
-
-        print("origin:")
-        print(o)
-        print("direction:")
-        print(d)
-
-        a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
-        b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
-        c = (o[0] - s[0]) ** 2 + (o[1] - s[1]) ** 2 + (o[2] - s[2]) ** 2 - r * r
-
-        discrim = b * b - 4 * a * c
-
-        if (discrim < 0): 
-            return -1
-        
-        root_discrim = math.sqrt(discrim)
-
-        t = 0
-
-        t0 = (-b - root_discrim) / (2 * a)
-        if (t0 < 0) :
-            t1 = (-b + root_discrim) / (2 * a)
-            t = t1
-        else:
-            t = t0
-
-        p = o + t * d
-        return t
-
+        lpos = event.position() if hasattr(event, 'position') else event.localPos()
+        region = [lpos.x()-5, lpos.y()-5, 10, 10]
+        # itemsAt seems to take in device pixels
+        dpr = self.devicePixelRatioF()
+        region = tuple([x * dpr for x in region])
+        for item in self.itemsAt(region):
+            print(item.objectName())
+            # if (item.objectName() == "Joint"):
+            #     print("joint clicked")
+            # if (item.objectName() == "Waypoint"):
+            #     print("waypoint clicked")
+            
+ 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -801,6 +719,7 @@ class PointEditorWindow(QMainWindow):
         self.toggleButton.setStyleSheet('background-color: black; color: white;')
 
         grid = gl.GLGridItem()
+        grid.setObjectName("grid")
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
@@ -1058,6 +977,7 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.clear()
 
         grid = gl.GLGridItem()
+        grid.setObjectName("grid")
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
         
@@ -1071,15 +991,14 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
 
         grid = gl.GLGridItem()
+        grid.setObjectName("grid")
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
         self.chain.addToWidget(self)
 
-        self.plot_widget.bounding_balls = []
-
         for joint in self.chain.Joints:
-            self.plot_widget.bounding_balls.append(joint.boundingBall())
+            print(joint.id)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1100,7 +1019,13 @@ class PointEditorWindow(QMainWindow):
     
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
-            joint = dialog.getJoint()
+            joint : Joint = dialog.getJoint()
+
+            if (self.chain == None):
+                joint.id = 0
+            else:
+                joint.id = len(self.chain.Joints)
+                
             isRelative = dialog.getIsRelative()
             isFixedPosition = dialog.getFixedPosition()
             isFixedOrientation = dialog.getFixedOrientation()
@@ -1164,6 +1089,7 @@ class PointEditorWindow(QMainWindow):
             self.setCentralWidget(self.plot_widget)
 
             grid = gl.GLGridItem()
+            grid.setObjectName("grid")
             self.plot_widget.addItem(grid)
             grid.setColor((0,0,0,255))
 

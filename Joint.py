@@ -28,6 +28,7 @@ class Joint(ABC):
         self.neutralLength = neutralLength
         self.state = 0
         self.TransformStateTo(initialState)
+        self.id = 0
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -140,12 +141,14 @@ class Joint(ABC):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
-                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None,
+                    index="test"):
         if showAxis:
             zhat = self.Pose.R[:, 2] 
             jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
                                 self.Pose.t + 10 * self.r * zhat])
             line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            line_item.setObjectName(index)
             widget.plot_widget.addItem(line_item)
 
         if showPoses:
@@ -158,6 +161,7 @@ class Joint(ABC):
                     end_point = start_point + poseAxisScale * pose.R[:, i]
                     points = np.array([start_point, end_point])
                     line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                    line.setObjectName(index)
                     widget.plot_widget.addItem(line)
 
         if showSphere:
@@ -280,20 +284,31 @@ class RevoluteJoint(OrigamiJoint):
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
 
-            for pose in [self.ProximalFrame(), self.DistalFrame()]:
-                uhat = pose.R[:, 1]
-                vhat = pose.R[:, 2]
-                basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
-                allPoints = np.vstack([basePoints, centerSegment])
+            pose = self.ProximalFrame()
+            uhat = pose.R[:, 1]
+            vhat = pose.R[:, 2]
+            basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
+            allPoints = np.vstack([basePoints, centerSegment])
 
-                hull = ConvexHull(allPoints)
-                vertices = allPoints[hull.vertices]
-                faces = hull.simplices
+            hull = ConvexHull(allPoints)
+            vertices = allPoints[hull.vertices]
+            faces = hull.simplices
 
-                meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-                item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
-                item.setGLOptions('translucent')
-                widget.plot_widget.addItem(item)
+            pose2 = self.DistalFrame()
+            uhat2 = pose2.R[:, 1]
+            vhat2 = pose2.R[:, 2]
+            basePoints2 = np.array([pose2.t + u[i] * uhat2 + v[i] * vhat2 for i in range(radialCount - 1)])
+            allPoints2 = np.vstack([basePoints2, centerSegment])
+
+            hull2 = ConvexHull(allPoints2)
+            vertices = np.append(vertices, allPoints2[hull2.vertices], axis=0)
+            faces = np.append(faces, hull2.simplices + 6, axis=0)
+
+            meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -362,7 +377,7 @@ class PrismaticJoint(OrigamiJoint):
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         
         if showSurface:
-            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor)
+            self.boundingCylinder().addToWidgetJoint(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor)
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -427,6 +442,7 @@ class Waypoint(OrigamiJoint):
             jointAxis = np.array([self.Pose.t - axisScale * self.r * zhat,
                                 self.Pose.t + axisScale * self.r * zhat])
             line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            line_item.setObjectName("line")
             widget.plot_widget.addItem(line_item)
 
         if showPoses:
@@ -438,10 +454,13 @@ class Waypoint(OrigamiJoint):
                 end_point = start_point + poseAxisScale * self.Pose.R[:, i]
                 points = np.array([start_point, end_point])
                 line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                line.setObjectName("line")
                 widget.plot_widget.addItem(line)
         
         if showSphere:
-            self.boundingBall().addToWidget(widget, sphereColor)
+            self.boundingBall().addToWidgetWaypoint(widget, sphereColor)
+        else:
+            self.boundingBall().addToWidgetWaypoint(widget, (0,0,0,0.5))
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
