@@ -220,27 +220,43 @@ class KinematicTree:
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
         return [link.branchingParameters() for link in linksToChildren]
     
-    # def branchModuleFrom(self, parentIndex : int, name : str, hole, grid_hole, outer, inner):
-    #     params = np.round(self.branchingParametersFrom(parentIndex), 9)
+    def exportLink3DFile(self, parentIndex : int, fileFormat = "stl"):
+        name = f"linkfrom_{parentIndex}_to_"
+        for endpointIndex in self.Children[parentIndex]:
+            name += f"{endpointIndex}_"
+        name[-1] = '.'
+        name += fileFormat
 
-    #     eps = grid_hole/100
-    #     defs = [f"eps={eps};\n", f"hole_radius={hole};\n", f"grid_hole_radius={grid_hole};\n", f"outer_radius={outer};\n", f"inner_radius={inner};\n"]
+        params = np.round(self.branchingParametersFrom(parentIndex), 9)
 
-    #     with open("scad/branch.scad", "r") as file:
-    #         lines = file.readlines()
-    #     truncated = lines[5:121] #first 5 are parameter definitions, first 121 lines are simply function definitions, replace if necessary
+        source = self.Joints[parentIndex]
+        sourceParameters = source.printParameters
+        defs = [f"tolerance={sourceParameters.tolerance};\n",f"hole_radius={source.screwRadius};\n",
+                f"grid_hole_radius={sourceParameters.gridHoleRadius};\n",f"outer_radius={source.r};\n",
+                f"thickness={sourceParameters.thickness};\n",f"hole_attach_height={sourceParameters.holeMargin};\n",
+                f"attach_thickness={sourceParameters.attachThickness};\n"]
 
-    #     new_lines = ["branch([\n"]
-    #     for path in params:
-    #         new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius],\n")
-    #     new_lines.append("],outer_radius,inner_radius);")
+        linkEndpoints = [self.Joints[childIndex].printParameters for childIndex in self.Children[parentIndex]]
 
-    #     with open(f"scad_output/{name}.scad", "w") as file:
-    #         truncated.extend(new_lines)
-    #         defs.extend(truncated)
-    #         file.writelines(defs)
+        with open("scad/branch.scad", "r") as file:
+            lines = file.readlines()
+        truncated = lines[7:175] #first 7 are parameter definitions, first 175 lines are function definitions
+
+        new_lines = ["branch([\n"]
+        for i in range(0,len(params)):
+            path = params[i]
+            nextInnerRadius = linkEndpoints[i].r - linkEndpoints[i].printParameters.thickness
+            nextHoleMargin = linkEndpoints[i].printParameters.holeMargin
+            nextScrewRadius = linkEndpoints[i].screwRadius
+            new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius, {nextScrewRadius}, {nextHoleMargin}, {nextInnerRadius}],\n")
+        new_lines.append("],outer_radius,inner_radius);")
+
+        with open(f"scad_output/{name}", "w") as file:
+            truncated.extend(new_lines)
+            defs.extend(truncated)
+            file.writelines(defs)
         
-    #     os.system(f"openscad -o scad_output/{name}.stl scad_output/{name}.scad")
+        os.system(f"openscad -o scad_output/{name} scad_output/{name}.scad")
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',

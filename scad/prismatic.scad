@@ -192,5 +192,5 @@ module top_joint() {
 
 bottom_joint();
 
-translate([outer_radius + 1, 0, 0])
+translate([outer_radius + 0.5, 0, 0])
 top_joint();

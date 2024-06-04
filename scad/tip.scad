@@ -1,9 +1,10 @@
 eps = 0.0001;
 hole_attach_height = 0.02;
-inner_radius = 0.2;
 outer_radius = 0.25;
 hole_radius = 0.045;
+thickness = 0.05;
 //other params
+inner_radius = outer_radius - thickness;
 fn = outer_radius * 1000;
 fnh = hole_radius * 1000;
 

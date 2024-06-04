@@ -251,7 +251,7 @@ module axle() {
 
 joint_bottom();
 
-translate([0,outer_radius + 1,bottom_rotation_height + top_rotation_height])
+translate([0,outer_radius + 1,bottom_rotation_height + top_rotation_height + next_hole_attach_height*2 + next_hole_radius*2])
 rotate([0,180,0])
 joint_top();
 
