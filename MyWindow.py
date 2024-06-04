@@ -675,7 +675,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
 
-    mousePressSignal = qc.pyqtSignal(int)
+    click_signal = qc.pyqtSignal(int)
 
     def toggle_lock(self):
         self.locked = not self.locked
@@ -690,18 +690,21 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             super(ClickableGLViewWidget, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        lpos = event.position() if hasattr(event, 'position') else event.localPos()
-        region = [lpos.x()-5, lpos.y()-5, 10, 10]
-        # itemsAt seems to take in device pixels
-        dpr = self.devicePixelRatioF()
-        region = tuple([x * dpr for x in region])
-        for item in self.itemsAt(region):
-            print(item.objectName())
-            # if (item.objectName() == "Joint"):
-            #     print("joint clicked")
-            # if (item.objectName() == "Waypoint"):
-            #     print("waypoint clicked")
-            
+        if self.locked:
+            lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            # itemsAt seems to take in device pixels
+            dpr = self.devicePixelRatioF()
+            region = tuple([x * dpr for x in region])
+
+            index = -1
+
+            for item in self.itemsAt(region):
+                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
+                    index = item.id
+                    break
+        
+            self.click_signal.emit(index)
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -719,7 +722,7 @@ class PointEditorWindow(QMainWindow):
         self.toggleButton.setStyleSheet('background-color: black; color: white;')
 
         grid = gl.GLGridItem()
-        grid.setObjectName("grid")
+
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
@@ -733,7 +736,7 @@ class PointEditorWindow(QMainWindow):
         self.crease_pattern = None
         self.selected_joint = -1
 
-        self.plot_widget.mousePressSignal.connect(self.joint_selection_changed)
+        self.plot_widget.click_signal.connect(self.joint_selection_changed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -844,18 +847,18 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_joint:
             self.selected_joint = index
             self.update_joint()
-            min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            max = self.chain.Joints[self.selected_joint].stateRange()[1]
-            current = self.chain.Joints[self.selected_joint].state
-            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+            # min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            # max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            # current = self.chain.Joints[self.selected_joint].state
+            # self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
 
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
         self.select_joint_options.clear() 
     
-        for index, joint in enumerate(self.chain.Joints):
-            self.select_joint_options.addItem("Joint " + str(index) + " - " + joint.__class__.__name__)
+        for joint in self.chain.Joints:
+            self.select_joint_options.addItem("Joint " + str(joint.id) + " - " + joint.__class__.__name__)
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
@@ -977,7 +980,6 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.clear()
 
         grid = gl.GLGridItem()
-        grid.setObjectName("grid")
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
         
@@ -991,14 +993,13 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
 
         grid = gl.GLGridItem()
-        grid.setObjectName("grid")
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
-        self.chain.addToWidget(self)
+        for index, joint in enumerate(self.chain.Joints):
+            joint.id = index
 
-        for joint in self.chain.Joints:
-            print(joint.id)
+        self.chain.addToWidget(self)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1089,7 +1090,6 @@ class PointEditorWindow(QMainWindow):
             self.setCentralWidget(self.plot_widget)
 
             grid = gl.GLGridItem()
-            grid.setObjectName("grid")
             self.plot_widget.addItem(grid)
             grid.setColor((0,0,0,255))
 

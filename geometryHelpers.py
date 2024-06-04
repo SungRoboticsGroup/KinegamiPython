@@ -15,6 +15,7 @@ import math
 from math import remainder
 from style import *
 import pyqtgraph.opengl as gl
+from meshHelpers import *
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -229,19 +230,13 @@ class Cylinder:
 
         return vertices, np.array(indices)
 
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5)):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5), is_joint=False, id=-1):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
-        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+        meshitem = MeshItemWithID(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True, id=id)
         meshitem.setGLOptions('translucent')
-        widget.plot_widget.addItem(meshitem)
-
-    def addToWidgetJoint(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5)):
-        vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
-        meshdata = gl.MeshData(vertexes=vertices, faces=indices)
-        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
-        meshitem.setGLOptions('translucent')
-        meshitem.setObjectName("Joint")
+        if (is_joint):
+            meshitem.setObjectName("Joint")
         widget.plot_widget.addItem(meshitem)
     
     def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
@@ -270,21 +265,14 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
         
-    def addToWidget(self, widget, color=(0,0,0,0.5)):
+    def addToWidget(self, widget, color=(0,0,0,0.5), is_waypoint=False, id=-1):
         md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
+        sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
         sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)
-        widget.plot_widget.addItem(sphere)
-
-    def addToWidgetWaypoint(self, widget, color=(0,0,0,0.5)):
-        md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
-        sphere.setGLOptions('translucent')
-        sphere.scale(self.r, self.r, self.r)
-        sphere.translate(*self.c)
-        sphere.setObjectName("Waypoint")
+        if (is_waypoint):
+            sphere.setObjectName("Waypoint")
         widget.plot_widget.addItem(sphere)
     
     def show(self, color='black', alpha=1, frame=False, block=blockDefault):
@@ -470,7 +458,6 @@ class Elbow:
             #widget.plot_widget.addItem(line)
 
         meshitem.setGLOptions('translucent')
-        meshitem.setObjectName("elbow")
         widget.plot_widget.addItem(meshitem)
     
     def show(self, numSides : int = 32, color : str = 'black', 
@@ -499,7 +486,6 @@ def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor
 
     #plot origin points
     originPlot = gl.GLScatterPlotItem(pos=origins, color=(1,1,1,1), size=10)
-    originPlot.setObjectName("Origin")
     widget.addItem(originPlot)
 
     xPoints = np.column_stack((ox + ux, oy + vx, oz + wx))
@@ -511,9 +497,6 @@ def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor
         xHats = gl.GLLinePlotItem(pos=np.array([origins[i], xPoints[i]]), color=xColor, width=5)
         yHats = gl.GLLinePlotItem(pos=np.array([origins[i], yPoints[i]]), color=yColor, width=5)
         zHats = gl.GLLinePlotItem(pos=np.array([origins[i], zPoints[i]]), color=zColor, width=5)
-        xHats.setObjectName("x")
-        yHats.setObjectName("y")
-        zHats.setObjectName("z")
         widget.addItem(xHats)
         widget.addItem(yHats)
         widget.addItem(zHats)
