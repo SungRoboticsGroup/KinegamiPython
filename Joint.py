@@ -165,25 +165,29 @@ class Joint(ABC):
         if showSphere:
             self.boundingBall().addToWidget(widget, sphereColor)
 
-    def addArrows(self, widget):
+    def addArrows(self, widget, selectedArrow=-1):
         rad = self.boundingBall().r
+
+        colors = [(1,0,0,1), (0,1,0,1), (0,0,1,1)]
+        if (selectedArrow != -1):
+            colors[selectedArrow] = (1,1,1,1)
 
         xhat = self.Pose.R[:, 0] 
         yhat = self.Pose.R[:, 1] 
         zhat = self.Pose.R[:, 2] 
         
         posX = np.array([self.Pose.t, self.Pose.t + rad * self.r * xhat])
-        lineX = LineItemWithID(pos=posX, color=(1, 0, 0, 1), width=10, antialias=True, id = 0)
+        lineX = LineItemWithID(pos=posX, color=colors[0], width=10, antialias=True, id = 0)
         lineX.setObjectName("Arrow")
         widget.plot_widget.addItem(lineX)
 
         posY = np.array([self.Pose.t, self.Pose.t + rad * self.r * yhat])
-        lineY = LineItemWithID(pos=posY, color=(0, 1, 0, 1), width=10, antialias=True, id = 1)
+        lineY = LineItemWithID(pos=posY, color=colors[1], width=10, antialias=True, id = 1)
         lineY.setObjectName("Arrow")
         widget.plot_widget.addItem(lineY)
 
         posZ = np.array([self.Pose.t, self.Pose.t + rad * self.r * zhat])
-        lineZ = LineItemWithID(pos=posZ, color=(0, 0, 1, 1), width=20, antialias=True, id = 2)
+        lineZ = LineItemWithID(pos=posZ, color=colors[2], width=20, antialias=True, id = 2)
         lineZ.setObjectName("Arrow")
         widget.plot_widget.addItem(lineZ)
 

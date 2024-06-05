@@ -676,6 +676,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.far_clip = dist * 1000.
 
     click_signal = qc.pyqtSignal(int)
+    click_signal_arrow = qc.pyqtSignal(int)
 
     selected_index = -1
 
@@ -701,20 +702,23 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             index = -1
             arrowIndex = -1
+            jointSeen = False   # Basically just selects the first joint in distance order.
 
             for item in self.itemsAt(region):
                 if (item.objectName() == "Arrow"):
                     index = self.selected_index
+                    arrowIndex = item.id
                     print("Arrow clicked: " + str(item.id))
                     break
 
-                if ((item.objectName() == "Joint" or item.objectName() == "Waypoint")):
+                if ((item.objectName() == "Joint" or item.objectName() == "Waypoint") and jointSeen == False):
                     index = item.id
                     self.selected_index = index
                     print("Joint clicked: " + str(item.id))
-                    break
+                    jointSeen = True
         
             self.click_signal.emit(index)
+            self.click_signal_arrow.emit(arrowIndex)
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -817,8 +821,10 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.radius = 1
         self.crease_pattern = None
         self.selected_joint = -1
+        self.selected_arrow = -1
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
+        self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -928,11 +934,14 @@ class PointEditorWindow(QMainWindow):
     def joint_selection_changed(self, index):
         if index != self.selected_joint:
             self.selected_joint = index
+            self.selected_arrow = -1
             self.update_joint()
-            # min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            # max = self.chain.Joints[self.selected_joint].stateRange()[1]
-            # current = self.chain.Joints[self.selected_joint].state
-            # self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+
+    @QtCore.pyqtSlot(int)
+    def arrow_selection_changed(self, index):
+        if index != self.selected_arrow:
+            self.selected_arrow = index
+            self.update_joint()
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1072,7 +1081,7 @@ class PointEditorWindow(QMainWindow):
 
         for joint in self.chain.Joints:
             if (joint.id == self.selected_joint):
-                joint.addArrows(self)
+                joint.addArrows(self, selectedArrow=self.selected_arrow)
 
     def update_plot(self):
         self.plot_widget.clear()
