@@ -164,7 +164,7 @@ class KinematicTree:
             if index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
-                        sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True, 
+                        sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True,
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
             else:
