@@ -677,6 +677,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
     click_signal = qc.pyqtSignal(int)
 
+    selected_index = -1
+
     def toggle_lock(self):
         self.locked = not self.locked
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
@@ -692,16 +694,24 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     def mouseReleaseEvent(self, event):
         if self.locked:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            region = [lpos.x()-2, lpos.y()-2, 4, 4]
             # itemsAt seems to take in device pixels
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
             index = -1
+            arrowIndex = -1
 
             for item in self.itemsAt(region):
-                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
+                if (item.objectName() == "Arrow"):
+                    index = self.selected_index
+                    print("Arrow clicked: " + str(item.id))
+                    break
+
+                if ((item.objectName() == "Joint" or item.objectName() == "Waypoint")):
                     index = item.id
+                    self.selected_index = index
+                    print("Joint clicked: " + str(item.id))
                     break
         
             self.click_signal.emit(index)
@@ -726,8 +736,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
         view_matrix = np.transpose(view_matrix)
 
-        ndc_x = (4.0 * x_coord / width) - 1.0                        # Mouse click x coordinate in NDC space
-        ndc_y = (4.0 * y_coord) / height - 1.0                   # Mouse click y coordinate in NDC space
+        ndc_x = (4.0 * x_coord / width) - 1.0                    
+        ndc_y = (4.0 * y_coord) / height - 1.0                
 
         clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
 
@@ -1059,6 +1069,10 @@ class PointEditorWindow(QMainWindow):
             self.chain.addToWidget(self, selectedJoint=self.selected_joint)
 
         self.select_joint_options.blockSignals(False)
+
+        for joint in self.chain.Joints:
+            if (joint.id == self.selected_joint):
+                joint.addArrows(self)
 
     def update_plot(self):
         self.plot_widget.clear()
