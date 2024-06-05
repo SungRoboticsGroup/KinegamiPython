@@ -97,6 +97,28 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         
         os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}/{name}.scad > /dev/null")
     
+    def renderPose(self, index, name="rendered_pose.stl"):
+        defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
+                f"grid_hole_radius={self.printParameters.gridHoleRadius};\n",f"outer_radius={self.r};\n",
+                f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
+                f"attach_thickness={self.printParameters.attachThickness};\n", f"bottom_rotation_height={self.bottomLength};\n",
+                f"top_rotation_height={self.topLength};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
+                f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",
+                f"max_turn={np.rad2deg(self.maxBendingAngle)};\n", f"min_turn={np.rad2deg(self.minBendingAngle*180/np.pi)};\n",
+                f"current_angle={np.rad2deg(self.initialState)}"]
+
+        with open("scad/poses/orthogonal_revolute_pose.scad", "r") as file:
+            lines = file.readlines()
+        truncated = lines[15:] #first 15 are parameter definitions
+
+        with open(f"scad_output/{name}.scad", "w+") as file:
+            defs.extend(truncated)
+            file.writelines(defs)
+        
+        os.system(f"openscad -q -o 3d_output/{name} scad_output/{name}.scad > /dev/null")
+
+        return name
+    
     def pathIndex(self) -> int:
         return 0 # xhat
     
