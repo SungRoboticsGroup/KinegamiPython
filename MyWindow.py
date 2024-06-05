@@ -657,6 +657,8 @@ class CreateNewChainDialog(QDialog):
         return self.r
     
 class ClickableGLViewWidget(gl.GLViewWidget):
+    mousePressSignal = QtCore.pyqtSignal(int)
+
     def __init__(self, parent=None):
         super(ClickableGLViewWidget, self).__init__(parent)
         fmt = QSurfaceFormat()
@@ -674,15 +676,28 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         dist = self.opts['distance']
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
-
-    click_signal = qc.pyqtSignal(int)
+        self.ray = None
 
     def toggle_lock(self):
         self.locked = not self.locked
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
-        if not self.locked:
+        if self.locked and event.button() == QtCore.Qt.LeftButton:
+            min_t = self.far_clip
+            index = -1
+
+            for i in range (0, len(self.bounding_balls)):
+                ball = self.bounding_balls[i]
+                center = ball.c
+                t = self.project_click(event.pos(), center, 1)
+
+                if (t < min_t and t > 0):
+                    min_t = t
+                    index = i
+
+            self.mousePressSignal.emit(index)
+        else:
             super(ClickableGLViewWidget, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -690,94 +705,89 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             super(ClickableGLViewWidget, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self.locked:
-            lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-5, lpos.y()-5, 10, 10]
-            # itemsAt seems to take in device pixels
-            dpr = self.devicePixelRatioF()
-            region = tuple([x * dpr for x in region])
+        if not self.locked:
+            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
 
-            index = -1
-
-            for item in self.itemsAt(region):
-                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
-                    index = item.id
-                    break
-        
-            self.click_signal.emit(index)
-    
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Method returns the ray origin (current camera position) and ray unit vector for
-        selection of triangulated meshes in the GLViewWidget.
-
-        :param x_coord: Mouse click local x coordinate within the widget.
-        :param y_coord: Mouse click local y coordinate within the widget.
-
-        Note: Mouse click coordinate system origin is top left of the GLViewWidget.
-
-        from @gordankos on github
-        https://github.com/pyqtgraph/pyqtgraph/issues/2647
-        """
+        # Get the viewport dimensions
         x0, y0, width, height = self.getViewport()
+        
+        # Convert screen coordinates to normalized device coordinates (NDC)
+        ndc_x = (2 * (x_coord - x0) / width) - 1
+        ndc_y = 1 - (2 * (y_coord - y0) / height)
+        ndc_z = -1  # Forward direction in NDC space
+
+        # Clip coordinates
+        clip_coords = np.array([ndc_x, ndc_y, ndc_z, 1.0])
+
+        # Get the projection matrix and its inverse
+        projection_matrix = np.array(self.projectionMatrix(region=None).data()).reshape(4, 4)
+        inv_projection_matrix = np.linalg.inv(projection_matrix)
+
+        # Transform clip coordinates to eye coordinates
+        eye_coords = np.dot(inv_projection_matrix, clip_coords)
+        eye_coords /= eye_coords[3]  # Perform perspective divide
+        eye_coords[2] = -1.0
+        eye_coords[3] = 0.0  # Direction vector in eye space
+
+        # Get the view matrix and its inverse
+        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
+        inv_view_matrix = np.linalg.inv(view_matrix)
+
+        # Transform eye coordinates to world coordinates
+        world_coords = np.dot(inv_view_matrix, eye_coords)
+        world_direction = world_coords[:3]
+        world_direction /= np.linalg.norm(world_direction)  # Normalize the direction vector
+
+        # Get the camera position
         ray_origin = np.array(self.cameraPosition())
 
-        projection_matrix = np.array(self.projectionMatrix().data()).reshape(4, 4)
-        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
-        view_matrix = np.transpose(view_matrix)
+        print("Viewport:", x0, y0, width, height)
+        print("NDC:", ndc_x, ndc_y, ndc_z)
+        print("Clip Coordinates:", clip_coords)
+        print("Projection Matrix:\n", projection_matrix)
+        print("Inverse Projection Matrix:\n", inv_projection_matrix)
+        print("Eye Coordinates:", eye_coords)
+        print("View Matrix:\n", view_matrix)
+        print("Inverse View Matrix:\n", inv_view_matrix)
+        print("World Coordinates:", world_coords)
+        print("Ray Origin:", ray_origin)
+        print("Ray Direction:", world_direction)
 
-        ndc_x = (4.0 * x_coord / width) - 1.0                        # Mouse click x coordinate in NDC space
-        ndc_y = (4.0 * y_coord) / height - 1.0                   # Mouse click y coordinate in NDC space
+        return ray_origin, world_direction
 
-        clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
-
-        p = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
-
-        eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
-        eye_coords /= eye_coords[3]
-        eye_coords = np.array([eye_coords[0], eye_coords[1], -1.0, 0.0])
-
-        ray_direction = np.linalg.inv(view_matrix) @ eye_coords
-        ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
-
-        return ray_origin, ray_direction
-
-    def project_click(self, pos, s, r):
-        """
-        pos: (local X coord within widget, local Y coord within widget)
-        - The top left corner is the origin point
-
-        s: center of the sphere that is being tested
-        r: radius of the sphere that is being tested
-        """
+    def project_click(self, pos, center, radius):
         o, d = self.get_ray(pos.x(), pos.y())
 
-        print("origin:")
-        print(o)
-        print("direction:")
-        print(d)
+        e = o + d * 1000
+        if self.ray is not None:
+            try:
+                self.removeItem(self.ray)
+            except ValueError:
+                print("Warning: Attempted to remove an item that was not in the list.")
+        self.ray = None
 
-        a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
-        b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
-        c = (o[0] - s[0]) ** 2 + (o[1] - s[1]) ** 2 + (o[2] - s[2]) ** 2 - r * r
+        line = np.array([o, e])
+        self.ray = gl.GLLinePlotItem(pos=line, color=(0, 0, 0, 1), width=2, antialias=True)
+        self.addItem(self.ray)
 
-        discrim = b * b - 4 * a * c
+        # Calculate intersection with a sphere
+        oc = o - center
+        a = np.dot(d, d)
+        b = 2.0 * np.dot(oc, d)
+        c = np.dot(oc, oc) - radius * radius
+        discriminant = b * b - 4 * a * c
 
-        if (discrim < 0): 
-            root_discrim = math.sqrt(discrim)
-
-        t = 0
-
-        t0 = (-b - root_discrim) / (2 * a)
-        if (t0 < 0) :
-            t1 = (-b + root_discrim) / (2 * a)
-            t = t1
+        if discriminant < 0:
+            return -1
         else:
-            t = t0
+            t0 = (-b - np.sqrt(discriminant)) / (2.0 * a)
+            t1 = (-b + np.sqrt(discriminant)) / (2.0 * a)
+            if t0 > 0:
+                return t0
+            else:
+                return t1  
 
-        p = o + t * d
-        return t
- 
 class PointEditorWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -794,7 +804,6 @@ class PointEditorWindow(QMainWindow):
         self.toggleButton.setStyleSheet('background-color: black; color: white;')
 
         grid = gl.GLGridItem()
-
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
@@ -808,7 +817,7 @@ class PointEditorWindow(QMainWindow):
         self.crease_pattern = None
         self.selected_joint = -1
 
-        self.plot_widget.click_signal.connect(self.joint_selection_changed)
+        self.plot_widget.mousePressSignal.connect(self.joint_selection_changed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -919,18 +928,18 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_joint:
             self.selected_joint = index
             self.update_joint()
-            # min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            # max = self.chain.Joints[self.selected_joint].stateRange()[1]
-            # current = self.chain.Joints[self.selected_joint].state
-            # self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+            min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            current = self.chain.Joints[self.selected_joint].state
+            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
 
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
         self.select_joint_options.clear() 
     
-        for joint in self.chain.Joints:
-            self.select_joint_options.addItem("Joint " + str(joint.id) + " - " + joint.__class__.__name__)
+        for index, joint in enumerate(self.chain.Joints):
+            self.select_joint_options.addItem("Joint " + str(index) + " - " + joint.__class__.__name__)
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
@@ -1068,10 +1077,12 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
 
-        for index, joint in enumerate(self.chain.Joints):
-            joint.id = index
-
         self.chain.addToWidget(self)
+
+        self.plot_widget.bounding_balls = []
+
+        for joint in self.chain.Joints:
+            self.plot_widget.bounding_balls.append(joint.boundingBall())
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1092,13 +1103,7 @@ class PointEditorWindow(QMainWindow):
     
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
-            joint : Joint = dialog.getJoint()
-
-            if (self.chain == None):
-                joint.id = 0
-            else:
-                joint.id = len(self.chain.Joints)
-                
+            joint = dialog.getJoint()
             isRelative = dialog.getIsRelative()
             isFixedPosition = dialog.getFixedPosition()
             isFixedOrientation = dialog.getFixedOrientation()
