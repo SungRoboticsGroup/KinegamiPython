@@ -700,25 +700,31 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
-            index = -1
             arrowIndex = -1
             jointSeen = False   # Basically just selects the first joint in distance order.
 
+            joints = []
+            arrows = []
+
             for item in self.itemsAt(region):
                 if (item.objectName() == "Arrow"):
-                    index = self.selected_index
-                    arrowIndex = item.id
-                    print("Arrow clicked: " + str(item.id))
-                    break
+                    arrows.append(item)
 
-                if ((item.objectName() == "Joint" or item.objectName() == "Waypoint") and jointSeen == False):
-                    index = item.id
-                    self.selected_index = index
-                    print("Joint clicked: " + str(item.id))
-                    jointSeen = True
-        
-            self.click_signal.emit(index)
+                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
+                    joints.append(item)
+
+            if (len(arrows) > 0 and self.selectedIndex != -1):
+                arrowIndex = arrows[0].id
+            else:
+                if(len(joints) > 0):
+                    self.selectedIndex = joints[0].id
+                else:
+                    self.selectedIndex = -1
+            
+            self.click_signal.emit(self.selectedIndex)
             self.click_signal_arrow.emit(arrowIndex)
+        if not self.locked:
+            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
