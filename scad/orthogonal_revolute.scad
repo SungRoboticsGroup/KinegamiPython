@@ -24,7 +24,7 @@ fnh = hole_radius * 1000;
 //solve for b = axle height
 max_turn_b = outer_radius / tan((180 - max_turn)/2);
 min_turn_b = outer_radius / tan((180 - min_turn)/2);
-axle_radius = max(min(min_turn_b - axle_offset, bottom_joint_attach_radius/2), axle_offset*2);
+axle_radius = max(min(min_turn_b - axle_offset, hole_radius), axle_offset);
 
 grid_hole_height = hole_radius*2 + hole_attach_height * 2;
 bottom_joint_grid_clearance = bottom_rotation_height - (hole_attach_height*2 + hole_radius*2 + grid_hole_height + max_turn_b + attach_thickness);
@@ -59,7 +59,7 @@ module hole_grid(hole_height, grid_h) {
             cylinder(h = grid_h, r = (inner_radius + outer_radius)/2, 
                 center=false, $fn = fn);
             //holes
-            for (i = [0 : hole_radius * 2 : inner_radius - grid_hole_radius * 2]) {
+            for (i = [0 : grid_hole_radius * 2 + hole_attach_height : inner_radius - grid_hole_radius * 2]) {
                 circular_grid(grid_h + eps*2, i, ceil(6.28*i/(grid_hole_radius*4)));
             }
             
@@ -153,16 +153,16 @@ module joint_top() {
                         translate([0,0,-top_attach_height/2 + axle_radius + axle_offset])
                         rotate([0,90,0])
                         cylinder(h=axle_attach_thickness,r=axle_radius + axle_offset,center=true, $fn = fn);
-                        translate([0,0,axle_radius + axle_offset])
-                    cube([axle_attach_thickness, (axle_radius + axle_offset)*2, top_attach_height],center=true);
+                        translate([0,0,(axle_radius + axle_offset)/2])
+                    cube([axle_attach_thickness, (axle_radius + axle_offset)*2, top_attach_height - axle_offset - axle_radius + attach_thickness],center=true);
                     }
                     
                     translate([-attach_distance, 0, 0]) {
                         translate([0,0,-top_attach_height/2 + axle_radius + axle_offset])
                         rotate([0,90,0])
                         cylinder(h=axle_attach_thickness,r=axle_radius + axle_offset,center=true, $fn = fn);
-                        translate([0,0,axle_radius + axle_offset])
-                    cube([axle_attach_thickness, (axle_radius + axle_offset)*2, top_attach_height],center=true);
+                        translate([0,0,(axle_radius + axle_offset)/2])
+                    cube([axle_attach_thickness, (axle_radius + axle_offset)*2, top_attach_height - axle_offset - axle_radius + attach_thickness],center=true);
                     }  
                     
                     //outer cylinder
@@ -251,9 +251,9 @@ module axle() {
 
 joint_bottom();
 
-translate([0,outer_radius + 1,bottom_rotation_height + top_rotation_height + next_hole_attach_height*2 + next_hole_radius*2])
+translate([0,outer_radius*2 + 1 + axle_radius,bottom_rotation_height + top_rotation_height + next_hole_attach_height*2 + next_hole_radius*2])
 rotate([0,180,0])
 joint_top();
 
-translate([0, outer_radius + 0.5 - outer_radius/2, 0])
+translate([0, outer_radius + 0.5, 0])
 axle();

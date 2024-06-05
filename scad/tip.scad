@@ -5,8 +5,8 @@ hole_radius = 0.045;
 thickness = 0.05;
 //other params
 inner_radius = outer_radius - thickness;
-fn = outer_radius * 1000;
-fnh = hole_radius * 1000;
+fn = outer_radius * 100;
+fnh = hole_radius * 500;
 
 difference() {
     union() {

@@ -1,10 +1,10 @@
-tolerance = 0.015;
-hole_radius = 0.045;
-grid_hole_radius = 0.03;
-outer_radius = 0.3;
-thickness = 0.05;
-hole_attach_height = 0.02;
-attach_thickness = 0.02;
+tolerance=0.01;
+hole_radius=0.05;
+grid_hole_radius=0.1;
+outer_radius=1;
+thickness=0.2;
+hole_attach_height=0.05;
+attach_thickness=0.2;
 
 //parameters that don't have to be defined explicitly
 eps = tolerance/100;
@@ -42,7 +42,7 @@ module hole_grid(hole_height, grid_h) {
             cylinder(h = grid_h, r = (inner_radius + outer_radius)/2, 
                 center=false, $fn = fn);
             //holes
-            for (i = [0 : hole_radius * 2 : inner_radius - grid_hole_radius * 2]) {
+            for (i = [0 : grid_hole_radius * 2 + hole_attach_height : inner_radius - grid_hole_radius * 2]) {
                 circular_grid(grid_h + eps*2, i, ceil(6.28*i/(grid_hole_radius*4)));
             }
             
@@ -97,12 +97,6 @@ module CSC(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, is_inner) {
             translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
             rotate([0,-_ta2,_t2]) {
                 cylinder(h=eps, r=_r, center=true,$fn=fn);
-                
-                //holes for screws
-//                translate([0,0,-hole_radius*1.5])
-//        angled_cylinder(0, (outer_radius + eps) * 2.5,  hole_radius, 90);
-//                translate([0,0,-hole_radius*1.5])
-//    angled_cylinder(90, (outer_radius + eps) * 2.5, hole_radius, 0);
             }
         
         }
@@ -124,9 +118,9 @@ module CSC_ATTACH(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, ne
             union() {
                 //attachment for smaller cylinder
                 translate([0,0,-attach_thickness])
-                cylinder(h=attach_thickness, r=_r, $fn=fn);
+                cylinder(h=attach_thickness, r=_r - thickness/2, $fn=fn);
                 translate([0,0,-attach_thickness*2])
-                cylinder(h=attach_thickness*2, r1=_r, r2=next_inner - tolerance - thickness, $fn=fn);
+                cylinder(h=attach_thickness*2, r1=_r - thickness/2, r2=next_inner - tolerance - thickness, $fn=fn);
                 
                 //small cylinder
                 cylinder(h=next_hole_radius*2 + next_hole_attach_height * 2, r = next_inner - tolerance, $fn=fn);
@@ -145,6 +139,20 @@ module CSC_ATTACH(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, ne
     }
 }
 
+//remove overlap to allow all branches to attach to each other
+module CSC_REMOVE_OVERLAP(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, next_hole_attach_height, next_inner) {
+    pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+    pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
+    
+    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+    rotate([0,-_ta1,_t1])
+    translate([0, 0, _h])
+    translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
+    rotate([0,-_ta2,_t2]) {
+        cylinder(h=999999, r=_r + tolerance, $fn=fn);
+    }
+}
+
 //c is _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next hole radius, next hole height, next inner radius
 module branch(branch_list, _outer, _inner) {
     union() {
@@ -159,6 +167,7 @@ module branch(branch_list, _outer, _inner) {
             
             for (c = branch_list) {
                 CSC(_inner,c[0],c[1],c[2],c[3],c[4],c[5],c[6], true);
+                CSC_REMOVE_OVERLAP(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
             }
             
             //make screw holes at the bottom
@@ -173,10 +182,8 @@ module branch(branch_list, _outer, _inner) {
     }
 }
 
-branch([[0,0,0,1,0,0,0,hole_radius,hole_attach_height,inner_radius]],outer_radius,inner_radius);
-//branch([
-////[  0.,     43.465,   outer_radius,      2.264*outer_radius,  -45.,      1.535,   1.   ],
-// [180.,      0.,      outer_radius,      7.082*outer_radius, 180.,      0.,      1., hole_radius, 0.02, 0.15  ],
-//
-// [180.,     44.945,   outer_radius,      2.358*outer_radius, 180.,     44.945,   1.   , hole_radius, 0.05, 0.5]
-//], outer_radius, inner_radius);
+branch([
+[ 0.0, 42.750838323, 1.0*outer_radius, 1.545671284*outer_radius, -0.0, 2.249161677, 1.0*outer_radius, 0.05, 0.05, 0.8],
+[ 180.0, 0.0, 1.0*outer_radius, 6.3625*outer_radius, 180.0, 0.0, 1.0*outer_radius, 0.05, 0.05, 0.8],
+[ 180.0, 63.377666873, 1.0*outer_radius, 1.282149075*outer_radius, -180.0, 63.377666873, 1.0*outer_radius, 0.05, 0.05, 0.8],
+],outer_radius,inner_radius);

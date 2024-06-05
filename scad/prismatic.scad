@@ -48,7 +48,7 @@ module hole_grid(hole_height, grid_h) {
             cylinder(h = grid_h, r = (inner_radius + outer_radius)/2, 
                 center=false, $fn = fn);
             //holes
-            for (i = [0 : hole_radius * 2 : inner_radius - grid_hole_radius * 2]) {
+            for (i = [0 : grid_hole_radius * 2 + hole_attach_height : inner_radius - grid_hole_radius * 2]) {
                 circular_grid(grid_h + eps*2, i, ceil(6.28*i/(grid_hole_radius*4)));
             }
             

@@ -15,7 +15,9 @@ import queue
 import TubularPattern
 from TubularPattern import *
 from LinkCSC import LinkCSC
+from PrintedJoint import *
 import os
+import time
 
 
 class KinematicTree:
@@ -81,10 +83,12 @@ class KinematicTree:
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
                  safe : bool = True, endPlane : Plane = None) -> int:
-        if newJoint.r != self.r:
-            raise ValueError("ERROR: newJoint.r != self.r")
-        if newJoint.numSides != self.numSides:
-            raise ValueError("ERROR: newJoint.numSides != self.numSides")
+        
+        if isinstance(newJoint, OrigamiJoint):
+            if newJoint.r != self.r:
+                raise ValueError("ERROR: newJoint.r != self.r")
+            if newJoint.numSides != self.numSides:
+                raise ValueError("ERROR: newJoint.numSides != self.numSides")
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
                 safe and fixedPosition both True")
@@ -224,24 +228,32 @@ class KinematicTree:
         name = f"linkfrom_{parentIndex}_to_"
         for endpointIndex in self.Children[parentIndex]:
             name += f"{endpointIndex}_"
-        name[-1] = '.'
-        name += fileFormat
-
+        name += "." + fileFormat
+        
+        source = self.Joints[parentIndex]
         params = np.round(self.branchingParametersFrom(parentIndex), 9)
 
-        source = self.Joints[parentIndex]
+        #check link min length        
+        for i in self.Children[parentIndex]:
+            if self.Links[i].path.length < (self.Joints[i].screwRadius*2 + self.Joints[i].printParameters.holeMargin*2 + self.Joints[i].printParameters.gridHoleRadius):
+                if (np.abs(self.Links[i].path.theta1) > 0.0001 or np.abs(self.Links[i].path.theta2) > 0.0001): #replace with some epsilon
+                    raise InvalidDimensionException(f"The link between joint {parentIndex} and joint {i} are too close together for a link to be created between them.")
+                else:
+                    print(f"Skipping link between joint {parentIndex} and joint {i}. Extending joint {parentIndex} by {self.Links[i].path.tMag} instead")
+                    source.extendSegment(self.Links[i].path.tMag)
+                    return
+
         sourceParameters = source.printParameters
         defs = [f"tolerance={sourceParameters.tolerance};\n",f"hole_radius={source.screwRadius};\n",
                 f"grid_hole_radius={sourceParameters.gridHoleRadius};\n",f"outer_radius={source.r};\n",
                 f"thickness={sourceParameters.thickness};\n",f"hole_attach_height={sourceParameters.holeMargin};\n",
                 f"attach_thickness={sourceParameters.attachThickness};\n"]
-
-        linkEndpoints = [self.Joints[childIndex].printParameters for childIndex in self.Children[parentIndex]]
-
+        
         with open("scad/branch.scad", "r") as file:
             lines = file.readlines()
-        truncated = lines[7:175] #first 7 are parameter definitions, first 175 lines are function definitions
+        truncated = lines[7:184] #first 7 are parameter definitions, first 184 lines are function definitions
 
+        linkEndpoints = [self.Joints[childIndex] for childIndex in self.Children[parentIndex]]
         new_lines = ["branch([\n"]
         for i in range(0,len(params)):
             path = params[i]
@@ -251,21 +263,35 @@ class KinematicTree:
             new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius, {nextScrewRadius}, {nextHoleMargin}, {nextInnerRadius}],\n")
         new_lines.append("],outer_radius,inner_radius);")
 
-        with open(f"scad_output/{folder}{name}", "w") as file:
+        with open(f"scad_output/{folder}{name}.scad", "w+") as file:
             truncated.extend(new_lines)
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad")
+        os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad > /dev/null")
 
     def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
+        if (folder != ""):
+            os.makedirs(f"scad_output/{folder}", exist_ok=True)
+            os.makedirs(f"3d_output/{folder}", exist_ok=True)
+            folder = folder + "/"
+
+        print(f"Printing modules for {folder[:-1]}...")
+
         #export all the links
         for i in range(0,len(self.Children)):
-            if len(self.Children[i] > 0):
-                exportLink3DFile(i,folder,fileFormat)
+            start = time.time()
+            if len(self.Children[i]) > 0:
+                self.exportLink3DFile(i,folder,fileFormat)
+            print(f"Finished link {i}/{len(self.Children) - 1}, Time: {time.time() - start} \r")
+        
         #export all the joints
         for i in range(0,len(self.Joints)):
-            self.Joints[i].export3DFile(i,folder,fileFormat)
+            start = time.time()
+            if not isinstance(self.Joints[i],PrintedWaypoint):
+                self.Joints[i].export3DFile(i,folder,fileFormat)
+            print(f"Finished joint {i}/{len(self.Joints) - 1}, Time: {time.time() - start} \r")
+        
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',

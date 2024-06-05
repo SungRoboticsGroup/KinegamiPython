@@ -110,3 +110,4 @@ for i in [middle2, pointer2, thumb1]:
 for i in [middle1, pointer1, thumb0]:
     tree.setJointState(i, np.pi/2)
 tree.show(showJointPoses=False)
+
