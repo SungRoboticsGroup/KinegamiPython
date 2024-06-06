@@ -1139,10 +1139,15 @@ class PointEditorWindow(QMainWindow):
             if self.chain.transformJoint(self.selected_joint, transformation, propogate, relative):
                 self.update_joint()
                 self.oldRotVal = value
-            elif value > self.oldRotVal:
-                self.rotationSlider.setMaximum(self.oldRotVal)
             else:
-                self.rotationSlider.setMinimum(self.oldRotVal)
+                self.rotationSlider.blockSignals(True)
+                self.rotationSlider.setValue(self.oldRotVal)
+                if value > self.oldRotVal:
+                    self.rotationSlider.setMaximum(self.oldRotVal)
+                else:
+                    self.rotationSlider.setMinimum(self.oldRotVal)
+                self.rotationLabel.setText(f"Rotation Angle: {oldRotVal}°")
+                self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
         self.translate_label.setText(f'Transform: {float(value) / 10}')
