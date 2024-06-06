@@ -7,7 +7,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QSurfaceFormat
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -19,6 +19,7 @@ from Joint import *
 from PathCSC import *
 from KinematicChain import *
 import re
+from scipy.spatial.transform import Rotation as R
 
 class EditJointStateDialog(QDialog):
 
@@ -674,7 +675,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         dist = self.opts['distance']
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
-
+    
+    lock_status_changed = pyqtSignal(bool)
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
 
@@ -682,6 +684,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
     def toggle_lock(self):
         self.locked = not self.locked
+        self.lock_status_changed.emit(self.locked)
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
@@ -809,9 +812,11 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.setBackgroundColor(255,255,255, 255)
 
         self.toggleButton = QPushButton('Toggle Lock', self)
-        self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
         self.toggleButton.setGeometry(20, 20, 140, 40)
-        self.toggleButton.setStyleSheet('background-color: black; color: white;')
+        self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
+        self.toggleButton.setStyleSheet('background-color: red; color: white;')
+
+        self.plot_widget.lock_status_changed.connect(self.updateToggleButtonStyle)
 
         grid = gl.GLGridItem()
 
@@ -910,29 +915,38 @@ class PointEditorWindow(QMainWindow):
 
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
-        self.rotationLabel = QLabel("Rotation Angle: 0°", self)
-        self.rotationSlider = QSlider(Qt.Horizontal, self)
+        # ////////////////////////////////    SLIDERS    ///////////////////////////////////
+
+        slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
+        slider_joints_widget = QWidget() 
+        mainLayout = QVBoxLayout() 
+
+        self.rotationLabel = QLabel("Rotation Angle: 0°")
+        self.rotationSlider = QSlider(Qt.Horizontal)
         self.rotationSlider.setMinimum(-360)
         self.rotationSlider.setMaximum(360)
         self.rotationSlider.setValue(0)
+        self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        sliderLayout = QHBoxLayout()  
-        sliderLayout.addWidget(self.rotationLabel) 
-        sliderLayout.addWidget(self.rotationSlider) 
+        mainLayout.addWidget(self.rotationLabel)
+        mainLayout.addWidget(self.rotationSlider)
 
-        sliderWidget = QWidget(self)
-        sliderWidget.setLayout(sliderLayout)
-        sliderWidget.setGeometry(20, 70, 200, 50)  
+        checkboxLayout = QHBoxLayout() 
+        self.propogateSliderCheckbox = QCheckBox("Propagate")
+        self.relativeSliderCheckbox = QCheckBox("Relative")
+        self.propogateSliderCheckbox.setChecked(True)
+        self.relativeSliderCheckbox.setChecked(True)
 
-        slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
-        self.slider_joints_widget = QWidget()
-        self.slider_joints_widget.setLayout(sliderLayout)
-        slider_joints_dock.setWidget(self.slider_joints_widget)
+        checkboxLayout.addWidget(self.propogateSliderCheckbox)
+        checkboxLayout.addWidget(self.relativeSliderCheckbox)
 
+        mainLayout.addLayout(checkboxLayout)
+
+        slider_joints_widget.setLayout(mainLayout)
+        slider_joints_dock.setWidget(slider_joints_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
         self.oldRotVal = 0
-        self.rotationSlider.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock_layout = QVBoxLayout()
@@ -966,16 +980,40 @@ class PointEditorWindow(QMainWindow):
             self.selected_joint = index
             self.selected_arrow = -1
             self.update_joint()
+            self.update_rotation_slider()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
         if index != self.selected_arrow:
             self.selected_arrow = index
             self.update_joint()
-            if self.selected_arrow != 1:
-                self.rotationSlider.setDisabled(False)
-            else:
-                self.rotationSlider.setDisabled(True)
+            self.update_rotation_slider()
+
+    def update_rotation_slider(self):
+        if self.selected_arrow != -1:
+            rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
+            angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
+            self.rotationSlider.blockSignals(True)
+            self.rotationSlider.setValue(int(angle_degrees))
+            self.rotationSlider.setDisabled(False)
+            self.rotationSlider.blockSignals(False)
+        else:
+            self.rotationSlider.blockSignals(True)
+            self.rotationSlider.setValue(0)
+            self.rotationSlider.setDisabled(True)
+            self.rotationSlider.blockSignals(False)
+        self.rotationSlider.setValue(0)
+
+    def rotation_angle_from_matrix(self, rotation_matrix, axis):
+        rot = R.from_matrix(rotation_matrix)
+        euler_angles = rot.as_euler('xyz', degrees=True)
+        return euler_angles[axis]
+
+    def updateToggleButtonStyle(self, locked):
+        if locked:
+            self.toggleButton.setStyleSheet('background-color: green; color: white;')
+        else:
+            self.toggleButton.setStyleSheet('background-color: red; color: white;')
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1060,11 +1098,23 @@ class PointEditorWindow(QMainWindow):
     def adjust_rotation(self, value):
         self.rotationLabel.setText(f"Rotation Angle: {value}°")
         angle_radians = math.radians(value - self.oldRotVal)
-        self.oldRotVal = value
         if self.chain and self.selected_joint != -1:
-            transformation = SE3.Rz(angle_radians)
-            if self.chain.transformJoint(self.selected_joint, transformation):
+            if self.selected_arrow == 0:
+                transformation = SE3.Rx(angle_radians)
+            elif self.selected_arrow == 1:
+                transformation = SE3.Ry(angle_radians)
+            else:
+                transformation = SE3.Rz(angle_radians)
+            propogate = self.propogateSliderCheckbox.isChecked()
+            relative = self.relativeSliderCheckbox.isChecked()
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate, relative):
                 self.update_joint()
+            """ elif self.oldRotVal > 0:
+                self.rotationSlider.setMaximum(self.oldRotVal)
+            else:
+                self.rotationSlider.setMinimum(self.oldRotVal)
+            """
+        self.oldRotVal = value
 
     def translate_joint(self):
         dialog = TranslationDialog(self)
