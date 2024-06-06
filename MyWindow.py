@@ -1004,7 +1004,7 @@ class PointEditorWindow(QMainWindow):
             min = self.chain.Joints[self.selected_joint].stateRange()[0]
             max = self.chain.Joints[self.selected_joint].stateRange()[1]
             current = self.chain.Joints[self.selected_joint].state
-            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+            self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -1014,19 +1014,23 @@ class PointEditorWindow(QMainWindow):
             self.update_rotation_slider()
 
     def update_rotation_slider(self):
+        self.rotationSlider.setMinimum(-360)
+        self.rotationSlider.setMaximum(360)
         if self.selected_arrow != -1:
             rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
             angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
             self.rotationSlider.blockSignals(True)
+            self.rotationLabel.setText(f"Rotation Angle: {angle_degrees}°")
             self.rotationSlider.setValue(int(angle_degrees))
+            self.oldRotVal = angle_degrees
             self.rotationSlider.setDisabled(False)
             self.rotationSlider.blockSignals(False)
         else:
             self.rotationSlider.blockSignals(True)
+            self.rotationLabel.setText(f"Rotation Angle: 0°")
             self.rotationSlider.setValue(0)
             self.rotationSlider.setDisabled(True)
             self.rotationSlider.blockSignals(False)
-        self.rotationSlider.setValue(0)
 
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
@@ -1070,7 +1074,7 @@ class PointEditorWindow(QMainWindow):
                     min = self.chain.Joints[self.selected_joint].stateRange()[0]
                     max = self.chain.Joints[self.selected_joint].stateRange()[1]
                     current = self.chain.Joints[self.selected_joint].state
-                    self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
+                    self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
                 else:
                     error_dialog = ErrorDialog('Error editing joint state.')
                     error_dialog.exec_()
@@ -1134,12 +1138,11 @@ class PointEditorWindow(QMainWindow):
             relative = self.relativeSliderCheckbox.isChecked()
             if self.chain.transformJoint(self.selected_joint, transformation, propogate, relative):
                 self.update_joint()
-            """ elif self.oldRotVal > 0:
+                self.oldRotVal = value
+            elif value > self.oldRotVal:
                 self.rotationSlider.setMaximum(self.oldRotVal)
             else:
                 self.rotationSlider.setMinimum(self.oldRotVal)
-            """
-        self.oldRotVal = value
 
     def adjust_translation(self, value):
         self.translate_label.setText(f'Transform: {float(value) / 10}')
