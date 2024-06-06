@@ -701,7 +701,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             region = tuple([x * dpr for x in region])
 
             arrowIndex = -1
-            jointSeen = False   # Basically just selects the first joint in distance order.
 
             joints = []
             arrows = []
@@ -911,7 +910,7 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
         self.translate_label = QLabel('Transform: 0', self)
-        self.translate_slider = QSlider(Qt.Horizontal)
+        self.translate_slider = QSlider(Qt.Horizontal, self)
         self.translate_slider.setMinimum(-100)
         self.translate_slider.setMaximum(100)
         self.translate_slider.setValue(0)
@@ -936,6 +935,7 @@ class PointEditorWindow(QMainWindow):
         self.oldRotVal = 0
         self.oldTransVal = 0
         self.rotationSlider.setDisabled(True)
+        self.translate_slider.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock_layout = QVBoxLayout()
@@ -954,8 +954,9 @@ class PointEditorWindow(QMainWindow):
         crease_dock.setWidget(crease_button_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
-    def update_transform_label(self):
-
+    def update_translate_label(self):
+        value = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
+        self.translate_slider.setValue(int(value))
 
     def save_crease_pattern(self):
         crease_pattern_name = self.crease_pattern_name_input.text()
@@ -978,11 +979,7 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_arrow:
             self.selected_arrow = index
             self.update_joint()
-            if self.selected_arrow != 1:
-                self.rotationSlider.setDisabled(False)
-                self.transform_slider
-            else:
-                self.rotationSlider.setDisabled(True)
+            self.update_translate_label()
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1149,6 +1146,13 @@ class PointEditorWindow(QMainWindow):
         for joint in self.chain.Joints:
             if (joint.id == self.selected_joint):
                 joint.addArrows(self, selectedArrow=self.selected_arrow)
+
+        if self.selected_arrow != -1:
+            self.rotationSlider.setDisabled(False)
+            self.translate_slider.setDisabled(False)
+        else:
+            self.rotationSlider.setDisabled(True)
+            self.translate_slider.setDisabled(True)
 
     def update_plot(self):
         self.plot_widget.clear()
