@@ -930,10 +930,10 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        self.translate_label = QLabel('Transform: 0', self)
+        self.translate_label = QLabel('Translate: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
-        self.translate_slider.setMinimum(-100)
-        self.translate_slider.setMaximum(100)
+        self.translate_slider.setMinimum(-10)
+        self.translate_slider.setMaximum(10)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
@@ -981,10 +981,6 @@ class PointEditorWindow(QMainWindow):
         # crease_dock.setWidget(crease_button_widget)
         # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
-    def update_translate_label(self):
-        value = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
-        self.translate_slider.setValue(int(value))
-
     def save_crease_pattern(self):
         crease_pattern_name = self.crease_pattern_name_input.text()
         if self.crease_pattern == None:
@@ -1001,6 +997,7 @@ class PointEditorWindow(QMainWindow):
             self.selected_arrow = -1
             self.update_joint()
             self.update_rotation_slider()
+            self.update_translate_slider()
             min = self.chain.Joints[self.selected_joint].stateRange()[0]
             max = self.chain.Joints[self.selected_joint].stateRange()[1]
             current = self.chain.Joints[self.selected_joint].state
@@ -1012,6 +1009,7 @@ class PointEditorWindow(QMainWindow):
             self.selected_arrow = index
             self.update_joint()
             self.update_rotation_slider()
+            self.update_translate_slider()
 
     def update_rotation_slider(self):
         self.rotationSlider.setMinimum(-360)
@@ -1032,6 +1030,22 @@ class PointEditorWindow(QMainWindow):
             self.rotationSlider.setDisabled(True)
             self.rotationSlider.blockSignals(False)
 
+    def update_translate_slider(self):
+        if self.selected_arrow != -1:
+            amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
+            self.translate_slider.blockSignals(True)
+            self.translate_label.setText(f"Translate: {amount}°")
+            self.translate_slider.setValue(int(amount))
+            self.oldTransVal = amount
+            self.translate_slider.setDisabled(False)
+            self.translate_slider.blockSignals(False)
+        else:
+            self.translate_slider.blockSignals(True)
+            self.translate_label.setText(f"Translate: 0")
+            self.translate_slider.setValue(0)
+            self.translate_slider.setDisabled(True)
+            self.translate_slider.blockSignals(False)
+
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
         euler_angles = rot.as_euler('xyz', degrees=True)
@@ -1042,7 +1056,6 @@ class PointEditorWindow(QMainWindow):
             self.toggleButton.setStyleSheet('background-color: green; color: white;')
         else:
             self.toggleButton.setStyleSheet('background-color: red; color: white;')
-            self.update_translate_label()
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1146,14 +1159,12 @@ class PointEditorWindow(QMainWindow):
                     self.rotationSlider.setMaximum(self.oldRotVal)
                 else:
                     self.rotationSlider.setMinimum(self.oldRotVal)
-                self.rotationLabel.setText(f"Rotation Angle: {oldRotVal}°")
+                self.rotationLabel.setText(f"Rotation Angle: {self.oldRotVal}°")
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
-        self.translate_label.setText(f'Transform: {float(value) / 10}')
-        actualVal = float(value) / 10
-        amount = actualVal - self.oldTransVal
-        self.oldTransVal = actualVal
+        self.translate_label.setText(f'Translate: {value}')
+        amount = int(value) - self.oldTransVal
         if self.chain and self.selected_joint != -1:
             propogate = self.propogateSliderCheckbox.isChecked()
             relative = self.relativeSliderCheckbox.isChecked()
@@ -1167,6 +1178,17 @@ class PointEditorWindow(QMainWindow):
     
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
+                self.oldTransVal = value
+            else:
+                self.translate_slider.blockSignals(True)
+                self.translate_slider.setValue(self.oldTransVal)
+                # if value > self.oldTransVal:
+                #     self.rotationSlider.setMaximum(self.oldRotVal)
+                # else:
+                #     self.rotationSlider.setMinimum(self.oldRotVal)
+
+                self.translate_label.setText(f"Translate: {self.oldTransVal}°")
+                self.translate_label.blockSignals(False)
 
     def translate_joint(self):
         dialog = TranslationDialog(self)
