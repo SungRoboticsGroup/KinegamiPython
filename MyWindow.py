@@ -698,13 +698,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     def mouseReleaseEvent(self, event):
         if self.locked:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-2, lpos.y()-2, 4, 4]
+            region = [lpos.x()-5, lpos.y()-5, 10, 10]
             # itemsAt seems to take in device pixels
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
             arrowIndex = -1
-            jointSeen = False   # Basically just selects the first joint in distance order.
 
             joints = []
             arrows = []
@@ -833,6 +832,7 @@ class PointEditorWindow(QMainWindow):
         self.crease_pattern = None
         self.selected_joint = -1
         self.selected_arrow = -1
+        self.selected_axis_name = 'N/A'
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -883,21 +883,16 @@ class PointEditorWindow(QMainWindow):
 
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.select_joint_options = QComboBox()
-        self.transform_joint_button = QPushButton("Transform Joint")
-        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
-        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
         self.edit_joint_state_button = QPushButton("Edit Joint State")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
-        joint_layout.addWidget(self.transform_joint_button)
-        joint_layout.addWidget(self.rotate_joint_button)
-        joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
         joint_layout.addWidget(self.edit_joint_state_button)
         joint_layout.addWidget(self.current_state_label)
+
         main_layout = QVBoxLayout()
         main_layout.addLayout(joint_layout)
 
@@ -907,9 +902,6 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
 
-        self.transform_joint_button.clicked.connect(self.transform_joint)
-        self.rotate_joint_button.clicked.connect(self.rotate_joint)
-        self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
@@ -931,6 +923,18 @@ class PointEditorWindow(QMainWindow):
 
         mainLayout.addWidget(self.rotationLabel)
         mainLayout.addWidget(self.rotationSlider)
+        self.translate_label = QLabel('Transform: 0', self)
+        self.translate_slider = QSlider(Qt.Horizontal, self)
+        self.translate_slider.setMinimum(-100)
+        self.translate_slider.setMaximum(100)
+        self.translate_slider.setValue(0)
+        self.translate_slider.valueChanged.connect(self.adjust_translation)
+
+        sliderLayout = QVBoxLayout()
+        sliderLayout.addWidget(self.rotationLabel) 
+        sliderLayout.addWidget(self.rotationSlider) 
+        sliderLayout.addWidget(self.translate_label)
+        sliderLayout.addWidget(self.translate_slider)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -947,6 +951,9 @@ class PointEditorWindow(QMainWindow):
         slider_joints_dock.setWidget(slider_joints_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
         self.oldRotVal = 0
+        self.oldTransVal = 0
+        self.rotationSlider.setDisabled(True)
+        self.translate_slider.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock_layout = QVBoxLayout()
@@ -964,6 +971,10 @@ class PointEditorWindow(QMainWindow):
         crease_dock = QDockWidget("Crease Pattern", self)
         crease_dock.setWidget(crease_button_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+
+    def update_translate_label(self):
+        value = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
+        self.translate_slider.setValue(int(value))
 
     def save_crease_pattern(self):
         crease_pattern_name = self.crease_pattern_name_input.text()
@@ -1014,6 +1025,7 @@ class PointEditorWindow(QMainWindow):
             self.toggleButton.setStyleSheet('background-color: green; color: white;')
         else:
             self.toggleButton.setStyleSheet('background-color: red; color: white;')
+            self.update_translate_label()
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1116,6 +1128,23 @@ class PointEditorWindow(QMainWindow):
             """
         self.oldRotVal = value
 
+    def adjust_translation(self, value):
+        self.translate_label.setText(f'Transform: {float(value) / 10}')
+        actualVal = float(value) / 10
+        amount = actualVal - self.oldTransVal
+        self.oldTransVal = actualVal
+        if self.chain and self.selected_joint != -1:
+            transformation = SE3()
+            if (self.selected_arrow == 0):
+                transformation = SE3.Tx(amount)
+            if (self.selected_arrow == 1):
+                transformation = SE3.Ty(amount)
+            if (self.selected_arrow == 2):
+                transformation = SE3.Tz(amount)
+    
+            if self.chain.transformJoint(self.selected_joint, transformation, relative=True):
+                self.update_joint()
+
     def translate_joint(self):
         dialog = TranslationDialog(self)
         if not self.chain:
@@ -1175,6 +1204,13 @@ class PointEditorWindow(QMainWindow):
         for joint in self.chain.Joints:
             if (joint.id == self.selected_joint):
                 joint.addArrows(self, selectedArrow=self.selected_arrow)
+
+        if self.selected_arrow != -1:
+            self.rotationSlider.setDisabled(False)
+            self.translate_slider.setDisabled(False)
+        else:
+            self.rotationSlider.setDisabled(True)
+            self.translate_slider.setDisabled(True)
 
     def update_plot(self):
         self.plot_widget.clear()
