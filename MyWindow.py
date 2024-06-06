@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QSurfaceFormat
 from pyqtgraph.Qt import QtCore
@@ -910,6 +910,30 @@ class PointEditorWindow(QMainWindow):
 
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
+        self.rotationLabel = QLabel("Rotation Angle: 0°", self)
+        self.rotationSlider = QSlider(Qt.Horizontal, self)
+        self.rotationSlider.setMinimum(-360)
+        self.rotationSlider.setMaximum(360)
+        self.rotationSlider.setValue(0)
+        self.rotationSlider.valueChanged.connect(self.adjust_rotation)
+
+        sliderLayout = QHBoxLayout()  
+        sliderLayout.addWidget(self.rotationLabel) 
+        sliderLayout.addWidget(self.rotationSlider) 
+
+        sliderWidget = QWidget(self)
+        sliderWidget.setLayout(sliderLayout)
+        sliderWidget.setGeometry(20, 70, 200, 50)  
+
+        slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
+        self.slider_joints_widget = QWidget()
+        self.slider_joints_widget.setLayout(sliderLayout)
+        slider_joints_dock.setWidget(self.slider_joints_widget)
+
+        self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
+        self.oldRotVal = 0
+        self.rotationSlider.setDisabled(True)
+
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock_layout = QVBoxLayout()
         self.crease_pattern_name_input = QLineEdit()
@@ -948,6 +972,10 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_arrow:
             self.selected_arrow = index
             self.update_joint()
+            if self.selected_arrow != 1:
+                self.rotationSlider.setDisabled(False)
+            else:
+                self.rotationSlider.setDisabled(True)
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1028,6 +1056,15 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error rotating joint.')
                     error_dialog.exec_()
+
+    def adjust_rotation(self, value):
+        self.rotationLabel.setText(f"Rotation Angle: {value}°")
+        angle_radians = math.radians(value - self.oldRotVal)
+        self.oldRotVal = value
+        if self.chain and self.selected_joint != -1:
+            transformation = SE3.Rz(angle_radians)
+            if self.chain.transformJoint(self.selected_joint, transformation):
+                self.update_joint()
 
     def translate_joint(self):
         dialog = TranslationDialog(self)
