@@ -877,18 +877,24 @@ class PointEditorWindow(QMainWindow):
         axis_key_layout.addWidget(self.y_axis_widget)
         axis_key_layout.addWidget(self.z_axis_widget)
 
-        axis_key_dock = QDockWidget("Axis Key", self)
-        axis_key_dock.setWidget(self.axis_key_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
+        # axis_key_dock = QDockWidget("Axis Key", self)
+        # axis_key_dock.setWidget(self.axis_key_widget)
+        # self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
 
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.select_joint_options = QComboBox()
+        self.transform_joint_button = QPushButton("Transform Joint")
+        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
+        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
         self.edit_joint_state_button = QPushButton("Edit Joint State")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
+        joint_layout.addWidget(self.transform_joint_button)
+        joint_layout.addWidget(self.rotate_joint_button)
+        joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
         joint_layout.addWidget(self.edit_joint_state_button)
         joint_layout.addWidget(self.current_state_label)
@@ -902,6 +908,9 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
 
+        self.transform_joint_button.clicked.connect(self.transform_joint)
+        self.rotate_joint_button.clicked.connect(self.rotate_joint)
+        self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
@@ -921,8 +930,6 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        mainLayout.addWidget(self.rotationLabel)
-        mainLayout.addWidget(self.rotationSlider)
         self.translate_label = QLabel('Transform: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
         self.translate_slider.setMinimum(-100)
@@ -935,6 +942,8 @@ class PointEditorWindow(QMainWindow):
         sliderLayout.addWidget(self.rotationSlider) 
         sliderLayout.addWidget(self.translate_label)
         sliderLayout.addWidget(self.translate_slider)
+
+        mainLayout.addLayout(sliderLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -968,9 +977,9 @@ class PointEditorWindow(QMainWindow):
         crease_button_widget = QWidget()
         crease_button_widget.setLayout(crease_dock_layout) 
 
-        crease_dock = QDockWidget("Crease Pattern", self)
-        crease_dock.setWidget(crease_button_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        # crease_dock = QDockWidget("Crease Pattern", self)
+        # crease_dock.setWidget(crease_button_widget)
+        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
     def update_translate_label(self):
         value = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
