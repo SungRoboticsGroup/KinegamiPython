@@ -1000,7 +1000,6 @@ class PointEditorWindow(QMainWindow):
             self.selected_joint = index
             self.selected_arrow = -1
             self.update_joint()
-            self.update_rotation_slider()
             min = self.chain.Joints[self.selected_joint].stateRange()[0]
             max = self.chain.Joints[self.selected_joint].stateRange()[1]
             current = self.chain.Joints[self.selected_joint].state
@@ -1011,7 +1010,6 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_arrow:
             self.selected_arrow = index
             self.update_joint()
-            self.update_rotation_slider()
 
     def update_rotation_slider(self):
         if self.selected_arrow != -1:
