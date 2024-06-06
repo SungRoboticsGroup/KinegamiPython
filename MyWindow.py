@@ -992,6 +992,10 @@ class PointEditorWindow(QMainWindow):
             self.selected_arrow = -1
             self.update_joint()
             self.update_rotation_slider()
+            min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            current = self.chain.Joints[self.selected_joint].state
+            self.current_state_label.setText(f"{min} ≤ {current} ≤ {max}")
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
