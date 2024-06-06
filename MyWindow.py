@@ -1136,7 +1136,7 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Rz(angle_radians)
             propogate = self.propogateSliderCheckbox.isChecked()
             relative = self.relativeSliderCheckbox.isChecked()
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate, relative):
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
                 self.oldRotVal = value
             elif value > self.oldRotVal:
@@ -1150,6 +1150,8 @@ class PointEditorWindow(QMainWindow):
         amount = actualVal - self.oldTransVal
         self.oldTransVal = actualVal
         if self.chain and self.selected_joint != -1:
+            propogate = self.propogateSliderCheckbox.isChecked()
+            relative = self.relativeSliderCheckbox.isChecked()
             transformation = SE3()
             if (self.selected_arrow == 0):
                 transformation = SE3.Tx(amount)
@@ -1158,7 +1160,7 @@ class PointEditorWindow(QMainWindow):
             if (self.selected_arrow == 2):
                 transformation = SE3.Tz(amount)
     
-            if self.chain.transformJoint(self.selected_joint, transformation, relative=True):
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
 
     def translate_joint(self):
