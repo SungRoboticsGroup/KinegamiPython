@@ -1186,7 +1186,8 @@ class PointEditorWindow(QMainWindow):
 
     def adjust_rotation(self, value):
         self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
-        value = value.strip()
+        if not isinstance(value, int):
+            value = value.strip()
         value = int(value) if value else 0
         angle_radians = math.radians(value - self.oldRotVal)
         if self.chain and self.selected_joint != -1:
@@ -1212,7 +1213,8 @@ class PointEditorWindow(QMainWindow):
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
-        value = value.strip()
+        if not isinstance(value, int):
+            value = value.strip()
         value = int(value) if value else 0
         actualVal = value / 10
         self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {actualVal}')
@@ -1227,7 +1229,6 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Ty(amount)
             if (self.selected_arrow == 2):
                 transformation = SE3.Tz(amount)
-    
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
                 self.oldTransVal = actualVal
