@@ -932,8 +932,8 @@ class PointEditorWindow(QMainWindow):
 
         self.translate_label = QLabel('Translate: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
-        self.translate_slider.setMinimum(-10)
-        self.translate_slider.setMaximum(10)
+        self.translate_slider.setMinimum(-100)
+        self.translate_slider.setMaximum(100)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
@@ -1034,8 +1034,8 @@ class PointEditorWindow(QMainWindow):
         if self.selected_arrow != -1:
             amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate: {amount}°")
-            self.translate_slider.setValue(int(amount))
+            self.translate_label.setText(f"Translate: {amount}")
+            self.translate_slider.setValue(int(amount * 10))
             self.oldTransVal = amount
             self.translate_slider.setDisabled(False)
             self.translate_slider.blockSignals(False)
@@ -1163,8 +1163,9 @@ class PointEditorWindow(QMainWindow):
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
-        self.translate_label.setText(f'Translate: {value}')
-        amount = int(value) - self.oldTransVal
+        actualVal = value / 10
+        self.translate_label.setText(f'Translate: {actualVal}')
+        amount = actualVal - self.oldTransVal
         if self.chain and self.selected_joint != -1:
             propogate = self.propogateSliderCheckbox.isChecked()
             relative = self.relativeSliderCheckbox.isChecked()
@@ -1178,16 +1179,11 @@ class PointEditorWindow(QMainWindow):
     
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
-                self.oldTransVal = value
+                self.oldTransVal = actualVal
             else:
                 self.translate_slider.blockSignals(True)
-                self.translate_slider.setValue(self.oldTransVal)
-                # if value > self.oldTransVal:
-                #     self.rotationSlider.setMaximum(self.oldRotVal)
-                # else:
-                #     self.rotationSlider.setMinimum(self.oldRotVal)
-
-                self.translate_label.setText(f"Translate: {self.oldTransVal}°")
+                self.translate_slider.setValue(int(self.oldTransVal * 10))
+                self.translate_label.setText(f"Translate: {self.oldTransVal}")
                 self.translate_label.blockSignals(False)
 
     def translate_joint(self):
