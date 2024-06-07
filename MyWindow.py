@@ -920,7 +920,7 @@ class PointEditorWindow(QMainWindow):
 
         slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
         slider_joints_widget = QWidget() 
-        mainLayout = QVBoxLayout() 
+        mainLayout = QVBoxLayout(slider_joints_widget)  
 
         self.rotationLabel = QLabel("Rotation Angle: 0°")
         self.rotationSlider = QSlider(Qt.Horizontal)
@@ -937,28 +937,36 @@ class PointEditorWindow(QMainWindow):
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
-        sliderLayout = QVBoxLayout()
-        sliderLayout.addWidget(self.rotationLabel) 
-        sliderLayout.addWidget(self.rotationSlider) 
-        sliderLayout.addWidget(self.translate_label)
-        sliderLayout.addWidget(self.translate_slider)
+        rotationLayout = QHBoxLayout()
+        self.rotationInput = QLineEdit(self)
+        self.rotationInput.setPlaceholderText("Enter angle in degrees")
+        rotationLayout.addWidget(self.rotationLabel)
+        rotationLayout.addWidget(self.rotationSlider)
+        rotationLayout.addWidget(self.rotationInput)  
 
-        mainLayout.addLayout(sliderLayout)
+        translationLayout = QHBoxLayout()
+        self.translationInput = QLineEdit(self)
+        self.translationInput.setPlaceholderText("Enter distance")
+        translationLayout.addWidget(self.translate_label)
+        translationLayout.addWidget(self.translate_slider)
+        translationLayout.addWidget(self.translationInput) 
+
+        mainLayout.addLayout(rotationLayout)
+        mainLayout.addLayout(translationLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
         self.relativeSliderCheckbox = QCheckBox("Relative")
         self.propogateSliderCheckbox.setChecked(True)
         self.relativeSliderCheckbox.setChecked(True)
-
         checkboxLayout.addWidget(self.propogateSliderCheckbox)
         checkboxLayout.addWidget(self.relativeSliderCheckbox)
 
         mainLayout.addLayout(checkboxLayout)
 
-        slider_joints_widget.setLayout(mainLayout)
         slider_joints_dock.setWidget(slider_joints_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
+
         self.oldRotVal = 0
         self.oldTransVal = 0
         self.rotationSlider.setDisabled(True)
@@ -1025,14 +1033,14 @@ class PointEditorWindow(QMainWindow):
             rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
             angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
             self.rotationSlider.blockSignals(True)
-            self.rotationLabel.setText(f"Rotation Angle: {angle_degrees}°")
+            self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {angle_degrees}°")
             self.rotationSlider.setValue(int(angle_degrees))
             self.oldRotVal = angle_degrees
             self.rotationSlider.setDisabled(False)
             self.rotationSlider.blockSignals(False)
         else:
             self.rotationSlider.blockSignals(True)
-            self.rotationLabel.setText(f"Rotation Angle: 0°")
+            self.rotationLabel.setText(f"Rotation {self.selected_axis_name} Axis: 0°")
             self.rotationSlider.setValue(0)
             self.rotationSlider.setDisabled(True)
             self.rotationSlider.blockSignals(False)
@@ -1145,7 +1153,7 @@ class PointEditorWindow(QMainWindow):
                     error_dialog.exec_()
 
     def adjust_rotation(self, value):
-        self.rotationLabel.setText(f"Rotation Angle: {value}°")
+        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
         angle_radians = math.radians(value - self.oldRotVal)
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
@@ -1166,7 +1174,7 @@ class PointEditorWindow(QMainWindow):
                     self.rotationSlider.setMaximum(self.oldRotVal)
                 else:
                     self.rotationSlider.setMinimum(self.oldRotVal)
-                self.rotationLabel.setText(f"Rotation Angle: {self.oldRotVal}°")
+                self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {self.oldRotVal}°")
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
