@@ -962,6 +962,9 @@ class PointEditorWindow(QMainWindow):
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
+        self.rotationInput.textChanged.connect(self.adjust_rotation)
+        self.translationInput.textChanged.connect(self.adjust_translation)
+
         mainLayout.addLayout(rotationLayout)
         mainLayout.addLayout(translationLayout)
 
@@ -982,6 +985,8 @@ class PointEditorWindow(QMainWindow):
         self.oldTransVal = 0
         self.rotationSlider.setDisabled(True)
         self.translate_slider.setDisabled(True)
+        self.rotationInput.setDisabled(True)
+        self.translationInput.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock_layout = QVBoxLayout()
@@ -1049,12 +1054,20 @@ class PointEditorWindow(QMainWindow):
             self.oldRotVal = angle_degrees
             self.rotationSlider.setDisabled(False)
             self.rotationSlider.blockSignals(False)
+            self.rotationInput.blockSignals(True)
+            self.rotationInput.setText(str(int(angle_degrees)))
+            self.rotationInput.blockSignals(False)
+            self.rotationInput.setDisabled(False)
         else:
             self.rotationSlider.blockSignals(True)
             self.rotationLabel.setText(f"Rotation {self.selected_axis_name} Axis: 0°")
             self.rotationSlider.setValue(0)
             self.rotationSlider.setDisabled(True)
             self.rotationSlider.blockSignals(False)
+            self.rotationInput.blockSignals(True)
+            self.rotationInput.setText("")
+            self.rotationInput.blockSignals(False)
+            self.rotationInput.setDisabled(True)
 
     def update_translate_slider(self):
         if self.selected_arrow != -1:
@@ -1065,12 +1078,20 @@ class PointEditorWindow(QMainWindow):
             self.oldTransVal = amount
             self.translate_slider.setDisabled(False)
             self.translate_slider.blockSignals(False)
+            self.translationInput.blockSignals(True)
+            self.translationInput.setText(str(amount))
+            self.translationInput.blockSignals(False)
+            self.translationInput.setDisabled(False)
         else:
             self.translate_slider.blockSignals(True)
             self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: 0")
             self.translate_slider.setValue(0)
             self.translate_slider.setDisabled(True)
             self.translate_slider.blockSignals(False)
+            self.translationInput.blockSignals(True)
+            self.translationInput.setText("")
+            self.translationInput.blockSignals(False)
+            self.translationInput.setDisabled(True)
 
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
@@ -1165,6 +1186,8 @@ class PointEditorWindow(QMainWindow):
 
     def adjust_rotation(self, value):
         self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
+        value = value.strip()
+        value = int(value) if value else 0
         angle_radians = math.radians(value - self.oldRotVal)
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
@@ -1177,7 +1200,7 @@ class PointEditorWindow(QMainWindow):
             relative = self.relativeSliderCheckbox.isChecked()
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
-                self.oldRotVal = value
+                self.oldRotVal = int(value)
             else:
                 self.rotationSlider.blockSignals(True)
                 self.rotationSlider.setValue(self.oldRotVal)
@@ -1189,6 +1212,8 @@ class PointEditorWindow(QMainWindow):
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
+        value = value.strip()
+        value = int(value) if value else 0
         actualVal = value / 10
         self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {actualVal}')
         amount = actualVal - self.oldTransVal
