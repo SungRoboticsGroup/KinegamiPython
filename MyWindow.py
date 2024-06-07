@@ -668,6 +668,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.setFormat(fmt)
         self.locked = False
         self.mesh = None 
+        self.is_dragging = False
+        self.drag_start_pos = None
 
         self.bounding_balls = []
         self.radius = 1
@@ -688,15 +690,26 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         print("Screen lock toggled:", "Locked" if self.locked else "Unlocked")
 
     def mousePressEvent(self, event):
-        if not self.locked:
-            super(ClickableGLViewWidget, self).mousePressEvent(event)
+        if (event.buttons() and Qt.LeftButton and event.buttons() != QtCore.Qt.MouseButton.MiddleButton):
+            self.is_dragging = False
+            self.drag_start_pos = event.pos()
 
     def mouseMoveEvent(self, event):
-        if not self.locked:
-            super(ClickableGLViewWidget, self).mouseMoveEvent(event)
+        if (event.buttons() and (Qt.LeftButton or Qt.MiddleButton)) and (event.pos() - self.drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
+            self.is_dragging = True
+        lpos = event.position() if hasattr(event, 'position') else event.localPos()
+        if not hasattr(self, 'mousePos'):
+            self.mousePos = lpos
+        diff = lpos - self.mousePos
+        self.mousePos = lpos
+
+        if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
+            self.pan(diff.x(), diff.y(), 0, relative='view')
+        elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
+            self.orbit(-diff.x(), diff.y())
 
     def mouseReleaseEvent(self, event):
-        if self.locked:
+        if not self.is_dragging:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
             region = [lpos.x()-5, lpos.y()-5, 10, 10]
             # itemsAt seems to take in device pixels
@@ -725,8 +738,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             
             self.click_signal.emit(self.selectedIndex)
             self.click_signal_arrow.emit(arrowIndex)
-        if not self.locked:
-            super(ClickableGLViewWidget, self).mouseReleaseEvent(event)
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
