@@ -930,7 +930,7 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        self.translate_label = QLabel('Translate: 0', self)
+        self.translate_label = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
         self.translate_slider.setMinimum(-100)
         self.translate_slider.setMaximum(100)
@@ -995,6 +995,7 @@ class PointEditorWindow(QMainWindow):
         if index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
+            self.selected_axis_name = 'N/A'
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
@@ -1007,6 +1008,12 @@ class PointEditorWindow(QMainWindow):
     def arrow_selection_changed(self, index):
         if index != self.selected_arrow:
             self.selected_arrow = index
+                        
+            if (index == 0): self.selected_axis_name = 'X'
+            elif (index == 1): self.selected_axis_name = 'Y'
+            elif (index == 2): self.selected_axis_name = 'Z'
+            else: self.selected_axis_name = 'N/A'
+
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
@@ -1034,14 +1041,14 @@ class PointEditorWindow(QMainWindow):
         if self.selected_arrow != -1:
             amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate: {amount}")
+            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {amount}")
             self.translate_slider.setValue(int(amount * 10))
             self.oldTransVal = amount
             self.translate_slider.setDisabled(False)
             self.translate_slider.blockSignals(False)
         else:
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate: 0")
+            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: 0")
             self.translate_slider.setValue(0)
             self.translate_slider.setDisabled(True)
             self.translate_slider.blockSignals(False)
@@ -1164,7 +1171,7 @@ class PointEditorWindow(QMainWindow):
 
     def adjust_translation(self, value):
         actualVal = value / 10
-        self.translate_label.setText(f'Translate: {actualVal}')
+        self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {actualVal}')
         amount = actualVal - self.oldTransVal
         if self.chain and self.selected_joint != -1:
             propogate = self.propogateSliderCheckbox.isChecked()
@@ -1183,7 +1190,7 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.translate_slider.blockSignals(True)
                 self.translate_slider.setValue(int(self.oldTransVal * 10))
-                self.translate_label.setText(f"Translate: {self.oldTransVal}")
+                self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {self.oldTransVal}")
                 self.translate_label.blockSignals(False)
 
     def translate_joint(self):
