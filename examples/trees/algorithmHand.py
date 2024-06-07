@@ -24,9 +24,10 @@ thumb0 = spec.addJoint(palm, thumb0Joint, relative=True)
 
 thumb1 = spec.addJoint(thumb0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                                            SE3.Trans(4,0,0)), relative=True)
-
+"""
 thumbEnd = spec.addJoint(thumb1, EndTip(numSides, r, 
         SE3.Trans(3,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
+"""
 
 pointer1 = spec.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
             SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi)), relative=True)
@@ -34,8 +35,11 @@ pointer1 = spec.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionL
 pointer2 = spec.addJoint(pointer1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                         SE3.Trans(4,0,0)), relative=True)
 
+"""
 pointerEnd = spec.addJoint(pointer2, EndTip(numSides, r, 
         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
+"""
+        
 
 middle0 = spec.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
         SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)), relative=True)
@@ -45,10 +49,11 @@ middle1 = spec.addJoint(middle0, ExtendedRevoluteJoint(numSides, r, np.pi, exten
 
 middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
                         SE3.Trans(4,0,0)), relative=True)
-
+"""
 middleEnd = spec.addJoint(middle2, EndTip(numSides, r, 
         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
-
+"""
+        
 tree = makeTubularKinematicTree(spec, plotSteps=False)
 
-tree.show()
+tree.show(jointAxisScale=100, showJointPoses=False)

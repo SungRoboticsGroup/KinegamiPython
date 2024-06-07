@@ -351,7 +351,7 @@ class Tip(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=linkColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -381,8 +381,8 @@ class Tip(OrigamiJoint):
                 ProximalHull = ConvexHull(ProximalPoints)
                 for s in ProximalHull.simplices:
                     tri = Poly3DCollection([ProximalPoints[s]])
-                    tri.set_facecolor(surfaceColor)
-                    tri.set_edgecolor(edgeColor)
+                    tri.set_facecolor(linkColorDefault)
+                    tri.set_edgecolor(None)
                     tri.set_alpha(surfaceOpacity)
                     ax.add_collection3d(tri)
             else:

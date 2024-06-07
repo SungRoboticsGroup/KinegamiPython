@@ -14,5 +14,6 @@ numSides = 4
 spec = JointSpecificationTree(RevoluteJoint(numSides, r, np.pi, SE3()))
 i = spec.addJoint(0, PrismaticJoint(numSides,r,3,3,np.pi/5,SE3(4,0,0)@SE3.Ry(np.pi/2)), relative=True)
 i = spec.addJoint(i, RevoluteJoint(numSides,r,np.pi,SE3.Trans(0,0,4)@SE3.Ry(2*np.pi/3)), relative=True)
-tree = makeTubularKinematicTree(spec, plotSteps=True)
+i = spec.addJoint(i, RevoluteJoint(numSides,r,np.pi,SE3.Trans(1,0,0)@SE3.Rx(np.pi/4)), relative=True)
+tree = makeTubularKinematicTree(spec, plotSteps=True, orientUp=True)
 tree.show()
