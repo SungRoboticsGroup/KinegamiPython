@@ -53,11 +53,13 @@ Input:
         types/sizes/etc and kinematic axes (but NOT their specific position 
         along or orientation about those axes) in global coordinates
     r, the tubular radius
-
+    plotSteps (optional), a boolean indicating whether to plot each step
+    orientUp (optional), a boolean indicating whether to rotate the tree
+        so that planeNormal (direction of growth) is the global Z direction
 Output: a KinematicTree object that instantiates the desired kinematics
         as a tubular tree with radius r
 """
-def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False) -> KinematicTree:
+def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False) -> KinematicTree:
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
     # Set orientation appropriately
@@ -132,8 +134,9 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         if plotSteps:
             ax = plt.figure().add_subplot(projection='3d')
             KT.addToPlot(ax)
-            boundingCylinder.addToPlot(ax)
-            boundingCylinder.endPlane().addToPlot(ax)
+            boundingCylinder.addToPlot(ax, alpha=0.1)
+            boundingCylinder.endPlane().addToPlot(ax, alpha=0.1, 
+                                        scale=boundingCylinder.r+5)
             ax.set_aspect('equal')
             plt.axis('off')
             plt.show(block=False)
@@ -143,4 +146,10 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         boundingCylinder.expandToIncludeBall(ball1)
         boundingCylinder.expandToIncludeBall(ball2)
     
+    if orientUp:
+        z = planeNormal / np.linalg.norm(planeNormal)
+        x = null_space(z.reshape(1,3))[:,0]
+        y = np.cross(z,x)
+        R = SO3(np.array([x,y,z]).T)
+        KT.transformAll(SE3.Rt(R, np.zeros(3)))
     return KT
