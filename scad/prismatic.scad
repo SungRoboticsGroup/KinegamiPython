@@ -9,6 +9,7 @@ extended_height = 1;
 next_hole_radius = 0.045;
 next_hole_attach_height = 0.02;
 next_inner = 0.2;
+hole_twist = 0;
 
 //other params
 eps = tolerance/100;
@@ -71,7 +72,8 @@ module bottom_joint() {
         cylinder(h=compressed_height + eps, r= inner_radius, $fn = fnh);
         
         //screw holes
-        translate([0,0,hole_attach_height + hole_radius]) {
+        translate([0,0,hole_attach_height + hole_radius]) 
+        rotate([0,0,hole_twist]){
             rotate([90,0,0])
             cylinder(h=outer_radius*2 + eps,r=hole_radius,$fn=fnh,center=true);
             rotate([0,90,0])

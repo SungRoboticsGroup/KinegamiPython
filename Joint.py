@@ -26,6 +26,7 @@ class Joint(ABC):
         self.Pose = Pose
         self.neutralLength = neutralLength
         self.state = 0
+        self.initialState = initialState
         self.TransformStateTo(initialState)
     
     @abstractmethod #0 for xhat, 2 for zhat

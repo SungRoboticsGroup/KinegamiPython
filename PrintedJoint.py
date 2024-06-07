@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
+from scipy.spatial.transform import Rotation
 import Joint
 from Joint import *
 import os
@@ -17,16 +18,16 @@ class InvalidDimensionException(Exception):
 class PrintParameters:
     def __init__(self, thickness : float, gridHoleRadius : float, holeMargin : float, holeGridMargin: float, attachThickness : float, tolerance: float,
                 nextR, nextScrewRadius, nextThickness, nextHoleMargin):
-        self.thickness = thickness
-        self.gridHoleRadius = gridHoleRadius
-        self.holeMargin = holeMargin
-        self.attachThickness = attachThickness
-        self.tolerance = tolerance
-        self.nextR = nextR
-        self.nextScrewRadius = nextScrewRadius
-        self.nextThickness = nextThickness
-        self.nextHoleMargin = nextHoleMargin
-        self.holeGridMargin = holeGridMargin
+        self.thickness = np.round(thickness, 4)
+        self.gridHoleRadius = np.round(gridHoleRadius, 4)
+        self.holeMargin = np.round(holeMargin, 4)
+        self.attachThickness = np.round(attachThickness, 4)
+        self.tolerance = np.round(tolerance, 4)
+        self.nextR = np.round(nextR, 4)
+        self.nextScrewRadius = np.round(nextScrewRadius, 4)
+        self.nextThickness = np.round(nextThickness, 4)
+        self.nextHoleMargin = np.round(nextHoleMargin, 4)
+        self.holeGridMargin = np.round(holeGridMargin, 4)
     
     def calculateNumHoles(self, outerRadius : float):
         #TODO
@@ -36,13 +37,17 @@ class PrintParameters:
     def default(r: float, screwRadius : float):
         thickness = r * 0.2
         gridHoleMargin = screwRadius*2.5#printParameters.gridHoleRadius*2 + printParameters.holeMargin
-        return PrintParameters(thickness, screwRadius*2, screwRadius, gridHoleMargin, thickness, 0.01, r, screwRadius, thickness, screwRadius)
+        return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.01, r, screwRadius, thickness, screwRadius)
 
 class PrintedJoint(Joint):
     def __init__(self, r : float, neutralLength : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
-        self.screwRadius = screwRadius
+        self.screwRadius = np.round(screwRadius, 4)
         self.printParameters = printParameters
+        self.twistAngle = 0
         super().__init__(r, neutralLength, Pose, initialState)
+    
+    def setTwistAngle(self, angle):
+        self.twistAngle = angle
 
 class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     def __init__(self, r : float, startBendingAngle : float, endBendingAngle : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
@@ -77,47 +82,72 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         self.topLength = self.printParameters.holeMargin*3 + self.printParameters.gridHoleRadius*4 + maxTurnDist
 
     def export3DFile(self, index: int, folder = "", fileFormat = "stl"):
-        name = f"joint_{index}." + fileFormat
+        name = f"orthogonal_revolute_{index}." + fileFormat
 
         defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
                 f"grid_hole_radius={self.printParameters.gridHoleRadius};\n",f"outer_radius={self.r};\n",
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
-                f"attach_thickness={self.printParameters.attachThickness};\n", f"bottom_rotation_height={self.bottomLength};\n",
-                f"top_rotation_height={self.topLength};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
+                f"attach_thickness={self.printParameters.attachThickness};\n", f"bottom_rotation_height={np.round(self.bottomLength, 4)};\n",
+                f"top_rotation_height={np.round(self.topLength, 4)};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
                 f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",
-                f"max_turn={np.rad2deg(self.maxBendingAngle)};\n", f"min_turn={np.rad2deg(self.minBendingAngle*180/np.pi)};\n"]
+                f"max_turn={np.round(np.rad2deg(self.maxBendingAngle), 4)};\n", f"min_turn={np.round(np.rad2deg(self.minBendingAngle), 4)};\n",
+                f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
 
         with open("scad/orthogonal_revolute.scad", "r") as file:
             lines = file.readlines()
-        truncated = lines[14:] #first 14 are parameter definitions
+        truncated = lines[15:] #first 15 are parameter definitions
 
-        with open(f"scad_output/{folder}{name}.scad", "w+") as file:
+        with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}/{name}.scad > /dev/null")
-    
-    def renderPose(self, index, name="rendered_pose.stl"):
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad > /dev/null")
+
+    def renderPose(self, folder):
+        rot = SE3.Ry(np.pi/2)
+        name = f"orthogonal_revolute_"
+
         defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
                 f"grid_hole_radius={self.printParameters.gridHoleRadius};\n",f"outer_radius={self.r};\n",
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
-                f"attach_thickness={self.printParameters.attachThickness};\n", f"bottom_rotation_height={self.bottomLength};\n",
-                f"top_rotation_height={self.topLength};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
+                f"attach_thickness={self.printParameters.attachThickness};\n", f"bottom_rotation_height={np.round(self.bottomLength, 4)};\n",
+                f"top_rotation_height={np.round(self.topLength, 4)};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
                 f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",
-                f"max_turn={np.rad2deg(self.maxBendingAngle)};\n", f"min_turn={np.rad2deg(self.minBendingAngle*180/np.pi)};\n",
-                f"current_angle={np.rad2deg(self.initialState)}"]
+                f"max_turn={np.round(np.rad2deg(self.maxBendingAngle), 4)};\n", f"min_turn={np.round(np.rad2deg(self.minBendingAngle), 4)};\n",
+                f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
+        defs2 = defs.copy()
 
-        with open("scad/poses/orthogonal_revolute_pose.scad", "r") as file:
+        for parameter in defs:
+            name += parameter[parameter.index("=") + 1:-2] + "_"
+
+        #orient bend the right way
+        if self.maxBendingAngle == self.endBendingAngle:
+            rot = rot @ SE3.Rz(np.pi)
+        #check if already has rendered somewhere
+        if os.path.isfile(f"3d_output/{folder}/poses/{name}1.stl") and os.path.isfile(f"3d_output/{folder}/poses/{name}2.stl"):
+            return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot      
+        
+        with open("scad/poses/orthogonal_revolute_pose1.scad", "r") as file:
             lines = file.readlines()
-        truncated = lines[15:] #first 15 are parameter definitions
+            truncated = lines[15:] #first 15 are parameter definitions
 
-        with open(f"scad_output/{name}.scad", "w+") as file:
+        with open(f"scad_output/{folder}/poses/{name}1.scad", "w+") as file:
             defs.extend(truncated)
             file.writelines(defs)
-        
-        os.system(f"openscad -q -o 3d_output/{name} scad_output/{name}.scad > /dev/null")
 
-        return name
+        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+
+        with open("scad/poses/orthogonal_revolute_pose2.scad", "r") as file:
+            lines2 = file.readlines()
+            truncated2 = lines2[15:] #first 15 are parameter definitions
+
+        with open(f"scad_output/{folder}/poses/{name}2.scad", "w+") as file:
+            defs2.extend(truncated2)
+            file.writelines(defs2)
+        
+        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+
+        return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
     
     def pathIndex(self) -> int:
         return 0 # xhat
@@ -127,7 +157,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     
     def stateChangeTransformation(self, stateChange : float) -> SE3:
         return RotationAboutLine(rotAxisDir=self.Pose.R[:,2],
-                              rotAxisPoint=self.Pose.t,
+                              rotAxisPoint=(self.ProximalDubinsFrame() @ SE3.Trans(self.bottomLength, 0, 0)).t,#rotate about axis, not necessarily center
                               angle=stateChange)
     
     def boundingRadius(self) -> float:
@@ -207,25 +237,69 @@ class PrintedPrismaticJoint(PrintedJoint):
     def extendSegment(self, amount):
         self.minLength += amount
 
-    def export3DFile(self, index: int, folder = "", fileFormat = "stl"):
-        name = f"joint_{index}." + fileFormat
+    def export3DFile(self, index: int, folder : str, fileFormat = "stl"):
+        name = f"prismatic_{index}." + fileFormat
+
+        if os.path.isfile(f"3d_output/{folder}/{name}"):
+            return
 
         defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
                 f"grid_hole_radius={self.printParameters.gridHoleRadius};\n",f"outer_radius={self.r};\n",
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
-                f"compressed_height={self.minLength};\n", f"extended_height={self.maxLength};\n",
+                f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
                 f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
-                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",]
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)}"]
 
         with open("scad/prismatic.scad", "r") as file:
             lines = file.readlines()
-        truncated = lines[11:] #first 11 are parameter definitions
+        truncated = lines[12:] #first 12 are parameter definitions
 
         with open(f"scad_output/{folder}{name}.scad", "w+") as file:
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad > /dev/null")
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+    
+    def renderPose(self, folder):
+        rot = SE3.Ry(np.pi/2)
+        name = f"prismatic_"
+
+        defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
+                f"grid_hole_radius={self.printParameters.gridHoleRadius};\n",f"outer_radius={self.r};\n",
+                f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
+                f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
+                f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)}"]
+        defs2 = defs.copy()
+
+        for parameter in defs:
+            name += parameter[parameter.index("=") + 1:-2] + "_"
+
+        #check if already has rendered somewhere
+        if os.path.isfile(f"3d_output/{folder}/poses/{name}1.stl") and os.path.isfile(f"3d_output/{folder}/poses/{name}2.stl"):
+            return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot      
+        
+        with open("scad/poses/prismatic_pose1.scad", "r") as file:
+            lines = file.readlines()
+            truncated = lines[12:] #first 12 are parameter definitions
+
+        with open(f"scad_output/{folder}/poses/{name}1.scad", "w+") as file:
+            defs.extend(truncated)
+            file.writelines(defs)
+
+        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+
+        with open("scad/poses/prismatic_pose2.scad", "r") as file:
+            lines2 = file.readlines()
+            truncated2 = lines2[12:] #first 12 are parameter definitions
+
+        with open(f"scad_output/{folder}/poses/{name}2.scad", "w+") as file:
+            defs2.extend(truncated2)
+            file.writelines(defs2)
+        
+        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+
+        return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
 
 class PrintedTip(PrintedJoint):
     def __init__(self, r : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters = None):
@@ -233,6 +307,7 @@ class PrintedTip(PrintedJoint):
             printParameters = PrintParameters.default(r, screwRadius)
 
         neutralLength = printParameters.holeMargin + screwRadius*2 + r
+
         super().__init__(r, neutralLength, Pose, screwRadius, printParameters)
 
     def export3DFile(self, index: float, folder = "", fileFormat = "stl"):
@@ -240,18 +315,49 @@ class PrintedTip(PrintedJoint):
 
         defs = [f"eps={self.printParameters.tolerance/100};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"hole_radius={self.screwRadius};\n",f"outer_radius={self.r};\n",
-                f"thickness={self.printParameters.thickness};\n"]
+                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
 
         with open("scad/tip.scad", "r") as file:
             lines = file.readlines()
-        truncated = lines[5:] #first 5 are parameter definitions
+        truncated = lines[6:] #first 6 are parameter definitions
 
-        with open(f"scad_output/{folder}{name}.scad", "w+") as file:
+        with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad > /dev/null")
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
     
+    def renderPose(self, folder):
+        rot1 = SE3.Ry(np.pi/2)
+
+        name = f"tip_"
+
+        defs = [f"eps={self.printParameters.tolerance/100};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
+                f"hole_radius={self.screwRadius};\n",f"outer_radius={self.r};\n",
+                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle))};\n"]
+        
+        for parameter in defs:
+            name += parameter[parameter.index("=") + 1:-2] + "_"
+        
+        filepath = f"3d_output/{folder}/poses/{name}.stl"
+        #check if already has rendered somewhere
+        if os.path.isfile(filepath):
+            return filepath, rot1, None, None
+
+        
+
+        with open("scad/poses/tip_pose.scad", "r") as file:
+            lines = file.readlines()
+        truncated = lines[6:] #first 6 are parameter definitions
+
+        with open(f"scad_output/{folder}/poses/{name}.scad", "w+") as file:
+            defs.extend(truncated)
+            file.writelines(defs)
+        
+        os.system(f"openscad -q -o {filepath} scad_output/{folder}/poses/{name}.scad")
+
+        return filepath, rot1, None, None 
+
     def pathIndex(self) -> int:
         return 2 # zhat
     

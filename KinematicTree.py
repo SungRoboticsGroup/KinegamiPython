@@ -160,6 +160,13 @@ class KinematicTree:
         self.Parents.append(parentIndex)
         self.Links.append(newLink)
         
+        #set twist angle for newly added joint
+        if (isinstance(newJoint, PrintedJoint)):
+            jointProximalFrame = newJoint.ProximalDubinsFrame()
+            prevDistalFrame = self.Joints[parentIndex].DistalDubinsFrame()
+            twistAngle = signedAngle(jointProximalFrame.R[:,1], prevDistalFrame.R[:,1], jointProximalFrame.R[:,0])
+            newJoint.setTwistAngle(twistAngle)
+
         return newIndex
     
     
@@ -224,14 +231,15 @@ class KinematicTree:
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
         return [link.branchingParameters() for link in linksToChildren]
     
-    def exportLink3DFile(self, parentIndex : int, folder = "", fileFormat = "stl"):
+    def exportLink3DFile(self, parentIndex : int, folder : str, fileFormat = "stl", pose=False):
+
         name = f"linkfrom_{parentIndex}_to_"
         for endpointIndex in self.Children[parentIndex]:
             name += f"{endpointIndex}_"
         name += "." + fileFormat
         
         source = self.Joints[parentIndex]
-        params = np.round(self.branchingParametersFrom(parentIndex), 9)
+        params = np.round(self.branchingParametersFrom(parentIndex), 4)
 
         #check link min length        
         for i in self.Children[parentIndex]:
@@ -244,12 +252,21 @@ class KinematicTree:
                     return
 
         sourceParameters = source.printParameters
+
         defs = [f"tolerance={sourceParameters.tolerance};\n",f"hole_radius={source.screwRadius};\n",
                 f"grid_hole_radius={sourceParameters.gridHoleRadius};\n",f"outer_radius={source.r};\n",
                 f"thickness={sourceParameters.thickness};\n",f"hole_attach_height={sourceParameters.holeMargin};\n",
                 f"attach_thickness={sourceParameters.attachThickness};\n"]
         
-        with open("scad/branch.scad", "r") as file:
+        if pose:
+            name = "link_"
+            for parameter in defs:
+                name += parameter[parameter.index("=") + 1:-2] + "_"
+
+        branch_scad = "scad/branch.scad"
+        if pose:
+            branch_scad = "scad/poses/branch_pose.scad"
+        with open(branch_scad, "r") as file:
             lines = file.readlines()
         truncated = lines[7:184] #first 7 are parameter definitions, first 184 lines are function definitions
 
@@ -260,21 +277,34 @@ class KinematicTree:
             nextInnerRadius = linkEndpoints[i].r - linkEndpoints[i].printParameters.thickness
             nextHoleMargin = linkEndpoints[i].printParameters.holeMargin
             nextScrewRadius = linkEndpoints[i].screwRadius
+
+            if pose:
+                name += f"{nextInnerRadius}_{nextHoleMargin}_{nextScrewRadius}_"
+                for p in path:
+                    name += f"{p}_"
+            
             new_lines.append(f"[ {path[0]}, {path[1]}, {path[2]}*outer_radius, {path[3]}*outer_radius, {path[4]}, {path[5]}, {path[6]}*outer_radius, {nextScrewRadius}, {nextHoleMargin}, {nextInnerRadius}],\n")
         new_lines.append("],outer_radius,inner_radius);")
 
-        with open(f"scad_output/{folder}{name}.scad", "w+") as file:
+        if pose:
+            if os.path.isfile(f"3d_output/{folder}/{name}.stl"):
+                return f"3d_output/{folder}/{name}.stl"
+            else:
+                name += ".stl"
+        
+        with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
             truncated.extend(new_lines)
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}{name} scad_output/{folder}{name}.scad > /dev/null")
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+
+        return f"3d_output/{folder}/{name}"
 
     def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
         if (folder != ""):
             os.makedirs(f"scad_output/{folder}", exist_ok=True)
             os.makedirs(f"3d_output/{folder}", exist_ok=True)
-            folder = folder + "/"
 
         print(f"Printing modules for {folder[:-1]}...")
 
@@ -378,13 +408,16 @@ class KinematicTree:
         else:
             self.Joints[jointIndex].transformPoseIntoFrame(Transformation)
             joint = self.Joints[jointIndex]
+            #TODO:causes end twist angles to be messed up (set recomputeLinkPath to False in meantime)
             if recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
                 self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                         joint.ProximalDubinsFrame(),
                                         self.maxAnglePerElbow)
             else:
-                self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+                #TODO:causes end twist angles to be messed up
+                #self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+                pass
             if propogate:
                 for c in self.Children[jointIndex]:
                     self.transformJoint(c, Transformation, propogate=True, 
@@ -412,7 +445,7 @@ class KinematicTree:
         for c in self.Children[jointIndex]:
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
-            self.transformJoint(c, Transformation, propogate=True, 
+            self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=False,
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
         return True

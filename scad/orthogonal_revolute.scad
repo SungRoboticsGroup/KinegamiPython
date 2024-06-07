@@ -12,19 +12,20 @@ next_hole_attach_height = 0.02;
 next_inner = 0.2;
 max_turn = 60;
 min_turn = -30;
+hole_twist = 0;
 
 //parameters that don't have to be defined explicitly
 eps = tolerance/100;
 inner_radius = outer_radius - thickness;
 axle_offset = attach_thickness;
-bottom_joint_attach_radius = outer_radius - hole_attach_height - grid_hole_radius*2 - thickness;
+bottom_joint_attach_radius = outer_radius - hole_attach_height - grid_hole_radius*2 - tolerance;
 fn = outer_radius * 100;
 fnh = hole_radius * 1000;
 
 //solve for b = axle height
 max_turn_b = outer_radius / tan((180 - max_turn)/2);
 min_turn_b = outer_radius / tan((180 - min_turn)/2);
-axle_radius = max(min(min_turn_b - axle_offset, hole_radius), axle_offset);
+axle_radius = bottom_joint_attach_radius/3;
 
 grid_hole_height = hole_radius*2 + hole_attach_height * 2;
 bottom_joint_grid_clearance = bottom_rotation_height - (hole_attach_height*2 + hole_radius*2 + grid_hole_height + max_turn_b + attach_thickness);
@@ -111,19 +112,20 @@ module joint_bottom() {
         cylinder(h=eps, r=inner_radius, center=true,$fn = fn);
         
         //screw holes
-        translate([0,0,hole_radius + hole_attach_height]) {
+        translate([0,0,hole_radius + hole_attach_height])
+        rotate([0,0,hole_twist]) {
             angled_cylinder(0, (outer_radius*1.5 + eps) * 2,  hole_radius, 90);
             angled_cylinder(90, (outer_radius*1.5 + eps) * 2, hole_radius, 0);
         } 
         
         //holes for routing strings
-        translate([0,-inner_radius,-hole_attach_height - grid_hole_radius + operating_height])
+        translate([0,-inner_radius + thickness,-hole_attach_height - grid_hole_radius + operating_height])
         rotate([90,0,0])
-        cylinder(h=thickness + eps, r=grid_hole_radius,$fn=fn);
+        cylinder(h=thickness + inner_radius + eps, r=grid_hole_radius,$fn=fn);
         
         translate([0,outer_radius,-hole_attach_height - grid_hole_radius + operating_height + max_turn_b - min_turn_b])
         rotate([90,0,0])
-        cylinder(h=thickness + eps, r=grid_hole_radius,$fn=fn);
+        cylinder(h=thickness + inner_radius + eps, r=grid_hole_radius,$fn=fn);
         
         translate([0,bottom_joint_attach_radius + hole_attach_height + grid_hole_radius,operating_height - attach_thickness - eps/2])
         cylinder(h=attach_thickness + max_turn_b - min_turn_b - hole_attach_height + eps, r=grid_hole_radius,$fn=fn);
@@ -216,21 +218,21 @@ module joint_top() {
             }
             
             //holes for string routing
-             translate([0,-inner_radius + tolerance,axle_radius+axle_offset +hole_attach_height + max_turn_b - min_turn_b]) 
+             translate([0,-inner_radius + tolerance,max_turn_b]) 
             rotate([90,0,0])
             {
-                cylinder(h=thickness + tolerance,r=grid_hole_radius,$fn=fn);
+                cylinder(h=thickness + inner_radius + tolerance,r=grid_hole_radius,$fn=fn);
                 translate([0,hole_attach_height + grid_hole_radius*2,0])
-                cylinder(h=thickness + tolerance,r=grid_hole_radius,$fn=fn);
+                cylinder(h=thickness + inner_radius + tolerance,r=grid_hole_radius,$fn=fn);
 
             }
 
-            translate([0,outer_radius + tolerance,axle_radius+axle_offset +hole_attach_height])
+            translate([0,outer_radius + tolerance,min_turn_b])
             rotate([90,0,0])
             {
-                cylinder(h=thickness + tolerance,r=grid_hole_radius,$fn=fn);
+                cylinder(h=thickness + inner_radius + tolerance,r=grid_hole_radius,$fn=fn);
                 translate([0,hole_attach_height + grid_hole_radius*2,0])
-                cylinder(h=thickness + tolerance,r=grid_hole_radius,$fn=fn);
+                cylinder(h=thickness + inner_radius + tolerance,r=grid_hole_radius,$fn=fn);
 
             }
              

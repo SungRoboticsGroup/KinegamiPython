@@ -10,17 +10,16 @@ sys.path.append(main_dir)
 # Example 1A
 from KinematicTree import *
 from PrintedJoint import *
+from testqtgraph import *
+
+os.chdir(main_dir)
 
 r = 1
-screwRadius = 0.05
-
-numSides = 4
-jointLength = 0.45/0.245
-unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutralLength
-extensionLength = (jointLength - unextendedRevoluteJointLength)/2
+multiplier = 1.5
+screwRadius = 0.05*multiplier
 
 tree = KinematicTree(PrintedWaypoint(r, SE3(), screwRadius))
-palmJoint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(2.5,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4), screwRadius)
+palmJoint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(2.5*multiplier,0,3*multiplier)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4), screwRadius)
 palm = tree.addJoint(0, palmJoint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -31,76 +30,62 @@ thumb0 = tree.addJoint(palm, thumb0Joint,
               fixedPosition=True, fixedOrientation=True)
 
 thumb1 = tree.addJoint(thumb0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                                           SE3.Trans(4,0,0), screwRadius),
+                                           SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 thumbEnd = tree.addJoint(thumb1, PrintedTip(r, 
-        SE3.Trans(3,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
+        SE3.Trans(3*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 
 pointer1 = tree.addJoint(0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-            SE3.Trans(0,0,8)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi), screwRadius),
+            SE3.Trans(0,0,8*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 pointer2 = tree.addJoint(pointer1, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                        SE3.Trans(4,0,0), screwRadius),
+                        SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 pointerEnd = tree.addJoint(pointer2, PrintedTip(r, 
-        SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
+        SE3.Trans(4*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 middle0 = tree.addJoint(0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-        SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2), screwRadius),
+        SE3.Trans(-2.25*multiplier,0,4*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 middle1 = tree.addJoint(middle0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                        SE3.Trans(4,0,0)@SE3.Rx(np.pi/2), screwRadius),
+                        SE3.Trans(4*multiplier,0,0)@SE3.Rx(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 middle2 = tree.addJoint(middle1, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                        SE3.Trans(4,0,0), screwRadius),
+                        SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 middleEnd = tree.addJoint(middle2, PrintedTip(r, 
-        SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
+        SE3.Trans(4*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-# print("Branching parameters from root:")
-# print(np.round(tree.branchingParametersFrom(0), decimals=3))
-# tree.branchModuleFrom(0, "test", 0.045, 0.03, 0.3, 0.25)
-# tree.show(block=False, showJointPoses=False)
+# Spherical grasp
+tree.setJointState(middle0, np.pi/2)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
 
-# print("Straight link lengths:")
-
-
-# for i in [thumb1, thumbEnd, pointer2, pointerEnd, middle1, middle2, middleEnd]:
-#     print(np.round(tree.Links[i].path.tMag, 3))
-
-
-# # Spherical grasp
-# tree.setJointState(middle0, np.pi/2)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-#     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
-
-# # Cylindrical grasp
+# Cylindrical grasp
 # tree.setJointState(middle0, 0)
 # tree.setJointState(palm, -np.pi/2)
 # for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
 #     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
 
 # # Pinch grasp
 # tree.setJointState(middle0, 0)
@@ -109,6 +94,6 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
 #     tree.setJointState(i, 0)
 # for i in [middle1, pointer1, thumb0]:
 #     tree.setJointState(i, np.pi/2)
-# tree.show(showJointPoses=False)
 
 tree.export3DKinematicTree("manualHand")
+plotPrintedTree(tree, "manualHand")
