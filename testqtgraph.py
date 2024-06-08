@@ -8,6 +8,8 @@ from KinematicTree import *
 from spatialmath import SE3
 
 def plotPrintedTree(tree : KinematicTree, folder : str):
+    assert(tree != None)
+    
     if (folder != ""):
         os.makedirs(f"scad_output/{folder}", exist_ok=True)
         os.makedirs(f"scad_output/{folder}/poses", exist_ok=True)
