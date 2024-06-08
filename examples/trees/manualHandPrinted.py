@@ -95,5 +95,5 @@ for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
 # for i in [middle1, pointer1, thumb0]:
 #     tree.setJointState(i, np.pi/2)
 
-tree.export3DKinematicTree("manualHand")
+#tree.export3DKinematicTree("manualHand")
 plotPrintedTree(tree, "manualHand")

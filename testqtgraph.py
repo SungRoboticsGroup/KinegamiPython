@@ -54,9 +54,9 @@ def plotPrintedTree(tree : KinematicTree, folder : str):
         start = time.time()
         if not isinstance(tree.Joints[i],PrintedWaypoint):
             file1, rot1, file2, rot2 = tree.Joints[i].renderPose(folder)
-            plotSTL(view3d, file1, tree.Joints[i].ProximalDubinsFrame() @ rot1)
+            plotSTL(view3d, file1, tree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,0.5,0))
             if (file2 != None):
-                plotSTL(view3d, file2, tree.Joints[i].DistalDubinsFrame() @ rot2)
+                plotSTL(view3d, file2, tree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,0.5,0))
         print(f"plotted joint {i}, Time: {time.time() - start}s")
     
     print(f"TOTAL GENERATION TIME: {time.time() - real_start}s")
@@ -69,7 +69,7 @@ def plotPrintedTree(tree : KinematicTree, folder : str):
     view.show()
     app.exec_()
 
-def plotSTL(view, filepath : str, pose):
+def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
     # Load the STL file
     stl_mesh = Mesh.from_file(filepath)
 
@@ -86,6 +86,6 @@ def plotSTL(view, filepath : str, pose):
 
     # Create a mesh item and add it to the view
     meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
-    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="normalColor", color=(1,0,0,0.5), drawEdges=False)
+    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="viewNormalColor", color=color, drawEdges=False)
     mesh.setGLOptions('opaque')
     view.addItem(mesh)

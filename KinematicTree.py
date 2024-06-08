@@ -292,11 +292,23 @@ class KinematicTree:
             else:
                 name += ".stl"
         
-        with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
-            truncated.extend(new_lines)
-            defs.extend(truncated)
-            file.writelines(defs)
-        
+        try:
+            with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
+                truncated.extend(new_lines)
+                defs.extend(truncated)
+                file.writelines(defs)
+        except:
+            #file name is too long
+            name = f"linkfrom_{parentIndex}_to_"
+            for endpointIndex in self.Children[parentIndex]:
+                name += f"{endpointIndex}_"
+            name += ".stl"
+
+            with open(f"scad_output/{folder}/{name}.scad", "w+") as file:
+                truncated.extend(new_lines)
+                defs.extend(truncated)
+                file.writelines(defs)
+
         os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
 
         return f"3d_output/{folder}/{name}"
@@ -416,7 +428,7 @@ class KinematicTree:
                                         self.maxAnglePerElbow)
             else:
                 #TODO:causes end twist angles to be messed up
-                #self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+                self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
                 pass
             if propogate:
                 for c in self.Children[jointIndex]:
@@ -445,7 +457,7 @@ class KinematicTree:
         for c in self.Children[jointIndex]:
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
-            self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=False,
+            self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=True,
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
         return True
@@ -511,6 +523,18 @@ class KinematicTree:
             else:
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
         return True
+
+
+def origamiToPrinted(tree : KinematicTree, screwRadius):
+    newTree = KinematicTree(tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
+    for i in range(1, len(tree.Joints)):
+        try:
+            newTree.addJoint(tree.Parents[i], tree.Joints[i].toPrinted(screwRadius), relative=False, safe=False, 
+            fixedPosition=True, fixedOrientation=True)
+        except Exception as e:
+            print(f"Unable to convert tree to 3D print because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try increasing placing joints further apart)")
+            return None
+    return newTree
 
 """ 
 Places joint along its joint axis, as close as possible to the given neighbor 

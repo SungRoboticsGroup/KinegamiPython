@@ -36,7 +36,7 @@ class PrintParameters:
     @staticmethod
     def default(r: float, screwRadius : float):
         thickness = r * 0.2
-        gridHoleMargin = screwRadius*2.5#printParameters.gridHoleRadius*2 + printParameters.holeMargin
+        gridHoleMargin = screwRadius*2.5
         return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.01, r, screwRadius, thickness, screwRadius)
 
 class PrintedJoint(Joint):
