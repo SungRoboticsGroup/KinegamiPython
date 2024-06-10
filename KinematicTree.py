@@ -18,9 +18,11 @@ from LinkCSC import LinkCSC
 from PrintedJoint import *
 import os
 import time
+from typing import Generic, TypeVar
 
+J = TypeVar("J", bound=Joint)
 
-class KinematicTree:
+class KinematicTree(Generic[J]):
     """
     Nodes are Joint objects
     Edges are Dubins linkages from parent distal frame to child proximal frame    
@@ -32,7 +34,7 @@ class KinematicTree:
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2):
+    def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2):
         self.r = root.r
         self.numSides = root.numSides
         self.Joints = [root]
@@ -79,7 +81,7 @@ class KinematicTree:
             fixedPosition is False, the algorithm will place the new joint such
             that its whole bounding sphere is >= 4r from this plane.
     """
-    def addJoint(self, parentIndex : int, newJoint : Joint, 
+    def addJoint(self, parentIndex : int, newJoint : J, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
                  safe : bool = True, endPlane : Plane = None) -> int:
@@ -525,14 +527,25 @@ class KinematicTree:
         return True
 
 
-def origamiToPrinted(tree : KinematicTree, screwRadius):
-    newTree = KinematicTree(tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
+def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):
+    newTree = KinematicTree[PrintedJoint](tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
     for i in range(1, len(tree.Joints)):
         try:
             newTree.addJoint(tree.Parents[i], tree.Joints[i].toPrinted(screwRadius), relative=False, safe=False, 
             fixedPosition=True, fixedOrientation=True)
         except Exception as e:
             print(f"Unable to convert tree to 3D print because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try increasing placing joints further apart)")
+            return None
+    return newTree
+
+def printedToOrigami(tree : KinematicTree[PrintedJoint], numSides: int, numLayers : int = 1):
+    newTree = KinematicTree[OrigamiJoint](tree.Joints[0].toOrigami(numSides, numLayers))
+    for i in range(1, len(tree.Joints)):
+        try:
+            newTree.addJoint(tree.Parents[i], tree.Joints[i].toOrigami(numSides, numLayers), relative=False, safe=False, 
+            fixedPosition=True, fixedOrientation=True)
+        except Exception as e:
+            print(f"Unable to convert tree to origami because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try adjusting parameters)")
             return None
     return newTree
 

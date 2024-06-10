@@ -7,7 +7,6 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import Joint
 from Joint import *
-from PrintedJoint import *
 
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
@@ -15,6 +14,9 @@ class OrigamiJoint(Joint):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         super().__init__(r, neutralLength, Pose, initialState)
+    
+    def toPrinted(self, screwRadius):
+        pass
 
 class RevoluteJoint(OrigamiJoint):
     """
@@ -98,6 +100,7 @@ class RevoluteJoint(OrigamiJoint):
         return plotHandles
     
     def toPrinted(self, screwRadius):
+        from PrintedJoint import PrintedOrthogonalRevoluteJoint
         return PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
     
 class ExtendedRevoluteJoint(OrigamiJoint):
@@ -227,6 +230,8 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         plt.show(block=block)
 
     def toPrinted(self, screwRadius):
+        from PrintedJoint import PrintedOrthogonalRevoluteJoint
+
         joint = PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
         if joint.neutralLength < self.neutralLength:
             amount = (self.neutralLength - joint.neutralLength)/2
@@ -292,6 +297,7 @@ class PrismaticJoint(OrigamiJoint):
         return plotHandles
     
     def toPrinted(self, screwRadius):
+        from PrintedJoint import PrintedPrismaticJoint
         return PrintedPrismaticJoint(self.r, self.minLength, self.maxLength, self.Pose, screwRadius, initialState=self.initialState)
         
     
@@ -342,6 +348,7 @@ class Waypoint(OrigamiJoint):
         return plotHandles
     
     def toPrinted(self, screwRadius):
+        from PrintedJoint import PrintedWaypoint
         return PrintedWaypoint(self.r, self.Pose, screwRadius, pathIndex = self.pidx)
 
 class Tip(OrigamiJoint):
@@ -424,6 +431,7 @@ class Tip(OrigamiJoint):
         return plotHandles
 
     def toPrinted(self, screwRadius):
+        from PrintedJoint import PrintedTip
         return PrintedTip(self.r, self.Pose, screwRadius)
     
 class StartTip(Tip):

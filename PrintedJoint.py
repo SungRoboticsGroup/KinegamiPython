@@ -49,6 +49,9 @@ class PrintedJoint(Joint):
     def setTwistAngle(self, angle):
         self.twistAngle = angle
 
+    def toOrigami(self, numSides : int, numLayers : int = 1):
+        pass
+
 class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     def __init__(self, r : float, startBendingAngle : float, endBendingAngle : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
@@ -215,6 +218,9 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             
         return plotHandles
 
+    def toOrigami(self, numSides : int, numLayers : int):
+        from OrigamiJoint import ExtendedRevoluteJoint
+        return ExtendedRevoluteJoint(numSides, self.r, max(-self.startBendingAngle, self.endBendingAngle)*2, self.bottomLength, self.Pose, numSinkLayers=numLayers, initialState=self.initialState)
         
 
 class PrintedPrismaticJoint(PrintedJoint):
@@ -300,6 +306,11 @@ class PrintedPrismaticJoint(PrintedJoint):
         os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
 
         return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
+    
+    def toOrigami(self, numSides : float, numLayers : int):
+        from OrigamiJoint import PrismaticJoint
+        coneAngle = np.arcsin(self.neutralLength/self.maxLength)
+        return PrismaticJoint(numSides, self.r, self.neutralLength, numLayers, coneAngle, self.Pose, initialState=self.initialState)
 
 class PrintedTip(PrintedJoint):
     def __init__(self, r : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters = None):
@@ -412,6 +423,10 @@ class PrintedTip(PrintedJoint):
             
         return plotHandles
 
+    def toOrigami(self, numSides : int, numLayers: int = 1):
+        from OrigamiJoint import Tip
+        return Tip(numSides, self.r, self.Pose, self.neutralLength)
+
 
 class PrintedWaypoint(PrintedJoint):
     # path direction through a waypoint defaults to zhat
@@ -463,3 +478,7 @@ class PrintedWaypoint(PrintedJoint):
         else:
             plotHandles = None
         return plotHandles
+
+    def toOrigami(self, numSides : float, numLayers: int = 1):
+        from OrigamiJoint import Waypoint
+        return Waypoint(numSides, self.r, self.Pose, self.pidx)
