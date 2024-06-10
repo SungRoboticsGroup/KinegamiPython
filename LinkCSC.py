@@ -93,11 +93,19 @@ class LinkCSC:
     def branchingParameters(self):
         dir1 = self.StartDubinsPose.R[:,0]
         b1 = self.StartDubinsPose.R[:,1]
+
         twist1 = signedAngle(b1, self.path.w1, dir1)
+        if self.path.theta1 < self.EPSILON:
+            twist1 = 0
+
         twist1Deg = np.rad2deg(twist1)
         theta1Deg = np.rad2deg(self.path.theta1)
         y1 = self.path.y1 if self.path.theta1 > self.EPSILON else b1
+
         twist2 = signedAngle(y1, self.path.y2, self.path.tUnit)
+        if self.path.theta2 < self.EPSILON:
+            twist2 = 0
+
         twist2Deg = np.rad2deg(twist2)
         theta2Deg = np.rad2deg(self.path.theta2)
         return [twist1Deg, theta1Deg, self.r, self.path.tMag, twist2Deg, theta2Deg, self.r]

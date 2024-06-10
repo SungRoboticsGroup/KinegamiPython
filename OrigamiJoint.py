@@ -298,7 +298,7 @@ class PrismaticJoint(OrigamiJoint):
     
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedPrismaticJoint
-        return PrintedPrismaticJoint(self.r, self.minLength, self.maxLength, self.Pose, screwRadius, initialState=self.initialState)
+        return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
         
     
 class Waypoint(OrigamiJoint):

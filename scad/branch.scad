@@ -162,12 +162,36 @@ module branch(branch_list, _outer, _inner) {
         //make CSC shells for each CSC in branch_list
         difference() {
             for (c = branch_list) {
-                CSC(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], false);
+               if (c[1] > 90) {
+                    CSC(_outer, c[0], 90, c[2], 0, 0, 0, 0, false);
+                    _tr1 = c[2];
+                    _t1 = c[0];
+                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
+                    
+                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+                    rotate([0,-90,_t1])
+                    CSC(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], false);
+                } else {
+                    CSC(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], false);
+                }
             }
             
             for (c = branch_list) {
-                CSC(_inner,c[0],c[1],c[2],c[3],c[4],c[5],c[6], true);
-                CSC_REMOVE_OVERLAP(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
+                if (c[1] > 90) {
+                    CSC(_inner, c[0], 90, c[2], 0, 0, 0, 0, true);
+                    _tr1 = c[2];
+                    _t1 = c[0];
+                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
+                    
+                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+                    rotate([0,-90,_t1]) {
+                        CSC(_inner,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], true);
+                        CSC_REMOVE_OVERLAP(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6],c[7], c[8], c[9]);
+                    }
+                } else {
+                    CSC(_inner,c[0],c[1],c[2],c[3],c[4],c[5],c[6], true);
+                    CSC_REMOVE_OVERLAP(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7], c[8], c[9]);
+                }
             }
             
             //make screw holes at the bottom
@@ -177,7 +201,17 @@ module branch(branch_list, _outer, _inner) {
             }    
         }
         for (c=branch_list) {
-            CSC_ATTACH(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
+            if (c[1] > 90) {
+                    _tr1 = c[2];
+                    _t1 = c[0];
+                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
+                    
+                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+                    rotate([0,-90,_t1])
+                    CSC_ATTACH(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
+            } else {
+                CSC_ATTACH(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
+            } 
         }
     }
 }

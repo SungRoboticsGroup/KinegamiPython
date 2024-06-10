@@ -224,21 +224,25 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         
 
 class PrintedPrismaticJoint(PrintedJoint):
-    def __init__(self, r : float, minLength : float, maxLength: float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
+    def __init__(self, r : float, extensionLength : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
         
         #subject to change, check scad
-        outHoleAngle = 60
-        guideHeight = printParameters.holeMargin*2 + screwRadius*2 + printParameters.gridHoleRadius*2 + printParameters.grid_hole_radius*2/sin(outHoleAngle) + printParameters.thickness/tan(outHoleAngle)
-        maxPossibleLength = minLength*2 - guideHeight - printParameters.holeMargin*2 - printParameters.gridHoleRadius
-        if (maxLength > maxPossibleLength):
-            raise InvalidDimensionException(f"Tried to construct a prismatic joint with minimum length of {minLength} and a maximum length of {maxLength}, yet with current parameters a maximum length of at most {maxPossibleLength} is possible")
-        
-        self.minLength = minLength
-        self.maxLength = maxLength
+        outHoleAngle = np.rad2deg(60)
+        guideHeight = printParameters.holeMargin*2 + screwRadius*2 + printParameters.gridHoleRadius*2 + printParameters.gridHoleRadius*2/np.sin(outHoleAngle) + printParameters.thickness/np.tan(outHoleAngle)
 
-        super().__init__(r, minLength, Pose, screwRadius, printParameters, initialState)
+        self.minLength = extensionLength + guideHeight + printParameters.holeMargin*2 + printParameters.gridHoleRadius
+        self.maxLength = self.minLength*2 - guideHeight - printParameters.holeMargin*2 - printParameters.gridHoleRadius
+
+        # maxPossibleLength = minLength*2 - guideHeight - printParameters.holeMargin*2 - printParameters.gridHoleRadius
+        # if (maxLength > maxPossibleLength):
+        #     raise InvalidDimensionException(f"Tried to construct a prismatic joint with minimum length of {minLength} and a maximum length of {maxLength}, yet with current parameters a maximum length of at most {maxPossibleLength} is possible")
+
+        # self.minLength = minLength
+        # self.maxLength = maxLength
+
+        super().__init__(r, self.minLength, Pose, screwRadius, printParameters, initialState)
 
     def extendSegment(self, amount):
         self.minLength += amount
@@ -254,7 +258,7 @@ class PrintedPrismaticJoint(PrintedJoint):
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
                 f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
-                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)}"]
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};"]
 
         with open("scad/prismatic.scad", "r") as file:
             lines = file.readlines()
@@ -275,7 +279,7 @@ class PrintedPrismaticJoint(PrintedJoint):
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
                 f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
-                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)}"]
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};"]
         defs2 = defs.copy()
 
         for parameter in defs:
@@ -307,6 +311,50 @@ class PrintedPrismaticJoint(PrintedJoint):
 
         return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
     
+    def pathIndex(self) -> int:
+        return 2 # zhat
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3.Trans(stateChange * self.pathDirection())
+    
+    def stateRange(self) -> list:
+        return [self.minLength - self.neutralLength, self.maxLength - self.neutralLength]
+    
+    def length(self) -> float:
+        return self.neutralLength + self.state
+    
+    def boundingRadius(self) -> float:
+        return norm([self.r, self.length() / 2])
+    
+    def center(self) -> np.ndarray:
+        return self.Pose.t + (self.state/2) * self.pathDirection()
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.center(), self.boundingRadius())
+    
+    def boundingCylinder(self) -> Cylinder:
+        uhat = (self.Pose @ SE3.Rz(np.pi/4)).R[:,1]
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
+                        self.length(), uhat)
+    
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
+             axisScale=10, showPoses=True):
+        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, surfaceOpacity, showSurface, showAxis,
+                          axisScale, showPoses)
+        if showSurface:
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
+                                              alpha=surfaceOpacity, 
+                                              edgeColor=edgeColor,
+                                              numPointsPerCircle=4)
+            
+        return plotHandles
+
     def toOrigami(self, numSides : float, numLayers : int):
         from OrigamiJoint import PrismaticJoint
         coneAngle = np.arcsin(self.neutralLength/self.maxLength)

@@ -36,7 +36,11 @@ class KinematicTree(Generic[J]):
     """
     def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2):
         self.r = root.r
-        self.numSides = root.numSides
+        try:
+            self.numSides = root.numSides
+        except:
+            self.numSides = 4
+
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
         self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
@@ -270,7 +274,7 @@ class KinematicTree(Generic[J]):
             branch_scad = "scad/poses/branch_pose.scad"
         with open(branch_scad, "r") as file:
             lines = file.readlines()
-        truncated = lines[7:184] #first 7 are parameter definitions, first 184 lines are function definitions
+        truncated = lines[7:218] #first 7 are parameter definitions, first 218 lines are function definitions
 
         linkEndpoints = [self.Joints[childIndex] for childIndex in self.Children[parentIndex]]
         new_lines = ["branch([\n"]
@@ -531,7 +535,10 @@ def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):
     newTree = KinematicTree[PrintedJoint](tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
     for i in range(1, len(tree.Joints)):
         try:
-            newTree.addJoint(tree.Parents[i], tree.Joints[i].toPrinted(screwRadius), relative=False, safe=False, 
+            tree.setJointState(i, tree.Joints[i].initialState)
+            newJoint = tree.Joints[i].toPrinted(screwRadius)
+            #newJoint.Pose = tree.Joints[i].Pose @ tree.Joints[tree.Parents[i]].Pose.inv() @ newTree.Joints[tree.Parents[i]].Pose
+            newTree.addJoint(tree.Parents[i], newJoint, relative=False, safe=False, 
             fixedPosition=True, fixedOrientation=True)
         except Exception as e:
             print(f"Unable to convert tree to 3D print because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try increasing placing joints further apart)")
@@ -539,9 +546,10 @@ def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):
     return newTree
 
 def printedToOrigami(tree : KinematicTree[PrintedJoint], numSides: int, numLayers : int = 1):
-    newTree = KinematicTree[OrigamiJoint](tree.Joints[0].toOrigami(numSides, numLayers))
+    newTree = KinematicTree[OrigamiJoint](tree.Joints[0].toOrigami(numSides, numLayers), tree.maxAnglePerElbow)
     for i in range(1, len(tree.Joints)):
         try:
+            tree.setJointState(i, tree.Joints[i].initialState)
             newTree.addJoint(tree.Parents[i], tree.Joints[i].toOrigami(numSides, numLayers), relative=False, safe=False, 
             fixedPosition=True, fixedOrientation=True)
         except Exception as e:

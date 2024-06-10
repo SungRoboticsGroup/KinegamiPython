@@ -11,6 +11,9 @@ sys.path.append(main_dir)
 from KinematicTree import *
 from PrintedJoint import *
 from testqtgraph import *
+from copy import deepcopy
+import matplotlib.pyplot as plt
+from PathCSC import *
 
 os.chdir(main_dir)
 
@@ -75,11 +78,13 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
+
 # Spherical grasp
-tree.setJointState(middle0, np.pi/2)
-tree.setJointState(palm, -np.pi/2)
-for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-    tree.setJointState(i, np.pi/3)
+# tree.setJointState(middle0, np.pi/2)
+# tree.setJointState(palm, -np.pi/2)
+# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+#     tree.setJointState(i, np.pi/3)
+
 
 # Cylindrical grasp
 # tree.setJointState(middle0, 0)
@@ -96,4 +101,4 @@ for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
 #     tree.setJointState(i, np.pi/2)
 
 #tree.export3DKinematicTree("manualHand")
-plotPrintedTree(tree, "manualHand")
+plotPrintedTree(tree, "manualHandPrinted")
