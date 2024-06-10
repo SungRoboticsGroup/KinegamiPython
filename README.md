@@ -3,7 +3,7 @@
 
 Daniel A. Feshbach, Wei-Hsi Chen, Daniel E. Koditschek, Cynthia R. Sung. “Kinegami: Open-source Software for Creating Kinematic Chains from Tubular Origami.” Submitted to Origami 8: Eigth International Meeting on Origami in Science, Mathematics and Education, 2024 (under review).
 
-This is a python repository for creating and modifying kinematic chains made of tubular origami. Examples of its usage can be found in the examples folder. 
+This is a python repository for creating and modifying kinematic chains and trees made of tubular origami and/or 3D printing. Examples of its usage can be found in the examples folder. 
 It requires the following libraries:
 - numpy
 - scipy
