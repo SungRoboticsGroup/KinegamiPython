@@ -54,6 +54,6 @@ middleEnd = spec.addJoint(middle2, EndTip(numSides, r,
         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
 """
         
-tree = makeTubularKinematicTree(spec, plotSteps=False)
+tree = makeTubularKinematicTree(spec, plotSteps=True)
 
 tree.show(jointAxisScale=100, showJointPoses=False)
