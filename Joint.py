@@ -165,6 +165,52 @@ class Joint(ABC):
         if showSphere:
             self.boundingBall().addToWidget(widget, sphereColor)
 
+    def generate_extended_line_points(self, point1, point2, gap):
+        point1 = np.array(point1)
+        point2 = np.array(point2)
+        
+        direction = point2 - point1
+        distance = np.linalg.norm(direction)
+        direction = direction / distance
+
+        point1 = point2 - direction * distance * 10
+        
+        extended_length = 20 * distance
+        num_points = int(extended_length / gap) + 1
+        start_point = point1 - direction * distance
+
+        points = [start_point + i * gap * direction for i in range(num_points)]
+    
+        return np.array(points)
+
+    def clamp(self, val, min_val, max_val):
+        return max(min(val, max_val), min_val)
+    
+    def extend_and_clamp_line(self, p1, p2, bound=10):
+        p1 = np.array(p1)
+        p2 = np.array(p2)
+        
+        direction_vector = p2 - p1
+        unit_vector = direction_vector / np.linalg.norm(direction_vector)
+        
+        t_values = []
+        for i in range(3):
+            if unit_vector[i] != 0:
+                t_min = (bound - p1[i]) / unit_vector[i]
+                t_max = (-bound - p1[i]) / unit_vector[i]
+                t_values.extend([t_min, t_max])
+        
+        t_min = min(t_values)
+        t_max = max(t_values)
+        
+        new_p1 = p1 + t_min * unit_vector
+        new_p2 = p1 + t_max * unit_vector
+        
+        new_p1 = np.array([self.clamp(coord, -bound, bound) for coord in new_p1])
+        new_p2 = np.array([self.clamp(coord, -bound, bound) for coord in new_p2])
+        
+        return np.array([new_p1, new_p2])
+
     def addArrows(self, widget, selectedArrow=-1):
         rad = self.boundingBall().r
 
@@ -175,6 +221,32 @@ class Joint(ABC):
         xhat = self.Pose.R[:, 0] 
         yhat = self.Pose.R[:, 1] 
         zhat = self.Pose.R[:, 2] 
+
+        extended_line_points = []
+
+        if (selectedArrow == 0):
+            point1 = self.Pose.t
+            point2 = self.Pose.t + rad * self.r * xhat
+            gap = 0.1
+            extended_line_points = self.generate_extended_line_points(point1, point2, gap)
+        elif (selectedArrow == 1):
+            point1 = self.Pose.t
+            point2 = self.Pose.t + rad * self.r * yhat
+            gap = 0.1
+            extended_line_points = self.generate_extended_line_points(point1, point2, gap)
+        elif (selectedArrow == 2):
+            point1 = self.Pose.t
+            point2 = self.Pose.t + rad * self.r * zhat
+            gap = 0.1
+            extended_line_points = self.generate_extended_line_points(point1, point2, gap)
+
+        for line in extended_line_points:
+            md = gl.MeshData.sphere(rows=4, cols=4)
+            sphere = gl.GLMeshItem(meshdata=md, color=[0,0,0,1], shader='shaded', smooth=True)
+            sphere.setGLOptions('translucent')
+            sphere.scale(0.02, 0.02, 0.02)
+            sphere.translate(line[0], line[1], line[2])
+            widget.plot_widget.addItem(sphere)
         
         posX = np.array([self.Pose.t, self.Pose.t + rad * self.r * xhat])
         lineX = LineItemWithID(pos=posX, color=colors[0], width=10, antialias=True, id = 0)

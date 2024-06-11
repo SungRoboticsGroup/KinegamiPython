@@ -738,6 +738,28 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             
             self.click_signal.emit(self.selectedIndex)
             self.click_signal_arrow.emit(arrowIndex)
+
+    def anotherItemsAt(self, region=None):
+        """
+        Going to use this to try to do raycasting       
+        """
+        region = (region[0], self.deviceHeight()-(region[1]+region[3]), region[2], region[3])
+        
+        #buf = np.zeros(100000, dtype=np.uint)
+        buf = glSelectBuffer(100000)
+        try:
+            glRenderMode(GL_SELECT)
+            glInitNames()
+            glPushName(0)
+            self._itemNames = {}
+            self.paintGL(region=region, useItemNames=True)
+            
+        finally:
+            hits = glRenderMode(GL_RENDER)
+            
+        items = [(h.near, h.names[0]) for h in hits]
+        items.sort(key=lambda i: i[0])
+        return [self._itemNames[i[1]] for i in items]
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
