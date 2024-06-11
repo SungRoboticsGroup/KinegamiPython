@@ -20,7 +20,7 @@ spec.addJoint(i, RevoluteJoint(numSides,r,np.pi,SE3(10,0,0)@SE3.Ry(-np.pi/6)), r
 spec.addJoint(j, RevoluteJoint(numSides,r,np.pi,SE3.Ry(-np.pi/4)), relative=False)
 spec.addJoint(j, PrismaticJoint(numSides,r,3,3,np.pi/5,SE3()), relative=False)
 tree = makeTubularKinematicTree(spec, plotSteps=False, orientUp=True)
-tree.show()
+# tree.show()
 
 printed = origamiToPrinted(tree, 0.05)
 plotPrintedTree(printed, "multipleBranchLayersPrinted")

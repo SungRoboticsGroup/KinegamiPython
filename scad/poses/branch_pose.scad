@@ -1,10 +1,10 @@
 tolerance=0.01;
 hole_radius=0.05;
-grid_hole_radius=0.1;
+grid_hole_radius=0.05;
 outer_radius=1;
 thickness=0.2;
 hole_attach_height=0.05;
-attach_thickness=0.2;
+attach_thickness=0.1;
 
 //parameters that don't have to be defined explicitly
 eps = tolerance/100;
@@ -59,97 +59,152 @@ module curve(_radius, _twist, _turning_angle, _turning_radius) {
 }
 
 module CSC(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, is_inner) {
-    //intermediate positions
-    pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
-    pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
     
-    union() {
-        //bottom shell threshold
-        if (is_inner) {
-            cylinder(h=eps, r=_r, center=true);
-        }
+    if (_ta1 > 90) {
+        CSC(_r, _t1, 90, _tr1, 0, 0, 0, 0, is_inner);
         
-        //first curve of CSC
-        curve(_r, _t1, _ta1, _tr1);
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2)));
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+        rotate([0,-90,_t1])
+        CSC(_r, 0, _ta1 - 90, _tr1, _h, _t2, _ta2, _tr2, is_inner);
+    } else if (_ta2 > 90) {
+        CSC(_r, _t1, _ta1, _tr1, _h, _t2, 90, _tr2, is_inner);
         
-        //straight link of CSC
-        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
-        rotate([0,-_ta1,_t1])
-        if (is_inner) {
-            //add threshold for shelling
-            translate([0,0,-eps /2])
-            cylinder(h=_h + eps,r=_r, center = false, $fn= fn);
-        } else {
-            cylinder(h=_h,r=_r, center = false, $fn= fn);
-        }
-        
-        //second curve of CSC
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2,2)));
         translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
         rotate([0,-_ta1,_t1])
         translate([0, 0, _h])
-        curve(_r, _t2, _ta2, _tr2);
+        translate([pos2*cos(_t2),pos2*sin(_t2),_tr2])
+        rotate([0,-90,_t2])
+        CSC(_r, 0, 0, 0, 0, 0, _ta2 - 90, _tr2, is_inner);
+    } else {
+        //intermediate positions
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
         
-        //shelling thresholds
-        if (is_inner) {
+        union() {
+            //bottom shell threshold
+            if (is_inner) {
+                cylinder(h=eps, r=_r, center=true);
+            }
+            
+            //first curve of CSC
+            curve(_r, _t1, _ta1, _tr1);
+            
+            //straight link of CSC
+            translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+            rotate([0,-_ta1,_t1])
+            if (is_inner) {
+                //add threshold for shelling
+                translate([0,0,-eps /2])
+                cylinder(h=_h + eps,r=_r, center = false, $fn= fn);
+            } else {
+                cylinder(h=_h,r=_r, center = false, $fn= fn);
+            }
+            
+            //second curve of CSC
             translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
             rotate([0,-_ta1,_t1])
             translate([0, 0, _h])
-            translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
-            rotate([0,-_ta2,_t2]) {
-                cylinder(h=eps, r=_r, center=true,$fn=fn);
+            curve(_r, _t2, _ta2, _tr2);
+            
+            //shelling thresholds
+            if (is_inner) {
+                translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+                rotate([0,-_ta1,_t1])
+                translate([0, 0, _h])
+                translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
+                rotate([0,-_ta2,_t2]) {
+                    cylinder(h=eps, r=_r, center=true,$fn=fn);
+                }
+            
             }
-        
         }
     }
+    
 }
 
 //allow modules to attach
 module CSC_ATTACH(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, next_hole_attach_height, next_inner) {
-    //intermediate positions
-    pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
-    pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
     
-    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
-    rotate([0,-_ta1,_t1])
-    translate([0, 0, _h])
-    translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
-    rotate([0,-_ta2,_t2]) {
-        difference() {
-            union() {
-                //attachment for smaller cylinder
-                translate([0,0,-attach_thickness])
-                cylinder(h=attach_thickness, r=_r - thickness/2, $fn=fn);
-                translate([0,0,-attach_thickness*2])
-                cylinder(h=attach_thickness*2, r1=_r - thickness/2, r2=next_inner - tolerance - thickness, $fn=fn);
+    if (_ta1 > 90) {        
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2)));
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+        rotate([0,-90,_t1])
+        CSC_ATTACH(_r, 0, _ta1 - 90, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, next_hole_attach_height, next_inner);
+    } else if (_ta2 > 90) {        
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2,2)));
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+        rotate([0,-_ta1,_t1])
+        translate([0, 0, _h])
+        translate([pos2*cos(_t2),pos2*sin(_t2),_tr2])
+        rotate([0,-90,_t2])
+        CSC_ATTACH(_r, 0, 0, 0, 0, 0, _ta2 - 90, _tr2, next_hole_radius, next_hole_attach_height, next_inner);
+    } else {
+        //intermediate positions
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
+        
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+        rotate([0,-_ta1,_t1])
+        translate([0, 0, _h])
+        translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
+        rotate([0,-_ta2,_t2]) {
+            difference() {
+                union() {
+                    //attachment for smaller cylinder
+                    translate([0,0,-attach_thickness])
+                    cylinder(h=attach_thickness, r=_r - thickness/2, $fn=fn);
+                    translate([0,0,-attach_thickness*2])
+                    cylinder(h=attach_thickness*2, r1=_r - thickness/2, r2=next_inner - tolerance - thickness, $fn=fn);
+                    
+                    //small cylinder
+                    cylinder(h=next_hole_radius*2 + next_hole_attach_height * 2, r = next_inner - tolerance, $fn=fn);
+                }
                 
-                //small cylinder
-                cylinder(h=next_hole_radius*2 + next_hole_attach_height * 2, r = next_inner - tolerance, $fn=fn);
+                //shelling
+                translate([0,0, -attach_thickness*2 - eps/2])
+                cylinder(h=next_hole_radius*2 + next_hole_attach_height * 2 + attach_thickness*2 + eps, r = min(inner_radius, next_inner - tolerance - thickness), $fn=fn);
+                
+                //holes for screws
+    //            translate([0,0,next_hole_attach_height + next_hole_radius]) {
+    //                angled_cylinder(0, (next_inner + thickness + eps) * 2,  hole_radius, 90);
+    //                angled_cylinder(90, (next_inner + thickness + eps) * 2, hole_radius, 0);
+    //            }
             }
-            
-            //shelling
-            translate([0,0, -attach_thickness*2 - eps/2])
-            cylinder(h=next_hole_radius*2 + next_hole_attach_height * 2 + attach_thickness*2 + eps, r = min(inner_radius, next_inner - tolerance - thickness), $fn=fn);
-            
-            //holes for screws
-//            translate([0,0,next_hole_attach_height + next_hole_radius]) {
-//                angled_cylinder(0, (next_inner + thickness + eps) * 2,  hole_radius, 90);
-//                angled_cylinder(90, (next_inner + thickness + eps) * 2, hole_radius, 0);
-//            }
         }
     }
 }
 
 //remove overlap to allow all branches to attach to each other
 module CSC_REMOVE_OVERLAP(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, next_hole_attach_height, next_inner) {
-    pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
-    pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
-    
-    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
-    rotate([0,-_ta1,_t1])
-    translate([0, 0, _h])
-    translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
-    rotate([0,-_ta2,_t2]) {
-        cylinder(h=999999, r=_r + tolerance, $fn=fn);
+    if (_ta1 > 90) {        
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2)));
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
+        rotate([0,-90,_t1])
+        CSC_REMOVE_OVERLAP(_r, 0, _ta1 - 90, _tr1, _h, _t2, _ta2, _tr2, next_hole_radius, next_hole_attach_height, next_inner);
+    } else if (_ta2 > 90) {        
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2,2)));
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+        rotate([0,-_ta1,_t1])
+        translate([0, 0, _h])
+        translate([pos2*cos(_t2),pos2*sin(_t2),_tr2])
+        rotate([0,-90,_t2])
+        CSC_REMOVE_OVERLAP(_r, 0, 0, 0, 0, 0, _ta2 - 90, _tr2, next_hole_radius, next_hole_attach_height, next_inner);
+    } else {
+        pos1 = (-_tr1 + sqrt(_tr1*_tr1 - pow(_tr1*sin(_ta1),2)));
+        pos2 = (-_tr2 + sqrt(_tr2*_tr2 - pow(_tr2*sin(_ta2),2)));
+        
+        translate([pos1*cos(_t1),pos1*sin(_t1),_tr1*sin(_ta1)])
+        rotate([0,-_ta1,_t1])
+        translate([0, 0, _h])
+        translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
+        rotate([0,-_ta2,_t2]) {
+            cylinder(h=999999, r=_r + tolerance, $fn=fn);
+        }
     }
 }
 
@@ -162,36 +217,12 @@ module branch(branch_list, _outer, _inner) {
         //make CSC shells for each CSC in branch_list
         difference() {
             for (c = branch_list) {
-               if (c[1] > 90) {
-                    CSC(_outer, c[0], 90, c[2], 0, 0, 0, 0, false);
-                    _tr1 = c[2];
-                    _t1 = c[0];
-                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
-                    
-                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
-                    rotate([0,-90,_t1])
-                    CSC(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], false);
-                } else {
-                    CSC(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], false);
-                }
+                CSC(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], false);
             }
             
             for (c = branch_list) {
-                if (c[1] > 90) {
-                    CSC(_inner, c[0], 90, c[2], 0, 0, 0, 0, true);
-                    _tr1 = c[2];
-                    _t1 = c[0];
-                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
-                    
-                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
-                    rotate([0,-90,_t1]) {
-                        CSC(_inner,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], true);
-                        CSC_REMOVE_OVERLAP(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6],c[7], c[8], c[9]);
-                    }
-                } else {
-                    CSC(_inner,c[0],c[1],c[2],c[3],c[4],c[5],c[6], true);
-                    CSC_REMOVE_OVERLAP(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7], c[8], c[9]);
-                }
+                CSC(_inner,c[0],c[1],c[2],c[3],c[4],c[5],c[6], true);
+                CSC_REMOVE_OVERLAP(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6],c[7], c[8], c[9]);
             }
             
             //make screw holes at the bottom
@@ -200,24 +231,12 @@ module branch(branch_list, _outer, _inner) {
 //                angled_cylinder(90, (outer_radius*1.5 + eps) * 2, hole_radius, 0);
 //            }    
         }
-        for (c=branch_list) {
-            if (c[1] > 90) {
-                    _tr1 = c[2];
-                    _t1 = c[0];
-                    pos1 = -_tr1 + sqrt(_tr1*_tr1 - pow(_tr1,2));
-                    
-                    translate([pos1*cos(_t1),pos1*sin(_t1),_tr1])
-                    rotate([0,-90,_t1])
-                    CSC_ATTACH(_outer,c[0],c[1] - 90,c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
-            } else {
-                CSC_ATTACH(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
-            } 
+        for (c=branch_list) {     
+            CSC_ATTACH(_outer,c[0],c[1],c[2],c[3],c[4],c[5],c[6], c[7], c[8], c[9]);
         }
     }
 }
 
 branch([
-[ 0.0, 42.750838323, 1.0*outer_radius, 1.545671284*outer_radius, -0.0, 2.249161677, 1.0*outer_radius, 0.05, 0.05, 0.8],
-[ 180.0, 0.0, 1.0*outer_radius, 6.3625*outer_radius, 180.0, 0.0, 1.0*outer_radius, 0.05, 0.05, 0.8],
-[ 180.0, 63.377666873, 1.0*outer_radius, 1.282149075*outer_radius, -180.0, 63.377666873, 1.0*outer_radius, 0.05, 0.05, 0.8],
+[ 179.9597, 113.5097, 1.0*outer_radius, 13.2335*outer_radius, -179.9677, 143.5097, 1.0*outer_radius, 0.05, 0.05, 0.8],
 ],outer_radius,inner_radius);

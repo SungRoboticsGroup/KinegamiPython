@@ -81,7 +81,7 @@ middleEnd = tree.addJoint(middle2, EndTip(numSides, r,
 # tree.show(block=False, showJointPoses=False)
 # print("Branching parameters from root:")
 # print(np.round(tree.branchingParametersFrom(0), decimals=3))
-# tree.show(block=False, showJointPoses=False)
+tree.show(block=False, showJointPoses=False)
 
 # print("Straight link lengths:")
 
@@ -90,28 +90,28 @@ middleEnd = tree.addJoint(middle2, EndTip(numSides, r,
 #     print(np.round(tree.Links[i].path.tMag, 3))
 
 
-# # Spherical grasp
-# tree.setJointState(middle0, np.pi/2)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-#     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
+# Spherical grasp
+tree.setJointState(middle0, np.pi/2)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False, showJointPoses=False)
 
-# # Cylindrical grasp
-# tree.setJointState(middle0, 0)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-#     tree.setJointState(i, np.pi/3)
-# tree.show(block=False, showJointPoses=False)
+# Cylindrical grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+    tree.setJointState(i, np.pi/3)
+tree.show(block=False, showJointPoses=False)
 
-# # Pinch grasp
-# tree.setJointState(middle0, 0)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle2, pointer2, thumb1]:
-#     tree.setJointState(i, 0)
-# for i in [middle1, pointer1, thumb0]:
-#     tree.setJointState(i, np.pi/2)
-# tree.show(showJointPoses=False)
+# Pinch grasp
+tree.setJointState(middle0, 0)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle2, pointer2, thumb1]:
+    tree.setJointState(i, 0)
+for i in [middle1, pointer1, thumb0]:
+    tree.setJointState(i, np.pi/2)
+tree.show(showJointPoses=False)
 
 
-plotPrintedTree(origamiToPrinted(tree, 0.05), "origamiToPrintedTest")
+#plotPrintedTree(origamiToPrinted(tree, 0.05), "origamiToPrintedTest")

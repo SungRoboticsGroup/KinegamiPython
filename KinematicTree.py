@@ -274,7 +274,7 @@ class KinematicTree(Generic[J]):
             branch_scad = "scad/poses/branch_pose.scad"
         with open(branch_scad, "r") as file:
             lines = file.readlines()
-        truncated = lines[7:218] #first 7 are parameter definitions, first 218 lines are function definitions
+        truncated = lines[7:239] #first 7 are parameter definitions, first 239 lines are function definitions
 
         linkEndpoints = [self.Joints[childIndex] for childIndex in self.Children[parentIndex]]
         new_lines = ["branch([\n"]

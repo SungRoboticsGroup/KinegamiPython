@@ -147,9 +147,9 @@ module joint_top() {
                 {
                     
                     //attach points
-                    axle_attach_thickness = inner_radius + thickness/2 - bottom_joint_attach_radius - tolerance;
+                    axle_attach_thickness = outer_radius - thickness/2 - bottom_joint_attach_radius - tolerance ;
                     
-                    attach_distance = outer_radius - axle_attach_thickness/2 - thickness/2;
+                    attach_distance = bottom_joint_attach_radius + axle_attach_thickness/2 + tolerance;
 
                     translate([attach_distance, 0, 0]) {
                         translate([0,0,-top_attach_height/2 + axle_radius + axle_offset])

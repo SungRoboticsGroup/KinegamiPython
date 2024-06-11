@@ -37,7 +37,7 @@ class PrintParameters:
     def default(r: float, screwRadius : float):
         thickness = r * 0.2
         gridHoleMargin = screwRadius*2.5
-        return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.01, r, screwRadius, thickness, screwRadius)
+        return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.075, r, screwRadius, thickness, screwRadius)
 
 class PrintedJoint(Joint):
     def __init__(self, r : float, neutralLength : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
@@ -94,7 +94,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
                 f"top_rotation_height={np.round(self.topLength, 4)};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
                 f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",
                 f"max_turn={np.round(np.rad2deg(self.maxBendingAngle), 4)};\n", f"min_turn={np.round(np.rad2deg(self.minBendingAngle), 4)};\n",
-                f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
+                f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};\n"]
 
         with open("scad/orthogonal_revolute.scad", "r") as file:
             lines = file.readlines()
@@ -117,7 +117,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
                 f"top_rotation_height={np.round(self.topLength, 4)};\n", f"next_hole_radius={self.printParameters.nextScrewRadius};\n",
                 f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",
                 f"max_turn={np.round(np.rad2deg(self.maxBendingAngle), 4)};\n", f"min_turn={np.round(np.rad2deg(self.minBendingAngle), 4)};\n",
-                f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
+                f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};\n"]
         defs2 = defs.copy()
 
         for parameter in defs:
@@ -258,7 +258,7 @@ class PrintedPrismaticJoint(PrintedJoint):
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
                 f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
-                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};"]
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};"]
 
         with open("scad/prismatic.scad", "r") as file:
             lines = file.readlines()
@@ -279,7 +279,7 @@ class PrintedPrismaticJoint(PrintedJoint):
                 f"thickness={self.printParameters.thickness};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"compressed_height={np.round(self.minLength, 4)};\n", f"extended_height={np.round(self.maxLength, 4)};\n",
                 f"next_hole_radius={self.printParameters.nextScrewRadius};\n", f"next_hole_attach_height={self.printParameters.nextHoleMargin};\n", 
-                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};"]
+                f"next_inner={self.printParameters.nextR - self.printParameters.nextThickness};\n",f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};"]
         defs2 = defs.copy()
 
         for parameter in defs:
@@ -374,7 +374,7 @@ class PrintedTip(PrintedJoint):
 
         defs = [f"eps={self.printParameters.tolerance/100};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"hole_radius={self.screwRadius};\n",f"outer_radius={self.r};\n",
-                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle), 4)};\n"]
+                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};\n"]
 
         with open("scad/tip.scad", "r") as file:
             lines = file.readlines()
@@ -393,7 +393,7 @@ class PrintedTip(PrintedJoint):
 
         defs = [f"eps={self.printParameters.tolerance/100};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
                 f"hole_radius={self.screwRadius};\n",f"outer_radius={self.r};\n",
-                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle))};\n"]
+                f"thickness={self.printParameters.thickness};\n", f"hole_twist={np.round(np.rad2deg(self.twistAngle) % 90, 4)};\n"]
         
         for parameter in defs:
             name += parameter[parameter.index("=") + 1:-2] + "_"
