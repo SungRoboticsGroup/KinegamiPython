@@ -173,9 +173,9 @@ class Joint(ABC):
         distance = np.linalg.norm(direction)
         direction = direction / distance
 
-        point1 = point2 - direction * distance * 10
+        point1 = point2 - direction * distance * 2
         
-        extended_length = 20 * distance
+        extended_length = 4 * distance
         num_points = int(extended_length / gap) + 1
         start_point = point1 - direction * distance
 
@@ -242,7 +242,8 @@ class Joint(ABC):
 
         for line in extended_line_points:
             md = gl.MeshData.sphere(rows=4, cols=4)
-            sphere = gl.GLMeshItem(meshdata=md, color=[0,0,0,1], shader='shaded', smooth=True)
+            sphere = LineSphere(meshdata=md, color=[0,0,0,0], shader='shaded', smooth=True, position=line)
+            sphere.setObjectName("line_sphere")
             sphere.setGLOptions('translucent')
             sphere.scale(0.02, 0.02, 0.02)
             sphere.translate(line[0], line[1], line[2])

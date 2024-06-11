@@ -660,12 +660,12 @@ class CreateNewChainDialog(QDialog):
 class ClickableGLViewWidget(gl.GLViewWidget):
     def __init__(self, parent=None):
         super(ClickableGLViewWidget, self).__init__(parent)
-        fmt = QSurfaceFormat()
-        fmt.setDepthBufferSize(24)
-        fmt.setVersion(3, 3)
-        fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
-        QSurfaceFormat.setDefaultFormat(fmt)
-        self.setFormat(fmt)
+        # fmt = QSurfaceFormat()
+        # fmt.setDepthBufferSize(24)
+        # fmt.setVersion(3, 3)
+        # fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
+        # QSurfaceFormat.setDefaultFormat(fmt)
+        # self.setFormat(fmt)
         self.locked = False
         self.mesh = None 
         self.is_dragging = False
@@ -681,6 +681,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     lock_status_changed = pyqtSignal(bool)
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
+    drag_change_position = qc.pyqtSignal(np.ndarray)
 
     selected_index = -1
 
@@ -723,8 +724,21 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.is_dragging = True
 
         if (self.selected_arrow):
-            print("dragging arrow " + str(self.selected_arrow.id))
-            # do something
+            lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            dpr = self.devicePixelRatioF()
+            region = tuple([x * dpr for x in region])
+
+            selected_point = None
+
+            for item in self.itemsAt(region):
+                if (item.objectName() == "line_sphere"):
+                    selected_point = item
+                    break
+
+            if (selected_point):
+                self.drag_change_position.emit(selected_point.position)
+
         else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
             if not hasattr(self, 'mousePos'):
@@ -875,6 +889,7 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
+        self.plot_widget.drag_change_position.connect(self.drag_transform)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1069,6 +1084,15 @@ class PointEditorWindow(QMainWindow):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
+
+    @QtCore.pyqtSlot(np.ndarray)
+    def drag_transform(self, new_position):
+        old_position = self.chain.Joints[self.selected_joint].Pose.t
+        trans = new_position - old_position
+        transformation = SE3.Trans(trans[0], trans[1], trans[2])
+
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=True, relative=False):
+            self.update_joint()
 
     def update_rotation_slider(self):
         self.rotationSlider.setMinimum(-360)
