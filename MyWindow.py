@@ -660,12 +660,12 @@ class CreateNewChainDialog(QDialog):
 class ClickableGLViewWidget(gl.GLViewWidget):
     def __init__(self, parent=None):
         super(ClickableGLViewWidget, self).__init__(parent)
-        # fmt = QSurfaceFormat()
-        # fmt.setDepthBufferSize(24)
+        fmt = QSurfaceFormat()
+        fmt.setDepthBufferSize(24)
         # fmt.setVersion(3, 3)
-        # fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
-        # QSurfaceFormat.setDefaultFormat(fmt)
-        # self.setFormat(fmt)
+        fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
+        QSurfaceFormat.setDefaultFormat(fmt)
+        self.setFormat(fmt)
         self.locked = False
         self.mesh = None 
         self.is_dragging = False
