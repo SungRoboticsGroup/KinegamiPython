@@ -684,6 +684,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
     selected_index = -1
 
+    selected_arrow = None
+
     def toggle_lock(self):
         self.locked = not self.locked
         self.lock_status_changed.emit(self.locked)
@@ -694,25 +696,51 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.is_dragging = False
             self.drag_start_pos = event.pos()
 
+            lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            # itemsAt seems to take in device pixels
+            dpr = self.devicePixelRatioF()
+            region = tuple([x * dpr for x in region])
+
+            joints = []
+            arrows = []
+
+            for item in self.itemsAt(region):
+                if (item.objectName() == "Arrow"):
+                    arrows.append(item)
+
+                if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
+                    joints.append(item)
+
+            if (len(arrows) > 0):
+                self.selected_arrow = arrows[0]
+                self.click_signal_arrow.emit(self.selected_arrow.id)
+            else: 
+                self.selected_arrow = None
+
     def mouseMoveEvent(self, event):
         if (event.buttons() and (Qt.LeftButton or Qt.MiddleButton)) and (event.pos() - self.drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
             self.is_dragging = True
-        lpos = event.position() if hasattr(event, 'position') else event.localPos()
-        if not hasattr(self, 'mousePos'):
-            self.mousePos = lpos
-        diff = lpos - self.mousePos
-        self.mousePos = lpos
 
-        if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
-            self.pan(diff.x(), diff.y(), 0, relative='view')
-        elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
-            self.orbit(-diff.x(), diff.y())
+        if (self.selected_arrow):
+            print("dragging arrow " + str(self.selected_arrow.id))
+            # do something
+        else:
+            lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            if not hasattr(self, 'mousePos'):
+                self.mousePos = lpos
+            diff = lpos - self.mousePos
+            self.mousePos = lpos
+
+            if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
+                self.pan(diff.x(), diff.y(), 0, relative='view')
+            elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
+                self.orbit(-diff.x(), diff.y())
 
     def mouseReleaseEvent(self, event):
         if not self.is_dragging:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
             region = [lpos.x()-5, lpos.y()-5, 10, 10]
-            # itemsAt seems to take in device pixels
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
@@ -738,28 +766,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             
             self.click_signal.emit(self.selectedIndex)
             self.click_signal_arrow.emit(arrowIndex)
-
-    def anotherItemsAt(self, region=None):
-        """
-        Going to use this to try to do raycasting       
-        """
-        region = (region[0], self.deviceHeight()-(region[1]+region[3]), region[2], region[3])
-        
-        #buf = np.zeros(100000, dtype=np.uint)
-        buf = glSelectBuffer(100000)
-        try:
-            glRenderMode(GL_SELECT)
-            glInitNames()
-            glPushName(0)
-            self._itemNames = {}
-            self.paintGL(region=region, useItemNames=True)
-            
-        finally:
-            hits = glRenderMode(GL_RENDER)
-            
-        items = [(h.near, h.names[0]) for h in hits]
-        items.sort(key=lambda i: i[0])
-        return [self._itemNames[i[1]] for i in items]
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -901,7 +907,7 @@ class PointEditorWindow(QMainWindow):
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
         self.axis_key_widget.setLayout(axis_key_layout)
-
+ 
         self.x_axis_widget = self.create_axis_label('x', Qt.red)
         self.y_axis_widget = self.create_axis_label('y', Qt.green)
         self.z_axis_widget = self.create_axis_label('z', Qt.blue)
@@ -973,14 +979,14 @@ class PointEditorWindow(QMainWindow):
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
         self.rotationInput.setPlaceholderText("Enter angle in degrees")
-        rotationLayout.addWidget(self.rotationLabel)
+        mainLayout.addWidget(self.rotationLabel)
         rotationLayout.addWidget(self.rotationSlider)
         rotationLayout.addWidget(self.rotationInput)  
 
         translationLayout = QHBoxLayout()
         self.translationInput = QLineEdit(self)
         self.translationInput.setPlaceholderText("Enter distance")
-        translationLayout.addWidget(self.translate_label)
+        mainLayout.addWidget(self.translate_label)
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
