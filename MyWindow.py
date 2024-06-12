@@ -1437,7 +1437,13 @@ class PointEditorWindow(QMainWindow):
 
             if (self.chain == None) :
                 self.chain = KinematicChain(joint)
-            else :
+            elif joint.id != 0 :
+                if self.selected_joint > -1:
+                    self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
+                else:
+                    error_dialog = ErrorDialog('Please select a parent joint.')
+                    error_dialog.exec_()
+            else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             
             self.update_plot()
