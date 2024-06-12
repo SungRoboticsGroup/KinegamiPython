@@ -725,7 +725,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         if (self.selected_arrow):
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-5, lpos.y()-5, 10, 10]
+            region = [lpos.x()-10, lpos.y()-10, 20, 20]
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
@@ -863,12 +863,12 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
         self.plot_widget.setBackgroundColor(255,255,255, 255)
 
-        self.toggleButton = QPushButton('Toggle Lock', self)
-        self.toggleButton.setGeometry(20, 20, 140, 40)
-        self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
-        self.toggleButton.setStyleSheet('background-color: red; color: white;')
+        # self.toggleButton = QPushButton('Toggle Lock', self)
+        # self.toggleButton.setGeometry(20, 20, 140, 40)
+        # self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
+        # self.toggleButton.setStyleSheet('background-color: red; color: white;')
 
-        self.plot_widget.lock_status_changed.connect(self.updateToggleButtonStyle)
+        # self.plot_widget.lock_status_changed.connect(self.updateToggleButtonStyle)
 
         grid = gl.GLGridItem()
 
@@ -882,7 +882,10 @@ class PointEditorWindow(QMainWindow):
         self.numSides = 4
         self.r = 1
         self.plot_widget.radius = 1
+
         self.crease_pattern = None
+        self.control_type = None
+
         self.selected_joint = -1
         self.selected_arrow = -1
         self.selected_axis_name = 'N/A'
@@ -1048,6 +1051,33 @@ class PointEditorWindow(QMainWindow):
         # crease_dock.setWidget(crease_button_widget)
         # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
+        # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
+
+        self.controls_dock = QDockWidget("Control options", self)
+        self.controls_options_widget = QWidget()
+        self.controls_layout = QVBoxLayout()
+
+        self.control1 = QRadioButton("Translate")
+        self.control2 = QRadioButton("Rotate")
+
+        self.control1.toggled.connect(self.change_control_type)
+        self.control2.toggled.connect(self.change_control_type)
+    
+        self.controls_layout.addWidget(self.control1)
+        self.controls_layout.addWidget(self.control2)
+        
+        self.controls_options_widget.setLayout(self.controls_layout)
+        self.controls_dock.setWidget(self.controls_options_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
+
+    def change_control_type(self):
+        if self.control1.isChecked():
+            self.control_type = "Translate"
+        elif self.control2.isChecked():
+            self.control_type = "Rotate"
+
+        self.update_joint()
+
     def save_crease_pattern(self):
         crease_pattern_name = self.crease_pattern_name_input.text()
         if self.crease_pattern == None:
@@ -1150,11 +1180,11 @@ class PointEditorWindow(QMainWindow):
         euler_angles = rot.as_euler('xyz', degrees=True)
         return euler_angles[axis]
 
-    def updateToggleButtonStyle(self, locked):
-        if locked:
-            self.toggleButton.setStyleSheet('background-color: green; color: white;')
-        else:
-            self.toggleButton.setStyleSheet('background-color: red; color: white;')
+    # def updateToggleButtonStyle(self, locked):
+    #     if locked:
+    #         self.toggleButton.setStyleSheet('background-color: green; color: white;')
+    #     else:
+    #         self.toggleButton.setStyleSheet('background-color: red; color: white;')
 
     def add_chain(self, chain):
         self.chain = chain
@@ -1346,9 +1376,10 @@ class PointEditorWindow(QMainWindow):
 
         self.select_joint_options.blockSignals(False)
 
-        for joint in self.chain.Joints:
-            if (joint.id == self.selected_joint):
-                joint.addArrows(self, selectedArrow=self.selected_arrow)
+        if (self.control_type == "Translate"):
+            for joint in self.chain.Joints:
+                if (joint.id == self.selected_joint):
+                    joint.addArrows(self, selectedArrow=self.selected_arrow)
 
         if self.selected_arrow != -1:
             self.rotationSlider.setDisabled(False)
