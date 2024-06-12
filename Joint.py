@@ -270,29 +270,20 @@ class Joint(ABC):
         point1 = self.Pose.t
         extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
 
-        if selectedArrow != -1:
-            points = self.generate_circle_points(point1, axes[selectedArrow], rad, 20, is_full=True)
-            line = LineItemWithID(pos=points, color=extended_circle_color[selectedArrow], width=5, antialias=True, id=selectedArrow)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
-
         R = self.Pose.R
-        theta = None
-        if (selectedArrow == 0):
-            theta = np.arctan2(R[2, 1], R[2, 2])
-        elif (selectedArrow == 1):
-            theta = np.arctan2(R[0, 2], R[2, 2])
-        elif (selectedArrow == 2):
-            theta = np.arctan2(R[1, 0], R[0, 0])
+        theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[2, 2]), np.arctan2(R[1, 0], R[0, 0])]
+
+        for i, axis in enumerate(axes):    
+            points = self.generate_circle_points(point1, axes[i], rad, 20, is_full=True)
+            line = LineItemWithID(pos=points, color=extended_circle_color[i], width=5, antialias=True, id=selectedArrow)
+            line.setObjectName("arrow_guide")
+            widget.plot_widget.addItem(line)
 
         for i, axis in enumerate(axes):
-            if (selectedArrow == i):
-                points = self.generate_circle_points(point1, axis, rad, 20, is_full=False, rotation=theta)
-            else: 
-                points = self.generate_circle_points(point1, axis, rad, 20, is_full=False)
-            line = LineItemWithID(pos=points, color=colors[i], width=10, antialias=True, id=i)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
+            points2 = self.generate_circle_points(point1, axis, rad, 20, is_full=False, rotation=theta[i])
+            line2 = LineItemWithID(pos=points2, color=colors[i], width=10, antialias=True, id=i)
+            line2.setObjectName("Arrow")
+            widget.plot_widget.addItem(line2)
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
