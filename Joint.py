@@ -184,8 +184,6 @@ class Joint(ABC):
         return np.array(points)
 
     def generate_extended_axis(self, point1, point2, length):
-        # do stuff
-
         direction_vector = point2 - point1
     
         midpoint = (point1 + point2) / 2
@@ -194,67 +192,107 @@ class Joint(ABC):
         p2 = midpoint + direction_vector * length
 
         return np.array([p1, p2])
+    
+    def generate_circle_points(self, center, axis, r=1.0, num_points=20, is_full=False, rotation=0.0):
+        axis = axis / np.linalg.norm(axis)
 
-    def addArrows(self, widget, selectedArrow=-1):
-        rad = self.boundingBall().r
-
-        colors = [(1,0,0,1), (0,1,0,1), (0,0,1,1)]
-        if (selectedArrow != -1):
-            colors[selectedArrow] = (1,1,1,1)
-
-        xhat = self.Pose.R[:, 0] 
-        yhat = self.Pose.R[:, 1] 
-        zhat = self.Pose.R[:, 2] 
-
-        point1 = self.Pose.t
-        point2 = []
-        gap = 0.1
-        length = 20
-        extended_line_points = []
-        extended_axis = []
-        extended_axis_color = ()
-
-        if (selectedArrow == 0):
-            point2 = self.Pose.t + rad * self.r * xhat
-            extended_axis_color = (1,0,0,0.2)
-        elif (selectedArrow == 1):
-            point2 = self.Pose.t + rad * self.r * yhat
-            extended_axis_color = (0,1,0,0.2)
-        elif (selectedArrow == 2):
-            point2 = self.Pose.t + rad * self.r * zhat
-            extended_axis_color = (0,0,1,0.2)
+        if np.allclose(axis, [1, 0, 0]):
+            ortho_vector = np.array([0, 1, 0])
         else:
-            point2 = []
+            ortho_vector = np.array([1, 0, 0])
 
-        if (len(point2) > 0):
-            extended_line_points = self.generate_extended_line_points(point1, point2, gap)
-            extended_axis = self.generate_extended_axis(point1, point2, length)
-            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color, width=5, antialias=True) 
+        u = np.cross(axis, ortho_vector)
+        u = u / np.linalg.norm(u)
+        v = np.cross(axis, u)
+
+        rotation_matrix = np.array([
+            [np.cos(rotation), -np.sin(rotation)],
+            [np.sin(rotation), np.cos(rotation)]
+        ])
+
+        angles = np.linspace(0, 2 * np.pi, num_points)
+
+        if (not is_full):
+            first5 = angles[:5]
+            last5 = angles[-5:]
+            angles = np.concatenate((last5, first5))
+
+        circle_points = []
+        for angle in angles:
+            point_on_circle = r * np.array([np.cos(angle), np.sin(angle)])
+            rotated_point = rotation_matrix @ point_on_circle
+            circle_point = center + rotated_point[0] * u + rotated_point[1] * v
+            circle_points.append(circle_point)
+
+        return np.array(circle_points)
+
+    def addTranslateArrows(self, widget, selectedArrow=-1):
+        rad = self.boundingBall().r
+        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
+
+        if selectedArrow != -1:
+            colors[selectedArrow] = (1, 1, 1, 1)
+
+        axes = [self.Pose.R[:, i] for i in range(3)]
+        extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
+        point1 = self.Pose.t
+
+        if selectedArrow != -1:
+            point2 = point1 + rad * self.r * axes[selectedArrow]
+            extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
+            extended_axis = self.generate_extended_axis(point1, point2, 20)
+            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
             widget.plot_widget.addItem(extended_axis_line)
 
-        for line in extended_line_points:
-            md = gl.MeshData.sphere(rows=4, cols=4)
-            sphere = LineSphere(meshdata=md, color=[0,0,0,0], shader='shaded', smooth=True, position=line)
-            sphere.setObjectName("line_sphere")
-            sphere.setGLOptions('translucent')
-            sphere.scale(0.02, 0.02, 0.02)
-            sphere.translate(line[0], line[1], line[2])
-            widget.plot_widget.addItem(sphere)
-        
-        posX = np.array([self.Pose.t, self.Pose.t + rad * self.r * xhat])
-        lineX = LineItemWithID(pos=posX, color=colors[0], width=10, antialias=True, id = 0)
-        lineX.setObjectName("Arrow")
-        widget.plot_widget.addItem(lineX)
+            for line in extended_line_points:
+                md = gl.MeshData.sphere(rows=4, cols=4)
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
+                sphere.setObjectName("line_sphere")
+                sphere.setGLOptions('translucent')
+                sphere.scale(0.02, 0.02, 0.02)
+                sphere.translate(*line)
+                widget.plot_widget.addItem(sphere)
 
-        posY = np.array([self.Pose.t, self.Pose.t + rad * self.r * yhat])
-        lineY = LineItemWithID(pos=posY, color=colors[1], width=10, antialias=True, id = 1)
-        lineY.setObjectName("Arrow")
-        widget.plot_widget.addItem(lineY)
+        for i, axis in enumerate(axes):
+            pos = np.array([point1, point1 + rad * self.r * axis])
+            line = LineItemWithID(pos=pos, color=colors[i], width=10, antialias=True, id=i)
+            line.setObjectName("Arrow")
+            widget.plot_widget.addItem(line)
+    
+    def addRotateArrows(self, widget, selectedArrow=-1):
+        rad = self.boundingBall().r
+        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
 
-        posZ = np.array([self.Pose.t, self.Pose.t + rad * self.r * zhat])
-        lineZ = LineItemWithID(pos=posZ, color=colors[2], width=20, antialias=True, id = 2)
-        lineZ.setObjectName("Arrow")
-        widget.plot_widget.addItem(lineZ)
+        if selectedArrow != -1:
+            colors[selectedArrow] = (1, 1, 1, 1)
+
+        axes = [self.Pose.R[:, i] for i in range(3)]
+        point1 = self.Pose.t
+        extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
+
+        if selectedArrow != -1:
+            points = self.generate_circle_points(point1, axes[selectedArrow], rad, 20, is_full=True)
+            line = LineItemWithID(pos=points, color=extended_circle_color[selectedArrow], width=5, antialias=True, id=selectedArrow)
+            line.setObjectName("Arrow")
+            widget.plot_widget.addItem(line)
+
+        R = self.Pose.R
+        theta = None
+        if (selectedArrow == 0):
+            theta = np.arctan2(R[2, 1], R[2, 2])
+        elif (selectedArrow == 1):
+            theta = np.arctan2(R[0, 2], R[2, 2])
+        elif (selectedArrow == 2):
+            theta = np.arctan2(R[1, 0], R[0, 0])
+
+        for i, axis in enumerate(axes):
+            if (selectedArrow == i):
+                points = self.generate_circle_points(point1, axis, rad, 20, is_full=False, rotation=theta)
+            else: 
+                points = self.generate_circle_points(point1, axis, rad, 20, is_full=False)
+            line = LineItemWithID(pos=points, color=colors[i], width=10, antialias=True, id=i)
+            line.setObjectName("Arrow")
+            widget.plot_widget.addItem(line)
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
