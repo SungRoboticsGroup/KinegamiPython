@@ -979,7 +979,7 @@ class PointEditorWindow(QMainWindow):
         slider_joints_widget = QWidget() 
         mainLayout = QVBoxLayout(slider_joints_widget)  
 
-        self.rotationLabel = QLabel("Rotation Angle: 0°")
+        self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
         self.rotationSlider = QSlider(Qt.Horizontal)
         self.rotationSlider.setMinimum(-360)
         self.rotationSlider.setMaximum(360)
@@ -1267,11 +1267,11 @@ class PointEditorWindow(QMainWindow):
                     error_dialog.exec_()
 
     def adjust_rotation(self, value):
-        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
         if not isinstance(value, int):
             value = value.strip()
-        value = int(value) if value else 0
+        value = int(value) if len(str(value)) > 0 else 0
         angle_radians = math.radians(value - self.oldRotVal)
+        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
                 transformation = SE3.Rx(angle_radians)
