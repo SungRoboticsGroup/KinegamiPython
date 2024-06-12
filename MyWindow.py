@@ -884,7 +884,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.radius = 1
 
         self.crease_pattern = None
-        self.control_type = None
+        self.control_type = "Rotate"
 
         self.selected_joint = -1
         self.selected_arrow = -1
@@ -1374,12 +1374,16 @@ class PointEditorWindow(QMainWindow):
         if self.chain is not None:
             self.chain.addToWidget(self, selectedJoint=self.selected_joint)
 
-        self.select_joint_options.blockSignals(False)
+            self.select_joint_options.blockSignals(False)
 
-        if (self.control_type == "Translate"):
-            for joint in self.chain.Joints:
-                if (joint.id == self.selected_joint):
-                    joint.addArrows(self, selectedArrow=self.selected_arrow)
+            if (self.control_type == "Translate"):
+                for joint in self.chain.Joints:
+                    if (joint.id == self.selected_joint):
+                        joint.addTranslateArrows(self, selectedArrow=self.selected_arrow)
+            elif (self.control_type == "Rotate"):
+                for joint in self.chain.Joints:
+                    if (joint.id == self.selected_joint):
+                        joint.addRotateArrows(self, selectedArrow=self.selected_arrow)
 
         if self.selected_arrow != -1:
             self.rotationSlider.setDisabled(False)

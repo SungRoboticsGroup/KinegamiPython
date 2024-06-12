@@ -154,7 +154,7 @@ class KinematicTree:
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                   showJointSurface=True, jointColor=jointColorDefault,
-                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+                  jointAxisScale=jointAxisScaleDefault, showJointPoses=False,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
