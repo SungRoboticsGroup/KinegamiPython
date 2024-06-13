@@ -156,4 +156,4 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         R = SO3(np.array([x,y,z]).T)
         KT.transformAll(SE3.Rt(R, np.zeros(3)))
 
-    return KT.optimize()
+    return KT

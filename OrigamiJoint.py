@@ -106,6 +106,10 @@ class RevoluteJoint(OrigamiJoint):
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedOrthogonalRevoluteJoint
         return PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
+
+    def collisionCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
+                CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
     
 class ExtendedRevoluteJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
@@ -322,6 +326,9 @@ class PrismaticJoint(OrigamiJoint):
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedPrismaticJoint
         return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
+    
+    def collisionCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
         
     
 class Waypoint(OrigamiJoint):

@@ -43,5 +43,6 @@ middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, exten
         
 tree = makeTubularKinematicTree(spec, plotSteps=False)
 
+print(tree.detectCollisions(plot=False))
 tree.show(jointAxisScale=100, showJointPoses=False, showCollisionBoxes=False)
 
