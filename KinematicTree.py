@@ -300,7 +300,7 @@ class KinematicTree(Generic[J]):
             link = self.Links[i]
             for j in range(0,len(self.Links)):
                 link2 = self.Links[j]
-                if link2 != link and link.StartDubinsPose != link2.StartDubinsPose and link.EndDubinsPose != link2.StartDubinsPose and link2.EndDubinsPose != link.StartDubinsPose:
+                if link2 != link and link.StartDubinsPose != link2.StartDubinsPose and link.EndDubinsPose != link2.StartDubinsPose and link2.EndDubinsPose != link.StartDubinsPose and self.Joints[i].DistalDubinsFrame() != link2.StartDubinsPose and self.Joints[j].DistalDubinsFrame() != link.StartDubinsPose:
                     linksCollided = False
                     idx1 = 0
                     for capsule1 in link.collisionCapsules():
