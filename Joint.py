@@ -110,6 +110,15 @@ class Joint(ABC):
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
     
+    def translateAlongX(self, xChange : float):
+        self.Pose = self.Pose @ SE3.Trans([xChange,0,0])
+
+    def translateAlongY(self, yChange : float):
+        self.Pose = self.Pose @ SE3.Trans([0,yChange,0])
+
+    def rotateAboutZ(self, angleToRotateAboutZ):
+        self.applyTransformationToPose(SE3.Rz(angleToRotateAboutZ))
+
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
         zhat = self.Pose.R[:,2]

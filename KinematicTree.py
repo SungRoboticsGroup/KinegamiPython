@@ -195,7 +195,7 @@ class KinematicTree(Generic[J]):
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, showCollisionBoxes=False, showSpecificCapsules = ([],[]), plotPoint=None):
         xyzHandles = []
         abcHandles = []
         
@@ -213,7 +213,11 @@ class KinematicTree(Generic[J]):
                                     showPoses=showJointPoses)
             if not handles is None:
                 xyzHandles.append(handles)
-        
+
+            if showCollisionBoxes:
+                for capsule in joint.collisionCapsules():
+                    capsule.addToPlot(ax)
+
         for link in self.Links:
             handles = link.addToPlot(ax, color=linkColor, 
                                    alpha=surfaceOpacity, 
@@ -225,13 +229,84 @@ class KinematicTree(Generic[J]):
             if showLinkPoses:
                 for elbowHandles in handles:
                     abcHandles.append(elbowHandles)
+            
+            if showCollisionBoxes:
+                for capsule in link.collisionCapsules():
+                    capsule.addToPlot(ax)
+        
+        for index in showSpecificCapsules[0]:
+            for capsule in self.Joints[index].collisionCapsules():
+                capsule.addToPlot(ax)
+        for index in showSpecificCapsules[1]:
+            for capsule in self.Links[index].collisionCapsules():
+                capsule.addToPlot(ax)
         
         if showSpheres:
             self.boundingBall.addToPlot(ax, color=sphereColor, 
                                         alpha=0.05, frame=True)
         
+        if not plotPoint is None:
+            ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
-        
+    
+    def detectCollisions(self, plot=False):
+        numCollisions = 0
+        EPSILON = 0.001
+        plot = True
+        #joint to joint collision:
+        for i in range(0, len(self.Joints)):
+            joint = self.Joints[i]
+            for j in range(0, len(self.Joints)):
+                joint2 = self.Joints[j]
+                if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame():
+                    jointsCollided = False
+                    for capsule1 in joint.collisionCapsules():
+                        if not jointsCollided:
+                            for capsule2 in joint2.collisionCapsules():
+                                didCollide, collisionPoint = capsule2.collidesWith(capsule1)
+                                if didCollide:
+                                    if plot:
+                                        self.show(showSpecificCapsules=([i,j],[]), showCollisionBoxes=False, plotPoint=collisionPoint)
+                                    numCollisions += 1
+                                    jointsCollided = True
+                                    break
+
+        #joint to link collision
+        for i in range(0,len(self.Joints)):
+            joint = self.Joints[i]
+            for j in range(0,len(self.Links)):
+                link = self.Links[j]
+                if link.StartDubinsPose != joint.DistalDubinsFrame() and link.EndDubinsPose != joint.ProximalDubinsFrame():
+                    collided = False
+                    for capsule1 in joint.collisionCapsules():
+                        if not collided:
+                            for capsule2 in link.collisionCapsules():
+                                didCollide, collisionPoint = capsule2.collidesWith(capsule1)
+                                if didCollide:
+                                    if plot:
+                                        self.show(showSpecificCapsules=([i], [j]), showCollisionBoxes = False, plotPoint = collisionPoint)
+                                    numCollisions += 1
+                                    collided = True
+                                    break
+
+        #link to link collision
+        for i in range(0, len(self.Links)):
+            link = self.Links[i]
+            for j in range(0,len(self.Links)):
+                link2 = self.Links[j]
+                if link2 != link and link.StartDubinsPose != link2.StartDubinsPose:
+                    linksCollided = False
+                    for capsule1 in link.collisionCapsules():
+                        if not linksCollided:
+                            for capsule2 in link2.collisionCapsules():
+                                didCollide, collisionPoint = capsule2.collidesWith(capsule1)
+                                if didCollide:
+                                    if plot:
+                                        self.show(showSpecificCapsules=([], [i, j]), showCollisionBoxes = False, plotPoint = collisionPoint)
+                                    numCollisions += 1
+                                    linksCollided = True
+                                    break
+        return numCollisions
     
     def branchingParametersFrom(self, parentIndex : int):
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
@@ -351,7 +426,7 @@ class KinematicTree(Generic[J]):
              showSpheres=False, block=blockDefault, showAxisGrids=False, 
              showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault,
              showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault,
-             groundPlaneColor=groundPlaneColorDefault):
+             groundPlaneColor=groundPlaneColorDefault, showCollisionBoxes=False, showSpecificCapsules=([],[]), plotPoint = None):
         ax = plt.figure().add_subplot(projection='3d')
         if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
             xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
@@ -368,7 +443,7 @@ class KinematicTree(Generic[J]):
                                     linkColor, surfaceOpacity, showLinkSurface, 
                                     showLinkPoses, showLinkPath, pathColor,
                                     showPathCircles, sphereColor,
-                                    showSpheres, showGlobalFrame, globalAxisScale)
+                                    showSpheres, showGlobalFrame, globalAxisScale, showCollisionBoxes=showCollisionBoxes, showSpecificCapsules=showSpecificCapsules, plotPoint=plotPoint)
         
         handleGroups = []
         labels = []
@@ -392,7 +467,6 @@ class KinematicTree(Generic[J]):
         if not showAxisGrids:
             plt.axis('off')
         plt.show(block=block)
-    
 
     def transformAll(self, Transformation : SE3):
         self.transformJoint(0, Transformation, safe=False)
@@ -531,13 +605,107 @@ class KinematicTree(Generic[J]):
         return True
 
 
+    # genetic algorithm
+    def optimize(self, iterations=15):
+        def select_mating_pool(pop, fitness, num_parents):
+            parents = np.empty((num_parents, pop.shape[1]))
+
+            for parent_num in range(num_parents):
+
+                max_fitness_idx = np.where(fitness == np.max(fitness))
+
+                max_fitness_idx = max_fitness_idx[0][0]
+
+                parents[parent_num, :] = pop[max_fitness_idx, :]
+
+                fitness[max_fitness_idx] = -99999999999
+
+            return parents
+        def crossover(parents, offspring_size):
+            offspring = np.empty(offspring_size)
+            # The point at which crossover takes place between two parents. Usually, it is at the center.
+            crossover_point = np.uint8(offspring_size[1]/2)
+        
+            for k in range(offspring_size[0]):
+                # Index of the first parent to mate.
+                parent1_idx = k%parents.shape[0]
+                # Index of the second parent to mate.
+                parent2_idx = (k+1)%parents.shape[0]
+                # The new offspring will have its first half of its genes taken from the first parent.
+                offspring[k, 0:crossover_point] = parents[parent1_idx, 0:crossover_point]
+                # The new offspring will have its second half of its genes taken from the second parent.
+                offspring[k, crossover_point:] = parents[parent2_idx, crossover_point:]
+            return offspring
+        def mutation(offspring_crossover, mutation_rate=0.2, mutation_range_factor=50):
+            for idx in range(offspring_crossover.shape[0]):
+                for gene_idx in range(offspring_crossover.shape[1]):
+                    if np.random.rand() < mutation_rate:
+                        random_value = np.random.uniform(-self.r * mutation_range_factor, self.r * mutation_range_factor)
+                        offspring_crossover[idx, gene_idx] += random_value
+            
+            return offspring_crossover
+
+        dim = len(self.Joints)*2
+
+        solutionsPerPopulation = 15
+        newPopulation = np.random.uniform(low = -self.r*25, high = self.r*25, size=(solutionsPerPopulation,dim))
+
+        bestFitness = -calculateTreeLoss(self, np.zeros(dim))[0]
+        print(f"INITIAL: {bestFitness}")
+        bestTree = self
+        for i in range(iterations):
+            fitness = np.array([-calculateTreeLoss(self, params)[0] for params in newPopulation])
+
+            parents = select_mating_pool(newPopulation, fitness, 6) #num parents mating
+
+            offspringCrossover = crossover(parents, offspring_size=(solutionsPerPopulation - parents.shape[0], dim))
+
+            offspringMutation = mutation(offspringCrossover)
+
+            newPopulation[0:parents.shape[0], :] = parents
+            newPopulation[parents.shape[0]:, :] = offspringMutation
+
+            if np.max(fitness) > bestFitness:
+                bestFitness = np.max(fitness)
+                best_match_idx = np.where(fitness == np.max(fitness))
+                bestTree = calculateTreeLoss(self, newPopulation[best_match_idx][0])[1]
+            
+            print(f"Best result {i}: {np.max(fitness)}")
+        
+        return bestTree
+
+def calculateTreeLoss(initialTree, params):
+    tree2 = copy.deepcopy(initialTree)
+    for i in range(0, len(tree2.Joints)):
+        tree2.Joints[i].translateAlongZ(params[i])
+    for i in range(len(tree2.Joints), len(params)):
+        tree2.Joints[i - len(tree2.Joints)].rotateAboutZ(params[i])
+    
+    tree = KinematicTree[OrigamiJoint](tree2.Joints[0], tree2.maxAnglePerElbow)
+    try:
+        for i in range(1, len(tree2.Joints)):
+            tree.addJoint(tree2.Parents[i], tree2.Joints[i], relative=False, safe=False, fixedPosition=True, fixedOrientation=True)
+    except Exception as e:
+        return 100000, None
+
+    #calculate total path length
+    totalLength = 0
+    for link in tree.Links:
+        totalLength += link.path.length
+
+    jointDistance = 0
+    for i in range(1,len(tree.Joints)):
+        jointDistance += np.linalg.norm(tree.Joints[i].ProximalDubinsFrame().t - tree.Joints[tree.Parents[i]].DistalDubinsFrame().t)
+    
+    return totalLength + jointDistance + tree.detectCollisions()*1000, tree
+    
+
 def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):
     newTree = KinematicTree[PrintedJoint](tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
     for i in range(1, len(tree.Joints)):
         try:
             tree.setJointState(i, tree.Joints[i].initialState)
             newJoint = tree.Joints[i].toPrinted(screwRadius)
-            #newJoint.Pose = tree.Joints[i].Pose @ tree.Joints[tree.Parents[i]].Pose.inv() @ newTree.Joints[tree.Parents[i]].Pose
             newTree.addJoint(tree.Parents[i], newJoint, relative=False, safe=False, 
             fixedPosition=True, fixedOrientation=True)
         except Exception as e:

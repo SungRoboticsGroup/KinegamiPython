@@ -7,6 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import Joint
 from Joint import *
+from CollisionDetection import *
 
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
@@ -17,6 +18,9 @@ class OrigamiJoint(Joint):
     
     def toPrinted(self, screwRadius):
         pass
+
+    def collisionCapsules(self):
+        return []
 
 class RevoluteJoint(OrigamiJoint):
     """
@@ -238,6 +242,25 @@ class ExtendedRevoluteJoint(OrigamiJoint):
             joint.extendBottomSegment(amount)
             joint.extendSegment(amount)
         return joint
+
+    def collisionBox(self):
+        prox = self.ProximalDubinsFrame()
+        points = np.array([
+            prox.t + self.r*prox.a + self.revoluteLength*prox.o,
+            prox.t - self.r*prox.a + self.revoluteLength*prox.o,
+            prox.t - self.r*prox.a - self.revoluteLength*prox.o,
+            prox.t + self.r*prox.a - self.revoluteLength*prox.o,
+            prox.t + self.r*prox.a + self.revoluteLength*prox.o + self.revoluteLength*prox.n,
+            prox.t - self.r*prox.a + self.revoluteLength*prox.o + self.revoluteLength*prox.n,
+            prox.t - self.r*prox.a - self.revoluteLength*prox.o + self.revoluteLength*prox.n,
+            prox.t + self.r*prox.a - self.revoluteLength*prox.o + self.revoluteLength*prox.n,
+        ])
+
+        return CollisionBox(points)
+    
+    def collisionCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
+                CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
 
 
 class PrismaticJoint(OrigamiJoint):

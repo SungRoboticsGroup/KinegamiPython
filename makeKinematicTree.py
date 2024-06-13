@@ -129,6 +129,9 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
                     relative=False, fixedPosition=False, fixedOrientation=False, 
                     safe=False, endPlane=boundingCylinder.endPlane())
+        # jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
+        #             relative=False, fixedPosition=True, fixedOrientation=True, 
+        #             safe=False)
         jointIndexSpecsToKT[j] = jInKT
         
         if plotSteps:
@@ -152,4 +155,5 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         y = np.cross(z,x)
         R = SO3(np.array([x,y,z]).T)
         KT.transformAll(SE3.Rt(R, np.zeros(3)))
-    return KT
+
+    return KT.optimize()

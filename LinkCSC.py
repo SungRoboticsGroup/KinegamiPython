@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import TubularPattern
 from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
+from CollisionDetection import *
 
 
 
@@ -202,3 +203,25 @@ class LinkCSC:
                 composed.append(elbow2PartPattern)
         
         return composed
+    
+
+    def collisionBoxes(self):
+        return [CollisionBox(startDubinsFrame=self.StartDubinsPose, endDubinsFrame=self.Elbow1EndFrame, r=self.r),
+                CollisionBox(startDubinsFrame=self.Elbow1EndFrame, endDubinsFrame=self.Elbow2StartFrame, r=self.r),
+                CollisionBox(startDubinsFrame=self.Elbow2StartFrame, endDubinsFrame=self.EndDubinsPose, r=self.r)]
+    
+    def collisionCapsules(self):
+        capsules = [CollisionCapsule(base=self.Elbow1EndFrame, radius=self.r, height=np.linalg.norm(self.Elbow2StartFrame.t - self.Elbow1EndFrame.t))]
+
+        if self.elbow1:
+            for elbow in self.elbow1.elbows:
+                capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
+                capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+        
+        if self.elbow2:
+            for elbow in self.elbow2.elbows:
+                capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
+                capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+
+        return capsules
+
