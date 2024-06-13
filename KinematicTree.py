@@ -234,12 +234,11 @@ class KinematicTree(Generic[J]):
                 for capsule in link.collisionCapsules():
                     capsule.addToPlot(ax)
         
-        for index in showSpecificCapsules[0]:
-            for capsule in self.Joints[index].collisionCapsules():
-                capsule.addToPlot(ax)
-        for index in showSpecificCapsules[1]:
-            for capsule in self.Links[index].collisionCapsules():
-                capsule.addToPlot(ax)
+        for jointIndex, capsuleIndex in showSpecificCapsules[0]:
+            self.Joints[jointIndex].collisionCapsules()[capsuleIndex].addToPlot(ax)
+
+        for linkIndex, capsuleIndex in showSpecificCapsules[1]:
+            self.Links[linkIndex].collisionCapsules()[capsuleIndex].addToPlot(ax)
         
         if showSpheres:
             self.boundingBall.addToPlot(ax, color=sphereColor, 
@@ -260,16 +259,20 @@ class KinematicTree(Generic[J]):
                 joint2 = self.Joints[j]
                 if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame():
                     jointsCollided = False
+                    idx1 = 0
                     for capsule1 in joint.collisionCapsules():
                         if not jointsCollided:
+                            idx2 = 0
                             for capsule2 in joint2.collisionCapsules():
                                 didCollide, collisionPoint = capsule2.collidesWith(capsule1)
                                 if didCollide:
                                     if plot:
-                                        self.show(showSpecificCapsules=([i,j],[]), showCollisionBoxes=False, plotPoint=collisionPoint)
+                                        self.show(showSpecificCapsules=([(i, idx1),(j, idx2)],[]), showCollisionBoxes=False, plotPoint=collisionPoint)
                                     numCollisions += 1
                                     jointsCollided = True
                                     break
+                                idx2 += 1
+                        idx1 += 1
 
         #joint to link collision
         for i in range(0,len(self.Joints)):
@@ -278,16 +281,20 @@ class KinematicTree(Generic[J]):
                 link = self.Links[j]
                 if link.StartDubinsPose != joint.DistalDubinsFrame() and link.EndDubinsPose != joint.ProximalDubinsFrame():
                     collided = False
+                    idx1 = 0
                     for capsule1 in joint.collisionCapsules():
                         if not collided:
+                            idx2 = 0
                             for capsule2 in link.collisionCapsules():
                                 didCollide, collisionPoint = capsule2.collidesWith(capsule1)
                                 if didCollide:
                                     if plot:
-                                        self.show(showSpecificCapsules=([i], [j]), showCollisionBoxes = False, plotPoint = collisionPoint)
+                                        self.show(showSpecificCapsules=([(i, idx1)], [(j, idx2)]), showCollisionBoxes = False, plotPoint = collisionPoint)
                                     numCollisions += 1
                                     collided = True
                                     break
+                                idx2 += 1
+                        idx1 += 1
 
         #link to link collision
         for i in range(0, len(self.Links)):
@@ -296,16 +303,20 @@ class KinematicTree(Generic[J]):
                 link2 = self.Links[j]
                 if link2 != link and link.StartDubinsPose != link2.StartDubinsPose:
                     linksCollided = False
+                    idx1 = 0
                     for capsule1 in link.collisionCapsules():
                         if not linksCollided:
+                            idx2 = 0
                             for capsule2 in link2.collisionCapsules():
                                 didCollide, collisionPoint = capsule2.collidesWith(capsule1)
                                 if didCollide:
                                     if plot:
-                                        self.show(showSpecificCapsules=([], [i, j]), showCollisionBoxes = False, plotPoint = collisionPoint)
+                                        self.show(showSpecificCapsules=([], [(i, idx1), (j, idx2)]), showCollisionBoxes = False, plotPoint = collisionPoint)
                                     numCollisions += 1
                                     linksCollided = True
                                     break
+                                idx2 += 1
+                        idx1 += 1
         return numCollisions
     
     def branchingParametersFrom(self, parentIndex : int):

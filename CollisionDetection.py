@@ -229,27 +229,21 @@ class CollisionCapsule:
         # Check distance between cylindrical segments
         for point in segment1:
             distance, closestPoint = pointToSegmentDistance(point, segment2)
-            if signedDistanceToFrame(closestPoint, self.base) * signedDistanceToFrame(closestPoint, self.base @ SE3.Trans(self.height * self.base.n)) > 0 or signedDistanceToFrame(closestPoint, other.base) * signedDistanceToFrame(closestPoint, other.base @ SE3.Trans(other.height * other.base.n)):
-                #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-                #print("COLLISION PAST SPHERE")
-                continue
-            if distance <= minDistance:
-                # if (distance <= self.radius + other.radius):
-                #     print("NOT SPHERE END COLLISION")
+
+            pt = 0.5 * (point + closestPoint)
+            #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
+            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.base @ SE3.Trans(self.height * self.base.n)) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.base @ SE3.Trans(other.height * other.base.n)) <= 0:
                 minDistance = distance
-                collisionPoint = 0.5 * (point + closestPoint)
+                collisionPoint = pt
 
         for point in segment2:
             distance, closestPoint = pointToSegmentDistance(point, segment1)
-            if signedDistanceToFrame(closestPoint, self.base) * signedDistanceToFrame(closestPoint, self.base @ SE3.Trans(self.height * self.base.n)) > 0 or signedDistanceToFrame(closestPoint, other.base) * signedDistanceToFrame(closestPoint, other.base @ SE3.Trans(other.height * other.base.n)):
-                #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-                #print("COLLISION PAST SPHERE")
-                continue
-            if distance <= minDistance:
-                # if (distance <= self.radius + other.radius):
-                #     print("NOT SPHERE END COLLISION")
+
+            pt = 0.5 * (point + closestPoint)
+            #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
+            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.base @ SE3.Trans(self.height * self.base.n)) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.base @ SE3.Trans(other.height * other.base.n)) <= 0:
                 minDistance = distance
-                collisionPoint = 0.5 * (point + closestPoint)
+                collisionPoint = pt
                 
 
         # Check distance between spherical ends
@@ -257,8 +251,6 @@ class CollisionCapsule:
         #     for p2 in ends2:
         #         distance = np.linalg.norm(p1 - p2)
         #         if distance <= minDistance:
-        #             if (distance <= self.radius + other.radius):
-        #                 print("SPHERE END COLLISION")
         #             minDistance = distance
         #             collisionPoint = 0.5 * (p1 + p2)
 
@@ -284,4 +276,5 @@ def pointToSegmentDistance(point, segment):
 def signedDistanceToFrame(point, frame : SE3()):
     vector = point - frame.t
     dist = np.dot(vector, frame.n)
+
     return dist
