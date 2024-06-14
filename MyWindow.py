@@ -682,6 +682,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
     drag_change_position = qc.pyqtSignal(np.ndarray)
+    drag_change_rotation = qc.pyqtSignal(float)
 
     selected_index = -1
 
@@ -729,15 +730,29 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
-            selected_point = None
+            selected_translate_point = None
+            selected_rotate_point = None
 
             for item in self.itemsAt(region):
                 if (item.objectName() == "line_sphere"):
-                    selected_point = item
+                    selected_translate_point = item
                     break
+                if (item.objectName() == "rotate_sphere"):
+                    selected_rotate_point = item
+                    break
+            
+            if (selected_translate_point):
+                self.drag_change_position.emit(selected_translate_point.position)
+            if (selected_rotate_point):
+                # id = self.selected_arrow.id
+                self.drag_change_rotation.emit(selected_rotate_point.rx)
 
-            if (selected_point):
-                self.drag_change_position.emit(selected_point.position)
+                # if (id == 0):
+                #     self.drag_change_rotation.emit(selected_rotate_point.rx)
+                # elif (id == 1):
+                #     self.drag_change_rotation.emit(selected_rotate_point.ry)
+                # elif (id == 2):
+                #     self.drag_change_rotation.emit(selected_rotate_point.rz)
 
         else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()

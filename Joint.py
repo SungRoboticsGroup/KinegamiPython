@@ -173,9 +173,9 @@ class Joint(ABC):
         distance = np.linalg.norm(direction)
         direction = direction / distance
 
-        point1 = point2 - direction * distance * 2
+        point1 = point2 - direction * distance * 4
         
-        extended_length = 4 * distance
+        extended_length = 8 * distance
         num_points = int(extended_length / gap) + 1
         start_point = point1 - direction * distance
 
@@ -193,7 +193,8 @@ class Joint(ABC):
 
         return np.array([p1, p2])
     
-    def generate_circle_points(self, center, axis, r=1.0, num_points=20, is_full=False, rotation=0.0):
+    def generate_circle_points(self, axis, point, r=1.0, num_points=10, rotation=0.0):
+        num_points += 1
         axis = axis / np.linalg.norm(axis)
 
         if np.allclose(axis, [1, 0, 0]):
@@ -211,20 +212,19 @@ class Joint(ABC):
         ])
 
         angles = np.linspace(0, 2 * np.pi, num_points)
-
-        if (not is_full):
-            first5 = angles[:5]
-            last5 = angles[-5:]
-            angles = np.concatenate((last5, first5))
-
         circle_points = []
         for angle in angles:
             point_on_circle = r * np.array([np.cos(angle), np.sin(angle)])
             rotated_point = rotation_matrix @ point_on_circle
-            circle_point = center + rotated_point[0] * u + rotated_point[1] * v
+            circle_point = point + rotated_point[0] * u + rotated_point[1] * v
             circle_points.append(circle_point)
 
         return np.array(circle_points)
+
+    def generate_angles(self, num_points=10):
+        num_points += 1
+        angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+        return angles
 
     def addTranslateArrows(self, widget, selectedArrow=-1):
         rad = self.boundingBall().r
@@ -245,7 +245,7 @@ class Joint(ABC):
             widget.plot_widget.addItem(extended_axis_line)
 
             for line in extended_line_points:
-                md = gl.MeshData.sphere(rows=4, cols=4)
+                md = gl.MeshData.sphere(rows=2, cols=2)
                 sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
                 sphere.setObjectName("line_sphere")
                 sphere.setGLOptions('translucent')
@@ -269,21 +269,38 @@ class Joint(ABC):
         axes = [self.Pose.R[:, i] for i in range(3)]
         point1 = self.Pose.t
         extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
+        num_points = 20
 
         R = self.Pose.R
         theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[2, 2]), np.arctan2(R[1, 0], R[0, 0])]
 
+        # generate the marker points around the arrows
+        if selectedArrow != -1:
+            points = self.generate_circle_points(axes[selectedArrow], point1, rad, num_points, rotation=theta[selectedArrow])
+            angles = self.generate_angles(num_points)
+            #print(angles)
+
+            for i, point in enumerate(points):
+                md = gl.MeshData.sphere(rows=3, cols=3)
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 1], shader='shaded', smooth=True, position=point, rx=angles[i])
+                sphere.setObjectName("rotate_sphere")
+                sphere.setGLOptions('translucent')
+                sphere.scale(0.1, 0.1, 0.1)
+                sphere.translate(*point)
+                widget.plot_widget.addItem(sphere)
+
+        # generate the arrows
         for i, axis in enumerate(axes):    
-            points = self.generate_circle_points(point1, axes[i], rad, 20, is_full=True)
-            line = LineItemWithID(pos=points, color=extended_circle_color[i], width=5, antialias=True, id=selectedArrow)
-            line.setObjectName("arrow_guide")
+            points = self.generate_circle_points(axis, point1, rad, num_points, rotation=theta[i])
+            line = LineItemWithID(pos=points[:len(points)//2 + 1], color=colors[i], width=10, antialias=True, id=i)
+            line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
 
-        for i, axis in enumerate(axes):
-            points2 = self.generate_circle_points(point1, axis, rad, 20, is_full=False, rotation=theta[i])
-            line2 = LineItemWithID(pos=points2, color=colors[i], width=10, antialias=True, id=i)
-            line2.setObjectName("Arrow")
-            widget.plot_widget.addItem(line2)
+        # for i, axis in enumerate(axes):
+        #     # points2 = self.generate_circle_points(point1, axis, rad, 20, rotation=theta[i], start_angle=0.0, arc_length=np.pi/4)
+        #     line2 = LineItemWithID(pos=points, color=colors[i], width=10, antialias=True, id=i)
+        #     line2.setObjectName("Arrow")
+        #     widget.plot_widget.addItem(line2)
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
