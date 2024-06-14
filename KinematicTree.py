@@ -175,7 +175,7 @@ class KinematicTree:
                         axisScale=jointAxisScale, showPoses=showJointPoses)
         for link in self.Links:
             link.addToWidget(widget, color=linkColor, 
-                        alpha=surfaceOpacity, 
+                        alpha=linkOpacityDefault,
                         showPath=showLinkPath, 
                         pathColor=pathColor,
                         showPathCircles=showPathCircles, 

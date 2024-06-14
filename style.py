@@ -13,7 +13,8 @@ pathColorDefault = (0.0, 0.0, 0.0, 1.0)  # black
 sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
 
 surfaceOpacityDefault=0.8
-linkColorDefault = (0.0, 0.0, 0.0, surfaceOpacityDefault)  # black
+linkOpacityDefault=0.6
+linkColorDefault = (0.0, 0.0, 0.0, linkOpacityDefault)  # black
 jointColorDefault = (1.0, 0.0, 1.0, surfaceOpacityDefault)  # magenta
 
 

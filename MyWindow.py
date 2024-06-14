@@ -390,12 +390,14 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
+        """"
         pose_layout = QHBoxLayout()
         pose_label = QLabel("Pose (SE3):")
         self.pose_input = QLineEdit()
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+        """
 
         relative_layout = QHBoxLayout()
         self.radio_group = QButtonGroup()
@@ -405,7 +407,7 @@ class AddPrismaticDialog(AddJointDialog):
         self.relative.clicked.connect(self.on_relative_clicked)
         self.absolute.clicked.connect(self.on_absolute_clicked)
         relative_layout.addWidget(self.relative)
-        relative_layout.addWidget(self.absolute)
+        relative_layout.addWidget(self.absolute) 
         layout.addLayout(relative_layout)
 
         self.position_checkbox = QCheckBox('Fixed Position')
@@ -430,9 +432,9 @@ class AddPrismaticDialog(AddJointDialog):
             neutralLength = int(self.length_input.text())
             numLayers = int(self.numLayers_input.text())
             coneAngleText = self.angle_input.text()
-            poseText = self.pose_input.text()
+            # poseText = self.pose_input.text()
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, self.parse_angle(coneAngleText), self.parse_pose(poseText))
+            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, self.parse_angle(coneAngleText), SE3())
             self.accept()
         except ValueError:
             error_dialog = ErrorDialog('Please enter valid integers.')
@@ -453,12 +455,14 @@ class AddRevoluteDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
+        """
         pose_layout = QHBoxLayout()
         pose_label = QLabel("Pose (SE3):")
         self.pose_input = QLineEdit()
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+        """
 
         relative_layout = QHBoxLayout()
         self.radio_group = QButtonGroup()
@@ -490,9 +494,9 @@ class AddRevoluteDialog(AddJointDialog):
 
     def onApplyClicked(self):
         bendingAngleText = self.angle_input.text()
-        poseText = self.pose_input.text()
+        # poseText = self.pose_input.text()
 
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, self.parse_angle(bendingAngleText), self.parse_pose(poseText))
+        self.jointToAdd = RevoluteJoint(self.numSides, self.r, self.parse_angle(bendingAngleText), SE3())
         self.accept()
         
 class AddWaypointDialog(AddJointDialog):
@@ -503,12 +507,14 @@ class AddWaypointDialog(AddJointDialog):
 
         layout = QVBoxLayout()
         
+        """
         pose_layout = QHBoxLayout()
         pose_label = QLabel("Pose (SE3):")
         self.pose_input = QLineEdit()
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+        """
 
         relative_layout = QHBoxLayout()
         self.radio_group = QButtonGroup()
@@ -539,9 +545,9 @@ class AddWaypointDialog(AddJointDialog):
         self.r = r
 
     def onApplyClicked(self):
-        poseText = self.pose_input.text()
+        # poseText = self.pose_input.text()
 
-        self.jointToAdd = Waypoint(self.numSides, self.r, Pose=self.parse_pose(poseText))
+        self.jointToAdd = Waypoint(self.numSides, self.r, SE3())
         self.accept()
 
 class AddTipDialog(AddJointDialog):
@@ -561,12 +567,14 @@ class AddTipDialog(AddJointDialog):
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
         
+        """
         pose_layout = QHBoxLayout()
         pose_label = QLabel("Pose (SE3):")
         self.pose_input = QLineEdit()
         pose_layout.addWidget(pose_label)
         pose_layout.addWidget(self.pose_input)
         layout.addLayout(pose_layout)
+        """
 
         relative_layout = QHBoxLayout()
         self.radio_group = QButtonGroup()
@@ -599,12 +607,12 @@ class AddTipDialog(AddJointDialog):
     def onApplyClicked(self):
         try:
             neutralLength = float(self.length_input.text())
-            poseText = self.pose_input.text()
+            # poseText = self.pose_input.text()
 
             if (self.isStart):
-                self.jointToAdd = StartTip(self.numSides, self.r, self.parse_pose(poseText), length=neutralLength)
+                self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=neutralLength)
             else:
-                self.jointToAdd = EndTip(self.numSides, self.r, self.parse_pose(poseText), length=neutralLength)
+                self.jointToAdd = EndTip(self.numSides, self.r, SE3(), length=neutralLength)
 
             self.accept()
         except ValueError:
@@ -1096,6 +1104,7 @@ class PointEditorWindow(QMainWindow):
 
     def press_cancel(self):
         self.cancel_pressed = True
+        # add delete function once added to kinematic tree
         self.button_dock.hide()
 
     def change_control_type(self):
@@ -1476,8 +1485,9 @@ class PointEditorWindow(QMainWindow):
                 self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
-            
+                
             self.update_plot()
+            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
     def chain_not_created(self):
         error_dialog = ErrorDialog('Please create a chain first.')
