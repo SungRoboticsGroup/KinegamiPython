@@ -59,7 +59,7 @@ Input:
 Output: a KinematicTree object that instantiates the desired kinematics
         as a tubular tree with radius r
 """
-def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False) -> KinematicTree:
+def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False, optimize = True) -> KinematicTree:
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
     # Set orientation appropriately
@@ -126,12 +126,11 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         #     # Meanwhile ball2 here is this waypoint bounding ball
         
         orientJoint(newJointSpec, planeNormal)
+
         jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
-                    relative=False, fixedPosition=False, fixedOrientation=False, 
-                    safe=False, endPlane=boundingCylinder.endPlane())
-        # jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
-        #             relative=False, fixedPosition=True, fixedOrientation=True, 
-        #             safe=False)
+                relative=False, fixedPosition=False, fixedOrientation=False, 
+                safe=False, endPlane=boundingCylinder.endPlane())
+
         jointIndexSpecsToKT[j] = jInKT
         
         if plotSteps:
@@ -149,7 +148,8 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         boundingCylinder.expandToIncludeBall(ball1)
         boundingCylinder.expandToIncludeBall(ball2)
 
-        KT = KT.optimizeJointPlacement(j)
+        if optimize:
+            KT = KT.optimizeJointPlacement(j)
     
     if orientUp:
         z = planeNormal / np.linalg.norm(planeNormal)

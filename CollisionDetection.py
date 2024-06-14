@@ -153,6 +153,7 @@ class CollisionCapsule:
         self.radius = radius
         self.height = height
         self.base = base @ SE3.Ry(np.pi/2)
+        self.otherBase = self.base @ SE3.Trans(self.height * self.base.n)
         self.center = self.base.t + self.base.n * (self.height/2 + np.sign(self.height)*self.radius)
         self.halfDist = np.abs(self.height/2) + self.radius
 
@@ -221,6 +222,9 @@ class CollisionCapsule:
         top_center = bottom_center + self.height * self.base.R[:, 2]
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
+    def frameOverlap(self, frame, radius):
+        return self.collidesWith(CollisionCapsule(frame, radius, 0))
+    
     def collidesWith(self, other):
         #if too far away to collide, return false
         if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
@@ -238,7 +242,7 @@ class CollisionCapsule:
 
             pt = 0.5 * (point + closestPoint)
             #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.base @ SE3.Trans(self.height * self.base.n)) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.base @ SE3.Trans(other.height * other.base.n)) <= 0:
+            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0:
                 minDistance = distance
                 collisionPoint = pt
 
@@ -247,7 +251,7 @@ class CollisionCapsule:
 
             pt = 0.5 * (point + closestPoint)
             #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.base @ SE3.Trans(self.height * self.base.n)) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.base @ SE3.Trans(other.height * other.base.n)) <= 0:
+            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0:
                 minDistance = distance
                 collisionPoint = pt
                 

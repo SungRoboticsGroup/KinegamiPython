@@ -20,6 +20,7 @@ import os
 import time
 from typing import Generic, TypeVar
 from functools import partial
+from geometryHelpers import *
 
 J = TypeVar("J", bound=Joint)
 
@@ -327,6 +328,18 @@ class KinematicTree(Generic[J]):
                                     break
                                 idx2 += 1
                         idx1 += 1
+                
+                #TODO: check if works, makes sure branch doesn't intersect itself
+                elif link2 != link and not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[j], Waypoint):
+                    idx1 = 0
+                    for capsule in link.collisionCapsules():
+                        didOverlap, collisionPoint = capsule.frameOverlap(link2.EndDubinsPose, self.r)
+                        if didOverlap:
+                            numCollisions += 1
+                            if plot:
+                                self.show(showSpecificCapsules=([], [(i, idx1), (j, len(link2.collisionCapsules()) - 1)]), showCollisionBoxes=False, plotPoint = collisionPoint)
+                            break
+                        idx1 += 1
         return numCollisions
     
     def branchingParametersFrom(self, parentIndex : int):
@@ -625,7 +638,24 @@ class KinematicTree(Generic[J]):
 
     def optimizeJointPlacement(self, index):
         start = time.time()
-        initialGuess = [0,0]
+
+        joint = self.Joints[index]
+        parent = self.Joints[self.Parents[index]]
+
+        frame1 = joint.Pose
+        frame2 = parent.DistalDubinsFrame()
+
+        #try to make initial guess right next to each other
+        transformation = frame1.inv() * frame2
+        initialPosition = transformation.t[2]
+        initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
+        initialGuess = [initialPosition,initialRotation]
+        try:
+            tree = copy.deepcopy(self)
+            tree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=False, safe=False, relative=True)
+        except:
+            initialGuess = [0,0]
+
         initialLoss = self.calculateJointFitness(initialGuess, index)
         result = minimize(partial(self.calculateJointFitness, index=index), initialGuess, method="Nelder-Mead", 
             options={
