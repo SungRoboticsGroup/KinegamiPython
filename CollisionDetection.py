@@ -153,6 +153,8 @@ class CollisionCapsule:
         self.radius = radius
         self.height = height
         self.base = base @ SE3.Ry(np.pi/2)
+        self.center = self.base.t + self.base.n * (self.height/2 + np.sign(self.height)*self.radius)
+        self.halfDist = np.abs(self.height/2) + self.radius
 
     
     def addToPlot(self, ax, color='r', alpha=0.25):
@@ -220,6 +222,10 @@ class CollisionCapsule:
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
     def collidesWith(self, other):
+        #if too far away to collide, return false
+        if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
+            return False, None
+
         segment1, ends1 = self.decomposeCapsule()
         segment2, ends2 = other.decomposeCapsule()
 

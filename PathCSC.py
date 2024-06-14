@@ -23,9 +23,7 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 import geometryHelpers
 from geometryHelpers import *
-
-
-
+import warnings
 
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,
@@ -69,14 +67,15 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     
     # solve for the path under all 4 sign combinations
     # solutions are values for tDirMag
-    solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, 1, 1))
-    solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, 1, -1))
-    solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, -1, 1))
-    solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, -1, -1))
+    with warnings.catch_warnings(action="ignore"):
+        solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, 1, 1))
+        solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, 1, -1))
+        solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, -1, 1))
+        solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, -1, -1))
     
     # Construct the paths found based on the solutions found for tDirMag
     pathPP = PathCSC(solPP, r, startPosition, startDir, endPosition, endDir, 1, 1)

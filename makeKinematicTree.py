@@ -84,46 +84,46 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         newJointSpec = jointSpecs.Joints[j]
         parentIndexInKT = jointIndexSpecsToKT[jointSpecs.Parents[j]]
 
-        if len(KT.Children[parentIndexInKT]) > 0: 
-            # if parent already has other children, 
-            # add waypoints routing out of the cylinder
-            parentJoint = KT.Joints[parentIndexInKT]
-            parentJointBB = parentJoint.boundingBall()
-            parentJointBBend = parentJointBB.c + parentJointBB.r*planeNormal
-            StartPlane = boundingCylinder.startPlane()
-            axisToParent = StartPlane.projectionOfPoint(parentJointBBend) - \
-                            boundingCylinder.start
-            if np.linalg.norm(axisToParent) < 1e-6:
-                axisToParent = boundingCylinder.uhat
-            axisToParentDir = axisToParent/np.linalg.norm(axisToParent)
+        # if len(KT.Children[parentIndexInKT]) > 0: 
+        #     # if parent already has other children, 
+        #     # add waypoints routing out of the cylinder
+        #     parentJoint = KT.Joints[parentIndexInKT]
+        #     parentJointBB = parentJoint.boundingBall()
+        #     parentJointBBend = parentJointBB.c + parentJointBB.r*planeNormal
+        #     StartPlane = boundingCylinder.startPlane()
+        #     axisToParent = StartPlane.projectionOfPoint(parentJointBBend) - \
+        #                     boundingCylinder.start
+        #     if np.linalg.norm(axisToParent) < 1e-6:
+        #         axisToParent = boundingCylinder.uhat
+        #     axisToParentDir = axisToParent/np.linalg.norm(axisToParent)
 
-            r = jointSpecs.Joints[j].r
-            o1 = boundingCylinder.start + (r + boundingCylinder.r)*axisToParentDir + \
-                (4*r + StartPlane.signedDistanceToPoint(parentJointBBend))*planeNormal
-            Waypoint1 = Waypoint(parentJoint.numSides, r, 
-                        SE3.Rt(boundingCylinder.orientation(), o1), pathIndex=2)
+        #     r = jointSpecs.Joints[j].r
+        #     o1 = boundingCylinder.start + (r + boundingCylinder.r)*axisToParentDir + \
+        #         (4*r + StartPlane.signedDistanceToPoint(parentJointBBend))*planeNormal
+        #     Waypoint1 = Waypoint(parentJoint.numSides, r, 
+        #                 SE3.Rt(boundingCylinder.orientation(), o1), pathIndex=2)
             
-            parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint1, 
-                                    relative=False, fixedPosition=True, 
-                                    fixedOrientation=True, safe=False)
-            ball1,ball2 = KT.Links[parentIndexInKT].endBoundingBalls2r()
-            boundingCylinder.expandToIncludeBall(ball1)
-            boundingCylinder.expandToIncludeBall(ball2)
+        #     parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint1, 
+        #                             relative=False, fixedPosition=True, 
+        #                             fixedOrientation=True, safe=False)
+        #     ball1,ball2 = KT.Links[parentIndexInKT].endBoundingBalls2r()
+        #     boundingCylinder.expandToIncludeBall(ball1)
+        #     boundingCylinder.expandToIncludeBall(ball2)
 
 
-            nDist = boundingCylinder.endPlane().signedDistanceToPoint(o1)
-            assert(nDist < 0)
-            o2 = o1 - nDist*planeNormal
-            Waypoint2 = Waypoint(parentJoint.numSides, r, 
-                        SE3.Rt(boundingCylinder.orientation(), o2), pathIndex=2)
-            parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint2, 
-                                    relative=False, fixedPosition=True, 
-                                    fixedOrientation=True, safe=False)
-            boundingCylinder.expandToIncludeBall(Waypoint2.boundingBall()) 
-            # this call suffices and avoids redundency because
-            # ball1 here is the same as ball2 from the previous waypoint,
-            # which is waypoint1's bounding ball. 
-            # Meanwhile ball2 here is this waypoint bounding ball
+        #     nDist = boundingCylinder.endPlane().signedDistanceToPoint(o1)
+        #     assert(nDist < 0)
+        #     o2 = o1 - nDist*planeNormal
+        #     Waypoint2 = Waypoint(parentJoint.numSides, r, 
+        #                 SE3.Rt(boundingCylinder.orientation(), o2), pathIndex=2)
+        #     parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint2, 
+        #                             relative=False, fixedPosition=True, 
+        #                             fixedOrientation=True, safe=False)
+        #     boundingCylinder.expandToIncludeBall(Waypoint2.boundingBall()) 
+        #     # this call suffices and avoids redundency because
+        #     # ball1 here is the same as ball2 from the previous waypoint,
+        #     # which is waypoint1's bounding ball. 
+        #     # Meanwhile ball2 here is this waypoint bounding ball
         
         orientJoint(newJointSpec, planeNormal)
         jInKT = KT.addJoint(parentIndexInKT, newJointSpec,
@@ -148,6 +148,8 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         ball1,ball2 = KT.Links[jInKT].endBoundingBalls2r()
         boundingCylinder.expandToIncludeBall(ball1)
         boundingCylinder.expandToIncludeBall(ball2)
+
+        KT = KT.optimizeJointPlacement(j)
     
     if orientUp:
         z = planeNormal / np.linalg.norm(planeNormal)

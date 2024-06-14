@@ -19,6 +19,7 @@ from PrintedJoint import *
 import os
 import time
 from typing import Generic, TypeVar
+from functools import partial
 
 J = TypeVar("J", bound=Joint)
 
@@ -248,14 +249,22 @@ class KinematicTree(Generic[J]):
             ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
-    def detectCollisions(self, plot=False):
+    def detectCollisions(self, specificJointIndex = None, plot=False):
+        #TODO: check if base circles intersect within the same branch
+
         numCollisions = 0
         EPSILON = 0.001
+
+        jointsToCheck = list(range(len(self.Joints))) if specificJointIndex is None else [specificJointIndex]
+
+        linksToCheck = list(range(len(self.Links))) if specificJointIndex is None else [specificJointIndex] + [child for child in self.Children[specificJointIndex]]
+        
         #joint to joint collision:
-        for i in range(0, len(self.Joints)):
+        for i in jointsToCheck:
             joint = self.Joints[i]
             for j in range(0, len(self.Joints)):
                 joint2 = self.Joints[j]
+                #check not joint-link-joint
                 if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame():
                     jointsCollided = False
                     idx1 = 0
@@ -274,10 +283,11 @@ class KinematicTree(Generic[J]):
                         idx1 += 1
 
         #joint to link collision
-        for i in range(0,len(self.Joints)):
+        for i in jointsToCheck:
             joint = self.Joints[i]
             for j in range(0,len(self.Links)):
                 link = self.Links[j]
+                #check link and joint not connected
                 if link.StartDubinsPose != joint.DistalDubinsFrame() and link.EndDubinsPose != joint.ProximalDubinsFrame():
                     collided = False
                     idx1 = 0
@@ -296,11 +306,12 @@ class KinematicTree(Generic[J]):
                         idx1 += 1
 
         #link to link collision
-        for i in range(0, len(self.Links)):
+        for i in linksToCheck:
             link = self.Links[i]
             for j in range(0,len(self.Links)):
                 link2 = self.Links[j]
-                if link2 != link and link.StartDubinsPose != link2.StartDubinsPose and link.EndDubinsPose != link2.StartDubinsPose and link2.EndDubinsPose != link.StartDubinsPose and self.Joints[i].DistalDubinsFrame() != link2.StartDubinsPose and self.Joints[j].DistalDubinsFrame() != link.StartDubinsPose:
+                #check that not part of the same branch and not link-joint-link
+                if link.StartDubinsPose != link2.StartDubinsPose and link.EndDubinsPose != link2.StartDubinsPose and link2.EndDubinsPose != link.StartDubinsPose and self.Joints[i].DistalDubinsFrame() != link2.StartDubinsPose and self.Joints[j].DistalDubinsFrame() != link.StartDubinsPose:
                     linksCollided = False
                     idx1 = 0
                     for capsule1 in link.collisionCapsules():
@@ -492,15 +503,16 @@ class KinematicTree(Generic[J]):
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall=True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True) -> bool:
-        if jointIndex < 0 and jointIndex >= -len(self.Joints):
-            jointIndex = len(self.Joints)+jointIndex
+                       safe : bool = True, relative : bool = False) -> bool:
+        if relative:
+            Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+        
         if safe:
             backup = self.dataDeepCopy()
             try:
                 self.transformJoint(jointIndex, Transformation, 
                        propogate, recomputeBoundingBall,
-                       recomputeLinkPath, safe=False)
+                       recomputeLinkPath, safe=False, relative=False)
             except ValueError as err:
                 print("WARNING: something went wrong in transformJoint:")
                 print(err)
@@ -508,24 +520,21 @@ class KinematicTree(Generic[J]):
                 self.setTo(backup)
                 return False
         else:
-            self.Joints[jointIndex].transformPoseIntoFrame(Transformation)
+            self.Joints[jointIndex].transformPoseBy(Transformation)
             joint = self.Joints[jointIndex]
-            #TODO:causes end twist angles to be messed up (set recomputeLinkPath to False in meantime)
             if recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
                 self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                         joint.ProximalDubinsFrame(),
                                         self.maxAnglePerElbow)
             else:
-                #TODO:causes end twist angles to be messed up
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
-                pass
             if propogate:
                 for c in self.Children[jointIndex]:
                     self.transformJoint(c, Transformation, propogate=True, 
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
-                                        safe=False)
+                                        safe=False, relative=False)
             else:
                 for c in self.Children[jointIndex]:
                     child = self.Joints[c]
@@ -614,100 +623,149 @@ class KinematicTree(Generic[J]):
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
         return True
 
+    def optimizeJointPlacement(self, index):
+        start = time.time()
+        initialGuess = [0,0]
+        initialLoss = self.calculateJointFitness(initialGuess, index)
+        result = minimize(partial(self.calculateJointFitness, index=index), initialGuess, method="Nelder-Mead", 
+            options={
+            #'maxiter': 15, 
+            #'disp': True,
+        })
+
+        print(f"Optimized joint {index} in {time.time() - start}s")
+        print(f"Old loss: {initialLoss}, Improved Loss: {result.fun}")
+
+        tree = copy.deepcopy(self)
+        tree.transformJoint(index, SE3.Trans([0,0,result.x[0]]) @ SE3.Rz(result.x[1]), propogate=False, safe=False, relative=True)
+
+        return tree
+
+    def calculateJointFitness(self, params, index):
+        #TODO: ISSUE: really short paths are disincentivized because wont try because of exception caused by being unable to make path, might need to check explicitly
+        #TODO: exponential growth (in detectCollisions?)
+        translation = params[0]
+        rotation = params[1]
+        tree = copy.deepcopy(self)
+        try:
+            if not tree.transformJoint(index, SE3.Trans([0,0,translation]) @ SE3.Rz(rotation), propogate=False, safe=False, relative=True):
+                return 100000
+        except Exception as e:
+            return 100000
+
+        path = tree.Links[index].path
+
+        pathCurviness = path.theta1 ** 2 * path.r + path.theta2 ** 2 * path.r
+
+        jointDistance = np.linalg.norm(tree.Joints[index].ProximalDubinsFrame().t - tree.Joints[tree.Parents[index]].DistalDubinsFrame().t)
+
+        start = time.time()
+        collisions = tree.detectCollisions(specificJointIndex=index) * 1000
+        #print(time.time() - start)
+
+        loss = path.length + pathCurviness * 4 + jointDistance + collisions
+        #print(f"Evaluating fitness_function at x={params}, : {loss}")
+        return loss
 
     # genetic algorithm
-    def optimize(self, iterations=15):
-        def select_mating_pool(pop, fitness, num_parents):
-            parents = np.empty((num_parents, pop.shape[1]))
+    # def optimize(self, iterations=15):
+    #     def select_mating_pool(pop, fitness, num_parents):
+    #         parents = np.empty((num_parents, pop.shape[1]))
 
-            for parent_num in range(num_parents):
+    #         for parent_num in range(num_parents):
 
-                max_fitness_idx = np.where(fitness == np.max(fitness))
+    #             max_fitness_idx = np.where(fitness == np.max(fitness))
 
-                max_fitness_idx = max_fitness_idx[0][0]
+    #             max_fitness_idx = max_fitness_idx[0][0]
 
-                parents[parent_num, :] = pop[max_fitness_idx, :]
+    #             parents[parent_num, :] = pop[max_fitness_idx, :]
 
-                fitness[max_fitness_idx] = -99999999999
+    #             fitness[max_fitness_idx] = -99999999999
 
-            return parents
-        def crossover(parents, offspring_size):
-            offspring = np.empty(offspring_size)
-            # The point at which crossover takes place between two parents. Usually, it is at the center.
-            crossover_point = np.uint8(offspring_size[1]/2)
+    #         return parents
+    #     def crossover(parents, offspring_size):
+    #         offspring = np.empty(offspring_size)
+    #         # The point at which crossover takes place between two parents. Usually, it is at the center.
+    #         crossover_point = np.uint8(offspring_size[1]/2)
         
-            for k in range(offspring_size[0]):
-                # Index of the first parent to mate.
-                parent1_idx = k%parents.shape[0]
-                # Index of the second parent to mate.
-                parent2_idx = (k+1)%parents.shape[0]
-                # The new offspring will have its first half of its genes taken from the first parent.
-                offspring[k, 0:crossover_point] = parents[parent1_idx, 0:crossover_point]
-                # The new offspring will have its second half of its genes taken from the second parent.
-                offspring[k, crossover_point:] = parents[parent2_idx, crossover_point:]
-            return offspring
-        def mutation(offspring_crossover, mutation_rate=0.2, mutation_range_factor=50):
-            for idx in range(offspring_crossover.shape[0]):
-                for gene_idx in range(offspring_crossover.shape[1]):
-                    if np.random.rand() < mutation_rate:
-                        random_value = np.random.uniform(-self.r * mutation_range_factor, self.r * mutation_range_factor)
-                        offspring_crossover[idx, gene_idx] += random_value
+    #         for k in range(offspring_size[0]):
+    #             # Index of the first parent to mate.
+    #             parent1_idx = k%parents.shape[0]
+    #             # Index of the second parent to mate.
+    #             parent2_idx = (k+1)%parents.shape[0]
+    #             # The new offspring will have its first half of its genes taken from the first parent.
+    #             offspring[k, 0:crossover_point] = parents[parent1_idx, 0:crossover_point]
+    #             # The new offspring will have its second half of its genes taken from the second parent.
+    #             offspring[k, crossover_point:] = parents[parent2_idx, crossover_point:]
+    #         return offspring
+    #     def mutation(offspring_crossover, mutation_rate=0.2, mutation_range_factor=50):
+    #         for idx in range(offspring_crossover.shape[0]):
+    #             for gene_idx in range(offspring_crossover.shape[1]):
+    #                 if np.random.rand() < mutation_rate:
+    #                     random_value = np.random.uniform(-self.r * mutation_range_factor, self.r * mutation_range_factor)
+    #                     offspring_crossover[idx, gene_idx] += random_value
             
-            return offspring_crossover
+    #         return offspring_crossover
 
-        dim = len(self.Joints)*2
+    #     dim = len(self.Joints)*2
 
-        solutionsPerPopulation = 15
-        newPopulation = np.random.uniform(low = -self.r*25, high = self.r*25, size=(solutionsPerPopulation,dim))
+    #     solutionsPerPopulation = 8
+    #     newPopulation = np.vstack((np.zeros(dim), np.random.uniform(low = -self.r*25, high = self.r*25, size=(solutionsPerPopulation - 1,dim))))
 
-        bestFitness = -calculateTreeLoss(self, np.zeros(dim))[0]
-        print(f"INITIAL: {bestFitness}")
-        bestTree = self
-        for i in range(iterations):
-            fitness = np.array([-calculateTreeLoss(self, params)[0] for params in newPopulation])
+    #     bestFitness = -calculateTreeLoss(self, np.zeros(dim))[0]
+    #     print(f"INITIAL: {bestFitness}")
+    #     bestTree = self
 
-            parents = select_mating_pool(newPopulation, fitness, 6) #num parents mating
+    #     for i in range(iterations):
+    #         start = time.time()
 
-            offspringCrossover = crossover(parents, offspring_size=(solutionsPerPopulation - parents.shape[0], dim))
+    #         fitness = np.array([-calculateTreeLoss(self, params)[0] for params in newPopulation])
 
-            offspringMutation = mutation(offspringCrossover)
+    #         parents = select_mating_pool(newPopulation, fitness, 4) #num parents mating
 
-            newPopulation[0:parents.shape[0], :] = parents
-            newPopulation[parents.shape[0]:, :] = offspringMutation
+    #         offspringCrossover = crossover(parents, offspring_size=(solutionsPerPopulation - parents.shape[0], dim))
 
-            if np.max(fitness) > bestFitness:
-                bestFitness = np.max(fitness)
-                best_match_idx = np.where(fitness == np.max(fitness))
-                bestTree = calculateTreeLoss(self, newPopulation[best_match_idx][0])[1]
+    #         offspringMutation = mutation(offspringCrossover)
+
+    #         newPopulation[0:parents.shape[0], :] = parents
+    #         newPopulation[parents.shape[0]:, :] = offspringMutation
+
+    #         if np.max(fitness) > bestFitness:
+    #             bestFitness = np.max(fitness)
+    #             best_match_idx = np.where(fitness == np.max(fitness))
+    #             bestTree = calculateTreeLoss(self, newPopulation[best_match_idx][0])[1]
             
-            print(f"Best result {i}: {np.max(fitness)}")
+    #         print(f"Best result {i}: {np.max(fitness)}, Time: {time.time() - start}")
         
-        return bestTree
+    #     return bestTree
 
-def calculateTreeLoss(initialTree, params):
-    tree2 = copy.deepcopy(initialTree)
-    for i in range(0, len(tree2.Joints)):
-        tree2.Joints[i].translateAlongZ(params[i])
-    for i in range(len(tree2.Joints), len(params)):
-        tree2.Joints[i - len(tree2.Joints)].rotateAboutZ(params[i])
+# def calculateTreeLoss(initialTree, params):
+#     tree2 = copy.deepcopy(initialTree)
+#     for i in range(0, len(tree2.Joints)):
+#         tree2.Joints[i].translateAlongZ(params[i])
+#     for i in range(len(tree2.Joints), len(params)):
+#         tree2.Joints[i - len(tree2.Joints)].rotateAboutZ(params[i])
     
-    tree = KinematicTree[OrigamiJoint](tree2.Joints[0], tree2.maxAnglePerElbow)
-    try:
-        for i in range(1, len(tree2.Joints)):
-            tree.addJoint(tree2.Parents[i], tree2.Joints[i], relative=False, safe=False, fixedPosition=True, fixedOrientation=True)
-    except Exception as e:
-        return 100000, None
+#     tree = KinematicTree[OrigamiJoint](tree2.Joints[0], tree2.maxAnglePerElbow)
+#     try:
+#         for i in range(1, len(tree2.Joints)):
+#             tree.addJoint(tree2.Parents[i], tree2.Joints[i], relative=False, safe=False, fixedPosition=True, fixedOrientation=True)
+#     except Exception as e:
+#         return 100000, None
 
-    #calculate total path length
-    totalLength = 0
-    for link in tree.Links:
-        totalLength += link.path.length
+#     #calculate total path length
+#     totalLength = 0
+#     for link in tree.Links:
+#         totalLength += link.path.length
 
-    jointDistance = 0
-    for i in range(1,len(tree.Joints)):
-        jointDistance += np.linalg.norm(tree.Joints[i].ProximalDubinsFrame().t - tree.Joints[tree.Parents[i]].DistalDubinsFrame().t)
+#     jointDistance = 0
+#     for i in range(1,len(tree.Joints)):
+#         jointDistance += np.linalg.norm(tree.Joints[i].ProximalDubinsFrame().t - tree.Joints[tree.Parents[i]].DistalDubinsFrame().t)
     
-    return totalLength + jointDistance + tree.detectCollisions()*1000, tree
+#     #ideas:
+#         # add incentive for joints being super close together
+#         # add disincentive for individual super long paths
+#     return totalLength + jointDistance + tree.detectCollisions()*1000, tree
     
 
 def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):

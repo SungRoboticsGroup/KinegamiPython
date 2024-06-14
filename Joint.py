@@ -103,6 +103,9 @@ class Joint(ABC):
     
     def transformPoseIntoFrame(self, Frame : SE3):
         self.Pose = Frame @ self.Pose
+
+    def transformPoseBy(self, Transformation: SE3):
+        self.Pose = Transformation @ self.Pose
     
     def applyTransformationToPose(self, Transformation : SE3):
         self.Pose = self.Pose @ Transformation
