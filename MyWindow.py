@@ -921,6 +921,26 @@ class PointEditorWindow(QMainWindow):
 
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
 
+        self.confirm_pressed = True
+        self.cancel_pressed = True
+        self.confirm = QPushButton("Confirm", self)
+        self.cancel = QPushButton("Cancel", self)
+
+        self.confirm.clicked.connect(self.press_confirm)
+        self.cancel.clicked.connect(self.press_cancel)
+
+        self.button_layout = QVBoxLayout()
+        self.button_layout.addWidget(self.confirm)
+        self.button_layout.addWidget(self.cancel)
+
+        self.button_widget = QWidget()
+        self.button_widget.setLayout(self.button_layout)
+        self.button_dock = QDockWidget("Press Buttons", self)
+        self.button_dock.setWidget(self.button_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.button_dock)
+
+        self.button_dock.hide()
+
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
@@ -1070,6 +1090,14 @@ class PointEditorWindow(QMainWindow):
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
 
+    def press_confirm(self):
+        self.confirm_pressed = True
+        self.button_dock.hide()
+
+    def press_cancel(self):
+        self.cancel_pressed = True
+        self.button_dock.hide()
+
     def change_control_type(self):
         if self.control1.isChecked():
             self.control_type = "Translate"
@@ -1123,6 +1151,9 @@ class PointEditorWindow(QMainWindow):
 
         if self.chain.transformJoint(self.selected_joint, transformation, propogate=True, relative=False):
             self.update_joint()
+
+        self.update_rotation_slider()
+        self.update_translate_slider()
 
     def update_rotation_slider(self):
         self.rotationSlider.setMinimum(-360)
@@ -1403,7 +1434,7 @@ class PointEditorWindow(QMainWindow):
         for index, joint in enumerate(self.chain.Joints):
             joint.id = index
 
-        self.chain.addToWidget(self)
+        self.chain.addToWidget(self, selectedJoint=self.selected_joint)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1442,11 +1473,7 @@ class PointEditorWindow(QMainWindow):
             if (self.chain == None) :
                 self.chain = KinematicChain(joint)
             elif joint.id != 0 :
-                if self.selected_joint > -1:
-                    self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
-                else:
-                    error_dialog = ErrorDialog('Please select a parent joint.')
-                    error_dialog.exec_()
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             
@@ -1457,33 +1484,59 @@ class PointEditorWindow(QMainWindow):
         error_dialog.exec_()
         self.create_new_chain_func()
 
+    def is_parent_joint_selected(self):
+        if self.selected_joint == -1 and self.chain is not None:
+            QMessageBox.warning(self, "Selection Required", "Please select a parent joint before adding a new one.")
+            return False
+        return True
+
     def add_prismatic_func(self):
-        if (not self.chain_created) :
+        if (not self.chain_created):
             self.chain_not_created()
-        else:
+        elif not self.confirm_pressed and not self.cancel_pressed:
+            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
+        elif self.is_parent_joint_selected():
             dialog = AddPrismaticDialog(self.numSides, self.r)
             self.add_joint(dialog)
+            self.button_dock.show()
+            self.confirm_pressed = False
+            self.cancel_pressed = False
 
     def add_revolute_func(self):
-        if (not self.chain_created) :
+        if (not self.chain_created):
             self.chain_not_created()
-        else:
+        elif not self.confirm_pressed and not self.cancel_pressed:
+            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
+        elif self.is_parent_joint_selected():
             dialog = AddRevoluteDialog(self.numSides, self.r)
             self.add_joint(dialog)
+            self.button_dock.show()
+            self.confirm_pressed = False
+            self.cancel_pressed = False
 
     def add_waypoint_func(self):
-        if (not self.chain_created) :
+        if (not self.chain_created):
             self.chain_not_created()
-        else:
+        elif not self.confirm_pressed and not self.cancel_pressed:
+            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
+        elif self.is_parent_joint_selected():
             dialog = AddWaypointDialog(self.numSides, self.r)
             self.add_joint(dialog)
+            self.button_dock.show()
+            self.confirm_pressed = False
+            self.cancel_pressed = False
 
     def add_tip_func(self):
-        if (not self.chain_created) :
+        if (not self.chain_created):
             self.chain_not_created()
-        else:
+        elif not self.confirm_pressed and not self.cancel_pressed:
+            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
+        elif self.is_parent_joint_selected():
             dialog = AddTipDialog(self.numSides, self.r)
             self.add_joint(dialog)
+            self.button_dock.show()
+            self.confirm_pressed = False
+            self.cancel_pressed = False
 
     def create_new_chain_func(self):
         dialog = CreateNewChainDialog()
