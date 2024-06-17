@@ -45,6 +45,31 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
+            if jointIndex == 0:
+                if len(self.Joints) > 1:
+                    self.Joints.pop(0)
+                    self.Links.pop(0)
+                else:
+                    self.Joints = []
+                    self.Links = []
+            elif jointIndex == len(self.Joints) - 1:
+                self.Joints.pop()
+                self.Links.pop(-2)  
+            else:
+                nextJoint = self.Joints[jointIndex + 1]
+                prevJoint = self.Joints[jointIndex - 1]
+                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                nextJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                self.Links[jointIndex - 1] = newLink 
+                self.Joints.pop(jointIndex)
+                self.Links.pop(jointIndex) 
+
+            if hasattr(self, 'Children') and hasattr(self, 'Parents'):
+                for i in range(len(self.Joints) - 1):
+                    self.Children[i] = [i + 1]
+                self.Children.append([])
+                self.Parents = [i - 1 for i in range(len(self.Joints))]
+            """"
             nextJoint = self.Joints[jointIndex+1]
             prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
             newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
@@ -64,4 +89,5 @@ class KinematicChain(KinematicTree):
             self.Parents = []
             for i in range(len(self.Joints)):
                 self.Parents.append(i-1)
+            """
         return True

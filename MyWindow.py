@@ -1514,7 +1514,7 @@ class PointEditorWindow(QMainWindow):
 
             if (self.chain == None) :
                 self.chain = KinematicChain(joint)
-            elif joint.id != 0 :
+            elif joint.id != 0 or len(self.chain.Joints) != 0:
                 self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)

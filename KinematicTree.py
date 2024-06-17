@@ -160,7 +160,6 @@ class KinematicTree:
                   showPathCircles=False, sphereColor=sphereColorDefault,
                   showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint=None, lastJoint = 123456789):
         # TODO: IMPLEMENT showGlobalFrame
-        print(lastJoint)
         for index, joint in enumerate(self.Joints):
             if index > lastJoint and index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
