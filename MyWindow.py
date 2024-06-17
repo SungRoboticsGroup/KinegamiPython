@@ -908,6 +908,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_transform)
+        self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1137,6 +1138,19 @@ class PointEditorWindow(QMainWindow):
         transformation = SE3.Trans(trans[0], trans[1], trans[2])
 
         if self.chain.transformJoint(self.selected_joint, transformation, propogate=True, relative=False):
+            self.update_joint()
+
+    @QtCore.pyqtSlot(float)
+    def drag_rotate(self, new_rotation):
+        transformation = SE3()
+        if (self.selected_axis_name == 'X'):
+            transformation = SE3.Rx(new_rotation)
+        elif (self.selected_axis_name == 'Y'):
+            transformation = SE3.Ry(new_rotation)
+        elif (self.selected_axis_name == 'Z'):
+            transformation = SE3.Rz(new_rotation)
+
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=False, relative=True):
             self.update_joint()
 
     def update_rotation_slider(self):
