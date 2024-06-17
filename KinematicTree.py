@@ -636,7 +636,52 @@ class KinematicTree(Generic[J]):
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
         return True
 
-    def optimizeJointPlacement(self, index):
+    def optimizeWaypointsAndJointPlacement(self, waypoint1Index, waypoint2Index, jointIndex, maxiter=1000):
+        start = time.time()
+
+        tree = copy.deepcopy(self)
+        
+        waypoint1 = tree.Joints[waypoint1Index]
+        waypoint2 = tree.Joints[waypoint2Index]
+        parent = tree.Joints[tree.Parents[waypoint1Index]]
+
+        initialWaypoint1Frame = waypoint1.ProximalDubinsFrame()
+
+        def transformJointToPose(index, frame2):
+            joint = tree.Joints[index]
+            frame1 = joint.ProximalDubinsFrame()
+            
+            transformation = frame2 * frame1.inv()
+
+            try:
+                if not tree.transformJoint(index, transformation, propogate=True, safe=False, relative=False):
+                    transformJointToPose(index, frame1)
+                    return False
+
+                if tree.detectCollisions() > 0:
+                    transformJointToPose(index, frame1)
+                    return False
+            except:
+                transformJointToPose(index, frame1)
+                return False
+            
+            return True
+        
+        #first try putting the waypoints at the previous joint's distal frame
+        if not transformJointToPose(waypoint1Index, parent.DistalDubinsFrame()):
+            #changing waypoint1 didnt work
+            if transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame()):
+                #changing waypoint2 worked
+                transformJointToPose(waypoint1Index, parent.DistalDubinsFrame())
+                transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame())
+        else:
+            #both worked
+            transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame())
+
+        #optimize joint
+        return tree.optimizeJointPlacement(jointIndex)
+
+    def optimizeJointPlacement(self, index, maxiter=1000):
         start = time.time()
 
         joint = self.Joints[index]
@@ -645,8 +690,9 @@ class KinematicTree(Generic[J]):
         frame1 = joint.Pose
         frame2 = parent.DistalDubinsFrame()
 
-        #try to make initial guess right next to each other
         transformation = frame1.inv() * frame2
+
+        #try to make initial guess right next to each other
         initialPosition = transformation.t[2]
         initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
         initialGuess = [initialPosition,initialRotation]
@@ -659,7 +705,7 @@ class KinematicTree(Generic[J]):
         initialLoss = self.calculateJointFitness(initialGuess, index)
         result = minimize(partial(self.calculateJointFitness, index=index), initialGuess, method="Nelder-Mead", 
             options={
-            #'maxiter': 15, 
+            'maxiter': maxiter, 
             #'disp': True,
         })
 
@@ -669,10 +715,9 @@ class KinematicTree(Generic[J]):
         tree = copy.deepcopy(self)
         tree.transformJoint(index, SE3.Trans([0,0,result.x[0]]) @ SE3.Rz(result.x[1]), propogate=False, safe=False, relative=True)
 
-        return tree
+        return tree, result.fun
 
     def calculateJointFitness(self, params, index):
-        #TODO: ISSUE: really short paths are disincentivized because wont try because of exception caused by being unable to make path, might need to check explicitly
         #TODO: exponential growth (in detectCollisions?)
         translation = params[0]
         rotation = params[1]
@@ -689,13 +734,35 @@ class KinematicTree(Generic[J]):
 
         jointDistance = np.linalg.norm(tree.Joints[index].ProximalDubinsFrame().t - tree.Joints[tree.Parents[index]].DistalDubinsFrame().t)
 
-        start = time.time()
+        #start = time.time()
         collisions = tree.detectCollisions(specificJointIndex=index) * 1000
         #print(time.time() - start)
 
         loss = path.length + pathCurviness * 4 + jointDistance + collisions
         #print(f"Evaluating fitness_function at x={params}, : {loss}")
         return loss
+
+    def calculateWaypointFitness(self, params, index):
+        tree = copy.deepcopy(self)
+        try:
+            if not tree.transformJoint(index, SE3.Trans([params[0], params[1], params[2]]) @ SE3.Rz(params[5]) @ SE3.Ry(params[4]) @ SE3.Rx(params[3]), propogate=False, safe=False, relative=True):
+                return 100000
+        except Exception as e:
+            return 100000
+        
+  
+        def calcLoss(tree, index, addLength=True):
+            total = 0
+            for childIndex in tree.Children[index]:
+                if addLength:
+                    total += tree.Links[childIndex].path.length
+                total += tree.detectCollisions(specificJointIndex=childIndex) * 1000
+                if isinstance(tree.Joints[index], Waypoint):
+                    total += calcLoss(tree, childIndex, False)
+            return total
+        
+        return calcLoss(tree, index)
+
 
     # genetic algorithm
     # def optimize(self, iterations=15):

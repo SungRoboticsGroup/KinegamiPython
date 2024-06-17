@@ -223,7 +223,8 @@ class CollisionCapsule:
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
     def frameOverlap(self, frame, radius):
-        return self.collidesWith(CollisionCapsule(frame, radius, 0))
+        return False, None
+        #return self.collidesWith(CollisionCapsule(frame, radius, 0))
     
     def collidesWith(self, other):
         #if too far away to collide, return false
