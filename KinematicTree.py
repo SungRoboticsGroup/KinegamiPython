@@ -158,10 +158,23 @@ class KinematicTree:
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint=None):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint=None, lastJoint = 123456789):
         # TODO: IMPLEMENT showGlobalFrame
+        print(lastJoint)
         for index, joint in enumerate(self.Joints):
-            if index == selectedJoint:
+            if index > lastJoint and index == selectedJoint:
+                joint.addToWidget(widget, xColor, yColor, zColor, 
+                        proximalColor, centerColor, distalColor, 
+                        sphereColor=(1.0, 0.5, 0.5, 0.5), showSphere=True, 
+                        surfaceColor=(1.0, 0.5, 0.5, 0.8), showSurface=showJointSurface, 
+                        axisScale=jointAxisScale, showPoses=showJointPoses)
+            elif index > lastJoint:
+                joint.addToWidget(widget, xColor, yColor, zColor, 
+                        proximalColor, centerColor, distalColor, 
+                        sphereColor=(1.0, 0.5, 0.5, 0.5), showSphere=showSpheres, 
+                        surfaceColor=(1.0, 0.5, 0.5, 0.8), showSurface=showJointSurface, 
+                        axisScale=jointAxisScale, showPoses=showJointPoses)
+            elif index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True,
@@ -173,14 +186,23 @@ class KinematicTree:
                         sphereColor, showSphere=showSpheres, 
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
-        for link in self.Links:
-            link.addToWidget(widget, color=linkColor, 
-                        alpha=linkOpacityDefault,
-                        showPath=showLinkPath, 
-                        pathColor=pathColor,
-                        showPathCircles=showPathCircles, 
-                        showFrames=showLinkPoses,
-                        showBoundary=showLinkSurface)
+        for index, link in enumerate(self.Links):
+            if index > lastJoint:
+                link.addToWidget(widget, color=(1.0, 0.5, 0.5, 0.6), 
+                            alpha=linkOpacityDefault,
+                            showPath=showLinkPath, 
+                            pathColor=(1.0, 0.5, 0.5, 0.6),
+                            showPathCircles=showPathCircles, 
+                            showFrames=showLinkPoses,
+                            showBoundary=showLinkSurface)
+            else:
+                link.addToWidget(widget, color=linkColor, 
+                            alpha=linkOpacityDefault,
+                            showPath=showLinkPath, 
+                            pathColor=pathColor,
+                            showPathCircles=showPathCircles, 
+                            showFrames=showLinkPoses,
+                            showBoundary=showLinkSurface)
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
         widget.add_chain(self)

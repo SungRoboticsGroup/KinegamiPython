@@ -912,6 +912,7 @@ class PointEditorWindow(QMainWindow):
         self.selected_joint = -1
         self.selected_arrow = -1
         self.selected_axis_name = 'N/A'
+        self.last_joint = 0
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -1116,6 +1117,8 @@ class PointEditorWindow(QMainWindow):
 
     def press_confirm(self):
         self.confirm_pressed = True
+        self.last_joint = (len(self.chain.Joints) - 1)
+        self.update_joint()
         self.button_dock.hide()
 
     def press_cancel(self):
@@ -1442,7 +1445,7 @@ class PointEditorWindow(QMainWindow):
         grid.setColor((0,0,0,255))
         
         if self.chain is not None:
-            self.chain.addToWidget(self, selectedJoint=self.selected_joint)
+            self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
 
             self.select_joint_options.blockSignals(False)
 
@@ -1473,7 +1476,7 @@ class PointEditorWindow(QMainWindow):
         for index, joint in enumerate(self.chain.Joints):
             joint.id = index
 
-        self.chain.addToWidget(self, selectedJoint=self.selected_joint)
+        self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1516,6 +1519,7 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
 
+            self.last_joint = self.selected_joint
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
             self.button_dock.show()
