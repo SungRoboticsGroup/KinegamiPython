@@ -690,6 +690,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
     drag_change_position = qc.pyqtSignal(np.ndarray)
+    drag_change_rotation = qc.pyqtSignal(float)
 
     selected_index = -1
 
@@ -737,15 +738,29 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
-            selected_point = None
+            selected_translate_point = None
+            selected_rotate_point = None
 
             for item in self.itemsAt(region):
                 if (item.objectName() == "line_sphere"):
-                    selected_point = item
+                    selected_translate_point = item
                     break
+                if (item.objectName() == "rotate_sphere"):
+                    selected_rotate_point = item
+                    break
+            
+            if (selected_translate_point):
+                self.drag_change_position.emit(selected_translate_point.position)
+            if (selected_rotate_point):
+                # id = self.selected_arrow.id
+                self.drag_change_rotation.emit(selected_rotate_point.rx)
 
-            if (selected_point):
-                self.drag_change_position.emit(selected_point.position)
+                # if (id == 0):
+                #     self.drag_change_rotation.emit(selected_rotate_point.rx)
+                # elif (id == 1):
+                #     self.drag_change_rotation.emit(selected_rotate_point.ry)
+                # elif (id == 2):
+                #     self.drag_change_rotation.emit(selected_rotate_point.rz)
 
         else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
@@ -901,6 +916,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_transform)
+        self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1163,6 +1179,20 @@ class PointEditorWindow(QMainWindow):
 
         self.update_rotation_slider()
         self.update_translate_slider()
+    @QtCore.pyqtSlot(float)
+    def drag_rotate(self, new_rotation):
+        transformation = SE3()
+        if (self.selected_axis_name == 'X'):
+            transformation = SE3.Rx(new_rotation)
+        elif (self.selected_axis_name == 'Y'):
+            transformation = SE3.Ry(new_rotation)
+        elif (self.selected_axis_name == 'Z'):
+            transformation = SE3.Rz(new_rotation)
+
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=False, relative=True):
+            self.update_joint()
+            self.update_rotation_slider()
+            self.update_translate_slider()
 
     def update_rotation_slider(self):
         self.rotationSlider.setMinimum(-360)
@@ -1171,7 +1201,7 @@ class PointEditorWindow(QMainWindow):
             rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
             angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
             self.rotationSlider.blockSignals(True)
-            self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {angle_degrees}°")
+            self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(angle_degrees)}°")
             self.rotationSlider.setValue(int(angle_degrees))
             self.oldRotVal = angle_degrees
             self.rotationSlider.setDisabled(False)
@@ -1195,13 +1225,13 @@ class PointEditorWindow(QMainWindow):
         if self.selected_arrow != -1:
             amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {amount}")
+            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(amount * 10)}")
             self.translate_slider.setValue(int(amount * 10))
             self.oldTransVal = amount
             self.translate_slider.setDisabled(False)
             self.translate_slider.blockSignals(False)
             self.translationInput.blockSignals(True)
-            self.translationInput.setText(str(amount))
+            self.translationInput.setText(str(int(amount * 10)))
             self.translationInput.blockSignals(False)
             self.translationInput.setDisabled(False)
         else:
@@ -1307,11 +1337,11 @@ class PointEditorWindow(QMainWindow):
                     error_dialog.exec_()
 
     def adjust_rotation(self, value):
-        if not isinstance(value, int):
+        if not isinstance(value, float):
             value = value.strip()
-        value = int(value) if len(str(value)) > 0 else 0
+        value = float(value) if len(str(value)) > 0 else 0
         angle_radians = math.radians(value - self.oldRotVal)
-        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {value}°")
+        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(value)}°")
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
                 transformation = SE3.Rx(angle_radians)
@@ -1326,20 +1356,20 @@ class PointEditorWindow(QMainWindow):
                 self.oldRotVal = int(value)
             else:
                 self.rotationSlider.blockSignals(True)
-                self.rotationSlider.setValue(self.oldRotVal)
+                self.rotationSlider.setValue(int(self.oldRotVal))
                 if value > self.oldRotVal:
-                    self.rotationSlider.setMaximum(self.oldRotVal)
+                    self.rotationSlider.setMaximum(int(self.oldRotVal))
                 else:
-                    self.rotationSlider.setMinimum(self.oldRotVal)
-                self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {self.oldRotVal}°")
+                    self.rotationSlider.setMinimum(int(self.oldRotVal))
+                self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(self.oldRotVal)}°")
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
-        if not isinstance(value, int):
+        if not isinstance(value, float):
             value = value.strip()
-        value = int(value) if value else 0
+        value = float(value) if value else 0
         actualVal = value / 10
-        self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {actualVal}')
+        self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {int(value)}')
         amount = actualVal - self.oldTransVal
         if self.chain and self.selected_joint != -1:
             propogate = self.propogateSliderCheckbox.isChecked()
@@ -1357,7 +1387,7 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.translate_slider.blockSignals(True)
                 self.translate_slider.setValue(int(self.oldTransVal * 10))
-                self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {self.oldTransVal}")
+                self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(self.oldTransVal * 10)}")
                 self.translate_label.blockSignals(False)
 
     def translate_joint(self):
@@ -1485,9 +1515,12 @@ class PointEditorWindow(QMainWindow):
                 self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
-                
+
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
+            self.button_dock.show()
+            self.confirm_pressed = False
+            self.cancel_pressed = False
 
     def chain_not_created(self):
         error_dialog = ErrorDialog('Please create a chain first.')
@@ -1508,9 +1541,6 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             dialog = AddPrismaticDialog(self.numSides, self.r)
             self.add_joint(dialog)
-            self.button_dock.show()
-            self.confirm_pressed = False
-            self.cancel_pressed = False
 
     def add_revolute_func(self):
         if (not self.chain_created):
@@ -1520,9 +1550,6 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             dialog = AddRevoluteDialog(self.numSides, self.r)
             self.add_joint(dialog)
-            self.button_dock.show()
-            self.confirm_pressed = False
-            self.cancel_pressed = False
 
     def add_waypoint_func(self):
         if (not self.chain_created):
@@ -1532,9 +1559,6 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             dialog = AddWaypointDialog(self.numSides, self.r)
             self.add_joint(dialog)
-            self.button_dock.show()
-            self.confirm_pressed = False
-            self.cancel_pressed = False
 
     def add_tip_func(self):
         if (not self.chain_created):
@@ -1544,9 +1568,6 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             dialog = AddTipDialog(self.numSides, self.r)
             self.add_joint(dialog)
-            self.button_dock.show()
-            self.confirm_pressed = False
-            self.cancel_pressed = False
 
     def create_new_chain_func(self):
         dialog = CreateNewChainDialog()

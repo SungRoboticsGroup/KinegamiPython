@@ -48,7 +48,7 @@ class LineItemWithID(gl.GLLinePlotItem):
         self.id = id
 
 class LineSphere(gl.GLMeshItem):
-    def __init__(self, parentItem=None, position = [], **kwds):
+    def __init__(self, parentItem=None, position = [], rx=0.0, ry=0.0, rz=0.0, **kwds):
         self.opts = {
             'meshdata': None,
             'color': (1., 1., 1., 1.),
@@ -74,3 +74,6 @@ class LineSphere(gl.GLMeshItem):
         self.colors = None
         self.faces = None
         self.position = position
+        self.rx = rx
+        self.ry = ry
+        self.rz = rz
