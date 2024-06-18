@@ -309,24 +309,26 @@ class Joint(ABC):
         axes = [self.Pose.R[:, i] for i in range(3)]
         center = self.Pose.t
         extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
-        num_points = 10
+        num_points = 20
 
         R = self.Pose.R
-        theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[2, 2]), np.arctan2(R[1, 0], R[0, 0])]
+        theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[0, 0]), np.arctan2(R[1, 0], R[1, 1])]
 
         # generate the marker points around the arrows
         if selectedArrow != -1:
             points, lines = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
+            angles = self.generate_angles(num_points)
 
             for i, point in enumerate(points[:num_points]):
                 md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 1], shader='shaded', smooth=True, position=point)
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=point, rotation=angles[i])
                 sphere.setObjectName("rotate_sphere")
                 sphere.setGLOptions('translucent')
                 sphere.scale(0.1, 0.1, 0.1)
                 sphere.translate(*point)
                 widget.plot_widget.addItem(sphere)
             
+            #marker lines for debugging
             for line in lines:
                 l = LineItemWithID(pos=line, color=(0,0,0,1), width=10, antialias=True)
                 widget.plot_widget.addItem(l)

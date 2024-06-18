@@ -752,15 +752,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             if (selected_translate_point):
                 self.drag_change_position.emit(selected_translate_point.position)
             if (selected_rotate_point):
-                # id = self.selected_arrow.id
-                self.drag_change_rotation.emit(selected_rotate_point.rx)
-
-                # if (id == 0):
-                #     self.drag_change_rotation.emit(selected_rotate_point.rx)
-                # elif (id == 1):
-                #     self.drag_change_rotation.emit(selected_rotate_point.ry)
-                # elif (id == 2):
-                #     self.drag_change_rotation.emit(selected_rotate_point.rz)
+                point = selected_rotate_point.rotation
+                print(point)
+                self.drag_change_rotation.emit(point)
 
         else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
