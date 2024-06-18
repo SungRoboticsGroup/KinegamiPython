@@ -1146,8 +1146,8 @@ class PointEditorWindow(QMainWindow):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
-            min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            max = self.chain.Joints[self.selected_joint].stateRange()[1]
+            min = round(self.chain.Joints[self.selected_joint].stateRange()[0], 2)
+            max = round(self.chain.Joints[self.selected_joint].stateRange()[1], 2)
             current = self.chain.Joints[self.selected_joint].state
             self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
 
@@ -1280,8 +1280,8 @@ class PointEditorWindow(QMainWindow):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint state successfully edited!')
                     success_dialog.exec_()
-                    min = self.chain.Joints[self.selected_joint].stateRange()[0]
-                    max = self.chain.Joints[self.selected_joint].stateRange()[1]
+                    min = round(self.chain.Joints[self.selected_joint].stateRange()[0], 2)
+                    max = round(self.chain.Joints[self.selected_joint].stateRange()[1], 2)
                     current = self.chain.Joints[self.selected_joint].state
                     self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
                 else:
