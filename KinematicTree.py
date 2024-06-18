@@ -578,4 +578,3 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
 
     toReturn.append(jointToPlace)
     return toReturn
-    
