@@ -193,40 +193,78 @@ class Joint(ABC):
 
         return np.array([p1, p2])
     
-    def generate_circle_points(self, axis, point, r=1.0, num_points=10, rotation=0.0):
-        num_points += 1
+    def rotation_matrix(self, axis, theta):
+        # rodrigues rotation formula
+        axis = np.asarray(axis)
         axis = axis / np.linalg.norm(axis)
+        a = np.cos(theta / 2.0)
+        b, c, d = -axis * np.sin(theta / 2.0)
+        aa, bb, cc, dd = a*a, b*b, c*c, d*d
+        bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
+        return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
+                        [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
+                        [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
+    
+    def generate_circle_points(self, axis, center, r=1.0, num_points=10, rotation=0.0):
+        #angles where the points are placed
+        angles = self.generate_angles(num_points)
 
-        if np.allclose(axis, [1, 0, 0]):
-            ortho_vector = np.array([0, 1, 0])
+        axis = np.array(axis)
+        axis = axis / np.linalg.norm(axis)
+        
+        #vector not parallel to the axis
+        if (axis == [1, 0, 0]).all() or (axis == [-1, 0, 0]).all():
+            not_parallel = np.array([0, 1, 0])
         else:
-            ortho_vector = np.array([1, 0, 0])
+            not_parallel = np.array([1, 0, 0])
 
-        u = np.cross(axis, ortho_vector)
-        u = u / np.linalg.norm(u)
-        v = np.cross(axis, u)
+        v1 = np.cross(axis, not_parallel)
+        v1 = v1 / np.linalg.norm(v1)
+        v2 = np.cross(axis, v1)
+        v2 = v2 / np.linalg.norm(v2)
 
-        rotation_matrix = np.array([
-            [np.cos(rotation), -np.sin(rotation)],
-            [np.sin(rotation), np.cos(rotation)]
-        ])
+        line1_point1 = center + v1
+        line1_point2 = center - v1
+        line2_point1 = center + v2
+        line2_point2 = center - v2
+        
+        line1 = (line1_point1.tolist(), line1_point2.tolist())
+        line2 = (line2_point1.tolist(), line2_point2.tolist())
 
-        angles = np.linspace(0, 2 * np.pi, num_points)
-        circle_points = []
+        points = []
+
         for angle in angles:
-            point_on_circle = r * np.array([np.cos(angle), np.sin(angle)])
-            rotated_point = rotation_matrix @ point_on_circle
-            circle_point = point + rotated_point[0] * u + rotated_point[1] * v
-            circle_points.append(circle_point)
+            R = self.rotation_matrix(axis, angle + rotation)
 
-        return np.array(circle_points)
+            point = center + v1
+
+            line_point = np.array(point.tolist()) - center
+
+            rotated_point = np.dot(R, line_point) + center
+            points.append(rotated_point)
+
+        line1 = (line1_point1.tolist(), line1_point2.tolist())
+        line2 = (line2_point1.tolist(), line2_point2.tolist())
+
+        lines = [line1, line2]
+
+        line_results = []
+
+        for line in lines:
+            # Center the line points at the origin
+            line_point1 = np.array(line[0]) - center
+            line_point2 = np.array(line[1]) - center
+            
+            # Rotate the points
+            rotated_point1 = np.dot(R, line_point1) + center
+            rotated_point2 = np.dot(R, line_point2) + center
+            line_results.append([rotated_point1, rotated_point2])
+        
+        return points, line_results
 
     def generate_angles(self, num_points=10):
-        num_points += 1
-        angles = np.linspace(0, np.pi, num_points//2 + 1, endpoint=False)
-        angles2 = np.linspace(-np.pi, 0, num_points//2, endpoint=False)
-        result = np.append(angles, angles2)
-        return result
+        angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+        return angles
 
     def addTranslateArrows(self, widget, selectedArrow=-1):
         rad = self.boundingBall().r
@@ -269,29 +307,33 @@ class Joint(ABC):
             colors[selectedArrow] = (1, 1, 1, 1)
 
         axes = [self.Pose.R[:, i] for i in range(3)]
-        point1 = self.Pose.t
+        center = self.Pose.t
         extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
-        num_points = 20
+        num_points = 10
 
         R = self.Pose.R
         theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[2, 2]), np.arctan2(R[1, 0], R[0, 0])]
 
         # generate the marker points around the arrows
         if selectedArrow != -1:
-            points = self.generate_circle_points(axes[selectedArrow], point1, rad, num_points, rotation=theta[selectedArrow])
-            angles = self.generate_angles(num_points)
+            points, lines = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
 
-            for i, point in enumerate(points):
+            for i, point in enumerate(points[:num_points]):
                 md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 1], shader='shaded', smooth=True, position=point, rx=angles[i])
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 1], shader='shaded', smooth=True, position=point)
                 sphere.setObjectName("rotate_sphere")
                 sphere.setGLOptions('translucent')
                 sphere.scale(0.1, 0.1, 0.1)
                 sphere.translate(*point)
                 widget.plot_widget.addItem(sphere)
+            
+            for line in lines:
+                l = LineItemWithID(pos=line, color=(0,0,0,1), width=10, antialias=True)
+                widget.plot_widget.addItem(l)
 
         for i, axis in enumerate(axes):    
-            points = self.generate_circle_points(axis, point1, rad, num_points, rotation=theta[i])
+            points, lines = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
+            points.append(points[0])
 
             #generate the lighter circles
             circle = LineItemWithID(pos=points, color=extended_circle_color[i], width=5, antialias=True, id=i)
