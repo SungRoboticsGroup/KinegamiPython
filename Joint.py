@@ -303,7 +303,16 @@ class Joint(ABC):
                 sphere.translate(*point)
                 widget.plot_widget.addItem(sphere)
 
-        for i, axis in enumerate(axes):    
+        #swap the axes so that the selected axis gets rendered last -> appears above the other axes
+        numbered_axes = [[0, axes[0]], [1, axes[1]], [2, axes[2]]]
+
+        if selectedArrow != -1:
+            numbered_axes[selectedArrow], numbered_axes[2] = numbered_axes[2], numbered_axes[selectedArrow]
+
+        for tul in numbered_axes:    
+            i = tul[0]
+            axis = tul[1]
+
             points = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
             points.append(points[0])
 
