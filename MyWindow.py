@@ -1364,7 +1364,7 @@ class PointEditorWindow(QMainWindow):
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
-        if not isinstance(value, float):
+        if not isinstance(value, float) and not isinstance(value, int):
             value = value.strip()
         value = float(value) if value else 0
         actualVal = value / 10

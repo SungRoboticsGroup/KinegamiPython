@@ -463,7 +463,6 @@ def moveJointNearNeighborBut4rFromBall(jointToPlace, neighbor, ball):
     jointToPlace.translateAlongZ(zChange)
     return jointToPlace
 
-
 """
 Places jointToPlace along its joint axis, as close as possible to the given 
 neighbor while inserting intermediate waypoints as appropriate to guarantee
