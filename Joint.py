@@ -283,7 +283,7 @@ class Joint(ABC):
 
             for i, point in enumerate(points):
                 md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=point, rx=angles[i])
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 1], shader='shaded', smooth=True, position=point, rx=angles[i])
                 sphere.setObjectName("rotate_sphere")
                 sphere.setGLOptions('translucent')
                 sphere.scale(0.1, 0.1, 0.1)
