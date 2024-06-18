@@ -912,7 +912,7 @@ class PointEditorWindow(QMainWindow):
         self.selected_joint = -1
         self.selected_arrow = -1
         self.selected_axis_name = 'N/A'
-        self.last_joint = 0
+        self.last_joint = -1
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -1123,7 +1123,9 @@ class PointEditorWindow(QMainWindow):
 
     def press_cancel(self):
         self.cancel_pressed = True
-        # add delete function once added to kinematic tree
+        for i in range(len(self.chain.Joints) - 1, self.last_joint, -1):
+            self.chain.delete(i)
+        self.update_joint()
         self.button_dock.hide()
 
     def change_control_type(self):
@@ -1426,10 +1428,12 @@ class PointEditorWindow(QMainWindow):
             error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
             self.selected_joint = self.select_joint_options.currentIndex() 
+            temp_last = len(self.chain.Joints) - 1
             if self.chain.delete(self.selected_joint):
                 self.update_joint()
                 success_dialog = SuccessDialog('Joint successfully deleted!')
                 success_dialog.exec_()
+                self.last_joint = temp_last
             else:
                 error_dialog = ErrorDialog('Error deleting joint.')
                 error_dialog.exec_()
@@ -1512,14 +1516,13 @@ class PointEditorWindow(QMainWindow):
             if (isFixedPosition or isFixedOrientation):
                 isSafe = False
 
-            if (self.chain == None) :
+            if (self.chain == None) or len(self.chain.Joints) == 0:
                 self.chain = KinematicChain(joint)
-            elif joint.id != 0 or len(self.chain.Joints) != 0:
+            elif joint.id != 0:
                 self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
             else:
                 self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
 
-            self.last_joint = self.selected_joint
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
             self.button_dock.show()
