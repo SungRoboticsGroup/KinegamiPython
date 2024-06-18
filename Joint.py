@@ -223,14 +223,6 @@ class Joint(ABC):
         v2 = np.cross(axis, v1)
         v2 = v2 / np.linalg.norm(v2)
 
-        line1_point1 = center + v1
-        line1_point2 = center - v1
-        line2_point1 = center + v2
-        line2_point2 = center - v2
-        
-        line1 = (line1_point1.tolist(), line1_point2.tolist())
-        line2 = (line2_point1.tolist(), line2_point2.tolist())
-
         points = []
 
         for angle in angles:
@@ -242,25 +234,8 @@ class Joint(ABC):
 
             rotated_point = np.dot(R, line_point) + center
             points.append(rotated_point)
-
-        line1 = (line1_point1.tolist(), line1_point2.tolist())
-        line2 = (line2_point1.tolist(), line2_point2.tolist())
-
-        lines = [line1, line2]
-
-        line_results = []
-
-        for line in lines:
-            # Center the line points at the origin
-            line_point1 = np.array(line[0]) - center
-            line_point2 = np.array(line[1]) - center
-            
-            # Rotate the points
-            rotated_point1 = np.dot(R, line_point1) + center
-            rotated_point2 = np.dot(R, line_point2) + center
-            line_results.append([rotated_point1, rotated_point2])
         
-        return points, line_results
+        return points
 
     def generate_angles(self, num_points=10):
         angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
@@ -316,7 +291,7 @@ class Joint(ABC):
 
         # generate the marker points around the arrows
         if selectedArrow != -1:
-            points, lines = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
+            points = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
             angles = self.generate_angles(num_points)
 
             for i, point in enumerate(points[:num_points]):
@@ -327,14 +302,9 @@ class Joint(ABC):
                 sphere.scale(0.1, 0.1, 0.1)
                 sphere.translate(*point)
                 widget.plot_widget.addItem(sphere)
-            
-            #marker lines for debugging
-            for line in lines:
-                l = LineItemWithID(pos=line, color=(0,0,0,1), width=10, antialias=True)
-                widget.plot_widget.addItem(l)
 
         for i, axis in enumerate(axes):    
-            points, lines = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
+            points = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
             points.append(points[0])
 
             #generate the lighter circles
