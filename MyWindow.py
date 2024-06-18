@@ -752,15 +752,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             if (selected_translate_point):
                 self.drag_change_position.emit(selected_translate_point.position)
             if (selected_rotate_point):
-                # id = self.selected_arrow.id
-                self.drag_change_rotation.emit(selected_rotate_point.rx)
-
-                # if (id == 0):
-                #     self.drag_change_rotation.emit(selected_rotate_point.rx)
-                # elif (id == 1):
-                #     self.drag_change_rotation.emit(selected_rotate_point.ry)
-                # elif (id == 2):
-                #     self.drag_change_rotation.emit(selected_rotate_point.rz)
+                point = selected_rotate_point.rotation
+                print(point)
+                self.drag_change_rotation.emit(point)
 
         else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
@@ -781,7 +775,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
-            arrowIndex = -1
+            arrow_index = -1
 
             joints = []
             arrows = []
@@ -794,7 +788,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     joints.append(item)
 
             if (len(arrows) > 0 and self.selected_index != -1):
-                arrowIndex = arrows[0].id
+                arrow_index = arrows[0].id
             else:
                 if(len(joints) > 0):
                     self.selected_index = joints[0].id
@@ -802,7 +796,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     self.selected_index = -1
             
             self.click_signal.emit(self.selected_index)
-            self.click_signal_arrow.emit(arrowIndex)
+            self.click_signal_arrow.emit(arrow_index)
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -1342,8 +1336,8 @@ class PointEditorWindow(QMainWindow):
                     error_dialog.exec_()
 
     def adjust_rotation(self, value):
-        if not isinstance(value, float):
-            value = value.strip()
+        # if not isinstance(value, float):
+        #     value = value.strip()
         value = float(value) if len(str(value)) > 0 else 0
         angle_radians = math.radians(value - self.oldRotVal)
         self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(value)}°")
