@@ -37,14 +37,7 @@ class MeshItemWithID(gl.GLMeshItem):
 class LineItemWithID(gl.GLLinePlotItem):
     def __init__(self, parentItem=None, id : int = -1, **kwds):
         """All keyword arguments are passed to setData()"""
-        super().__init__(parentItem=parentItem)
-        glopts = kwds.pop('glOptions', 'additive')
-        self.setGLOptions(glopts)
-        self.pos = None
-        self.mode = 'line_strip'
-        self.width = 1.
-        self.color = (1.0,1.0,1.0,1.0)
-        self.setData(**kwds)
+        super().__init__(**kwds)
         self.id = id
 
 class LineSphere(gl.GLMeshItem):
