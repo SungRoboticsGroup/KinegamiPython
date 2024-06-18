@@ -793,15 +793,15 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
                     joints.append(item)
 
-            if (len(arrows) > 0 and self.selectedIndex != -1):
+            if (len(arrows) > 0 and self.selected_index != -1):
                 arrowIndex = arrows[0].id
             else:
                 if(len(joints) > 0):
-                    self.selectedIndex = joints[0].id
+                    self.selected_index = joints[0].id
                 else:
-                    self.selectedIndex = -1
+                    self.selected_index = -1
             
-            self.click_signal.emit(self.selectedIndex)
+            self.click_signal.emit(self.selected_index)
             self.click_signal_arrow.emit(arrowIndex)
     
     def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
