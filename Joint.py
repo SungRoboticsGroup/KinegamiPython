@@ -205,7 +205,7 @@ class Joint(ABC):
                         [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
                         [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
     
-    def generate_circle_points(self, axis, center, r=1.0, num_points=10, rotation=0.0):
+    def generate_circle_points(self, axis, center, rad=1.0, num_points=10, rotation=0.0):
         #angles where the points are placed
         angles = self.generate_angles(num_points)
 
@@ -220,8 +220,7 @@ class Joint(ABC):
 
         v1 = np.cross(axis, not_parallel)
         v1 = v1 / np.linalg.norm(v1)
-        v2 = np.cross(axis, v1)
-        v2 = v2 / np.linalg.norm(v2)
+        v1 = v1 * rad
 
         points = []
 
@@ -303,7 +302,16 @@ class Joint(ABC):
                 sphere.translate(*point)
                 widget.plot_widget.addItem(sphere)
 
-        for i, axis in enumerate(axes):    
+        #swap the axes so that the selected axis gets rendered last -> appears above the other axes
+        numbered_axes = [[0, axes[0]], [1, axes[1]], [2, axes[2]]]
+
+        if selectedArrow != -1:
+            numbered_axes[selectedArrow], numbered_axes[2] = numbered_axes[2], numbered_axes[selectedArrow]
+
+        for tul in numbered_axes:    
+            i = tul[0]
+            axis = tul[1]
+
             points = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
             points.append(points[0])
 
@@ -313,7 +321,7 @@ class Joint(ABC):
             widget.plot_widget.addItem(circle)
 
             # generate the arrows
-            line = LineItemWithID(pos=points[:len(points)//2 + 1], color=colors[i], width=10, antialias=True, id=i)
+            line = LineItemWithID(pos=points[:num_points//4], color=colors[i], width=15, antialias=True, id=i)
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
 
