@@ -21,6 +21,7 @@ import time
 from typing import Generic, TypeVar
 from functools import partial
 from geometryHelpers import *
+from pyswarm import pso
 
 J = TypeVar("J", bound=Joint)
 
@@ -266,7 +267,7 @@ class KinematicTree(Generic[J]):
             for j in range(0, len(self.Joints)):
                 joint2 = self.Joints[j]
                 #check not joint-link-joint
-                if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame():
+                if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame() and joint.DistalDubinsFrame() != joint2.ProximalDubinsFrame() and joint2.DistalDubinsFrame() != joint.ProximalDubinsFrame():
                     jointsCollided = False
                     idx1 = 0
                     for capsule1 in joint.collisionCapsules():
@@ -636,25 +637,22 @@ class KinematicTree(Generic[J]):
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
         return True
 
-    def optimizeWaypointsAndJointPlacement(self, waypoint1Index, waypoint2Index, jointIndex, maxiter=1000):
+    def optimizeWaypointsAndJointPlacement(self, waypoint1Index, waypoint2Index, jointIndex, maxiter=3):
         start = time.time()
 
-        tree = copy.deepcopy(self)
-        
-        waypoint1 = tree.Joints[waypoint1Index]
-        waypoint2 = tree.Joints[waypoint2Index]
-        parent = tree.Joints[tree.Parents[waypoint1Index]]
+        dist = self.Links[waypoint1Index].path.length + self.Links[waypoint2Index].path.length + self.Links[jointIndex].path.length
 
-        initialWaypoint1Frame = waypoint1.ProximalDubinsFrame()
+        #waypoint 1 t, waypoint 2 t, joint translation, waypoint 1 R, waypoint 2 R, joint rotation
+        bounds = [(-dist*2, dist*2)]*7 + [(-np.pi*2, np.pi*2)] * 7
 
-        def transformJointToPose(index, frame2):
+        def transformJointToPose(tree, index, frame2):
             joint = tree.Joints[index]
             frame1 = joint.ProximalDubinsFrame()
             
             transformation = frame2 * frame1.inv()
 
             try:
-                if not tree.transformJoint(index, transformation, propogate=True, safe=False, relative=False):
+                if not tree.transformJoint(index, transformation, propogate=False, safe=False, relative=False):
                     transformJointToPose(index, frame1)
                     return False
 
@@ -666,20 +664,161 @@ class KinematicTree(Generic[J]):
                 return False
             
             return True
-        
-        #first try putting the waypoints at the previous joint's distal frame
-        if not transformJointToPose(waypoint1Index, parent.DistalDubinsFrame()):
-            #changing waypoint1 didnt work
-            if transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame()):
-                #changing waypoint2 worked
-                transformJointToPose(waypoint1Index, parent.DistalDubinsFrame())
-                transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame())
-        else:
-            #both worked
-            transformJointToPose(waypoint2Index, waypoint1.DistalDubinsFrame())
 
-        #optimize joint
-        return tree.optimizeJointPlacement(jointIndex)
+        def objective(params):            
+            tree = copy.deepcopy(self)
+            
+            t1 = params[0:3]
+            t2 = params[3:6]
+            t3 = params[6]
+            rx1 = params[7]
+            ry1 = params[8]
+            rz1 = params[9]
+            rx2 = params[10]
+            ry2 = params[11]
+            rz2 = params[12]
+            r3 = params[13]
+
+            start2 = time.time()
+
+            try:
+                if tree.transformJoint(waypoint1Index, SE3.Trans(t1) @ SE3.Rz(rx1) @ SE3.Ry(ry1) @ SE3.Rz(rz1),  propogate=False, safe=False, relative=False) and tree.transformJoint(waypoint2Index, SE3.Trans(t2) @ SE3.Rz(rx2) @ SE3.Ry(ry2) @ SE3.Rz(rz2), propogate=False, relative=False) and tree.transformJoint(jointIndex, SE3.Trans([0,0,t3]) @ SE3.Rz(r3), propogate=False, relative=True):
+                    distance = tree.Links[waypoint1Index].path.length + tree.Links[waypoint2Index].path.length + tree.Links[jointIndex].path.length
+                    #np.linalg.norm(tree.Joints[jointIndex].ProximalDubinsFrame().t - tree.Joints[tree.Parents[waypoint1Index]].DistalDubinsFrame().t)
+                    ans = distance + 1000*(tree.detectCollisions(specificJointIndex=waypoint1Index) + tree.detectCollisions(specificJointIndex=waypoint2Index) + tree.detectCollisions(specificJointIndex=jointIndex))
+                else:
+                    ans = 100000
+            except:
+                ans = 100000
+            
+            #print(time.time() - start2)
+            return ans
+
+        # optimalParams, optimalValues = pso(objective, lb = [b[0] for b in bounds], ub = [b[1] for b in bounds])
+
+        # print(optimalParams)
+        # print(optimalValues)
+
+        #try to make as close as possible
+        initialTree = copy.deepcopy(self)
+
+        initialGuess = [0]*14
+
+        parent = initialTree.Joints[initialTree.Parents[waypoint1Index]]
+        joint = initialTree.Joints[jointIndex]
+        waypoint1 = initialTree.Joints[waypoint1Index]
+        waypoint2 = initialTree.Joints[waypoint2Index]
+        transform1 = parent.DistalDubinsFrame() * waypoint1.ProximalDubinsFrame().inv()
+        initialGuess[0:3] = transform1.t
+        initialGuess[7:10] = SE3.Rt(transform1.R, np.zeros(3)).eul()
+            
+        try:
+            initialTree.transformJoint(waypoint1Index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[7]) @ SE3.Ry(initialGuess[8]) @ SE3.Rz(initialGuess[9]), propogate=False, safe=False, relative=False)
+        except:
+            initialGuess[0:3] = [0]*3
+            initialGuess[7:10] = [0]*3
+
+        transform2 = waypoint1.DistalDubinsFrame() * waypoint2.ProximalDubinsFrame().inv()
+        initialGuess[3:6] = transform2.t
+        initialGuess[10:13] = SE3.Rt(transform2.R, np.zeros(3)).eul()
+
+        try:
+            initialTree.transformJoint(waypoint2Index, SE3.Trans(initialGuess[3:6]) @ SE3.Rz(initialGuess[10]) @ SE3.Ry(initialGuess[11]) @ SE3.Rz(initialGuess[12]), propogate=False, safe=False, relative=False)
+        except:
+            initialGuess[3:6] = [0]*3
+            initialGuess[10:13] = [0]*3
+
+        transform3 = joint.ProximalDubinsFrame().inv() * waypoint2.DistalDubinsFrame()
+
+        initialGuess[6] = transform3.t[2]
+        initialGuess[13] = np.arctan2(transform3.R[1, 0], transform3.R[0, 0])
+        try:
+            initialTree.transformJoint(jointIndex, SE3.Trans([0,0,initialGuess[6]]) @ SE3.Rz(initialGuess[13]), propogate=False, safe=False, relative=True)
+        except:
+            initialGuess[6] = 0
+            initialGuess[13] = 0
+        
+        
+        initialLoss = objective(initialGuess)
+
+        result = minimize(objective, initialGuess, method="L-BFGS-B", bounds=None,
+            options={
+            'maxiter': maxiter, 
+            'ftol': 1e-2,
+            #'disp': True,
+        })
+        
+        #for some reason minimize sometimes returns value greater than initial loss
+        if (result.fun > initialLoss):
+            print(f"Optimized new branch {jointIndex} with waypoints:\nInitial Loss: {initialLoss}, Improved Loss: {initialLoss}, TIME: {time.time() - start}")
+            return initialTree, initialLoss
+
+        tree = copy.deepcopy(self)
+
+        tree.transformJoint(waypoint1Index, SE3.Trans(result.x[0:3]) @ SE3.Rx(result.x[7]) @ SE3.Ry(result.x[8]) @ SE3.Rz(result.x[9]), propogate=False, safe=False, relative=True)
+        tree.transformJoint(waypoint2Index, SE3.Trans(result.x[3:6]) @ SE3.Rx(result.x[10]) @ SE3.Ry(result.x[11]) @ SE3.Rz(result.x[12]), propogate=False, relative=True)
+        tree.transformJoint(jointIndex, SE3.Trans([0,0,result.x[6]]) @ SE3.Rz(result.x[13]), propogate=False, relative=True)
+
+        print(f"Optimized new branch {jointIndex} with waypoints:\nInitial Loss: {initialLoss}, Improved Loss: {result.fun}, TIME: {time.time() - start}")
+
+        return tree, result.fun
+
+
+    # def optimizeWaypointsAndJointPlacement(self, waypoint1Index, waypoint2Index, jointIndex, maxiter=1000):
+    #     start = time.time()
+
+    #     tree = copy.deepcopy(self)
+        
+    #     waypoint1 = tree.Joints[waypoint1Index]
+    #     waypoint2 = tree.Joints[waypoint2Index]
+    #     parent = tree.Joints[tree.Parents[waypoint1Index]]
+
+    #     initialWaypoint1Frame = waypoint1.ProximalDubinsFrame()
+
+    #     def transformJointToPose(index, frame2):
+    #         joint = tree.Joints[index]
+    #         frame1 = joint.ProximalDubinsFrame()
+            
+    #         transformation = frame2 * frame1.inv()
+
+    #         try:
+    #             if not tree.transformJoint(index, transformation, propogate=False, safe=False, relative=False):
+    #                 transformJointToPose(index, frame1)
+    #                 return False
+
+    #             if tree.detectCollisions() > 0:
+    #                 transformJointToPose(index, frame1)
+    #                 return False
+    #         except:
+    #             transformJointToPose(index, frame1)
+    #             return False
+            
+    #         return True
+        
+    #     # #first try putting the waypoints at the previous joint's distal frame
+    #     # if not transformJointToPose(waypoint1Index, parent.ProximalDubinsFrame()):
+    #     #     #changing waypoint1 didnt work
+    #     #     if transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame()):
+    #     #         #changing waypoint2 worked
+    #     #         transformJointToPose(waypoint1Index, parent.ProximalDubinsFrame())
+    #     #         transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame())
+    #     # else:
+    #     #     #first transform worked
+    #     #     transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame())
+
+    #     # print(parent.ProximalDubinsFrame(), waypoint1.ProximalDubinsFrame(), waypoint2.ProximalDubinsFrame())
+
+
+    #     # transformJointToPose(waypoint2Index, tree.Joints[jointIndex].ProximalDubinsFrame())
+    #     # transformJointToPose(waypoint1Index, tree.Joints[jointIndex].ProximalDubinsFrame())
+
+    #     # tree, newLoss = tree.optimizeJointPlacement(waypoint1Index)
+
+    #     # transformJointToPose(waypoint2Index, tree.Joints[waypoint1Index].ProximalDubinsFrame())
+    #     # transformJointToPose(jointIndex, tree.Joints[waypoint1Index].DistalDubinsFrame())
+
+    #     #optimize joint
+    #     return tree.optimizeJointPlacement(jointIndex)
 
     def optimizeJointPlacement(self, index, maxiter=1000):
         start = time.time()
@@ -703,7 +842,11 @@ class KinematicTree(Generic[J]):
             initialGuess = [0,0]
 
         initialLoss = self.calculateJointFitness(initialGuess, index)
-        result = minimize(partial(self.calculateJointFitness, index=index), initialGuess, method="Nelder-Mead", 
+
+        # dist = np.linalg.norm(self.Joints[index].ProximalDubinsFrame().t - self.Joints[self.Parents[index]].DistalDubinsFrame().t) * 2
+        # bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
+
+        result = minimize(partial(self.calculateJointFitness, index=index), initialGuess, method="Nelder-Mead",
             options={
             'maxiter': maxiter, 
             #'disp': True,

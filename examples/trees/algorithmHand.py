@@ -41,14 +41,14 @@ pointer2 = spec.addJoint(pointer1, ExtendedRevoluteJoint(numSides, r, np.pi, ext
 
         
 
-# middle0 = spec.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
-#         SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)), relative=True)
+middle0 = spec.addJoint(0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
+        SE3.Trans(-2.25,0,4)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2)), relative=True)
 
-# middle1 = spec.addJoint(middle0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
-#                         SE3.Trans(4,0,0)@SE3.Rx(np.pi/2)), relative=True)
+middle1 = spec.addJoint(middle0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
+                        SE3.Trans(4,0,0)@SE3.Rx(np.pi/2)), relative=True)
 
-# middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
-#                         SE3.Trans(4,0,0)), relative=True)
+middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
+                        SE3.Trans(4,0,0)), relative=True)
 
 # middleEnd = spec.addJoint(middle2, EndTip(numSides, r, 
 #         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)

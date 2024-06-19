@@ -113,8 +113,6 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             
             addedWaypoints.append(parentIndexInKT)
 
-
-
             nDist = boundingCylinder.endPlane().signedDistanceToPoint(o1)
             assert(nDist < 0)
             o2 = o1 - nDist*planeNormal
@@ -157,9 +155,9 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
 
         if optimize:
             if len(addedWaypoints) > 0:
-                KT, loss = KT.optimizeWaypointsAndJointPlacement(addedWaypoints[0], addedWaypoints[1], j)
+                KT, loss = KT.optimizeWaypointsAndJointPlacement(addedWaypoints[0], addedWaypoints[1], jInKT)
             else:
-                KT, loss = KT.optimizeJointPlacement(j)
+                KT, loss = KT.optimizeJointPlacement(jInKT)
     
     if orientUp:
         z = planeNormal / np.linalg.norm(planeNormal)
