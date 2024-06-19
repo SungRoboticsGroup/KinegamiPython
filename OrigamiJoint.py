@@ -33,6 +33,7 @@ class RevoluteJoint(OrigamiJoint):
         polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         neutralLength = 2*r*np.sin(polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
         self.totalBendingAngle = totalBendingAngle
+        self.numSinkLayers = numSinkLayers
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
@@ -120,6 +121,7 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         self.tubeLength = tubeLength
         neutralLength = self.revoluteLength + 2*tubeLength
         self.totalBendingAngle = totalBendingAngle
+        self.numSinkLayers = numSinkLayers
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         revolutePattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)

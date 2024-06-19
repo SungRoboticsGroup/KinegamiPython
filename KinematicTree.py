@@ -763,63 +763,6 @@ class KinematicTree(Generic[J]):
 
         return tree, result.fun
 
-
-    # def optimizeWaypointsAndJointPlacement(self, waypoint1Index, waypoint2Index, jointIndex, maxiter=1000):
-    #     start = time.time()
-
-    #     tree = copy.deepcopy(self)
-        
-    #     waypoint1 = tree.Joints[waypoint1Index]
-    #     waypoint2 = tree.Joints[waypoint2Index]
-    #     parent = tree.Joints[tree.Parents[waypoint1Index]]
-
-    #     initialWaypoint1Frame = waypoint1.ProximalDubinsFrame()
-
-    #     def transformJointToPose(index, frame2):
-    #         joint = tree.Joints[index]
-    #         frame1 = joint.ProximalDubinsFrame()
-            
-    #         transformation = frame2 * frame1.inv()
-
-    #         try:
-    #             if not tree.transformJoint(index, transformation, propogate=False, safe=False, relative=False):
-    #                 transformJointToPose(index, frame1)
-    #                 return False
-
-    #             if tree.detectCollisions() > 0:
-    #                 transformJointToPose(index, frame1)
-    #                 return False
-    #         except:
-    #             transformJointToPose(index, frame1)
-    #             return False
-            
-    #         return True
-        
-    #     # #first try putting the waypoints at the previous joint's distal frame
-    #     # if not transformJointToPose(waypoint1Index, parent.ProximalDubinsFrame()):
-    #     #     #changing waypoint1 didnt work
-    #     #     if transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame()):
-    #     #         #changing waypoint2 worked
-    #     #         transformJointToPose(waypoint1Index, parent.ProximalDubinsFrame())
-    #     #         transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame())
-    #     # else:
-    #     #     #first transform worked
-    #     #     transformJointToPose(waypoint2Index, waypoint1.ProximalDubinsFrame())
-
-    #     # print(parent.ProximalDubinsFrame(), waypoint1.ProximalDubinsFrame(), waypoint2.ProximalDubinsFrame())
-
-
-    #     # transformJointToPose(waypoint2Index, tree.Joints[jointIndex].ProximalDubinsFrame())
-    #     # transformJointToPose(waypoint1Index, tree.Joints[jointIndex].ProximalDubinsFrame())
-
-    #     # tree, newLoss = tree.optimizeJointPlacement(waypoint1Index)
-
-    #     # transformJointToPose(waypoint2Index, tree.Joints[waypoint1Index].ProximalDubinsFrame())
-    #     # transformJointToPose(jointIndex, tree.Joints[waypoint1Index].DistalDubinsFrame())
-
-    #     #optimize joint
-    #     return tree.optimizeJointPlacement(jointIndex)
-
     def optimizeJointPlacement(self, index, maxiter=1000):
         start = time.time()
 
@@ -885,27 +828,25 @@ class KinematicTree(Generic[J]):
         #print(f"Evaluating fitness_function at x={params}, : {loss}")
         return loss
 
-    def calculateWaypointFitness(self, params, index):
-        tree = copy.deepcopy(self)
-        try:
-            if not tree.transformJoint(index, SE3.Trans([params[0], params[1], params[2]]) @ SE3.Rz(params[5]) @ SE3.Ry(params[4]) @ SE3.Rx(params[3]), propogate=False, safe=False, relative=True):
-                return 100000
-        except Exception as e:
-            return 100000
-        
-  
-        def calcLoss(tree, index, addLength=True):
-            total = 0
-            for childIndex in tree.Children[index]:
-                if addLength:
-                    total += tree.Links[childIndex].path.length
-                total += tree.detectCollisions(specificJointIndex=childIndex) * 1000
-                if isinstance(tree.Joints[index], Waypoint):
-                    total += calcLoss(tree, childIndex, False)
-            return total
-        
-        return calcLoss(tree, index)
-
+    def save(self, filename):
+        with open(f"save/{filename}.tree", "w") as f:
+            save = str(self.maxAnglePerElbow) + "\n"
+            for i in range(0, len(self.Joints)):
+                joint = self.Joints[i]
+                
+                save += str(self.Parents[i]) + " "
+                if isinstance(joint, Waypoint):
+                    save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
+                elif isinstance(joint, ExtendedRevoluteJoint):
+                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
+                else:
+                    raise Exception("Not Implemented")
+                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
+                save += "\n"
+            
+            f.write(save)
+            f.close()
+                
 
     # genetic algorithm
     # def optimize(self, iterations=15):
@@ -1006,7 +947,38 @@ class KinematicTree(Generic[J]):
 #         # add incentive for joints being super close together
 #         # add disincentive for individual super long paths
 #     return totalLength + jointDistance + tree.detectCollisions()*1000, tree
-    
+
+def loadKinematicTree(filename : str):
+    def getJoint(line):
+        first = line.split(' ')
+        print(np.array(line.split('[')[1].split(",")[:-1]).reshape(4,4))
+        pose = SE3(np.array([float(x) for x in line.split('[')[1].split(",")[:-1]]).reshape(4,4))
+        match first[1]:
+            case "Waypoint":
+                numSides = int(first[2])
+                r = float(first[3])
+                pathIndex = int(first[4])
+                return Waypoint(numSides, r, pose, pathIndex)
+            case "ExtendedRevoluteJoint":
+                numSides = int(first[2])
+                r = float(first[3])
+                totalBendingAngle = float(first[4])
+                tubeLength = float(first[5])
+                numSinkLayers = int(first[6])
+                initialState = float(first[7])
+                return ExtendedRevoluteJoint(numSides, r, totalBendingAngle, tubeLength, pose, numSinkLayers, initialState)
+    try:
+        with open(f"save/{filename}.tree") as f:
+            lines = f.readlines()
+            tree = KinematicTree[OrigamiJoint](getJoint(lines[1]), float(lines[0]))
+            for i in range(2, len(lines)):
+                parent = int(lines[i].split(" ")[0])
+                tree.addJoint(parent, getJoint(lines[i]), relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
+            
+            return tree
+    except Exception as e:
+        print(e)
+        raise Exception(f"file save/{filename}.tree doesnt exist")
 
 def origamiToPrinted(tree : KinematicTree[OrigamiJoint], screwRadius: float):
     newTree = KinematicTree[PrintedJoint](tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
