@@ -8,7 +8,7 @@ import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QSurfaceFormat
+from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -691,6 +691,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     click_signal_arrow = qc.pyqtSignal(int)
     drag_change_position = qc.pyqtSignal(np.ndarray)
     drag_change_rotation = qc.pyqtSignal(float)
+    key_pressed = qc.pyqtSignal(str)
 
     selected_index = -1
 
@@ -867,6 +868,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         p = o + t * d
         return t
+    
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key_W:
+            self.key_pressed.emit("Translate")
+        elif event.key() == Qt.Key_E:
+            self.key_pressed.emit("Rotate")
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -899,7 +906,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.radius = 1
 
         self.crease_pattern = None
-        self.control_type = "Rotate"
+        self.control_type = "Translate"
 
         self.selected_joint = -1
         self.selected_arrow = -1
@@ -910,6 +917,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_transform)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
+        self.plot_widget.key_pressed.connect(self.change_control_type_key)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1096,6 +1104,7 @@ class PointEditorWindow(QMainWindow):
 
         self.control1 = QRadioButton("Translate")
         self.control2 = QRadioButton("Rotate")
+        self.control1.setChecked(True)
 
         self.control1.toggled.connect(self.change_control_type)
         self.control2.toggled.connect(self.change_control_type)
@@ -1125,6 +1134,16 @@ class PointEditorWindow(QMainWindow):
             self.control_type = "Translate"
         elif self.control2.isChecked():
             self.control_type = "Rotate"
+
+        self.update_joint()
+    
+    @QtCore.pyqtSlot(str)
+    def change_control_type_key(self, key):
+        self.control_type = key
+        if key == "Translate":
+            self.control1.setChecked(True)
+        elif key == "Rotate":
+            self.control2.setChecked(True)
 
         self.update_joint()
 
@@ -1422,6 +1441,7 @@ class PointEditorWindow(QMainWindow):
             self.selected_joint = self.select_joint_options.currentIndex() 
             temp_last = len(self.chain.Joints) - 1
             if self.chain.delete(self.selected_joint):
+                self.reload_IDs()
                 self.update_joint()
                 success_dialog = SuccessDialog('Joint successfully deleted!')
                 success_dialog.exec_()
@@ -1429,6 +1449,12 @@ class PointEditorWindow(QMainWindow):
             else:
                 error_dialog = ErrorDialog('Error deleting joint.')
                 error_dialog.exec_()
+
+    def reload_IDs(self):
+        print("reload IDs here")
+        if self.chain is not None:
+            for index, joint in enumerate(self.chain.Joints):
+                joint.id = index
 
     def update_joint(self):
         self.select_joint_options.blockSignals(True)
@@ -1588,6 +1614,16 @@ class PointEditorWindow(QMainWindow):
 
             success_dialog = SuccessDialog('Chain created!')
             success_dialog.exec_()
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key_W:
+            self.control_type = "Translate"
+            self.control1.setChecked(True)
+            self.update_joint()
+        elif event.key() == Qt.Key_E:
+            self.control_type = "Rotate"
+            self.control2.setChecked(True)
+            self.update_joint()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

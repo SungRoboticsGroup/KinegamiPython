@@ -320,8 +320,12 @@ class Joint(ABC):
             circle.setObjectName("circle")
             widget.plot_widget.addItem(circle)
 
+            arrow = np.array(points[-num_points//4:])
+            arrow2 = np.array(points[:num_points//4])
+            arrows = np.append(arrow, arrow2, axis=0)
+
             # generate the arrows
-            line = LineItemWithID(pos=points[:num_points//4], color=colors[i], width=15, antialias=True, id=i)
+            line = LineItemWithID(pos=arrows, color=colors[i], width=15, antialias=True, id=i)
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
 
