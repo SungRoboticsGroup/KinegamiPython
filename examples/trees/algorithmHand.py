@@ -7,6 +7,7 @@ this_dir = os.path.dirname(__file__)
 main_dir = os.path.abspath(os.path.join(this_dir, '../..'))
 sys.path.append(main_dir)
 from makeKinematicTree import *
+from testqtgraph import *
 
 r = 1
 numSides = 4
@@ -15,7 +16,7 @@ unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutral
 extensionLength = (jointLength - unextendedRevoluteJointLength)/2
 
 spec = JointSpecificationTree(Waypoint(numSides, r, Pose=SE3()))
-palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(2.5,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
+palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(4,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
 palm = spec.addJoint(0, palmJoint, relative=True)
 
 
@@ -54,8 +55,15 @@ middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, exten
 #         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
 
         
-tree = makeTubularKinematicTree(spec, plotSteps=False)
+tree = makeTubularKinematicTree(spec, plotSteps=False, optimize=False)
 
-print(tree.detectCollisions(plot=True))
+tree.show()
+
 tree.save("algorithmHand")
-tree.show(jointAxisScale=100, showJointPoses=False, showCollisionBoxes=False)
+
+#plotPrintedTree(origamiToPrinted(tree, 0.05), "algorithmHandPrinted")
+#tree.show()
+
+# print(tree.detectCollisions(plot=True))
+# tree.save("algorithmHand")
+# tree.show(jointAxisScale=100, showJointPoses=False, showCollisionBoxes=False)

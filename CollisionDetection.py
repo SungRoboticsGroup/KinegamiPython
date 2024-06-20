@@ -153,8 +153,8 @@ class CollisionCapsule:
         self.radius = radius
         self.height = height
         self.base = base @ SE3.Ry(np.pi/2)
-        self.otherBase = self.base @ SE3.Trans(self.height * self.base.n)
-        self.center = self.base.t + self.base.n * (self.height/2 + np.sign(self.height)*self.radius)
+        self.otherBase = self.base @ SE3.Trans(self.height * self.base.R[:,2])
+        self.center = (self.base @ SE3.Trans(self.height/2 * self.base.R[:,2])).t
         self.halfDist = np.abs(self.height/2) + self.radius
 
     
@@ -223,8 +223,50 @@ class CollisionCapsule:
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
     def frameOverlap(self, frame, radius):
-        return False, None
-        #return self.collidesWith(CollisionCapsule(frame, radius, 0))
+        # Capsule endpoints
+        capsuleStart = self.base.t
+        capsuleEnd = self.base.t + self.height * self.base.R[:,2]
+        
+        # Circle center and normal
+        circleCenter = frame.t
+        circleNormal = frame.R[:, 2]
+
+        # Project the circle's center onto the line defined by the capsule's segment
+        closestPoint = closestPointToSegment(circleCenter, capsuleStart, capsuleEnd)
+        
+        # Distance from the circle's center to the closest point on the capsule's line segment
+        lineDist = np.linalg.norm(circleCenter - closestPoint)
+        
+        if lineDist <= radius + self.radius:
+            # Calculate intersection points
+            intersectionPoints = []
+            
+            # Check if the circle intersects with the cylindrical part of the capsule
+            if lineDist <= radius + self.radius:
+                intersectionPoints.append(closestPoint)
+            
+            # Check hemispherical ends of the capsule
+            startDist = np.linalg.norm(circleCenter - capsuleStart)
+            endDist = np.linalg.norm(circleCenter - capsuleEnd)
+            
+            if startDist <= radius + self.radius:
+                intersectionPoints.append(capsuleStart)
+            
+            if endDist <= radius + self.radius:
+                intersectionPoints.append(capsuleEnd)
+            
+            # If the normal projection of the circle center to the capsule line segment is outside the segment, then it won't intersect
+            normalProjection = np.dot(circleCenter - capsuleStart, circleNormal)
+            closestPointOnCirclePlane = circleCenter - normalProjection * circleNormal
+            
+            circlePlaneDist = pointToLine(closestPointOnCirclePlane, capsuleStart, capsuleEnd)
+            
+            if circlePlaneDist <= radius + self.radius:
+                intersectionPoints.append(closestPointOnCirclePlane)
+            
+            return True, intersectionPoints[0]
+        
+        return False, []
     
     def collidesWith(self, other):
         #if too far away to collide, return false
@@ -289,3 +331,18 @@ def signedDistanceToFrame(point, frame : SE3()):
     dist = np.dot(vector, frame.n)
 
     return dist
+
+
+def pointToLine(p, a, b):
+    """Compute the minimum distance from point p to line segment ab."""
+    pa = p - a
+    ba = b - a
+    h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
+    return np.linalg.norm(pa - h * ba)
+
+def closestPointToSegment(p, a, b):
+    """Compute the closest point from point p to line segment ab."""
+    pa = p - a
+    ba = b - a
+    h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
+    return a + h * ba

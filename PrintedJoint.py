@@ -52,6 +52,9 @@ class PrintedJoint(Joint):
     def toOrigami(self, numSides : int, numLayers : int = 1):
         pass
 
+    def extendSegment(self, amount):
+        pass
+
 class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     def __init__(self, r : float, startBendingAngle : float, endBendingAngle : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
@@ -104,7 +107,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad > /dev/null")
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
 
     def renderPose(self, folder):
         rot = SE3.Ry(np.pi/2)

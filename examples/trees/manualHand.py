@@ -19,7 +19,7 @@ extensionLength = (jointLength - unextendedRevoluteJointLength)/2
 print(extensionLength)
 
 tree = KinematicTree(Waypoint(numSides, r, Pose=SE3()))
-palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(2.5,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
+palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(3.5,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
 palm = tree.addJoint(0, palmJoint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)

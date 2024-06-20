@@ -253,6 +253,8 @@ class KinematicTree(Generic[J]):
     
     def detectCollisions(self, specificJointIndex = None, plot=False):
         #TODO: check if base circles intersect within the same branch
+        def posesAreSame(pose1, pose2):
+            return np.allclose(pose1.t, pose2.t, rtol=1e-05, atol=1e-08) and np.allclose(pose1.n, pose2.n, rtol=1e-05, atol=1e-08)
 
         numCollisions = 0
         EPSILON = 0.001
@@ -267,7 +269,7 @@ class KinematicTree(Generic[J]):
             for j in range(0, len(self.Joints)):
                 joint2 = self.Joints[j]
                 #check not joint-link-joint
-                if joint != joint2 and self.Links[i].StartDubinsPose != joint2.DistalDubinsFrame() and self.Links[j].StartDubinsPose != joint.DistalDubinsFrame() and joint.DistalDubinsFrame() != joint2.ProximalDubinsFrame() and joint2.DistalDubinsFrame() != joint.ProximalDubinsFrame():
+                if joint != joint2 and not posesAreSame(self.Links[i].StartDubinsPose, joint2.DistalDubinsFrame()) and not posesAreSame(self.Links[j].StartDubinsPose, joint.DistalDubinsFrame()) and not posesAreSame(joint.DistalDubinsFrame(), joint2.ProximalDubinsFrame()) and not posesAreSame(joint2.DistalDubinsFrame(), joint.ProximalDubinsFrame()):
                     jointsCollided = False
                     idx1 = 0
                     for capsule1 in joint.collisionCapsules():
@@ -290,7 +292,7 @@ class KinematicTree(Generic[J]):
             for j in range(0,len(self.Links)):
                 link = self.Links[j]
                 #check link and joint not connected
-                if link.StartDubinsPose != joint.DistalDubinsFrame() and link.EndDubinsPose != joint.ProximalDubinsFrame():
+                if not posesAreSame(link.StartDubinsPose, joint.DistalDubinsFrame()) and not posesAreSame(link.EndDubinsPose, joint.ProximalDubinsFrame()):
                     collided = False
                     idx1 = 0
                     for capsule1 in joint.collisionCapsules():
@@ -313,7 +315,7 @@ class KinematicTree(Generic[J]):
             for j in range(0,len(self.Links)):
                 link2 = self.Links[j]
                 #check that not part of the same branch and not link-joint-link
-                if link.StartDubinsPose != link2.StartDubinsPose and link.EndDubinsPose != link2.StartDubinsPose and link2.EndDubinsPose != link.StartDubinsPose and self.Joints[i].DistalDubinsFrame() != link2.StartDubinsPose and self.Joints[j].DistalDubinsFrame() != link.StartDubinsPose:
+                if not posesAreSame(link.StartDubinsPose, link2.StartDubinsPose) and not posesAreSame(link.EndDubinsPose, link2.StartDubinsPose) and not posesAreSame(link2.EndDubinsPose, link.StartDubinsPose) and not posesAreSame(self.Joints[i].DistalDubinsFrame(), link2.StartDubinsPose) and not posesAreSame(self.Joints[j].DistalDubinsFrame(), link.StartDubinsPose):
                     linksCollided = False
                     idx1 = 0
                     for capsule1 in link.collisionCapsules():
@@ -330,8 +332,7 @@ class KinematicTree(Generic[J]):
                                 idx2 += 1
                         idx1 += 1
                 
-                #TODO: check if works, makes sure branch doesn't intersect itself
-                elif link2 != link and not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[j], Waypoint):
+                elif link2 != link and not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[j], Waypoint) and posesAreSame(link.StartDubinsPose, link2.StartDubinsPose):
                     idx1 = 0
                     for capsule in link.collisionCapsules():
                         didOverlap, collisionPoint = capsule.frameOverlap(link2.EndDubinsPose, self.r)
@@ -365,7 +366,6 @@ class KinematicTree(Generic[J]):
                 else:
                     print(f"Skipping link between joint {parentIndex} and joint {i}. Extending joint {parentIndex} by {self.Links[i].path.tMag} instead")
                     source.extendSegment(self.Links[i].path.tMag)
-                    return
 
         sourceParameters = source.printParameters
 
@@ -708,7 +708,10 @@ class KinematicTree(Generic[J]):
         initialGuess[7:10] = SE3.Rt(transform1.R, np.zeros(3)).eul()
             
         try:
-            initialTree.transformJoint(waypoint1Index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[7]) @ SE3.Ry(initialGuess[8]) @ SE3.Rz(initialGuess[9]), propogate=False, safe=False, relative=False)
+            initialTree.transformJoint(waypoint1Index, transform1, propogate=False, safe=False, relative=False)
+            if (initialTree.detectCollisions() > 0):
+                initialTree.transformJoint(waypoint1Index, transform1.inv(), propogate=False, safe=False, relative=False)
+                raise Exception()
         except:
             initialGuess[0:3] = [0]*3
             initialGuess[7:10] = [0]*3
@@ -719,6 +722,9 @@ class KinematicTree(Generic[J]):
 
         try:
             initialTree.transformJoint(waypoint2Index, SE3.Trans(initialGuess[3:6]) @ SE3.Rz(initialGuess[10]) @ SE3.Ry(initialGuess[11]) @ SE3.Rz(initialGuess[12]), propogate=False, safe=False, relative=False)
+            if (initialTree.detectCollisions() > 0):
+                initialTree.transformJoint(waypoint2Index, transform2.inv(), propogate=False, safe=False, relative=False)
+                raise Exception()
         except:
             initialGuess[3:6] = [0]*3
             initialGuess[10:13] = [0]*3
@@ -728,11 +734,14 @@ class KinematicTree(Generic[J]):
         initialGuess[6] = transform3.t[2]
         initialGuess[13] = np.arctan2(transform3.R[1, 0], transform3.R[0, 0])
         try:
-            initialTree.transformJoint(jointIndex, SE3.Trans([0,0,initialGuess[6]]) @ SE3.Rz(initialGuess[13]), propogate=False, safe=False, relative=True)
+            jointTransform = SE3.Trans([0,0,initialGuess[6]]) @ SE3.Rz(initialGuess[13])
+            initialTree.transformJoint(jointIndex, jointTransform, propogate=False, safe=False, relative=True)
+            if (initialTree.detectCollisions() > 0):
+                initialTree.transformJoint(jointIndex, jointTransform.inv(), propogate=False, safe=False, relative=False)
+                raise Exception()
         except:
             initialGuess[6] = 0
             initialGuess[13] = 0
-        
         
         initialLoss = objective(initialGuess)
 
@@ -823,6 +832,10 @@ class KinematicTree(Generic[J]):
         #print(f"Evaluating fitness_function at x={params}, : {loss}")
         return loss
 
+    def postOptimize(self):
+        #TODO
+        pass
+
     def save(self, filename):
         with open(f"save/{filename}.tree", "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
@@ -851,7 +864,7 @@ class KinematicTree(Generic[J]):
         bounds = [(-self.r*100, self.r*100)] * (len(self.Joints) - 1) + [(-np.pi*2, np.pi*2)] * (len(self.Joints) - 1)
         x0 = np.zeros(len(self.Joints)*2 - 2)
         print(f"INITIAL LOSS: {self.calculateTreeLoss(x0)}")
-        result = dual_annealing(self.calculateTreeLoss, bounds=bounds, x0=x0, maxiter=iterations, maxfun=100)
+        result = dual_annealing(self.calculateTreeLoss, bounds=bounds, maxiter=iterations, maxfun=100, x0=x0)
 
         print(result.x)
         print(result.fun)
@@ -889,6 +902,7 @@ class KinematicTree(Generic[J]):
         tree = self.transformedTree(params)
 
         if tree == None:
+            print(time.time() - start)
             return 100000
 
         #calculate total path length
