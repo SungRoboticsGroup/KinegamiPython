@@ -57,11 +57,5 @@ middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, exten
 tree = makeTubularKinematicTree(spec, plotSteps=False)
 
 print(tree.detectCollisions(plot=True))
-tree.save("test")
-tree.show(jointAxisScale=100, showJointPoses=False, showCollisionBoxes=False)
-
-# from testqtgraph import *
-# plotPrintedTree(origamiToPrinted(tree, 0.05), "test")
-
-tree2 = loadKinematicTree("test")
+tree.save("algorithmHand")
 tree.show(jointAxisScale=100, showJointPoses=False, showCollisionBoxes=False)

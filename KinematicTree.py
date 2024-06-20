@@ -21,7 +21,7 @@ import time
 from typing import Generic, TypeVar
 from functools import partial
 from geometryHelpers import *
-from pyswarm import pso
+from scipy.optimize import dual_annealing
 
 J = TypeVar("J", bound=Joint)
 
@@ -694,11 +694,6 @@ class KinematicTree(Generic[J]):
             #print(time.time() - start2)
             return ans
 
-        # optimalParams, optimalValues = pso(objective, lb = [b[0] for b in bounds], ub = [b[1] for b in bounds])
-
-        # print(optimalParams)
-        # print(optimalValues)
-
         #try to make as close as possible
         initialTree = copy.deepcopy(self)
 
@@ -848,110 +843,75 @@ class KinematicTree(Generic[J]):
             f.close()
                 
 
-    # genetic algorithm
-    # def optimize(self, iterations=15):
-    #     def select_mating_pool(pop, fitness, num_parents):
-    #         parents = np.empty((num_parents, pop.shape[1]))
+    # global optimization algorithm
+    def globalOptimize(self, iterations=10):
 
-    #         for parent_num in range(num_parents):
+        start = time.time()
 
-    #             max_fitness_idx = np.where(fitness == np.max(fitness))
+        bounds = [(-self.r*100, self.r*100)] * (len(self.Joints) - 1) + [(-np.pi*2, np.pi*2)] * (len(self.Joints) - 1)
+        x0 = np.zeros(len(self.Joints)*2 - 2)
+        print(f"INITIAL LOSS: {self.calculateTreeLoss(x0)}")
+        result = dual_annealing(self.calculateTreeLoss, bounds=bounds, x0=x0, maxiter=iterations, maxfun=100)
 
-    #             max_fitness_idx = max_fitness_idx[0][0]
+        print(result.x)
+        print(result.fun)
+        print(f"TOOK TIME: {time.time() - start}, LOSS: {result.fun}")
 
-    #             parents[parent_num, :] = pop[max_fitness_idx, :]
+        return self.transformedTree(result.x)
 
-    #             fitness[max_fitness_idx] = -99999999999
-
-    #         return parents
-    #     def crossover(parents, offspring_size):
-    #         offspring = np.empty(offspring_size)
-    #         # The point at which crossover takes place between two parents. Usually, it is at the center.
-    #         crossover_point = np.uint8(offspring_size[1]/2)
+    def transformedTree(self, params):
+        tree = copy.deepcopy(self)
         
-    #         for k in range(offspring_size[0]):
-    #             # Index of the first parent to mate.
-    #             parent1_idx = k%parents.shape[0]
-    #             # Index of the second parent to mate.
-    #             parent2_idx = (k+1)%parents.shape[0]
-    #             # The new offspring will have its first half of its genes taken from the first parent.
-    #             offspring[k, 0:crossover_point] = parents[parent1_idx, 0:crossover_point]
-    #             # The new offspring will have its second half of its genes taken from the second parent.
-    #             offspring[k, crossover_point:] = parents[parent2_idx, crossover_point:]
-    #         return offspring
-    #     def mutation(offspring_crossover, mutation_rate=0.2, mutation_range_factor=50):
-    #         for idx in range(offspring_crossover.shape[0]):
-    #             for gene_idx in range(offspring_crossover.shape[1]):
-    #                 if np.random.rand() < mutation_rate:
-    #                     random_value = np.random.uniform(-self.r * mutation_range_factor, self.r * mutation_range_factor)
-    #                     offspring_crossover[idx, gene_idx] += random_value
-            
-    #         return offspring_crossover
-
-    #     dim = len(self.Joints)*2
-
-    #     solutionsPerPopulation = 8
-    #     newPopulation = np.vstack((np.zeros(dim), np.random.uniform(low = -self.r*25, high = self.r*25, size=(solutionsPerPopulation - 1,dim))))
-
-    #     bestFitness = -calculateTreeLoss(self, np.zeros(dim))[0]
-    #     print(f"INITIAL: {bestFitness}")
-    #     bestTree = self
-
-    #     for i in range(iterations):
-    #         start = time.time()
-
-    #         fitness = np.array([-calculateTreeLoss(self, params)[0] for params in newPopulation])
-
-    #         parents = select_mating_pool(newPopulation, fitness, 4) #num parents mating
-
-    #         offspringCrossover = crossover(parents, offspring_size=(solutionsPerPopulation - parents.shape[0], dim))
-
-    #         offspringMutation = mutation(offspringCrossover)
-
-    #         newPopulation[0:parents.shape[0], :] = parents
-    #         newPopulation[parents.shape[0]:, :] = offspringMutation
-
-    #         if np.max(fitness) > bestFitness:
-    #             bestFitness = np.max(fitness)
-    #             best_match_idx = np.where(fitness == np.max(fitness))
-    #             bestTree = calculateTreeLoss(self, newPopulation[best_match_idx][0])[1]
-            
-    #         print(f"Best result {i}: {np.max(fitness)}, Time: {time.time() - start}")
+        jointsToTransform = list(range(1,len(tree.Joints)))
         
-    #     return bestTree
+        ctr = 0
+        while len(jointsToTransform) > 0:
+            idx = jointsToTransform[0]
+            try:
+                if not tree.transformJoint(idx, SE3.Trans([0,0,params[idx]]) @ SE3.Rz(params[idx + len(tree.Joints) - 2]), propogate=False, relative=True, safe=False):
+                    raise Exception("transform didnt work")
 
-# def calculateTreeLoss(initialTree, params):
-#     tree2 = copy.deepcopy(initialTree)
-#     for i in range(0, len(tree2.Joints)):
-#         tree2.Joints[i].translateAlongZ(params[i])
-#     for i in range(len(tree2.Joints), len(params)):
-#         tree2.Joints[i - len(tree2.Joints)].rotateAboutZ(params[i])
-    
-#     tree = KinematicTree[OrigamiJoint](tree2.Joints[0], tree2.maxAnglePerElbow)
-#     try:
-#         for i in range(1, len(tree2.Joints)):
-#             tree.addJoint(tree2.Parents[i], tree2.Joints[i], relative=False, safe=False, fixedPosition=True, fixedOrientation=True)
-#     except Exception as e:
-#         return 100000, None
+                jointsToTransform.remove(idx)
+                ctr = 0
+            except:
+                return None
+                # jointsToTransform.remove(idx)
+                # jointsToTransform.append(idx)
+                # ctr += 1
+                # if ctr > len(jointsToTransform):
+                #     return None
+        
+        return tree
 
-#     #calculate total path length
-#     totalLength = 0
-#     for link in tree.Links:
-#         totalLength += link.path.length
+    def calculateTreeLoss(self, params):
+        start = time.time()
 
-#     jointDistance = 0
-#     for i in range(1,len(tree.Joints)):
-#         jointDistance += np.linalg.norm(tree.Joints[i].ProximalDubinsFrame().t - tree.Joints[tree.Parents[i]].DistalDubinsFrame().t)
-    
-#     #ideas:
-#         # add incentive for joints being super close together
-#         # add disincentive for individual super long paths
-#     return totalLength + jointDistance + tree.detectCollisions()*1000, tree
+        tree = self.transformedTree(params)
+
+        if tree == None:
+            return 100000
+
+        #calculate total path length
+        totalLength = 0
+        for link in tree.Links:
+            totalLength += link.path.length
+
+        jointDistance = 0
+        for i in range(1,len(tree.Joints)):
+            jointDistance += np.linalg.norm(tree.Joints[i].ProximalDubinsFrame().t - tree.Joints[tree.Parents[i]].DistalDubinsFrame().t)
+        
+        #ideas:
+            # add incentive for joints being super close together
+            # add disincentive for individual super long paths
+
+        loss = totalLength + tree.detectCollisions()*1000
+
+        print(time.time() - start)
+        return loss
 
 def loadKinematicTree(filename : str):
     def getJoint(line):
         first = line.split(' ')
-        print(np.array(line.split('[')[1].split(",")[:-1]).reshape(4,4))
         pose = SE3(np.array([float(x) for x in line.split('[')[1].split(",")[:-1]]).reshape(4,4))
         match first[1]:
             case "Waypoint":
