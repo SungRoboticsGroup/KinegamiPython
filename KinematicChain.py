@@ -45,28 +45,30 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
-            if jointIndex > 0 and jointIndex < len(self.Joints) - 1:
-                prevJoint = self.Joints[jointIndex - 1]
-                nextJoint = self.Joints[jointIndex + 1]
-                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(),
-                                nextJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
-                self.Links[jointIndex - 1] = newLink
-                self.Links.pop(jointIndex)
-            elif jointIndex == 0 and len(self.Joints) > 1:
-                self.Links.pop(0)
-            elif jointIndex == len(self.Joints) - 1:
-                self.Links.pop(-1)
+            parentIndex = self.Parents[jointIndex]
+            children_to_reassign = self.Children[jointIndex]
+            for childIndex in children_to_reassign:
+                self.Parents[childIndex] = parentIndex
+                if parentIndex != -1:
+                    self.Children[parentIndex].append(childIndex)
+
+            if parentIndex != -1:
+                for childIndex in children_to_reassign:
+                    childJoint = self.Joints[childIndex]
+                    parentJoint = self.Joints[parentIndex]
+                    newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
+                                    childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                    self.Links[childIndex] = newLink
 
             self.Joints.pop(jointIndex)
-            if hasattr(self, 'Children'):
-                for i in range(len(self.Children)):
-                    self.Children[i] = [child - 1 if child > jointIndex else child for child in self.Children[i]]
-                self.Children.pop(jointIndex)
+            self.Children.pop(jointIndex)
+            self.Parents.pop(jointIndex)
+            if jointIndex < len(self.Links):
+                self.Links.pop(jointIndex)
 
-            if hasattr(self, 'Parents'):
-                self.Parents = [parent - 1 if parent > jointIndex else parent for parent in self.Parents]
-                self.Parents.pop(jointIndex)
-            
+            self.Parents = [p - 1 if p > jointIndex else p for p in self.Parents]
+            self.Children = [[child - 1 if child > jointIndex else child for child in children] 
+                                for children in self.Children]
             if len(self.Joints) > 0:
                 self.recomputeBoundingBall()
             """"
