@@ -47,6 +47,9 @@ class KinematicChain(KinematicTree):
         else:
             parentIndex = self.Parents[jointIndex]
             children_to_reassign = self.Children[jointIndex]
+
+            children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
+
             for childIndex in children_to_reassign:
                 self.Parents[childIndex] = parentIndex
                 if parentIndex != -1:
@@ -67,11 +70,13 @@ class KinematicChain(KinematicTree):
                 self.Links.pop(jointIndex)
 
             self.Parents = [p - 1 if p > jointIndex else p for p in self.Parents]
+
             self.Children = [[child - 1 if child > jointIndex else child for child in children] 
                                 for children in self.Children]
+
             if len(self.Joints) > 0:
                 self.recomputeBoundingBall()
-            """"
+            """
             nextJoint = self.Joints[jointIndex+1]
             prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
             newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
