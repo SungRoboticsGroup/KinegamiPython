@@ -1130,7 +1130,7 @@ class PointEditorWindow(QMainWindow):
 
     def press_cancel(self):
         self.cancel_pressed = True
-        for i in range(len(self.chain.Joints) - 1, self.last_joint, -1):
+        for i in range(len(self.chain.Joints) -1, self.last_joint, -1):
             self.chain.delete(i)
         self.update_joint()
         self.button_dock.hide()
