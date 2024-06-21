@@ -874,6 +874,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.key_pressed.emit("Translate")
         elif event.key() == Qt.Key_E:
             self.key_pressed.emit("Rotate")
+        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            self.key_pressed.emit("Enter")
+        elif event.key() == Qt.Key_Escape:
+            self.key_pressed.emit("Escape")
+        elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
+            self.key_pressed.emit("Delete")
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -917,7 +923,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_transform)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
-        self.plot_widget.key_pressed.connect(self.change_control_type_key)
+        self.plot_widget.key_pressed.connect(self.key_pressed)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1138,12 +1144,31 @@ class PointEditorWindow(QMainWindow):
         self.update_joint()
     
     @QtCore.pyqtSlot(str)
-    def change_control_type_key(self, key):
-        self.control_type = key
+    def key_pressed(self, key):
         if key == "Translate":
+            self.control_type = key
             self.control1.setChecked(True)
         elif key == "Rotate":
+            self.control_type = key
             self.control2.setChecked(True)
+        elif key == "Enter":
+            self.press_confirm()
+        elif key == "Escape":
+            self.press_cancel()
+        elif key == "Delete":
+            if (self.chain and self.selected_joint != -1):
+                self.selected_joint = self.select_joint_options.currentIndex() 
+                temp_last = len(self.chain.Joints) - 1
+                if self.chain.delete(self.selected_joint):
+                    self.reload_IDs()
+                    self.update_joint()
+                    success_dialog = SuccessDialog('Joint successfully deleted!')
+                    success_dialog.exec_()
+                    self.last_joint = temp_last
+                else:
+                    error_dialog = ErrorDialog('Error deleting joint.')
+                    error_dialog.exec_()
+                self.press_cancel()
 
         self.update_joint()
 
@@ -1451,7 +1476,6 @@ class PointEditorWindow(QMainWindow):
                 error_dialog.exec_()
 
     def reload_IDs(self):
-        print("reload IDs here")
         if self.chain is not None:
             for index, joint in enumerate(self.chain.Joints):
                 joint.id = index
@@ -1624,6 +1648,24 @@ class PointEditorWindow(QMainWindow):
             self.control_type = "Rotate"
             self.control2.setChecked(True)
             self.update_joint()
+        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            self.press_confirm()
+        elif event.key() == Qt.Key_Escape:
+            self.press_cancel()
+        elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
+            if (self.chain and self.selected_joint != -1):
+                self.selected_joint = self.select_joint_options.currentIndex() 
+                temp_last = len(self.chain.Joints) - 1
+                if self.chain.delete(self.selected_joint):
+                    self.reload_IDs()
+                    self.update_joint()
+                    success_dialog = SuccessDialog('Joint successfully deleted!')
+                    success_dialog.exec_()
+                    self.last_joint = temp_last
+                else:
+                    error_dialog = ErrorDialog('Error deleting joint.')
+                    error_dialog.exec_()
+                self.press_cancel()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
