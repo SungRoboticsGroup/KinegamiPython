@@ -40,7 +40,7 @@ class PrintParameters:
         return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.075, r, screwRadius, thickness, screwRadius)
 
 class PrintedJoint(Joint):
-    def __init__(self, r : float, neutralLength : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
+    def __init__(self, r : float, neutralLength : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
         self.screwRadius = np.round(screwRadius, 4)
         self.printParameters = printParameters
         self.twistAngle = 0
@@ -104,7 +104,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad > /dev/null")
+        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
 
     def renderPose(self, folder):
         rot = SE3.Ry(np.pi/2)

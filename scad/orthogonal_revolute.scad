@@ -71,7 +71,7 @@ module hole_grid(hole_height, grid_h) {
 module joint_bottom() {
     //make grid of holes
     grid_hole_height = hole_radius*2 + hole_attach_height * 2;
-    hole_grid(grid_hole_height, grid_hole_radius);
+    //hole_grid(grid_hole_height, grid_hole_radius);
     
     bottom_joint_attach_height = max_turn_b + axle_radius + axle_offset;
    
