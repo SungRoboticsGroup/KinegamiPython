@@ -59,7 +59,7 @@ Input:
 Output: a KinematicTree object that instantiates the desired kinematics
         as a tubular tree with radius r
 """
-def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False, optimize = True) -> KinematicTree:
+def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False, optimize = False) -> KinematicTree:
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
     # Set orientation appropriately

@@ -37,8 +37,8 @@ pointer2 = spec.addJoint(pointer1, ExtendedRevoluteJoint(numSides, r, np.pi, ext
                         SE3.Trans(4,0,0)), relative=True)
 
 
-# pointerEnd = spec.addJoint(pointer2, EndTip(numSides, r, 
-#         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
+# # pointerEnd = spec.addJoint(pointer2, EndTip(numSides, r, 
+# #         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
 
         
 
@@ -57,9 +57,11 @@ middle2 = spec.addJoint(middle1, ExtendedRevoluteJoint(numSides, r, np.pi, exten
         
 tree = makeTubularKinematicTree(spec, plotSteps=False, optimize=False)
 
+tree = tree.postOptimize()
+
 tree.show()
 
-tree.save("algorithmHand")
+#tree.save("algorithmHand")
 
 #plotPrintedTree(origamiToPrinted(tree, 0.05), "algorithmHandPrinted")
 #tree.show()

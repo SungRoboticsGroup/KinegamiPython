@@ -8,4 +8,6 @@ tree = loadKinematicTree("algorithmHand")
 tree = tree.postOptimize()
 
 print(tree.detectCollisions(plot=True))
+
+tree.show()
 plotPrintedTree(origamiToPrinted(tree, 0.05), "test3")
