@@ -45,24 +45,35 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
+            # parent of the selected joint
             parentIndex = self.Parents[jointIndex]
+
+            # children of the selected joint (represented as indices)
             children_to_reassign = self.Children[jointIndex]
 
-            children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
+            print("Parent", parentIndex)
+            print("Children", children_to_reassign)
 
+            # not sure what this does?
+            #children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
+
+            # assign every child of the joint to the new parent
+            # and assign the new parent to every child
             for childIndex in children_to_reassign:
                 self.Parents[childIndex] = parentIndex
                 if parentIndex != -1:
                     self.Children[parentIndex].append(childIndex)
 
+            # creates new links between children and parent
             if parentIndex != -1:
+                parentJoint = self.Joints[parentIndex]
                 for childIndex in children_to_reassign:
                     childJoint = self.Joints[childIndex]
-                    parentJoint = self.Joints[parentIndex]
                     newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
                                     childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
                     self.Links[childIndex] = newLink
 
+            # delete the selected joint
             self.Joints.pop(jointIndex)
             self.Children.pop(jointIndex)
             self.Parents.pop(jointIndex)
@@ -76,6 +87,7 @@ class KinematicChain(KinematicTree):
 
             if len(self.Joints) > 0:
                 self.recomputeBoundingBall()
+
             """
             nextJoint = self.Joints[jointIndex+1]
             prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
