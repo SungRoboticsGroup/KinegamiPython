@@ -921,7 +921,7 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
-        self.plot_widget.drag_change_position.connect(self.drag_transform)
+        self.plot_widget.drag_change_position.connect(self.drag_translate)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
         self.plot_widget.key_pressed.connect(self.key_pressed)
 
@@ -1210,7 +1210,7 @@ class PointEditorWindow(QMainWindow):
             self.update_translate_slider()
 
     @QtCore.pyqtSlot(np.ndarray)
-    def drag_transform(self, new_position):
+    def drag_translate(self, new_position):
         old_position = self.chain.Joints[self.selected_joint].Pose.t
         trans = new_position - old_position
         transformation = SE3.Trans(trans[0], trans[1], trans[2])
@@ -1220,6 +1220,7 @@ class PointEditorWindow(QMainWindow):
 
         self.update_rotation_slider()
         self.update_translate_slider()
+
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
         transformation = SE3()
@@ -1230,7 +1231,7 @@ class PointEditorWindow(QMainWindow):
         elif (self.selected_axis_name == 'Z'):
             transformation = SE3.Rz(new_rotation)
 
-        if self.chain.transformJoint(self.selected_joint, transformation, propogate=False, relative=True):
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=True, relative=True):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
