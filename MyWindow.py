@@ -390,34 +390,6 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        """
-        pose_layout = QHBoxLayout()
-        pose_label = QLabel("Pose (SE3):")
-        self.pose_input = QLineEdit()
-        pose_layout.addWidget(pose_label)
-        pose_layout.addWidget(self.pose_input)
-        layout.addLayout(pose_layout)
-        """
-
-        relative_layout = QHBoxLayout()
-        self.radio_group = QButtonGroup()
-        self.relative = QRadioButton('Relative')
-        self.absolute = QRadioButton('Absolute')
-        self.relative.setChecked(True)
-        self.relative.clicked.connect(self.on_relative_clicked)
-        self.absolute.clicked.connect(self.on_absolute_clicked)
-        relative_layout.addWidget(self.relative)
-        relative_layout.addWidget(self.absolute) 
-        layout.addLayout(relative_layout)
-
-        self.position_checkbox = QCheckBox('Fixed Position')
-        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
-        layout.addWidget(self.position_checkbox)
-
-        self.orientation_checkbox = QCheckBox('Fixed Orientation')
-        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
-        layout.addWidget(self.orientation_checkbox)
-
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -429,10 +401,9 @@ class AddPrismaticDialog(AddJointDialog):
 
     def onApplyClicked(self):
         try:
-            neutralLength = int(self.length_input.text())
+            neutralLength = float(self.length_input.text())
             numLayers = int(self.numLayers_input.text())
             coneAngleText = self.angle_input.text()
-            # poseText = self.pose_input.text()
 
             self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, self.parse_angle(coneAngleText), SE3())
             self.accept()
@@ -454,34 +425,6 @@ class AddRevoluteDialog(AddJointDialog):
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
-
-        """
-        pose_layout = QHBoxLayout()
-        pose_label = QLabel("Pose (SE3):")
-        self.pose_input = QLineEdit()
-        pose_layout.addWidget(pose_label)
-        pose_layout.addWidget(self.pose_input)
-        layout.addLayout(pose_layout)
-        """
-
-        relative_layout = QHBoxLayout()
-        self.radio_group = QButtonGroup()
-        self.relative = QRadioButton('Relative')
-        self.absolute = QRadioButton('Absolute')
-        self.relative.setChecked(True)
-        self.relative.clicked.connect(self.on_relative_clicked)
-        self.absolute.clicked.connect(self.on_absolute_clicked)
-        relative_layout.addWidget(self.relative)
-        relative_layout.addWidget(self.absolute)
-        layout.addLayout(relative_layout)
-
-        self.position_checkbox = QCheckBox('Fixed Position')
-        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
-        layout.addWidget(self.position_checkbox)
-
-        self.orientation_checkbox = QCheckBox('Fixed Orientation')
-        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
-        layout.addWidget(self.orientation_checkbox)
 
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -991,18 +934,18 @@ class PointEditorWindow(QMainWindow):
 
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.select_joint_options = QComboBox()
-        self.transform_joint_button = QPushButton("Transform Joint")
-        self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
-        self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
+        # self.transform_joint_button = QPushButton("Transform Joint")
+        # self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
+        # self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
         self.edit_joint_state_button = QPushButton("Edit Joint State")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
-        joint_layout.addWidget(self.transform_joint_button)
-        joint_layout.addWidget(self.rotate_joint_button)
-        joint_layout.addWidget(self.translate_joint_button)
+        # joint_layout.addWidget(self.transform_joint_button)
+        # joint_layout.addWidget(self.rotate_joint_button)
+        # joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
         joint_layout.addWidget(self.edit_joint_state_button)
         joint_layout.addWidget(self.current_state_label)
@@ -1016,9 +959,9 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
 
-        self.transform_joint_button.clicked.connect(self.transform_joint)
-        self.rotate_joint_button.clicked.connect(self.rotate_joint)
-        self.translate_joint_button.clicked.connect(self.translate_joint)
+        # self.transform_joint_button.clicked.connect(self.transform_joint)
+        # self.rotate_joint_button.clicked.connect(self.rotate_joint)
+        # self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
@@ -1616,8 +1559,22 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
-            dialog = AddWaypointDialog(self.numSides, self.r)
-            self.add_joint(dialog)
+            waypoint = Waypoint(self.numSides, self.r, SE3())
+            
+            if (self.chain == None):
+                waypoint.id = 0
+            else:
+                waypoint.id = len(self.chain.Joints)
+
+            if (self.chain == None) or len(self.chain.Joints) == 0:
+                self.chain = KinematicChain(waypoint)
+            elif waypoint.id != 0:
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, safe=True)
+            else:
+                self.chain.append(waypoint, safe=True)
+
+            self.update_plot()
+            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
     def add_tip_func(self):
         if (not self.chain_created):
