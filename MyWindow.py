@@ -558,6 +558,10 @@ class AddTipDialog(AddJointDialog):
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
 
+        self.numSides = numSides
+        self.r = r
+        self.isStart = False
+
         layout = QVBoxLayout()
 
         length_layout = QHBoxLayout()
@@ -566,43 +570,22 @@ class AddTipDialog(AddJointDialog):
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
-        
-        """
-        pose_layout = QHBoxLayout()
-        pose_label = QLabel("Pose (SE3):")
-        self.pose_input = QLineEdit()
-        pose_layout.addWidget(pose_label)
-        pose_layout.addWidget(self.pose_input)
-        layout.addLayout(pose_layout)
-        """
 
-        relative_layout = QHBoxLayout()
-        self.radio_group = QButtonGroup()
-        self.relative = QRadioButton('Relative')
-        self.absolute = QRadioButton('Absolute')
-        self.relative.setChecked(True)
-        self.relative.clicked.connect(self.on_relative_clicked)
-        self.absolute.clicked.connect(self.on_absolute_clicked)
-        relative_layout.addWidget(self.relative)
-        relative_layout.addWidget(self.absolute)
-        layout.addLayout(relative_layout)
-
-        self.position_checkbox = QCheckBox('Fixed Position')
-        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
-        layout.addWidget(self.position_checkbox)
-
-        self.orientation_checkbox = QCheckBox('Fixed Orientation')
-        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
-        layout.addWidget(self.orientation_checkbox)
+        radio_layout = QHBoxLayout()
+        self.radio_start = QRadioButton('Start Tip')
+        self.radio_end = QRadioButton('End Tip')
+        self.radio_start.setChecked(True)
+        self.radio_start.toggled.connect(self.updateVariable)
+        self.radio_end.toggled.connect(self.updateVariable)
+        radio_layout.addWidget(self.radio_start)
+        radio_layout.addWidget(self.radio_end)
+        layout.addLayout(radio_layout)
         
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
 
         self.setLayout(layout)
-
-        self.numSides = numSides
-        self.r = r
 
     def onApplyClicked(self):
         try:
@@ -618,6 +601,12 @@ class AddTipDialog(AddJointDialog):
         except ValueError:
             error_dialog = ErrorDialog('Please enter valid integers.')
             error_dialog.exec_()
+
+    def updateVariable(self):
+        if self.radio_start.isChecked():
+            self.isStart = True
+        elif self.radio_end.isChecked():
+            self.isStart = False
 
 class CreateNewChainDialog(QDialog):
     numSides = 4

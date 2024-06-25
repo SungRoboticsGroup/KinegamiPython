@@ -273,6 +273,8 @@ class Ball:
         sphere.translate(*self.c)
         if (is_waypoint):
             sphere.setObjectName("Waypoint")
+            sphere.setGLOptions('opaque')
+            sphere.scale(self.r * 0.9, self.r * 0.9, self.r * 0.9)
         widget.plot_widget.addItem(sphere)
     
     def show(self, color='black', alpha=1, frame=False, block=blockDefault):
