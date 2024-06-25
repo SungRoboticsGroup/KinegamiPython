@@ -162,6 +162,7 @@ class KinematicTree:
         # TODO: IMPLEMENT showGlobalFrame
         #print(lastJoint)
         for index, joint in enumerate(self.Joints):
+            """
             if index > lastJoint and index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
@@ -174,7 +175,8 @@ class KinematicTree:
                         sphereColor=(1.0, 0.5, 0.5, 0.5), showSphere=showSpheres, 
                         surfaceColor=(1.0, 0.5, 0.5, 0.8), showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
-            elif index == selectedJoint:
+            """
+            if index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True,
@@ -187,6 +189,7 @@ class KinematicTree:
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
         for index, link in enumerate(self.Links):
+            """
             if index > lastJoint:
                 link.addToWidget(widget, color=(1.0, 0.5, 0.5, 0.6), 
                             alpha=linkOpacityDefault,
@@ -196,13 +199,14 @@ class KinematicTree:
                             showFrames=showLinkPoses,
                             showBoundary=showLinkSurface)
             else:
-                link.addToWidget(widget, color=linkColor, 
-                            alpha=linkOpacityDefault,
-                            showPath=showLinkPath, 
-                            pathColor=pathColor,
-                            showPathCircles=showPathCircles, 
-                            showFrames=showLinkPoses,
-                            showBoundary=showLinkSurface)
+            """
+            link.addToWidget(widget, color=linkColor, 
+                        alpha=linkOpacityDefault,
+                        showPath=showLinkPath, 
+                        pathColor=pathColor,
+                        showPathCircles=showPathCircles, 
+                        showFrames=showLinkPoses,
+                        showBoundary=showLinkSurface)
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
         widget.add_chain(self)
@@ -325,7 +329,6 @@ class KinematicTree:
                 return False
         else:
             self.Joints[jointIndex].transformPoseBy(Transformation)
-
             if recomputeLinkPath and jointIndex > 0:
                 parentIndex = self.Parents[jointIndex]
                 if parentIndex != -1:

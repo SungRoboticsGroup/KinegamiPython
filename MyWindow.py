@@ -390,7 +390,7 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        """"
+        """
         pose_layout = QHBoxLayout()
         pose_label = QLabel("Pose (SE3):")
         self.pose_input = QLineEdit()
@@ -952,6 +952,8 @@ class PointEditorWindow(QMainWindow):
 
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
 
+        """
+
         self.confirm_pressed = True
         self.cancel_pressed = True
         self.confirm = QPushButton("Confirm", self)
@@ -971,6 +973,8 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.button_dock)
 
         self.button_dock.hide()
+
+        """
 
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
@@ -1122,6 +1126,8 @@ class PointEditorWindow(QMainWindow):
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
 
+    """
+
     def press_confirm(self):
         self.confirm_pressed = True
         self.last_joint = (len(self.chain.Joints) - 1)
@@ -1134,6 +1140,8 @@ class PointEditorWindow(QMainWindow):
             self.chain.delete(i)
         self.update_joint()
         self.button_dock.hide()
+    
+    """
 
     def change_control_type(self):
         if self.control1.isChecked():
@@ -1151,10 +1159,6 @@ class PointEditorWindow(QMainWindow):
         elif key == "Rotate":
             self.control_type = key
             self.control2.setChecked(True)
-        elif key == "Enter":
-            self.press_confirm()
-        elif key == "Escape":
-            self.press_cancel()
         elif key == "Delete":
             if (self.chain and self.selected_joint != -1):
                 self.selected_joint = self.select_joint_options.currentIndex() 
@@ -1168,7 +1172,7 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
-                self.press_cancel()
+                #self.press_cancel()
 
         self.update_joint()
 
@@ -1568,9 +1572,11 @@ class PointEditorWindow(QMainWindow):
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
+            """
             self.button_dock.show()
             self.confirm_pressed = False
             self.cancel_pressed = False
+            """
 
     def chain_not_created(self):
         error_dialog = ErrorDialog('Please create a chain first.')
@@ -1586,8 +1592,6 @@ class PointEditorWindow(QMainWindow):
     def add_prismatic_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif not self.confirm_pressed and not self.cancel_pressed:
-            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
         elif self.is_parent_joint_selected():
             dialog = AddPrismaticDialog(self.numSides, self.r)
             self.add_joint(dialog)
@@ -1595,8 +1599,6 @@ class PointEditorWindow(QMainWindow):
     def add_revolute_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif not self.confirm_pressed and not self.cancel_pressed:
-            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
         elif self.is_parent_joint_selected():
             dialog = AddRevoluteDialog(self.numSides, self.r)
             self.add_joint(dialog)
@@ -1604,8 +1606,6 @@ class PointEditorWindow(QMainWindow):
     def add_waypoint_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif not self.confirm_pressed and not self.cancel_pressed:
-            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
         elif self.is_parent_joint_selected():
             dialog = AddWaypointDialog(self.numSides, self.r)
             self.add_joint(dialog)
@@ -1613,8 +1613,6 @@ class PointEditorWindow(QMainWindow):
     def add_tip_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif not self.confirm_pressed and not self.cancel_pressed:
-            QMessageBox.warning(self, "Action Required", "Please confirm or cancel the joint before adding a new one.")
         elif self.is_parent_joint_selected():
             dialog = AddTipDialog(self.numSides, self.r)
             self.add_joint(dialog)
