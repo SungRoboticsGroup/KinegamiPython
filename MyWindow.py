@@ -1185,9 +1185,7 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
-<<<<<<< HEAD
                 #self.press_cancel()
-=======
                 self.press_cancel()
         elif key == "X":
             self.arrow_selection_changed(0)
@@ -1195,7 +1193,6 @@ class PointEditorWindow(QMainWindow):
             self.arrow_selection_changed(1)
         elif key == "Z":
             self.arrow_selection_changed(2)
->>>>>>> refs/remotes/origin/rays-branch
 
         self.update_joint()
 
