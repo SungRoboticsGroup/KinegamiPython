@@ -880,6 +880,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.key_pressed.emit("Escape")
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             self.key_pressed.emit("Delete")
+        elif event.key() == Qt.Key_X:
+            self.key_pressed.emit("X")
+        elif event.key() == Qt.Key_Y:
+            self.key_pressed.emit("Y")
+        elif event.key() == Qt.Key_Z:
+            self.key_pressed.emit("Z")
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -913,6 +919,7 @@ class PointEditorWindow(QMainWindow):
 
         self.crease_pattern = None
         self.control_type = "Translate"
+        self.is_local = True
 
         self.selected_joint = -1
         self.selected_arrow = -1
@@ -1077,6 +1084,8 @@ class PointEditorWindow(QMainWindow):
         checkboxLayout.addWidget(self.propogateSliderCheckbox)
         checkboxLayout.addWidget(self.relativeSliderCheckbox)
 
+        self.relativeSliderCheckbox.stateChanged.connect(self.relative_clicked)
+
         mainLayout.addLayout(checkboxLayout)
 
         slider_joints_dock.setWidget(slider_joints_widget)
@@ -1143,6 +1152,10 @@ class PointEditorWindow(QMainWindow):
     
     """
 
+    def relative_clicked(self):
+        self.is_local = self.relativeSliderCheckbox.isChecked()
+        self.update_joint()
+
     def change_control_type(self):
         if self.control1.isChecked():
             self.control_type = "Translate"
@@ -1172,7 +1185,17 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
+<<<<<<< HEAD
                 #self.press_cancel()
+=======
+                self.press_cancel()
+        elif key == "X":
+            self.arrow_selection_changed(0)
+        elif key == "Y":
+            self.arrow_selection_changed(1)
+        elif key == "Z":
+            self.arrow_selection_changed(2)
+>>>>>>> refs/remotes/origin/rays-branch
 
         self.update_joint()
 
@@ -1201,7 +1224,7 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
-        if index != self.selected_arrow:
+        if index != self.selected_arrow and self.selected_joint != -1:
             self.selected_arrow = index
                         
             if (index == 0): self.selected_axis_name = 'X'
@@ -1503,7 +1526,7 @@ class PointEditorWindow(QMainWindow):
             if (self.control_type == "Translate"):
                 for joint in self.chain.Joints:
                     if (joint.id == self.selected_joint):
-                        joint.addTranslateArrows(self, selectedArrow=self.selected_arrow)
+                        joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
             elif (self.control_type == "Rotate"):
                 for joint in self.chain.Joints:
                     if (joint.id == self.selected_joint):
@@ -1665,6 +1688,12 @@ class PointEditorWindow(QMainWindow):
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
                 self.press_cancel()
+        elif event.key() == Qt.Key_X:
+            self.arrow_selection_changed(0)
+        elif event.key() == Qt.Key_Y:
+            self.arrow_selection_changed(1)
+        elif event.key() == Qt.Key_Z:
+            self.arrow_selection_changed(2)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
