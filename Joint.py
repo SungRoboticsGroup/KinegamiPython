@@ -743,10 +743,12 @@ class Tip(OrigamiJoint):
             distalBase = distalPose.t + np.outer(u, distalPose.R[:, 0]) + np.outer(v, distalPose.R[:, 1])
 
             if self.forward:
+                # facing up
                 tipSegment = np.array([distalPose.t - scale * distalPose.R[:, 0],
                                     distalPose.t + scale * distalPose.R[:, 0]])
                 tipPoints = np.vstack((proximalBase, tipSegment))
             else:
+                # facing down
                 tipSegment = np.array([proximalPose.t - scale * proximalPose.R[:, 0],
                                     proximalPose.t + scale * proximalPose.R[:, 0]])
                 tipPoints = np.vstack((distalBase, tipSegment))
