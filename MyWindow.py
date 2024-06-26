@@ -690,7 +690,6 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
-
         self.controls_dock = QDockWidget("Control options", self)
         self.controls_options_widget = QWidget()
         self.controls_layout = QVBoxLayout()
@@ -1079,7 +1078,7 @@ class PointEditorWindow(QMainWindow):
             elif (self.control_type == "Rotate"):
                 for joint in self.chain.Joints:
                     if (joint.id == self.selected_joint):
-                        joint.addRotateArrows(self, selectedArrow=self.selected_arrow)
+                        joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
 
         if self.selected_arrow != -1:
             self.rotationSlider.setDisabled(False)

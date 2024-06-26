@@ -242,57 +242,34 @@ class Joint(ABC):
 
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True):
         if local:
-            rad = self.boundingBall().r
-            colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
-
-            if selectedArrow != -1:
-                colors[selectedArrow] = (1, 1, 1, 1)
-
             axes = [self.Pose.R[:, i] for i in range(3)]
-            extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
-            point1 = self.Pose.t
-
-            if selectedArrow != -1:
-                point2 = point1 + rad * self.r * axes[selectedArrow]
-                extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
-                extended_axis = self.generate_extended_axis(point1, point2, 20)
-                extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
-                widget.plot_widget.addItem(extended_axis_line)
-
-                for line in extended_line_points:
-                    md = gl.MeshData.sphere(rows=2, cols=2)
-                    sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
-                    sphere.setObjectName("line_sphere")
-                    sphere.setGLOptions('translucent')
-                    sphere.scale(0.02, 0.02, 0.02)
-                    sphere.translate(*line)
-                    widget.plot_widget.addItem(sphere)
         else:
-            rad = self.boundingBall().r
-            colors = [(1,0,0,1), (0,1,0,1), (0,0,1,1)]
-
-            if selectedArrow != -1:
-                colors[selectedArrow] = (1, 1, 1, 1)
-
             axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
-            extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
-            point1 = self.Pose.t
 
-            if selectedArrow != -1:
-                point2 = point1 + rad * self.r * axes[selectedArrow]
-                extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
-                extended_axis = self.generate_extended_axis(point1, point2, 20)
-                extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
-                widget.plot_widget.addItem(extended_axis_line)
+        rad = self.boundingBall().r
+        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
 
-                for line in extended_line_points:
-                    md = gl.MeshData.sphere(rows=2, cols=2)
-                    sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
-                    sphere.setObjectName("line_sphere")
-                    sphere.setGLOptions('translucent')
-                    sphere.scale(0.02, 0.02, 0.02)
-                    sphere.translate(*line)
-                    widget.plot_widget.addItem(sphere)
+        if selectedArrow != -1:
+            colors[selectedArrow] = (1, 1, 1, 1)
+
+        extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
+        point1 = self.Pose.t
+
+        if selectedArrow != -1:
+            point2 = point1 + rad * self.r * axes[selectedArrow]
+            extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
+            extended_axis = self.generate_extended_axis(point1, point2, 20)
+            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
+            widget.plot_widget.addItem(extended_axis_line)
+
+            for line in extended_line_points:
+                md = gl.MeshData.sphere(rows=2, cols=2)
+                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
+                sphere.setObjectName("line_sphere")
+                sphere.setGLOptions('translucent')
+                sphere.scale(0.02, 0.02, 0.02)
+                sphere.translate(*line)
+                widget.plot_widget.addItem(sphere)
 
         for i, axis in enumerate(axes):
             pos = np.array([point1, point1 + rad * self.r * axis])
@@ -300,14 +277,18 @@ class Joint(ABC):
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
     
-    def addRotateArrows(self, widget, selectedArrow=-1):
+    def addRotateArrows(self, widget, selectedArrow=-1, local=True):
+        if local:
+            axes = [self.Pose.R[:, i] for i in range(3)]
+        else: 
+            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+
         rad = self.boundingBall().r
         colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
 
         if selectedArrow != -1:
             colors[selectedArrow] = (1, 1, 1, 1)
 
-        axes = [self.Pose.R[:, i] for i in range(3)]
         center = self.Pose.t
         extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
         num_points = 20
