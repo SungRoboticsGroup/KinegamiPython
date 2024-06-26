@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent
 from pyqtgraph.Qt import QtCore
@@ -827,14 +827,7 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget = ClickableGLViewWidget()
         self.setCentralWidget(self.plot_widget)
-        self.plot_widget.setBackgroundColor(255,255,255, 255)
-
-        # self.toggleButton = QPushButton('Toggle Lock', self)
-        # self.toggleButton.setGeometry(20, 20, 140, 40)
-        # self.toggleButton.clicked.connect(self.plot_widget.toggle_lock)
-        # self.toggleButton.setStyleSheet('background-color: red; color: white;')
-
-        # self.plot_widget.lock_status_changed.connect(self.updateToggleButtonStyle)
+        self.plot_widget.setBackgroundColor(255,255,255,255)
 
         grid = gl.GLGridItem()
 
@@ -864,6 +857,20 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
         self.plot_widget.key_pressed.connect(self.key_pressed)
 
+        # //////////////////////////////////    ADD TOP DOCK    ///////////////////////////////////
+        top_dock_widget = QDockWidget("Top Dock", self)
+        top_dock_widget.setAllowedAreas(Qt.TopDockWidgetArea)
+
+        self.key_bar = QWidget()
+        self.key_bar_layout = QHBoxLayout(self.key_bar)
+        self.key_bar.setLayout(self.key_bar_layout)
+        self.key_bar.setFixedHeight(40)
+        self.init_key_bar()
+
+        top_dock_widget.setWidget(self.key_bar)
+
+        self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
+
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
         self.add_revolute = QPushButton("Add Revolute Joint")
@@ -891,30 +898,6 @@ class PointEditorWindow(QMainWindow):
 
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
 
-        """
-
-        self.confirm_pressed = True
-        self.cancel_pressed = True
-        self.confirm = QPushButton("Confirm", self)
-        self.cancel = QPushButton("Cancel", self)
-
-        self.confirm.clicked.connect(self.press_confirm)
-        self.cancel.clicked.connect(self.press_cancel)
-
-        self.button_layout = QVBoxLayout()
-        self.button_layout.addWidget(self.confirm)
-        self.button_layout.addWidget(self.cancel)
-
-        self.button_widget = QWidget()
-        self.button_widget.setLayout(self.button_layout)
-        self.button_dock = QDockWidget("Press Buttons", self)
-        self.button_dock.setWidget(self.button_widget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.button_dock)
-
-        self.button_dock.hide()
-
-        """
-
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
@@ -928,24 +911,14 @@ class PointEditorWindow(QMainWindow):
         axis_key_layout.addWidget(self.y_axis_widget)
         axis_key_layout.addWidget(self.z_axis_widget)
 
-        # axis_key_dock = QDockWidget("Axis Key", self)
-        # axis_key_dock.setWidget(self.axis_key_widget)
-        # self.addDockWidget(Qt.RightDockWidgetArea, axis_key_dock)
-
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.select_joint_options = QComboBox()
-        # self.transform_joint_button = QPushButton("Transform Joint")
-        # self.rotate_joint_button = QPushButton("Rotate Joint Along Axis of Motion")
-        # self.translate_joint_button = QPushButton("Translate Joint Along Axis of Motion")
         self.delete_joint_button = QPushButton("Delete Joint")
         self.edit_joint_state_button = QPushButton("Edit Joint State")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
-        # joint_layout.addWidget(self.transform_joint_button)
-        # joint_layout.addWidget(self.rotate_joint_button)
-        # joint_layout.addWidget(self.translate_joint_button)
         joint_layout.addWidget(self.delete_joint_button)
         joint_layout.addWidget(self.edit_joint_state_button)
         joint_layout.addWidget(self.current_state_label)
@@ -959,9 +932,6 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, dock)
         dock.setWidget(button_widget)
 
-        # self.transform_joint_button.clicked.connect(self.transform_joint)
-        # self.rotate_joint_button.clicked.connect(self.rotate_joint)
-        # self.translate_joint_button.clicked.connect(self.translate_joint)
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
@@ -1043,10 +1013,6 @@ class PointEditorWindow(QMainWindow):
         crease_button_widget = QWidget()
         crease_button_widget.setLayout(crease_dock_layout) 
 
-        # crease_dock = QDockWidget("Crease Pattern", self)
-        # crease_dock.setWidget(crease_button_widget)
-        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
-
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
 
         self.controls_dock = QDockWidget("Control options", self)
@@ -1067,22 +1033,24 @@ class PointEditorWindow(QMainWindow):
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
 
-    """
+    def init_key_bar(self):
+        instructions = [
+            "Middle Mouse Button: Pan Around",
+            "W: Translate",
+            "E: Rotate",
+            "Delete: Delete Joint",
+            "X: Select X Axis",
+            "Y: Select Y Axis",
+            "Z: Select Z Axis"
+        ]
+        for instruction in instructions:
+            label = QLabel(instruction)
+            label.setAlignment(Qt.AlignCenter) 
+            self.key_bar_layout.addWidget(label)
 
-    def press_confirm(self):
-        self.confirm_pressed = True
-        self.last_joint = (len(self.chain.Joints) - 1)
-        self.update_joint()
-        self.button_dock.hide()
-
-    def press_cancel(self):
-        self.cancel_pressed = True
-        for i in range(len(self.chain.Joints) -1, self.last_joint, -1):
-            self.chain.delete(i)
-        self.update_joint()
-        self.button_dock.hide()
-    
-    """
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.key_bar_layout.addWidget(spacer)
 
     def relative_clicked(self):
         self.is_local = self.relativeSliderCheckbox.isChecked()
@@ -1247,13 +1215,7 @@ class PointEditorWindow(QMainWindow):
         rot = R.from_matrix(rotation_matrix)
         euler_angles = rot.as_euler('xyz', degrees=True)
         return euler_angles[axis]
-
-    # def updateToggleButtonStyle(self, locked):
-    #     if locked:
-    #         self.toggleButton.setStyleSheet('background-color: green; color: white;')
-    #     else:
-    #         self.toggleButton.setStyleSheet('background-color: red; color: white;')
-
+    
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
