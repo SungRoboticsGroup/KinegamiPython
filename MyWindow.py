@@ -609,6 +609,13 @@ class PointEditorWindow(QMainWindow):
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
+        self.state_label = QLabel('Translate N/A Axis: 0', self)
+        self.state_slider = QSlider(Qt.Horizontal, self)
+        self.state_slider.setMinimum(-100)
+        self.state_slider.setMaximum(100)
+        self.translate_slider.setValue(0)
+        self.translate_slider.valueChanged.connect(self.adjust_translation)
+
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
         self.rotationInput.setPlaceholderText("Enter angle in degrees")
@@ -623,11 +630,20 @@ class PointEditorWindow(QMainWindow):
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
+        stateLayout = QHBoxLayout()
+        self.stateInput = QLineEdit(self)
+        self.stateInput.setPlaceholderText("Enter state")
+        mainLayout.addWidget(self.state_label)
+        stateLayout.addWidget(self.state_slider)
+        stateLayout.addWidget(self.stateInput) 
+
         self.rotationInput.textChanged.connect(self.adjust_rotation)
         self.translationInput.textChanged.connect(self.adjust_translation)
+        self.translationInput.textChanged.connect(self.adjust_state)
 
         mainLayout.addLayout(rotationLayout)
         mainLayout.addLayout(translationLayout)
+        mainLayout.addLayout(stateLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -650,6 +666,8 @@ class PointEditorWindow(QMainWindow):
         self.translate_slider.setDisabled(True)
         self.rotationInput.setDisabled(True)
         self.translationInput.setDisabled(True)
+        self.stateInput.setDisabled(True)
+        self.stateInput.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock = QDockWidget("Save Crease Pattern", self)
