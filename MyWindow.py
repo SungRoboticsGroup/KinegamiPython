@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent
 from pyqtgraph.Qt import QtCore
@@ -824,9 +824,22 @@ class PointEditorWindow(QMainWindow):
         self.setWindowTitle("Point Editor")
         self.setGeometry(100, 100, 800, 600)
 
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+
+        self.key_bar = QWidget()
+        self.key_bar_layout = QHBoxLayout(self.key_bar)
+        self.key_bar.setFixedHeight(40)
+        self.init_key_bar()
+
+        main_layout.addWidget(self.key_bar)
+
         self.plot_widget = ClickableGLViewWidget()
         self.setCentralWidget(self.plot_widget)
         self.plot_widget.setBackgroundColor(255,255,255, 255)
+
+        main_layout.addWidget(self.plot_widget)
+        self.setCentralWidget(main_widget)
 
         # self.toggleButton = QPushButton('Toggle Lock', self)
         # self.toggleButton.setGeometry(20, 20, 140, 40)
@@ -1065,6 +1078,26 @@ class PointEditorWindow(QMainWindow):
         self.controls_options_widget.setLayout(self.controls_layout)
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
+
+    def init_key_bar(self):
+        instructions = [
+            "Middle Mouse Button: Pan Around",
+            "W: Translate",
+            "E: Rotate",
+            "Delete: Delete Joint",
+            "X: Select X Axis",
+            "Y: Select Y Axis",
+            "Z: Select Z Axis"
+        ]
+        for instruction in instructions:
+            label = QLabel(instruction)
+            label.setAlignment(Qt.AlignCenter) 
+            self.key_bar_layout.addWidget(label)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.key_bar_layout.addWidget(spacer)
+
 
     """
 
@@ -1466,6 +1499,12 @@ class PointEditorWindow(QMainWindow):
         else:
             self.rotationSlider.setDisabled(True)
             self.translate_slider.setDisabled(True)
+    
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.addWidget(self.key_bar)
+        main_layout.addWidget(self.plot_widget)
+        self.setCentralWidget(main_widget)
 
     def update_plot(self):
         self.plot_widget.clear()
@@ -1479,6 +1518,12 @@ class PointEditorWindow(QMainWindow):
             joint.id = index
 
         self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
+
+        main_widget = QWidget()
+        main_layout = QVBoxLayout(main_widget)
+        main_layout.addWidget(self.key_bar)
+        main_layout.addWidget(self.plot_widget)
+        self.setCentralWidget(main_widget)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1600,8 +1645,15 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.addItem(grid)
             grid.setColor((0,0,0,255))
 
-            success_dialog = SuccessDialog('Chain created!')
-            success_dialog.exec_()
+            self.setCentralWidget(self.plot_widget)
+            main_widget = QWidget()
+            main_layout = QVBoxLayout(main_widget)
+            main_layout.addWidget(self.key_bar)
+            main_layout.addWidget(self.plot_widget)
+            self.setCentralWidget(main_widget)
+
+        success_dialog = SuccessDialog('Chain created!')
+        success_dialog.exec_()
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_W:
@@ -1612,10 +1664,10 @@ class PointEditorWindow(QMainWindow):
             self.control_type = "Rotate"
             self.control2.setChecked(True)
             self.update_joint()
-        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            self.press_confirm()
-        elif event.key() == Qt.Key_Escape:
-            self.press_cancel()
+        # elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+        #     self.press_confirm()
+        # elif event.key() == Qt.Key_Escape:
+        #     self.press_cancel()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             if (self.chain and self.selected_joint != -1):
                 self.selected_joint = self.select_joint_options.currentIndex() 
@@ -1629,7 +1681,7 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
-                self.press_cancel()
+                # self.press_cancel()
         elif event.key() == Qt.Key_X:
             self.arrow_selection_changed(0)
         elif event.key() == Qt.Key_Y:
