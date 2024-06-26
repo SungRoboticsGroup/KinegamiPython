@@ -609,12 +609,12 @@ class PointEditorWindow(QMainWindow):
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
-        self.state_label = QLabel('Translate N/A Axis: 0', self)
+        self.state_label = QLabel('Edit Joint N/A State: 0', self)
         self.state_slider = QSlider(Qt.Horizontal, self)
         self.state_slider.setMinimum(-100)
         self.state_slider.setMaximum(100)
-        self.translate_slider.setValue(0)
-        self.translate_slider.valueChanged.connect(self.adjust_translation)
+        self.state_slider.setValue(0)
+        self.state_slider.valueChanged.connect(self.adjust_state)
 
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
@@ -639,7 +639,7 @@ class PointEditorWindow(QMainWindow):
 
         self.rotationInput.textChanged.connect(self.adjust_rotation)
         self.translationInput.textChanged.connect(self.adjust_translation)
-        self.translationInput.textChanged.connect(self.adjust_state)
+        self.stateInput.textChanged.connect(self.adjust_state)
 
         mainLayout.addLayout(rotationLayout)
         mainLayout.addLayout(translationLayout)
@@ -662,11 +662,12 @@ class PointEditorWindow(QMainWindow):
 
         self.oldRotVal = 0
         self.oldTransVal = 0
+        self.oldStateVal = 0
         self.rotationSlider.setDisabled(True)
         self.translate_slider.setDisabled(True)
+        self.state_slider.setDisabled(True)
         self.rotationInput.setDisabled(True)
         self.translationInput.setDisabled(True)
-        self.stateInput.setDisabled(True)
         self.stateInput.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
@@ -787,10 +788,11 @@ class PointEditorWindow(QMainWindow):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
-            min = round(self.chain.Joints[self.selected_joint].stateRange()[0], 2)
-            max = round(self.chain.Joints[self.selected_joint].stateRange()[1], 2)
+            min = self.chain.Joints[self.selected_joint].stateRange()[0]
+            max = self.chain.Joints[self.selected_joint].stateRange()[1]
             current = self.chain.Joints[self.selected_joint].state
-            self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
+            self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 10000)}")
+            self.update_state_slider()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -884,6 +886,34 @@ class PointEditorWindow(QMainWindow):
             self.translationInput.blockSignals(False)
             self.translationInput.setDisabled(True)
 
+    def update_state_slider(self):
+        min = self.chain.Joints[self.selected_joint].stateRange()[0] * 10000
+        max = self.chain.Joints[self.selected_joint].stateRange()[1] * 10000
+        if self.selected_joint != -1 and min != 0 and max != 0:
+            self.state_slider.setMinimum(int(min))
+            self.state_slider.setMaximum(int(max))
+            current = int(self.chain.Joints[self.selected_joint].state * 10000)
+            self.oldStateVal = current
+            self.state_slider.blockSignals(True)
+            self.state_label.setText(f"Edit Joint {self.selected_joint} State: {current}")
+            self.state_slider.setValue(current)
+            self.state_slider.setDisabled(False)
+            self.state_slider.blockSignals(False)
+            self.stateInput.blockSignals(True)
+            self.stateInput.setText(str(current))
+            self.stateInput.blockSignals(False)
+            self.stateInput.setDisabled(False)
+        else:
+            self.state_slider.blockSignals(True)
+            self.state_label.setText(f"Edit Joint N/A State: 0")
+            self.state_slider.setValue(0)
+            self.state_slider.setDisabled(True)
+            self.state_slider.blockSignals(False)
+            self.stateInput.blockSignals(True)
+            self.stateInput.setText("")
+            self.stateInput.blockSignals(False)
+            self.stateInput.setDisabled(True)
+
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
         euler_angles = rot.as_euler('xyz', degrees=True)
@@ -916,10 +946,10 @@ class PointEditorWindow(QMainWindow):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint state successfully edited!')
                     success_dialog.exec_()
-                    min = round(self.chain.Joints[self.selected_joint].stateRange()[0], 2)
-                    max = round(self.chain.Joints[self.selected_joint].stateRange()[1], 2)
+                    min = self.chain.Joints[self.selected_joint].stateRange()[0]
+                    max = self.chain.Joints[self.selected_joint].stateRange()[1]
                     current = self.chain.Joints[self.selected_joint].state
-                    self.current_state_label.setText(f"Min State: {min} ≤ Current State: {current} ≤ Max State: {max}")
+                    self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 1000)}")
                 else:
                     error_dialog = ErrorDialog('Error editing joint state.')
                     error_dialog.exec_()
@@ -942,6 +972,7 @@ class PointEditorWindow(QMainWindow):
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
                 self.oldRotVal = int(value)
+                self.update_rotation_slider()
             else:
                 self.rotationSlider.blockSignals(True)
                 self.rotationSlider.setValue(int(self.oldRotVal))
@@ -972,11 +1003,33 @@ class PointEditorWindow(QMainWindow):
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
                 self.oldTransVal = actualVal
+                self.update_translate_slider()
             else:
                 self.translate_slider.blockSignals(True)
                 self.translate_slider.setValue(int(self.oldTransVal * 10))
                 self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(self.oldTransVal * 10)}")
                 self.translate_label.blockSignals(False)
+
+    def adjust_state(self, value):
+        if not isinstance(value, float) and not isinstance(value, int):
+            value = value.strip()
+        value = float(value) if value else 0
+        actualVal = value / 10000
+        self.state_label.setText(f'Edit Joint {self.selected_joint} State: {int(value)}')
+        if self.chain and self.selected_joint != -1:
+            if self.chain.setJointState(self.selected_joint, actualVal):
+                self.update_joint()
+                self.OldStateVal = value
+                min = self.chain.Joints[self.selected_joint].stateRange()[0]
+                max = self.chain.Joints[self.selected_joint].stateRange()[1]
+                current = self.chain.Joints[self.selected_joint].state
+                self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 10000)}")
+                self.update_state_slider()
+            else:
+                self.state_slider.blockSignals(True)
+                self.state_slider.setValue(int(self.oldStateVal))
+                self.state_label.setText(f"Edit Joint State: {int(self.oldStateVal)}")
+                self.state_label.blockSignals(False)
 
     def delete_joint(self):
         dialog = DeleteDialog(self)
