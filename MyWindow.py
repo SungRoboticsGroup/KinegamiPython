@@ -384,7 +384,7 @@ class AddPrismaticDialog(AddJointDialog):
         layout.addLayout(numLayers_layout)
 
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Cone Angle (radians):")
+        angle_label = QLabel("Cone Angle (degrees):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -403,9 +403,9 @@ class AddPrismaticDialog(AddJointDialog):
         try:
             neutralLength = float(self.length_input.text())
             numLayers = int(self.numLayers_input.text())
-            coneAngleText = self.angle_input.text()
+            coneAngleText = float(self.angle_input.text())
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, self.parse_angle(coneAngleText), SE3())
+            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), SE3())
             self.accept()
         except ValueError:
             error_dialog = ErrorDialog('Please enter valid integers.')
@@ -420,7 +420,7 @@ class AddRevoluteDialog(AddJointDialog):
         layout = QVBoxLayout()
         
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Total Bending Angle (radians):")
+        angle_label = QLabel("Total Bending Angle (degrees):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -436,10 +436,9 @@ class AddRevoluteDialog(AddJointDialog):
         self.r = r
 
     def onApplyClicked(self):
-        bendingAngleText = self.angle_input.text()
-        # poseText = self.pose_input.text()
+        bendingAngleText = float(self.angle_input.text())
 
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, self.parse_angle(bendingAngleText), SE3())
+        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
         self.accept()
         
 class AddWaypointDialog(AddJointDialog):
