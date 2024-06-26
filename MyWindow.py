@@ -22,7 +22,6 @@ import re
 from scipy.spatial.transform import Rotation as R
 
 class EditJointStateDialog(QDialog):
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Edit Joint State')
@@ -30,10 +29,6 @@ class EditJointStateDialog(QDialog):
 
         layout = QVBoxLayout()
 
-        self.setupStateInput(layout)
-        self.setLayout(layout)
-
-    def setupStateInput(self, layout):
         self.state_input = QLineEdit(self)
         self.state_input.setPlaceholderText('Enter new joint state')
         layout.addWidget(QLabel('State:'))
@@ -47,215 +42,21 @@ class EditJointStateDialog(QDialog):
         self.cancel_button.clicked.connect(self.reject)
         layout.addWidget(self.cancel_button)
 
+        self.setLayout(layout)
+
     def onApplyClicked(self):
         self.accept()
 
     def get_state(self):
-        while True:
-            try:
-                state = float(self.state_input.text())
-                return state
-            except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
-                self.exec_() 
-                return None
-
-class TransformDialog(QDialog):
-    propogateTransform = True
-    relativeTransform = True
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Transform Joint')
-        self.setGeometry(100, 100, 300, 250)  
-
-        layout = QVBoxLayout()
-
-        self.operationSelection = QComboBox(self)
-        self.operationSelection.addItems(["Translate", "Rotate"])
-        layout.addWidget(QLabel('Operation:'))
-        layout.addWidget(self.operationSelection)
-
-        self.axisSelection = QComboBox(self)
-        self.axisSelection.addItems(["X", "Y", "Z"])
-        self.axisSelectionLabel = QLabel('Axis:')
-        layout.addWidget(self.axisSelectionLabel)
-        layout.addWidget(self.axisSelection)
-        self.axisSelection.setVisible(False) 
-        self.axisSelectionLabel.setVisible(False)  
-
-        self.operationSelection.currentTextChanged.connect(self.toggleAxisSelection)
-
-        self.propogateTransformCheckbox = QCheckBox("Propagate")
-        self.relativeTransformCheckbox = QCheckBox("Relative")
-
-        self.propogateTransformCheckbox.setChecked(TransformDialog.propogateTransform)
-        self.relativeTransformCheckbox.setChecked(TransformDialog.relativeTransform)
-
-        layout.addWidget(self.propogateTransformCheckbox)
-        layout.addWidget(self.relativeTransformCheckbox)
-
-        self.setupTransformInputAndButtons(layout)
-        self.setLayout(layout)
-
-    def toggleAxisSelection(self):
-        isRotateSelected = self.operationSelection.currentText() == "Rotate"
-        self.axisSelection.setVisible(isRotateSelected)
-        self.axisSelectionLabel.setVisible(isRotateSelected)
-
-    def setupTransformInputAndButtons(self, layout):
-        self.transform_input = QLineEdit(self)
-        self.transform_input.setPlaceholderText('x, y, z for Translate or degree for Rotate')
-        layout.addWidget(QLabel('Values:'))
-        layout.addWidget(self.transform_input)
-
-        self.apply_button = QPushButton('Apply', self)
-        self.apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(self.apply_button)
-
-        self.cancel_button = QPushButton('Cancel', self)
-        self.cancel_button.clicked.connect(self.reject)
-        layout.addWidget(self.cancel_button)
-
-    def onApplyClicked(self):
-        TransformDialog.propogateTransform = self.propogateTransformCheckbox.isChecked()
-        TransformDialog.relativeTransform = self.relativeTransformCheckbox.isChecked()
-        self.accept()
-
-    def get_transform(self):
-        while True:
-            try:
-                operation = self.operationSelection.currentText()
-                input_text = self.transform_input.text()
-                values = [float(val.strip()) for val in input_text.split(',')]
-                if operation == "Translate":
-                    if len(values) != 3:
-                        raise ValueError("Invalid Input", "Please enter exactly 3 values for translation.")
-                    transformation = SE3.Trans(values[0], values[1], values[2])
-                else:
-                    if len(values) != 1:
-                        raise ValueError("Invalid Input", "Please enter exactly 1 value for rotation angle in degrees.")
-                    angle_degrees = values[0]
-                    angle_radians = math.radians(angle_degrees) 
-                    axis = self.axisSelection.currentText()
-                    if axis == "X":
-                        transformation = SE3.Rx(angle_radians)
-                    elif axis == "Y":
-                        transformation = SE3.Ry(angle_radians)
-                    else:
-                        transformation = SE3.Rz(angle_radians)
-                return transformation
-            except ValueError as e:
-                QMessageBox.warning(self, "Invalid Input", str(e))
-                self.exec_()
-                return None
-
-class RotationDialog(QDialog):
-    propogateRotation = True
-    applyToPreviousWaypointRotation = False
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Rotate Joint Along Axis Of Motion')
-        self.setGeometry(100, 100, 200, 100)
-
-        layout = QVBoxLayout()
-
-        self.propogateRotationCheckbox = QCheckBox("Propogate")
-        self.applyToPreviousWaypointRotationCheckbox = QCheckBox("Apply to Previous Waypoint")
-
-        self.propogateRotationCheckbox.setChecked(RotationDialog.propogateRotation)
-        self.applyToPreviousWaypointRotationCheckbox.setChecked(RotationDialog.applyToPreviousWaypointRotation)
-
-        layout.addWidget(self.propogateRotationCheckbox)
-        layout.addWidget(self.applyToPreviousWaypointRotationCheckbox)
-
-        self.setupAngleInputAndButtons(layout)
-        self.setLayout(layout)
-
-    def setupAngleInputAndButtons(self, layout):
-        self.angle_input = QLineEdit(self)
-        self.angle_input.setPlaceholderText('Enter angle in degrees')
-        layout.addWidget(QLabel('Angle:'))
-        layout.addWidget(self.angle_input)
-
-        self.apply_button = QPushButton('Apply', self)
-        self.apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(self.apply_button)
-
-        self.cancel_button = QPushButton('Cancel', self)
-        self.cancel_button.clicked.connect(self.reject)
-        layout.addWidget(self.cancel_button)
-
-    def onApplyClicked(self):
-        RotationDialog.propogateRotation = self.propogateRotationCheckbox.isChecked()
-        RotationDialog.applyToPreviousWaypointRotation = self.applyToPreviousWaypointRotationCheckbox.isChecked()
-        self.accept()
-
-    def get_angle(self):
-        while True:
-            try:
-                angle = float(self.angle_input.text())
-                return angle
-            except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Please enter a valid angle in degrees.")
-                self.exec_() 
-                return None
-                
-class TranslationDialog(QDialog):
-    propogateTranslation = True
-    applyToPreviousWaypointTranslation = False
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Translate Joint Along Axis of Motion')
-        self.setGeometry(100, 100, 200, 100)
-
-        layout = QVBoxLayout()
-
-        self.propogateTranslationCheckbox = QCheckBox("Propogate")
-        self.applyToPreviousWaypointTranslationCheckbox = QCheckBox("Apply to Previous Waypoint")
-
-        self.propogateTranslationCheckbox.setChecked(TranslationDialog.propogateTranslation)
-        self.applyToPreviousWaypointTranslationCheckbox.setChecked(TranslationDialog.applyToPreviousWaypointTranslation)
-
-        layout.addWidget(self.propogateTranslationCheckbox)
-        layout.addWidget(self.applyToPreviousWaypointTranslationCheckbox)
-
-        self.setupDistanceInputAndButtons(layout)
-        self.setLayout(layout)
-
-    def setupDistanceInputAndButtons(self, layout):
-        self.distance_input = QLineEdit()
-        self.distance_input.setPlaceholderText('Enter translation distance')
-        layout.addWidget(QLabel('Distance:'))
-        layout.addWidget(self.distance_input)
-
-        apply_button = QPushButton('Apply')
-        apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(apply_button)
-
-        cancel_button = QPushButton('Cancel')
-        cancel_button.clicked.connect(self.reject)
-        layout.addWidget(cancel_button)
-
-    def onApplyClicked(self):
-        TranslationDialog.propogateTranslation = self.propogateTranslationCheckbox.isChecked()
-        TranslationDialog.applyToPreviousWaypointTranslation = self.applyToPreviousWaypointTranslationCheckbox.isChecked()
-        self.accept()
-
-    def get_distance(self):
-        while True:
-            try:
-                distance = float(self.distance_input.text())
-                return distance
-            except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Please enter a valid translation distance.")
-                self.exec_() 
-                return None
-
+        try:
+            state = float(self.state_input.text())
+            return state
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
+            self.exec_() 
+            return None
+ 
 class DeleteDialog(QDialog):
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Confirm Delete')
@@ -315,24 +116,12 @@ class ErrorDialog(QDialog):
 
 class AddJointDialog(QDialog):
     jointToAdd = None
-    relative = True
-    fixedPosition = False
-    fixedOrientation = False
 
     def __init__(self, parent=None):
         super().__init__(parent)
     
     def getJoint(self):
         return self.jointToAdd
-        
-    def getIsRelative(self):
-        return self.relative
-    
-    def getFixedPosition(self):
-        return self.fixedPosition
-    
-    def getFixedOrientation(self):
-        return self.fixedOrientation
         
     def parse_angle(self, exp):
         try:
@@ -348,18 +137,6 @@ class AddJointDialog(QDialog):
         except Exception as e:
             print("Error:", e)
             return None
-        
-    def on_relative_clicked(self):
-        self.relative = True
-
-    def on_absolute_clicked(self):
-        self.relative = False
-
-    def on_fixed_position_toggled(self):
-        self.fixedPosition = not self.fixedPosition
-
-    def on_fixed_orientation_toggled(self):
-        self.fixedOrientation = not self.fixedOrientation
         
 class AddPrismaticDialog(AddJointDialog):
     def __init__(self, numSides, r, parent=None):
@@ -437,60 +214,8 @@ class AddRevoluteDialog(AddJointDialog):
 
     def onApplyClicked(self):
         bendingAngleText = float(self.angle_input.text())
-        # poseText = self.pose_input.text()
 
         self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
-        self.accept()
-        
-class AddWaypointDialog(AddJointDialog):
-    def __init__(self, numSides, r, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Add new joint')
-        self.setGeometry(100, 100, 300, 100)
-
-        layout = QVBoxLayout()
-        
-        """
-        pose_layout = QHBoxLayout()
-        pose_label = QLabel("Pose (SE3):")
-        self.pose_input = QLineEdit()
-        pose_layout.addWidget(pose_label)
-        pose_layout.addWidget(self.pose_input)
-        layout.addLayout(pose_layout)
-        """
-
-        relative_layout = QHBoxLayout()
-        self.radio_group = QButtonGroup()
-        self.relative = QRadioButton('Relative')
-        self.absolute = QRadioButton('Absolute')
-        self.relative.setChecked(True)
-        self.relative.clicked.connect(self.on_relative_clicked)
-        self.absolute.clicked.connect(self.on_absolute_clicked)
-        relative_layout.addWidget(self.relative)
-        relative_layout.addWidget(self.absolute)
-        layout.addLayout(relative_layout)
-
-        self.position_checkbox = QCheckBox('Fixed Position')
-        self.position_checkbox.stateChanged.connect(self.on_fixed_position_toggled)
-        layout.addWidget(self.position_checkbox)
-
-        self.orientation_checkbox = QCheckBox('Fixed Orientation')
-        self.orientation_checkbox.stateChanged.connect(self.on_fixed_orientation_toggled)
-        layout.addWidget(self.orientation_checkbox)
-        
-        apply_button = QPushButton('Add')
-        apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(apply_button)
-
-        self.setLayout(layout)
-
-        self.numSides = numSides
-        self.r = r
-
-    def onApplyClicked(self):
-        # poseText = self.pose_input.text()
-
-        self.jointToAdd = Waypoint(self.numSides, self.r, SE3())
         self.accept()
 
 class AddTipDialog(AddJointDialog):
@@ -533,7 +258,6 @@ class AddTipDialog(AddJointDialog):
     def onApplyClicked(self):
         try:
             neutralLength = float(self.length_input.text())
-            # poseText = self.pose_input.text()
 
             if (self.isStart):
                 self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=neutralLength)
@@ -728,79 +452,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             
             self.click_signal.emit(self.selected_index)
             self.click_signal_arrow.emit(arrow_index)
-    
-    def get_ray(self, x_coord: int, y_coord: int) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Method returns the ray origin (current camera position) and ray unit vector for
-        selection of triangulated meshes in the GLViewWidget.
 
-        :param x_coord: Mouse click local x coordinate within the widget.
-        :param y_coord: Mouse click local y coordinate within the widget.
-
-        Note: Mouse click coordinate system origin is top left of the GLViewWidget.
-
-        from @gordankos on github
-        https://github.com/pyqtgraph/pyqtgraph/issues/2647
-        """
-        x0, y0, width, height = self.getViewport()
-        ray_origin = np.array(self.cameraPosition())
-
-        projection_matrix = np.array(self.projectionMatrix().data()).reshape(4, 4)
-        view_matrix = np.array(self.viewMatrix().data()).reshape(4, 4)
-        view_matrix = np.transpose(view_matrix)
-
-        ndc_x = (4.0 * x_coord / width) - 1.0                    
-        ndc_y = (4.0 * y_coord) / height - 1.0                
-
-        clip_coords = np.array([ndc_x, ndc_y, -1.0, 1.0])
-
-        p = np.linalg.inv(view_matrix) @ np.linalg.inv(projection_matrix) @ clip_coords
-
-        eye_coords = np.linalg.inv(projection_matrix) @ clip_coords
-        eye_coords /= eye_coords[3]
-        eye_coords = np.array([eye_coords[0], eye_coords[1], -1.0, 0.0])
-
-        ray_direction = np.linalg.inv(view_matrix) @ eye_coords
-        ray_direction = ray_direction[:3] / np.linalg.norm(ray_direction[:3])
-
-        return ray_origin, ray_direction
-
-    def project_click(self, pos, s, r):
-        """
-        pos: (local X coord within widget, local Y coord within widget)
-        - The top left corner is the origin point
-
-        s: center of the sphere that is being tested
-        r: radius of the sphere that is being tested
-        """
-        o, d = self.get_ray(pos.x(), pos.y())
-
-        print("origin:")
-        print(o)
-        print("direction:")
-        print(d)
-
-        a = d[0] ** 2 + d[1] ** 2 + d[2] ** 2
-        b = 2 * (d[0] * (o[0] - s[0]) + d[1] * (o[1] - s[1]) + d[2] * (o[2] - s[2]))
-        c = (o[0] - s[0]) ** 2 + (o[1] - s[1]) ** 2 + (o[2] - s[2]) ** 2 - r * r
-
-        discrim = b * b - 4 * a * c
-
-        if (discrim < 0): 
-            root_discrim = math.sqrt(discrim)
-
-        t = 0
-
-        t0 = (-b - root_discrim) / (2 * a)
-        if (t0 < 0) :
-            t1 = (-b + root_discrim) / (2 * a)
-            t = t1
-        else:
-            t = t0
-
-        p = o + t * d
-        return t
-    
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_W:
             self.key_pressed.emit("Translate")
@@ -938,7 +590,6 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
         # ////////////////////////////////    SLIDERS    ///////////////////////////////////
-
         slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
         slider_joints_widget = QWidget() 
         mainLayout = QVBoxLayout(slider_joints_widget)  
@@ -1019,7 +670,12 @@ class PointEditorWindow(QMainWindow):
         self.stateInput.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
-        crease_dock_layout = QVBoxLayout()
+        crease_dock = QDockWidget("Save Crease Pattern", self)
+        crease_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+
+        crease_dock_widget = QWidget()
+        crease_dock_layout = QVBoxLayout(crease_dock_widget)
+
         self.crease_pattern_name_input = QLineEdit()
         self.crease_pattern_name_input.setPlaceholderText('Name')
         crease_dock_layout.addWidget(self.crease_pattern_name_input)
@@ -1028,8 +684,9 @@ class PointEditorWindow(QMainWindow):
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
-        crease_button_widget = QWidget()
-        crease_button_widget.setLayout(crease_dock_layout) 
+        crease_dock_widget.setLayout(crease_dock_layout)
+        crease_dock.setWidget(crease_dock_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
 
@@ -1103,7 +760,6 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
-                #self.press_cancel()
         elif key == "X":
             self.arrow_selection_changed(0)
         elif key == "Y":
@@ -1268,51 +924,6 @@ class PointEditorWindow(QMainWindow):
                     error_dialog = ErrorDialog('Error editing joint state.')
                     error_dialog.exec_()
 
-    def transform_joint(self):
-        dialog = TransformDialog(self) 
-        if not self.chain:
-            error_dialog = ErrorDialog('Please initialize a chain.')
-            error_dialog.exec_()
-        if self.selected_joint == -1:
-            error_dialog = ErrorDialog('Please select a joint.')
-            error_dialog.exec_()
-        elif dialog.exec_() == QDialog.Accepted:
-            transformation = dialog.get_transform()
-            if transformation is not None:
-                propagate = dialog.propogateTransformCheckbox.isChecked()
-                relative = dialog.relativeTransformCheckbox.isChecked()
-
-                if self.chain.transformJoint(self.selected_joint, transformation, propagate, relative=relative):
-                    self.update_joint()
-                    success_dialog = SuccessDialog('Joint successfully transformed!')
-                    success_dialog.exec_()
-                else:
-                    error_dialog = ErrorDialog('Error transforming joint.')
-                    error_dialog.exec_()
-
-    def rotate_joint(self):
-        dialog = RotationDialog(self)
-        if not self.chain:
-            error_dialog = ErrorDialog('Please initialize a chain.')
-            error_dialog.exec_()
-        if self.selected_joint == -1:
-            error_dialog = ErrorDialog('Please select a joint.')
-            error_dialog.exec_()
-        elif dialog.exec_() == QDialog.Accepted:
-            angle = dialog.get_angle()
-            if angle is not None:
-                propogate = dialog.propogateRotationCheckbox.isChecked()
-                apply_to_previous_waypoint = dialog.applyToPreviousWaypointRotationCheckbox.isChecked()
-                self.selected_joint = self.select_joint_options.currentIndex()
-
-                if self.chain.rotateJointAboutAxisOfMotion(self.selected_joint, math.radians(angle), propogate, apply_to_previous_waypoint):
-                    self.update_joint()
-                    success_dialog = SuccessDialog('Joint successfully rotated!')
-                    success_dialog.exec_()
-                else:
-                    error_dialog = ErrorDialog('Error rotating joint.')
-                    error_dialog.exec_()
-
     def adjust_rotation(self, value):
         # if not isinstance(value, float):
         #     value = value.strip()
@@ -1366,29 +977,6 @@ class PointEditorWindow(QMainWindow):
                 self.translate_slider.setValue(int(self.oldTransVal * 10))
                 self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(self.oldTransVal * 10)}")
                 self.translate_label.blockSignals(False)
-
-    def translate_joint(self):
-        dialog = TranslationDialog(self)
-        if not self.chain:
-            error_dialog = ErrorDialog('Please initialize a chain.')
-            error_dialog.exec_()
-        if self.selected_joint == -1:
-            error_dialog = ErrorDialog('Please select a joint.')
-            error_dialog.exec_()
-        elif dialog.exec_() == QDialog.Accepted:
-            distance = dialog.get_distance()
-            if distance is not None:
-                propogate = dialog.propogateTranslationCheckbox.isChecked()
-                apply_to_previous_waypoint = dialog.applyToPreviousWaypointTranslationCheckbox.isChecked()
-                self.selected_joint = self.select_joint_options.currentIndex()
-
-                if self.chain.translateJointAlongAxisOfMotion(self.selected_joint, distance, propogate, apply_to_previous_waypoint):
-                    self.update_joint()
-                    success_dialog = SuccessDialog('Joint successfully translated!')
-                    success_dialog.exec_()
-                else:
-                    error_dialog = ErrorDialog('Error translating joint.')
-                    error_dialog.exec_()
 
     def delete_joint(self):
         dialog = DeleteDialog(self)
@@ -1485,21 +1073,13 @@ class PointEditorWindow(QMainWindow):
                 joint.id = 0
             else:
                 joint.id = len(self.chain.Joints)
-                
-            isRelative = dialog.getIsRelative()
-            isFixedPosition = dialog.getFixedPosition()
-            isFixedOrientation = dialog.getFixedOrientation()
-            isSafe = True
-
-            if (isFixedPosition or isFixedOrientation):
-                isSafe = False
 
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 self.chain = KinematicChain(joint)
             elif joint.id != 0:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint)
             else:
-                self.chain.append(joint, relative=isRelative, fixedPosition=isFixedPosition, fixedOrientation=isFixedOrientation, safe=isSafe)
+                self.chain.append(joint)
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
@@ -1592,10 +1172,6 @@ class PointEditorWindow(QMainWindow):
             self.control_type = "Rotate"
             self.control2.setChecked(True)
             self.update_joint()
-        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            self.press_confirm()
-        elif event.key() == Qt.Key_Escape:
-            self.press_cancel()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             if (self.chain and self.selected_joint != -1):
                 self.selected_joint = self.select_joint_options.currentIndex() 
@@ -1609,7 +1185,6 @@ class PointEditorWindow(QMainWindow):
                 else:
                     error_dialog = ErrorDialog('Error deleting joint.')
                     error_dialog.exec_()
-                self.press_cancel()
         elif event.key() == Qt.Key_X:
             self.arrow_selection_changed(0)
         elif event.key() == Qt.Key_Y:
