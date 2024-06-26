@@ -51,6 +51,9 @@ class KinematicChain(KinematicTree):
             # children of the selected joint (represented as indices)
             children_to_reassign = self.Children[jointIndex]
 
+            print("Parent", parentIndex)
+            print("Children", children_to_reassign)
+
             # not sure what this does?
             #children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
 
