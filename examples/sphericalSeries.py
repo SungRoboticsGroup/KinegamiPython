@@ -27,7 +27,7 @@ chain = KinematicChain(Waypoint(numSides, r, SE3.Trans(0,0,-5)))
 for i in range(numSphericalJoints):
     for Joint in spherical.Joints:
         newJoint = copy.deepcopy(Joint)
-        newJoint.transformPoseBy(SE3(0,0,i*spacing))
+        newJoint.transformPoseIntoFrame(SE3(0,0,i*spacing))
         chain.append(newJoint, relative=False, safe=False, fixedPosition=True, 
                      fixedOrientation=True)
 

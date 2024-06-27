@@ -299,9 +299,7 @@ class TubularPattern():
     def show(self, dxfName=None, show=True, printGraph=False, block=blockDefault,
              mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
              boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
-        
-        
-        if not dxfName is None and (len(dxfName) < 4 or dxfName[-4:]!=".dxf"):
+        if dxfName and (len(dxfName) < 4 or dxfName[-4:]!=".dxf"):
             dxfName += ".dxf"
         
         doc = ezdxf.new()
@@ -422,7 +420,7 @@ class TipPattern(TubularPattern):
     def __init__(self, numSides, r, length, forward=True, proximalMarker=[0, 0]):
         super().__init__(numSides, r, proximalMarker)
         assert(length > 0)
-        totalBendingAngle = 4 * np.arctan(length / r*np.sin(self.polygonInnerAngle))
+        totalBendingAngle = 4 * np.arctan2(length, r*np.sin(self.polygonInnerAngle))
         self.patternHeight = length / np.sin(totalBendingAngle/4)
         
         self.patternHeight = self.patternHeight
@@ -1043,7 +1041,132 @@ class PrismaticJointPattern(TubularPattern):
         self.append(valleyTube)
         self.append(ReboPattern(numSides, r, neutralLength, numLayers, coneAngle, True))
         self.append(tube)
-           
+
+class KnuckleJointPattern(TubularPattern):
+    def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
+                 proximalMarker=[0,0]):
+        assert(numSides % 4 == 0)
+        super().__init__(numSides, r, proximalMarker)
+        rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
+        assert(rotationalAxisAngle % (2*np.pi/self.numSides) < self.EPSILON)
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) < np.pi)
+        assert(abs(bendingAngle) > self.EPSILON)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            rotationalAxisAngle = np.mod(rotationalAxisAngle+np.pi, 2*np.pi)
+        rotationalAxisOffset = (int)(np.rint((rotationalAxisAngle+np.pi/2) / (2*np.pi/self.numSides)))
+
+        dw = self.r * np.tan(bendingAngle / 2)
+        baseAngles = (2*np.pi/self.numSides)*(np.arange(self.numSides)+0.5)
+        midPolygonHeights = dw * (np.sin(baseAngles - rotationalAxisAngle) + 1)
+        maxMidPolygonHeight = np.max(midPolygonHeights)
+        self.patternHeight = 2*maxMidPolygonHeight
+        
+        ProximalBase = self.Vertices
+        DistalBase = ProximalBase + [0, self.patternHeight]
+        self.Vertices = np.vstack((ProximalBase, DistalBase))
+        self.distalBaseIndices = self.numSides + self.proximalBaseIndices
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        
+        Heights0Y = np.vstack((np.zeros(self.numSides), midPolygonHeights)).T
+        LowerTuckBoundary = ProximalBase + Heights0Y
+        UpperTuckBoundary = DistalBase - Heights0Y
+        
+        Prev2D = np.roll(LowerTuckBoundary, 1, axis=0)
+        Prev2D[0,0] -= self.width
+        Next2D = np.roll(LowerTuckBoundary, -1, axis=0)
+        Next2D[-1,0] += self.width
+        Back2D = Prev2D - LowerTuckBoundary
+        Forward2D = Next2D - LowerTuckBoundary
+        Angles2D = np.mod(signedAngles2D(Forward2D, Back2D), 2*np.pi)
+        
+        MidPolygon3D = np.vstack((self.r * np.cos(baseAngles),
+                                  self.r * np.sin(baseAngles),
+                                  midPolygonHeights)).T
+        rotAxis = np.array([np.cos(rotationalAxisAngle), 
+                            np.sin(rotationalAxisAngle), 
+                            0])
+        midNormal3D = SO3.AngVec(bendingAngle/2, rotAxis) * np.array([0,0,1])
+        Prev3D = np.roll(MidPolygon3D, 1, axis=0)
+        Next3D = np.roll(MidPolygon3D, -1, axis=0)
+        Back3D = Prev3D-MidPolygon3D
+        Forward3D = Next3D-MidPolygon3D
+        Angles3D = signedAngles3D(Forward3D, Back3D, midNormal3D)
+        
+        TuckAngles = (Angles2D - Angles3D)/2 #\varepsilon_i for each i
+        mMPHcopies = maxMidPolygonHeight * np.ones(self.numSides) 
+        MidAligned = np.vstack((ProximalBase[:,0], mMPHcopies)).T
+        c = self.numSides//2
+        offsetSigns = np.roll(np.hstack((-np.ones(c), np.ones(c))), rotationalAxisOffset)
+        MidOffset = np.vstack((ProximalBase[:,0] +\
+                offsetSigns*(mMPHcopies-midPolygonHeights)*np.tan(TuckAngles), 
+                        mMPHcopies)).T
+
+        lowerTuckBoundaryIndices = []
+        upperTuckBoundaryIndices = []
+        midAlignedIndices = []
+        midOffsetIndices = []
+        VerticesToAdd = []
+        nv = self.Vertices.shape[0] #number of vertices / next vertex index
+        for i in range(self.numSides):
+            height = midPolygonHeights[i]
+            if abs(height-maxMidPolygonHeight) < self.EPSILON:
+                # all four are the same vertex, don't want to duplicate
+                VerticesToAdd.append(MidAligned[i])
+                lowerTuckBoundaryIndices.append(nv)
+                upperTuckBoundaryIndices.append(nv)
+                midAlignedIndices.append(nv)
+                midOffsetIndices.append(nv)
+                nv += 1
+            else:
+                # add the four vertices separately
+                lowerTuckBoundaryIndices.append(nv)
+                VerticesToAdd.append(LowerTuckBoundary[i]) #lower
+                midAlignedIndices.append(nv+1)
+                VerticesToAdd.append(MidAligned[i])
+                midOffsetIndices.append(nv+2)
+                VerticesToAdd.append(MidOffset[i])
+                upperTuckBoundaryIndices.append(nv+3)
+                VerticesToAdd.append(UpperTuckBoundary[i]) #upper
+                nv += 4
+        
+        self.Vertices = np.vstack((self.Vertices, VerticesToAdd))
+        
+        lowerBoundaryEdges = np.vstack((np.roll(lowerTuckBoundaryIndices, 1), 
+                                       lowerTuckBoundaryIndices)).T
+        self.addMountainEdges(lowerBoundaryEdges)
+        lowerVerticalEdges = np.vstack((lowerTuckBoundaryIndices,
+                                        self.proximalBaseIndices)).T
+        self.addMountainEdges(lowerVerticalEdges)
+        
+        upperBoundaryEdges = np.vstack((np.roll(upperTuckBoundaryIndices, 1), 
+                                               upperTuckBoundaryIndices)).T
+        self.addMountainEdges(upperBoundaryEdges, deDuplicate=True)
+        upperVerticalEdges = np.vstack((upperTuckBoundaryIndices,
+                                        self.distalBaseIndices)).T
+        self.addMountainEdges(upperVerticalEdges, deDuplicate=True)
+        
+        # Horizontal tucking edges (across the middle)
+        self.addValleyEdges(np.vstack((midAlignedIndices, midOffsetIndices)).T)
+        nextMidAligned = np.roll(midAlignedIndices, -1)
+        self.addValleyEdges(np.vstack((midOffsetIndices, nextMidAligned)).T)
+        
+        # Vertical tucking edges (aligned with the base vertices)
+        self.addValleyEdges(np.vstack((lowerTuckBoundaryIndices, 
+                                       midAlignedIndices)).T)
+        self.addMountainEdges(np.vstack((midAlignedIndices, 
+                                         upperTuckBoundaryIndices)).T)
+        
+        # Diagonal tucking edges (boundary vertices to mid offset vertices)
+        self.addMountainEdges(np.vstack((lowerTuckBoundaryIndices,
+                                        midOffsetIndices)).T, deDuplicate=True)
+        self.addValleyEdges(np.vstack((upperTuckBoundaryIndices,
+                                       midOffsetIndices)).T, deDuplicate=True)
+        self.distalMarker = self.proximalMarker + [0, self.patternHeight]
+        self.wrapToWidth()
+        self.assertValidationChecks()
+
 class ElbowFittingPattern(TubularPattern):
     def __init__(self, numSides, r, bendingAngle, rotationalAxisAngle,
                  proximalMarker=[0,0]):
