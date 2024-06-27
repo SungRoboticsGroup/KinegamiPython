@@ -90,6 +90,8 @@ class LinkCSC:
             self.elbow2 = None
             self.Elbow2StartFrame = self.EndDubinsPose
             self.elbow2BoundingBall = Ball(self.EndDubinsPose.t, self.r)
+
+        self.collisionCapsules = self.getCapsules()
     
     def branchingParameters(self):
         dir1 = self.StartDubinsPose.R[:,0]
@@ -210,7 +212,7 @@ class LinkCSC:
                 CollisionBox(startDubinsFrame=self.Elbow1EndFrame, endDubinsFrame=self.Elbow2StartFrame, r=self.r),
                 CollisionBox(startDubinsFrame=self.Elbow2StartFrame, endDubinsFrame=self.EndDubinsPose, r=self.r)]
     
-    def collisionCapsules(self):
+    def getCapsules(self):
         capsules = [CollisionCapsule(base=self.Elbow1EndFrame, radius=self.r, height=np.linalg.norm(self.Elbow2StartFrame.t - self.Elbow1EndFrame.t))]
 
         if self.elbow1:
@@ -222,6 +224,7 @@ class LinkCSC:
             for elbow in self.elbow2.elbows:
                 capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
                 capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
-
         return capsules
 
+    def recomputeCollisionCapsules(self):
+        self.collisionCapsules = self.getCapsules()

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 from spatialmath import SE3
+import time
 
 class CollisionBox:
     def __init__(self, points=None, startDubinsFrame=None, endDubinsFrame=None,r=None):
@@ -223,6 +224,10 @@ class CollisionCapsule:
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
     def frameOverlap(self, frame, radius):
+        #if too far away to overlap, return false
+        if (np.linalg.norm(self.base.t - frame.t) > self.radius + radius) and (np.linalg.norm(self.otherBase.t - frame.t) > self.radius + radius):
+            return False, None
+            
         # Capsule endpoints
         capsuleStart = self.base.t
         capsuleEnd = self.base.t + self.height * self.base.R[:,2]

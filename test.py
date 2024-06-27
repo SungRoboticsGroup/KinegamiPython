@@ -1,13 +1,9 @@
 from KinematicTree import *
 from testqtgraph import *
+import time
 
-tree = loadKinematicTree("algorithmHand")
+tree = loadKinematicTree("algorithmHandPostOptimized")
 
-# tree = tree.globalOptimize()
-
-tree = tree.postOptimize()
-
+start = time.time()
 print(tree.detectCollisions(plot=True))
-
-tree.show()
-plotPrintedTree(origamiToPrinted(tree, 0.05), "test3")
+print(time.time() - start)

@@ -19,9 +19,6 @@ class OrigamiJoint(Joint):
     def toPrinted(self, screwRadius):
         pass
 
-    def collisionCapsules(self):
-        return []
-
 class RevoluteJoint(OrigamiJoint):
     """
     Origami revolute joint with rotation range [-totalBendingAngle/2, totalBendingAngle/2]
@@ -108,7 +105,7 @@ class RevoluteJoint(OrigamiJoint):
         from PrintedJoint import PrintedOrthogonalRevoluteJoint
         return PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
 
-    def collisionCapsules(self):
+    def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
     
@@ -264,7 +261,7 @@ class ExtendedRevoluteJoint(OrigamiJoint):
 
         return CollisionBox(points)
     
-    def collisionCapsules(self):
+    def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
 
@@ -329,7 +326,7 @@ class PrismaticJoint(OrigamiJoint):
         from PrintedJoint import PrintedPrismaticJoint
         return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
     
-    def collisionCapsules(self):
+    def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
         
     

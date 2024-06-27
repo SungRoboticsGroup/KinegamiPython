@@ -28,6 +28,8 @@ class Joint(ABC):
         self.state = 0
         self.initialState = initialState
         self.TransformStateTo(initialState)
+
+        self.collisionCapsules = self.getCapsules()
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -174,3 +176,9 @@ class Joint(ABC):
             ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
         ax.set_aspect('equal')
         plt.show(block=block)
+
+    def getCapsules(self):
+        return []
+
+    def recomputeCollisionCapsules(self):
+        self.collisionCapsules = self.getCapsules()
