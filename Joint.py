@@ -106,7 +106,6 @@ class Joint(ABC):
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
     
-<<<<<<< HEAD
     def translateAlongX(self, xChange : float):
         self.Pose = self.Pose @ SE3.Trans([xChange,0,0])
 
@@ -122,8 +121,6 @@ class Joint(ABC):
     def recomputeCollisionCapsules(self):
         self.collisionCapsules = self.getCapsules()
 
-=======
->>>>>>> parent of cdbf930 (Merge branch 'emils-branch' into rays-branch)
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
         zhat = self.Pose.R[:,2]
@@ -794,8 +791,4 @@ class StartTip(Tip):
 
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
-<<<<<<< HEAD
         super().__init__(numSides, r, Pose, length, closesForward=True)
-=======
-        super().__init__(numSides, r, Pose, length, closesForward=True)
->>>>>>> parent of cdbf930 (Merge branch 'emils-branch' into rays-branch)
