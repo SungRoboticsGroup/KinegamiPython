@@ -8,7 +8,6 @@ from numpy import cross, dot, arctan2
 import scipy
 from scipy.spatial.transform import Rotation
 from scipy.linalg import null_space
-from scipy.optimize import minimize, NonlinearConstraint
 from numpy.linalg import norm
 from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
@@ -17,7 +16,6 @@ from math import remainder
 from style import *
 import pyqtgraph.opengl as gl
 from meshHelpers import *
-from matplotlib import cm
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -107,6 +105,7 @@ def signedAngle(a, b, n):
         
     return arctan2(dot(cross(a,b),n), dot(a,b))
 
+
 """
 For A and B matrices (of the same shape) storing 2D vectors as rows,
 return the signed angle between corresponding rows
@@ -137,158 +136,6 @@ def wrapAngle(angle, EPSILON=0.00001):
     if abs(modResult-2*np.pi) < EPSILON:
         return 0
     return modResult
-
-
-class Line:
-    def __init__(self, point, direction, EPSILON=1e-8):
-        self.p = np.array(point)
-        direction = np.array(direction)
-        self.EPSILON = EPSILON
-        assert(norm(direction) > self.EPSILON)
-        self.dhat = direction / norm(direction)
-
-    def distanceToPoint(self, point):
-        point = np.array(point)
-        return norm(cross(point - self.p, self.dhat))
-    
-    def contains(self, point):
-        return self.distanceToPoint(point) < self.EPSILON
-    
-class Ray:
-    def __init__(self, startPoint, direction, EPSILON=1e-8):
-        self.startPoint = np.array(startPoint)
-        direction = np.array(direction)
-        self.EPSILON = EPSILON
-        assert(norm(direction) > self.EPSILON)
-        self.dhat = direction / norm(direction)
-
-    def distanceToPoint(self, point): 
-        if Plane(self.startPoint, self.dhat).sideOfPoint(point) < 0:
-            return norm(point - self.startPoint)
-        else:
-            return Line(self.startPoint, self.dhat).distanceToPoint(point)
-    
-    def contains(self, point):
-        return self.distanceToPoint(point) < self.EPSILON
-
-
-
-def unitSphereParameterization(theta, phi):
-    return np.array([np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)])
-
-def directionNotOrthogonalToAnyOf(otherDirections: np.ndarray) -> np.ndarray:
-    assert(otherDirections.shape[1] == 3)
-    assert(np.min(norm(otherDirections,axis=1)) > 0)
-    otherDirections = otherDirections / (norm(otherDirections,axis=1).reshape(-1,1)) #normalize
-
-    # We want a direction not orthogonal to any of the given directions,
-    # i.e., with nonzero dot product with all of them.
-    # Such a direction must exist since there are finitely many given directions
-    # so let's take the one as far from orthogonal as possible, i.e.,
-    # maximizing the minimum absolute value of the dot product with 
-    # the given directions.
-    def negativeMinAbsDotProduct(v):
-        return -np.min(np.abs(otherDirections @ v))
-    
-    if otherDirections.shape[0] == 0:
-        return np.array([1,0,0])
-    else:
-        C = NonlinearConstraint(lambda v : norm(v), 1, 1)
-        result = minimize(negativeMinAbsDotProduct, np.random.rand(3), constraints=(C,))
-        return result.x
-        
-
-class Plane:
-    def __init__(self, point, normal, EPSILON=0.00000001):
-        self.p = point
-        self.nhat = normal / norm(normal)
-        self.EPSILON = EPSILON
-        
-    # sign is + if the point is on the +nhat side, 0 if on plane, - otherwise
-    def signedDistanceToPoint(self, point):
-        projectionLength = dot(point - self.p, self.nhat)
-        if abs(projectionLength) < self.EPSILON: #for numerical stability
-            return 0
-        else:
-            return projectionLength
-    
-    def projectionOfPoint(self, point):
-        return point - self.signedDistanceToPoint(point)*self.nhat
-
-    # return 0 if point is on the plane, +1 if on the +nhat side, -1 otherwise
-    def sideOfPoint(self, point):
-        return np.sign(self.signedDistanceToPoint(point))
-    
-    def containsPoint(self, point):
-        # plane contains point iff self.p - point is orthogonal to self.nhat
-        return self.sideOfPoint(point) == 0
-    
-    def intersectionWithLine(self, line):
-        if abs(dot(self.nhat, line.dhat)) < self.EPSILON: 
-            # line is either on the plane or parallel to it
-            if self.containsPoint(line.p): 
-                # line is on the plane
-                return line
-            else: 
-                # line is parallel to the plane
-                return None
-        else:
-            # line intersects the plane at a single point
-            # so the linear system constructed per wikipedia has point solution
-            # https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
-            # what they call cross(p01, p02) is just our nhat
-            t = dot(self.nhat, line.p - self.p) / dot(-line.dhat, self.nhat)
-            intersect = line.p + t * line.dhat
-            assert(self.containsPoint(intersect))
-            return intersect
-    
-    def intersectionsWithParallelLines(self, Points : np.ndarray, 
-                                       direction : np.ndarray) -> np.ndarray:
-        PtoPoints = Points - self.p.flatten()
-        alignment = dot(-direction, self.nhat.flatten())
-        ts =  PtoPoints @ self.nhat.reshape(3,1) / alignment
-        return Points + ts*direction
-    
-    """ 
-    Return an array containing the sides of the plane that the given line
-    intersects with: 0 for on the plane, 1 for +nhat side, -1 for -nhat side
-    """
-    def sidesOfLine(self, line):
-        intersection = self.intersectionWithLine(line)
-        if intersection is None:
-            # line is parallel to plane, need to check on which side
-            return [self.sideOfPoint(line.p)]
-        elif type(intersection) == Line:
-            # whole line is on plane
-            return [0]
-        else:
-            # line crosses the plane at a point
-            return [-1,0,1]
-    
-    def parallelPlane(self, distance):
-        return Plane(self.p + distance*self.nhat, self.nhat, self.EPSILON)
-
-    def grid(self, scale=20, numPoints=9):
-        range = np.linspace(-scale, scale, numPoints)
-        basis = null_space([self.nhat])
-        uhat = basis[:,0]
-        vhat = basis[:,1]
-        grid = np.zeros((numPoints, numPoints, 3))
-        for u in np.arange(numPoints):
-            for v in np.arange(numPoints):
-                grid[u,v] = self.p + range[u]*uhat + range[v]*vhat
-        return grid
-
-    def addToPlot(self, ax, color='red', alpha=0.5, scale=20):
-        grid = self.grid(scale, numPoints=9)
-        X = grid[:,:,0]
-        Y = grid[:,:,1]
-        Z = grid[:,:,2]
-        ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
-
-def planeFromThreePoints(p1, p2, p3):
-    normal = unit(cross(p2-p1, p3-p1))
-    return Plane(p1, normal)
 
 class Circle3D:
     def __init__(self, radius, center, normal):
@@ -436,12 +283,6 @@ class Ball:
         ax.set_aspect('equal')
         plt.show(block=block)
 
-    def projectionOntoPlane(self, plane : Plane) -> Circle3D:
-        return Circle3D(self.r, plane.projectionOfPoint(self.c), plane.nhat)
-    
-    def translationToCenterOnPlane(self, plane : Plane):
-        return Ball(plane.projectionOfPoint(self.c), self.r)
-
 """
 Note: we don't need to guarantee minimality of our bounding balls, so we build
 bounding balls of bounding balls in a greedy fashion based on the below 
@@ -475,92 +316,6 @@ def distanceBetweenBalls(ball1, ball2):
     centerDistance = norm(ball2.c - ball1.c)
     return max(0, centerDistance - ball1.r - ball2.r)
 
-class Cylinder:
-    def __init__(self, radius : float, start : np.ndarray, 
-                 direction : np.ndarray, length : float, 
-                 uhat : np.ndarray = None):
-        assert(length > 0)
-        assert(norm(direction)>0)
-        self.start = start
-        self.direction = direction / norm(direction)
-        self.length = length
-        self.r = radius
-        if uhat is None:
-            uhat = null_space([self.direction])[:,0]
-        else:
-            uhat = uhat.reshape((3))    
-        self.uhat = uhat / norm(uhat)
-    
-    def orientation(self) -> SO3:
-        return SO3(np.vstack((self.uhat, 
-                              cross(self.direction, self.uhat), 
-                              self.direction)).T)
-    
-    def end(self):
-        return self.start + self.length * self.direction
-
-    def startPlane(self) -> Plane:
-        return Plane(self.start, self.direction)
-    
-    def endPlane(self) -> Plane:
-        return Plane(self.end(), self.direction)
-
-    # Keeping self.direction constant, expand cylinder to include ball
-    def expandToIncludeBall(self, ball : Ball):
-        ballStart = ball.c - ball.r * self.direction
-        ballEnd = ball.c + ball.r * self.direction
-        distanceInBack = self.startPlane().signedDistanceToPoint(ballStart)
-        distanceInFront = self.endPlane().signedDistanceToPoint(ballEnd)
-
-        # Update cylinder forward/backward
-        if distanceInFront > 0:
-            self.length += distanceInFront
-        if distanceInBack < 0:
-            self.start = self.start + (distanceInBack * self.direction)
-            self.length -= distanceInBack
-            
-        # Update cylinder circular cross-section
-        ballTranslatedToStartPlane = ball.translationToCenterOnPlane(self.startPlane())
-        cylinderStartBall = Ball(self.start, self.r)
-        expandedStartBall = minBoundingBall(cylinderStartBall, ballTranslatedToStartPlane)
-        self.start = expandedStartBall.c
-        self.r = expandedStartBall.r
-    
-    def interpolateCircles(self, numPointsPerCircle=32, numCircles=2):
-        radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
-        angle = np.linspace(0, 2*np.pi, radialCount) 
-        u = self.r * np.cos(angle)
-        v = self.r * np.sin(angle)
-        """
-        circlePlaneBasis = null_space([self.direction])
-        uhat = circlePlaneBasis[:,0]
-        vhat = circlePlaneBasis[:,1]
-        """
-        uhat = self.uhat
-        vhat = cross(self.direction, uhat)
-        circle = u.reshape(-1,1) @ uhat.reshape(1,3) + v.reshape(-1,1) @ vhat.reshape(1,3)
-        
-        segment = np.linspace(self.start, self.end(), numCircles)
-        circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
-        return circlePoints.reshape((numCircles, radialCount, 3))
-    
-    def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, edgeColor=None):
-        circles = self.interpolateCircles(numPointsPerCircle, numCircles)
-        X = circles[:,:,0]
-        Y = circles[:,:,1]
-        Z = circles[:,:,2]
-        if frame:
-            return ax.plot_wireframe(X, Y, Z, color=edgeColor, alpha=alpha)
-        elif edgeColor is None:
-            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, edgecolor=edgeColor)
-    
-    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=blockDefault, edgeColor='black'):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
-        ax.set_aspect('equal')
-        plt.show(block=block)
 
 def RotationAboutLine(rotAxisDir : np.ndarray,
                       rotAxisPoint : np.ndarray,
@@ -854,16 +609,6 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
-    
-    def addToPlot(self, ax, color='black', alpha=1):
-        X,Y,Z = self.interpolate().T
-        return ax.plot(X, Y, Z, color=color, alpha=alpha)
-
-    def show(self, color='black', alpha=1, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandle = self.addToPlot(ax, color, alpha)
-        ax.set_aspect('equal')
-        plt.show(block=block)
         
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
@@ -901,9 +646,7 @@ def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, z
         Poses = np.array([Poses])
     ax = plt.figure().add_subplot(projection='3d')
     handles = addPosesToPlot(Poses, ax, axisLength, xColor, yColor, zColor, oColors, makeAxisLimitsIncludeTips)
-    ax.set_xticks(np.arange(3))
-    ax.set_yticks(np.arange(3))
-    ax.set_zticks(np.arange(3))
+    ax.legend(handles, [r'$\^x$', r'$\^y$', r'$\^z$'])
     ax.set_aspect('equal')
     plt.show(block=block)
 
@@ -938,44 +681,72 @@ def commonNormal(point1, direction1, point2, direction2, undefined=None):
         return undefined
 
 
-class Torus:
-    def __init__(self, majorRadius, minorRadius, center, axisDirection):
-        self.R = majorRadius
-        self.r = minorRadius
-        self.c = center
-        self.dhat = axisDirection / norm(axisDirection)
-        self.uhat, self.vhat = null_space([self.dhat]).T
-
-    def point(self, turnAngle, azumith):
-        u = (self.R + self.r*np.cos(turnAngle))*np.cos(azumith)*self.uhat
-        v = (self.R + self.r*np.cos(turnAngle))*np.sin(azumith)*self.vhat
-        d = self.r*np.sin(turnAngle)*self.dhat
-        return self.c + u + v + d
+class Line:
+    def __init__(self, point, direction):
+        self.p = point
+        self.dhat = direction / norm(direction)
     
-    def interpolate(self, numTurnTicks=32, numAzumithTicks=32):
-        numTurnTicks += 1
-        numAzumithTicks += 1
-        turnAngles = np.linspace(0, 2*np.pi, numTurnTicks)
-        azumiths = np.linspace(0, 2*np.pi, numAzumithTicks)
-        grid = np.zeros((numTurnTicks, numAzumithTicks, 3))
-        for i, turnAngle in enumerate(turnAngles):
-            for j, azumith in enumerate(azumiths):
-                grid[i,j] = self.point(turnAngle, azumith)
-        return grid
+class Plane:
+    def __init__(self, point, normal, EPSILON=0.00000001):
+        self.p = point
+        self.nhat = normal / norm(normal)
+        self.EPSILON = EPSILON
+        
+    # sign is + if the point is on the +nhat side, 0 if on plane, - otherwise
+    def signedDistanceToPoint(self, point):
+        projectionLength = dot(point - self.p, self.nhat)
+        if abs(projectionLength) < self.EPSILON: #for numerical stability
+            return 0
+        else:
+            return projectionLength
     
-    def addToPlot(self, ax, numTurnTicks=32, numAzumithTicks=32, colorMap=cm.Blues, alpha=0.5):
-        grid = self.interpolate(numTurnTicks, numAzumithTicks)
-        X = grid[:,:,0]
-        Y = grid[:,:,1]
-        Z = grid[:,:,2]
-        return ax.plot_surface(X, Y, Z, cmap=colorMap, alpha=alpha)
-
-    def show(self, numTurnTicks=32, numAzumithTicks=32, colorMap=cm.Blues, alpha=0.5, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandle = self.addToPlot(ax, numTurnTicks, numAzumithTicks, colorMap, alpha)
-        ax.set_aspect('equal')
-        plt.show(block=block)
-
-class HornTorus(Torus):
-    def __init__(self, radius, center, axisDirection):
-        super().__init__(radius, radius, center, axisDirection)
+    # return 0 if point is on the plane, +1 if on the +nhat side, -1 otherwise
+    def sideOfPoint(self, point):
+        return np.sign(self.signedDistanceToPoint(point))
+    
+    def containsPoint(self, point):
+        # plane contains point iff self.p - point is orthogonal to self.nhat
+        return self.sideOfPoint(point) == 0
+    
+    def intersectionWithLine(self, line):
+        if abs(dot(self.nhat, line.dhat)) < self.EPSILON: 
+            # line is either on the plane or parallel to it
+            if self.containsPoint(line.p): 
+                # line is on the plane
+                return line
+            else: 
+                # line is parallel to the plane
+                return None
+        else:
+            # line intersects the plane at a single point
+            # so the linear system constructed per wikipedia has point solution
+            # https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
+            # what they call cross(p01, p02) is just our nhat
+            t = dot(self.nhat, line.p - self.p) / dot(-line.dhat, self.nhat)
+            intersect = line.p + t * line.dhat
+            assert(self.containsPoint(intersect))
+            return intersect
+    
+    def intersectionsWithParallelLines(self, Points : np.ndarray, 
+                                       direction : np.ndarray) -> np.ndarray:
+        PtoPoints = Points - self.p.flatten()
+        alignment = dot(-direction, self.nhat.flatten())
+        ts =  PtoPoints @ self.nhat.reshape(3,1) / alignment
+        return Points + ts*direction
+    
+    """ 
+    Return an array containing the sides of the plane that the given line
+    intersects with: 0 for on the plane, 1 for +nhat side, -1 for -nhat side
+    """
+    def sidesOfLine(self, line):
+        intersection = self.intersectionWithLine(line)
+        if intersection is None:
+            # line is parallel to plane, need to check on which side
+            return [self.sideOfPoint(line.p)]
+        elif type(intersection) == Line:
+            # whole line is on plane
+            return [0]
+        else:
+            # line crosses the plane at a point
+            return [-1,0,1]
+    

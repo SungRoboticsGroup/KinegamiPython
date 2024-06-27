@@ -29,51 +29,39 @@ def relativePoseFromDHOriginal(theta, alpha, a, d):
 
 # Construct pose matrices from the Denavit-Hartenberg parameters for a PUMA arm
 # from Lee and Ziegler 1984
-RelativePoses = [relativePoseFromDHOriginal(np.pi/2, -np.pi/2, 0, 0),
+Poses = [relativePoseFromDHOriginal(np.pi/2, -np.pi/2, 0, 0),
          relativePoseFromDHOriginal(0, 0, 431.8, 149.09),
          relativePoseFromDHOriginal(np.pi/2, np.pi/2, -20.32, 0),
          relativePoseFromDHOriginal(0, -np.pi/2, 0, 433.07),
          relativePoseFromDHOriginal(0, np.pi/2, 0, 0),
          relativePoseFromDHOriginal(0, 0, 0, 56.25)]
 
-GlobalPoses = [RelativePoses[0]]
-for Pose in RelativePoses[1:]:
-    GlobalPoses.append(GlobalPoses[-1] @ Pose)
-
-
-
 # Initialize the chain with a base waypoint
-chain = KinematicChain(Waypoint(numSides, r, SE3.Trans(0,0,-660.4)@SE3.Rz(np.pi)))
+chain = KinematicChain(Waypoint(numSides, r, SE3.Rz(np.pi)))
 
 # The first joint axis is horizontal, 660.4 mm above the start base
-chain.append(RevoluteJoint(numSides, r, np.pi, SE3()), safe=False)
+chain.append(RevoluteJoint(numSides, r, np.pi, SE3.Trans(0,0,660.4)), safe=False)
 # Add the remaining revolute joints using the compact joint placement algorithm
-for Pose in GlobalPoses[:-1]:
-    chain.append(RevoluteJoint(numSides, r, np.pi, Pose), safe=False, relative=False)
+for Pose in Poses[:-1]:
+    chain.append(RevoluteJoint(numSides, r, np.pi, Pose), safe=False)
 # The last DH parameters (and thus pose matrix) is for the end effector
-chain.append(EndTip(numSides, r, GlobalPoses[-1], 50), safe=False, relative=False)
-
-chain.transformAll(SE3.Trans(0,0,660.4))
+chain.append(EndTip(numSides, r, Poses[-1], 50), safe=False)
 
 # Plot the resulting chain
-chain.show(block=False, showLinkPath=False, showJointPoses=False, 
-           showLinkPoses=False, showAxisGrids=False, 
-           showGroundPlane=True, groundPlaneScale=800,
-           surfaceOpacity=0.5)
+chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxisGrids=False)
 
 # Adjust the resulting chain to shorten links
-chain.translateJointAlongAxisOfMotion(1, -200, propogate=False)
-chain.translateJointAlongAxisOfMotion(2, -400, propogate=False)
-chain.translateJointAlongAxisOfMotion(3, 1400, propogate=False)
-chain.translateJointAlongAxisOfMotion(4, -900, propogate=False)
-chain.translateJointAlongAxisOfMotion(5, -2100, propogate=False)
-chain.translateJointAlongAxisOfMotion(6, -1500, propogate=True)
+chain.translateJointAlongAxisOfMotion(2, 400)
+chain.translateJointAlongAxisOfMotion(3, 600)
+chain.translateJointAlongAxisOfMotion(4, -550)
+chain.rotateJointAboutAxisOfMotion(4, np.pi/2, propogate=False)
+chain.translateJointAlongAxisOfMotion(5, -550)
+chain.translateJointAlongAxisOfMotion(6, -400)
+chain.translateJointAlongAxisOfMotion(7, -300)
 
 # Plot the chain structure
-chain.show(showLinkPath=False, showJointPoses=False, 
-           showLinkPoses=False, showAxisGrids=False, 
-           showGroundPlane=True, groundPlaneScale=800,
-           surfaceOpacity=0.5)
+chain.show(block=False, showLinkPath=False, showJointPoses=False, showLinkPoses=False, showAxisGrids=False)
 # Plot the crease pattern
-#chain.creasePattern().show()
+chain.creasePattern().show()
+
 

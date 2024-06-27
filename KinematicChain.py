@@ -5,7 +5,6 @@ Created on Wed Dec  6 14:07:27 2023
 @author: Daniel Feshbach
 """
 from Joint import *
-from OrigamiJoint import *
 from KinematicTree import KinematicTree
 from TubularPattern import *
 from LinkCSC import LinkCSC
@@ -27,11 +26,11 @@ class KinematicChain(KinematicTree):
                                 fixedOrientation, safe)
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
-        chainPattern = copy.deepcopy(self.Joints[0].pattern)
+        pattern = self.Joints[0].pattern
         for j in range(1, len(self.Joints)):
-            chainPattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
-            chainPattern.append(self.Joints[j].pattern)
-        return chainPattern
+            pattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
+            pattern.append(self.Joints[j].pattern)
+        return pattern
     
     def delete(self, jointIndex : int, safe : bool = True) -> bool:
         assert(jointIndex>=0)
