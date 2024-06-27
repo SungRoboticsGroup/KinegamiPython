@@ -472,6 +472,7 @@ class KinematicTree(Generic[J]):
         return f"3d_output/{folder}/{name}"
 
     def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
+        assert(isinstance(self, KinematicTree[PrintedJoint]))
         if (folder != ""):
             os.makedirs(f"scad_output/{folder}", exist_ok=True)
             os.makedirs(f"3d_output/{folder}", exist_ok=True)
@@ -891,7 +892,6 @@ class KinematicTree(Generic[J]):
         return tree, result.fun
 
     def calculateJointFitness(self, params, index):
-        #TODO: exponential growth (in detectCollisions?)
         translation = params[0]
         rotation = params[1]
 
@@ -1007,7 +1007,7 @@ class KinematicTree(Generic[J]):
         print(time.time() - start)
         return loss
     
-    def save(self, filename):
+    def save(self, filename: str):
         with open(f"save/{filename}.tree", "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
             for i in range(0, len(self.Joints)):

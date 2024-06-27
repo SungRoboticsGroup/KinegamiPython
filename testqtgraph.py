@@ -7,7 +7,7 @@ from PyQt5.QtGui import QColor
 from KinematicTree import *
 from spatialmath import SE3
 
-def plotPrintedTree(tree : KinematicTree, folder : str):
+def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     assert(tree != None)
     
     if (folder != ""):
