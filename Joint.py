@@ -28,8 +28,10 @@ class Joint(ABC):
         self.Pose = Pose
         self.neutralLength = neutralLength
         self.state = 0
+        self.initialState = initialState
         self.TransformStateTo(initialState)
         self.id = 0
+        self.collisionCapsules = self.getCapsules()
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -74,6 +76,9 @@ class Joint(ABC):
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
     
+    def reverseZhat(self):
+        self.Pose = self.Pose @ SE3.Rx(np.pi)
+    
     def reversePathDirection(self):
         if self.pathIndex() == 2:
             self.Pose = self.Pose @ SE3.Rx(np.pi)
@@ -88,10 +93,10 @@ class Joint(ABC):
     def DubinsFrame(self) -> SE3:
         return SE3(self.Pose.A[:,self.dubinsColumnOrder()])
     
-    def ProximalDubinsFrame(self) -> SE3():
+    def ProximalDubinsFrame(self) -> SE3:
         return SE3(self.ProximalFrame().A[:,self.dubinsColumnOrder()])
     
-    def DistalDubinsFrame(self) -> SE3():
+    def DistalDubinsFrame(self) -> SE3:
         return SE3(self.DistalFrame().A[:,self.dubinsColumnOrder()])
     
     def proximalPosition(self) -> np.ndarray:
@@ -100,12 +105,27 @@ class Joint(ABC):
     def distalPosition(self) -> np.ndarray:
         return self.DistalFrame().t
     
-    def transformPoseBy(self, Transformation : SE3):
+    def transformPoseIntoFrame(self, Frame : SE3):
+        self.Pose = Frame @ self.Pose
+
+    def transformPoseBy(self, Transformation: SE3):
         self.Pose = Transformation @ self.Pose
     
+    def applyTransformationToPose(self, Transformation : SE3):
+        self.Pose = self.Pose @ Transformation
+
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
     
+    def translateAlongX(self, xChange : float):
+        self.Pose = self.Pose @ SE3.Trans([xChange,0,0])
+
+    def translateAlongY(self, yChange : float):
+        self.Pose = self.Pose @ SE3.Trans([0,yChange,0])
+
+    def rotateAboutZ(self, angleToRotateAboutZ):
+        self.applyTransformationToPose(SE3.Rz(angleToRotateAboutZ))
+
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
         zhat = self.Pose.R[:,2]
@@ -119,9 +139,11 @@ class Joint(ABC):
         self.Pose = SE3(Transform)
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
-             showSurface=True, showAxis=False, axisScale=10, showPoses=True):
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
+             axisScale=10, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:,2]
             JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
@@ -777,3 +799,9 @@ class StartTip(Tip):
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=True)
+
+    def getCapsules(self):
+        return []
+
+    def recomputeCollisionCapsules(self):
+        self.collisionCapsules = self.getCapsules()

@@ -24,9 +24,9 @@ import matplotlib.pyplot as plt
 import geometryHelpers
 from geometryHelpers import *
 from spatialmath import SE3
-
 import pyqtgraph.opengl as gl
 
+import warnings
 
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,
@@ -70,14 +70,15 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     
     # solve for the path under all 4 sign combinations
     # solutions are values for tDirMag
-    solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, 1, 1))
-    solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, 1, -1))
-    solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, -1, 1))
-    solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                            (r, startPosition, startDir, endPosition, endDir, -1, -1))
+    with warnings.catch_warnings(action="ignore"):
+        solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, 1, 1))
+        solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, 1, -1))
+        solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, -1, 1))
+        solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
+                                (r, startPosition, startDir, endPosition, endDir, -1, -1))
     
     # Construct the paths found based on the solutions found for tDirMag
     pathPP = PathCSC(solPP, r, startPosition, startDir, endPosition, endDir, 1, 1)
@@ -176,7 +177,7 @@ class PathCSC:
         self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
                                 cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
-    
+
     def newPathTransformedBy(self, Transformation : SE3):
         new_turn1end = Transformation * self.turn1end
         new_turn1endPlusTunit = Transformation * (self.turn1end + self.tUnit)
@@ -274,3 +275,14 @@ class PathCSC:
         #make a new plot and then call add to plot, then display that plot
         self.add(widget, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
+        ax.set_aspect('equal')
+        ax.legend()
+        plt.show(block=block)
+        
+        
+        
+        
+        
+        
+        
+        
