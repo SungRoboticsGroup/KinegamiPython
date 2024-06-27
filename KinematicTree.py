@@ -133,7 +133,6 @@ class KinematicTree(Generic[J]):
                                                             endPlane)
 
         if not fixedOrientation:
-<<<<<<< HEAD
             xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
                                 newJoint.Pose.t, newJoint.Pose.R[:,2],
                                 undefined=newJoint.Pose.R[:,0])
@@ -141,7 +140,6 @@ class KinematicTree(Generic[J]):
             outwardDirection = newJoint.Pose.t - parent.Pose.t
             if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
                 newJoint.reversePathDirection()        
-=======
             if endPlane is None:
                 xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
                                     newJoint.Pose.t, newJoint.Pose.R[:,2],
@@ -161,7 +159,6 @@ class KinematicTree(Generic[J]):
 
 
 
->>>>>>> parent of de30fe0 (reverting to test again)
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow)
