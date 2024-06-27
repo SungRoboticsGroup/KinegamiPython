@@ -1123,6 +1123,8 @@ class PointEditorWindow(QMainWindow):
         if self.chain and self.selected_joint != -1:
             for joint in self.chain.Joints:
                 joint.changeRadius(value)
+            for link in self.chain.Links:
+                link.changeRadius(value)
             if self.chain.changeRadius(value):
                 self.chain.recomputeBoundingBall()
                 self.r = value
