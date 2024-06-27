@@ -52,7 +52,7 @@ class KinematicChain(KinematicTree):
             children_to_reassign = self.Children[jointIndex]
 
             # not sure what this does?
-            #children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
+            children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
 
             # assign every child of the joint to the new parent
             # and assign the new parent to every child

@@ -617,6 +617,13 @@ class PointEditorWindow(QMainWindow):
         self.state_slider.setValue(0)
         self.state_slider.valueChanged.connect(self.adjust_state)
 
+        self.radius_label = QLabel('Edit Joint Radius: 0', self)
+        self.radius_slider = QSlider(Qt.Horizontal, self)
+        self.radius_slider.setMinimum(1)
+        self.radius_slider.setMaximum(10)
+        self.radius_slider.setValue(1)
+        self.radius_slider.valueChanged.connect(self.adjust_radius)
+
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
         self.rotationInput.setPlaceholderText("Enter angle in degrees")
@@ -638,13 +645,22 @@ class PointEditorWindow(QMainWindow):
         stateLayout.addWidget(self.state_slider)
         stateLayout.addWidget(self.stateInput) 
 
+        radiusLayout = QHBoxLayout()
+        self.radiusInput = QLineEdit(self)
+        self.radiusInput.setPlaceholderText("Enter radius")
+        mainLayout.addWidget(self.radius_label)
+        radiusLayout.addWidget(self.radius_slider)
+        radiusLayout.addWidget(self.radiusInput) 
+
         self.rotationInput.textChanged.connect(self.adjust_rotation)
         self.translationInput.textChanged.connect(self.adjust_translation)
         self.stateInput.textChanged.connect(self.adjust_state)
+        self.radiusInput.textChanged.connect(self.adjust_radius)
 
         mainLayout.addLayout(rotationLayout)
         mainLayout.addLayout(translationLayout)
         mainLayout.addLayout(stateLayout)
+        mainLayout.addLayout(radiusLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -664,12 +680,15 @@ class PointEditorWindow(QMainWindow):
         self.oldRotVal = 0
         self.oldTransVal = 0
         self.oldStateVal = 0
+        self.oldRadiusVal = 1
         self.rotationSlider.setDisabled(True)
         self.translate_slider.setDisabled(True)
         self.state_slider.setDisabled(True)
+        self.radius_slider.setDisabled(True)
         self.rotationInput.setDisabled(True)
         self.translationInput.setDisabled(True)
         self.stateInput.setDisabled(True)
+        self.radiusInput.setDisabled(True)
 
         # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
         crease_dock = QDockWidget("Save Crease Pattern", self)
@@ -833,6 +852,7 @@ class PointEditorWindow(QMainWindow):
             current = self.chain.Joints[self.selected_joint].state
             self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 10000)}")
             self.update_state_slider()
+            self.update_radius_slider()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -954,6 +974,30 @@ class PointEditorWindow(QMainWindow):
             self.stateInput.blockSignals(False)
             self.stateInput.setDisabled(True)
 
+    def update_radius_slider(self):
+        if self.selected_joint != -1:
+            radius = int(self.chain.Joints[self.selected_joint].r)
+            self.oldRadiusVal = radius
+            self.radius_slider.blockSignals(True)
+            self.radius_label.setText(f"Edit Joint Radius: {radius}")
+            self.radius_slider.setValue(radius)
+            self.radius_slider.setDisabled(False)
+            self.radius_slider.blockSignals(False)
+            self.radiusInput.blockSignals(True)
+            self.radiusInput.setText(str(radius))
+            self.radiusInput.blockSignals(False)
+            self.radiusInput.setDisabled(False)
+        else:
+            self.radius_slider.blockSignals(True)
+            self.radius_label.setText(f"Edit Joint Radius: 0")
+            self.radius_slider.setValue(1)
+            self.radius_slider.setDisabled(True)
+            self.radius_slider.blockSignals(False)
+            self.radiusInput.blockSignals(True)
+            self.radiusInput.setText("")
+            self.radiusInput.blockSignals(False)
+            self.radiusInput.setDisabled(True)
+
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
         euler_angles = rot.as_euler('xyz', degrees=True)
@@ -1068,8 +1112,28 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.state_slider.blockSignals(True)
                 self.state_slider.setValue(int(self.oldStateVal))
-                self.state_label.setText(f"Edit Joint State: {int(self.oldStateVal)}")
+                self.state_label.setText(f"Edit Joint {self.selected_joint} State: {int(self.oldStateVal)}")
                 self.state_label.blockSignals(False)
+
+    def adjust_radius(self, value):
+        if not isinstance(value, float) and not isinstance(value, int):
+            value = value.strip()
+        value = float(value) if value else 0
+        self.radius_label.setText(f'Edit Joint Radius: {int(value)}')
+        if self.chain and self.selected_joint != -1:
+            for joint in self.chain.Joints:
+                joint.changeRadius(value)
+            if self.chain.changeRadius(value):
+                self.chain.recomputeBoundingBall()
+                self.r = value
+                self.update_joint()
+                self.OldRadiusVal = value
+                self.update_radius_slider()
+            else:
+                self.radius_slider.blockSignals(True)
+                self.radius_slider.setValue(int(self.oldStateVal))
+                self.radius_label.setText(f"Edit Joint Radius: {int(self.oldRadiusVal)}")
+                self.radius_label.blockSignals(False)
 
     def delete_joint(self):
         dialog = DeleteDialog(self)

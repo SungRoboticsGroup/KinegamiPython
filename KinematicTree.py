@@ -42,6 +42,10 @@ class KinematicTree:
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
+
+    def changeRadius(self, r : float):
+        self.r = r
+        return True
     
     def dataDeepCopy(self):
         return copy.deepcopy([self.r, self.numSides, self.Joints, self.Parents, 
@@ -114,8 +118,7 @@ class KinematicTree:
             newJoint.setXhatAboutZhat(xhat)
             outwardDirection = newJoint.Pose.t - parent.Pose.t
             if np.dot(newJoint.pathDirection(), outwardDirection) < 0:
-                newJoint.reversePathDirection()
-
+                newJoint.reversePathDirection()        
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow)

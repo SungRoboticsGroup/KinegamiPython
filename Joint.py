@@ -105,6 +105,9 @@ class Joint(ABC):
     
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
+
+    def changeRadius(self, r : float):
+        self.r = r
     
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
