@@ -125,6 +125,12 @@ class Joint(ABC):
 
     def rotateAboutZ(self, angleToRotateAboutZ):
         self.applyTransformationToPose(SE3.Rz(angleToRotateAboutZ))
+    
+    def getCapsules(self):
+        return []
+
+    def recomputeCollisionCapsules(self):
+        self.collisionCapsules = self.getCapsules()
 
     def setXhatAboutZhat(self, xhatNew):
         xhatNew = xhatNew / norm(xhatNew)
@@ -799,9 +805,3 @@ class StartTip(Tip):
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=True)
-
-    def getCapsules(self):
-        return []
-
-    def recomputeCollisionCapsules(self):
-        self.collisionCapsules = self.getCapsules()
