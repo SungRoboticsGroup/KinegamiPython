@@ -502,6 +502,7 @@ class PointEditorWindow(QMainWindow):
         self.selected_arrow = -1
         self.selected_axis_name = 'N/A'
         self.last_joint = -1
+        self.selected_frame = -1
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -686,8 +687,8 @@ class PointEditorWindow(QMainWindow):
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
         crease_dock_widget.setLayout(crease_dock_layout)
-        crease_dock.setWidget(crease_dock_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        #crease_dock.setWidget(crease_dock_widget)
+        #self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
         self.controls_dock = QDockWidget("Control options", self)
@@ -707,6 +708,46 @@ class PointEditorWindow(QMainWindow):
         self.controls_options_widget.setLayout(self.controls_layout)
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
+
+        # ////////////////////////////////    SELECT JOINT AS FRAME    ///////////////////////////////////
+        self.frame_dock = QDockWidget("Control options", self)
+        self.frame_widget = QWidget()
+        self.frame_layout = QVBoxLayout()
+
+        self.set_frame_joint = QPushButton("Set Frame")
+        self.set_frame_joint.clicked.connect(self.set_joint_as_frame)
+        self.frame_layout.addWidget(self.set_frame_joint)
+
+        frame_string = None
+        if (self.selected_frame == -1):
+            frame_string = "N/A"
+        else: 
+            frame_string = str(frame_string)
+
+        self.frame_label = QLabel("Joint selected as frame: " + frame_string)
+        self.frame_layout.addWidget(self.frame_label)
+
+        self.remove_frame = QPushButton("Cancel")
+        self.remove_frame.clicked.connect(self.remove_frame_button)
+        self.frame_layout.addWidget(self.remove_frame)
+        
+        self.frame_widget.setLayout(self.frame_layout)
+        self.frame_dock.setWidget(self.frame_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.frame_dock)
+
+        self.frame_dock.setMaximumSize(300, 200)
+
+    def set_joint_as_frame(self):
+        self.selected_frame = self.selected_joint
+        self.frame_label.setText("Joint selected as frame: " + str(self.selected_frame))
+        self.relativeSliderCheckbox.setDisabled(True)
+        self.update_joint()
+
+    def remove_frame_button(self):
+        self.selected_frame = -1
+        self.frame_label.setText("Joint selected as frame: N/A")
+        self.relativeSliderCheckbox.setDisabled(False)
+        self.update_joint()
 
     def init_key_bar(self):
         instructions = [
@@ -1074,11 +1115,19 @@ class PointEditorWindow(QMainWindow):
             if (self.control_type == "Translate"):
                 for joint in self.chain.Joints:
                     if (joint.id == self.selected_joint):
-                        joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                        if (self.selected_frame == -1):
+                            joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                        else:
+                            frame_joint = self.chain.Joints[self.selected_frame]
+                            joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
             elif (self.control_type == "Rotate"):
                 for joint in self.chain.Joints:
                     if (joint.id == self.selected_joint):
-                        joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                        if (self.selected_frame == -1):
+                            joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                        else: 
+                            frame_joint = self.chain.Joints[self.selected_frame]
+                            joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
 
         if self.selected_arrow != -1:
             self.rotationSlider.setDisabled(False)
@@ -1135,11 +1184,6 @@ class PointEditorWindow(QMainWindow):
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
-            """
-            self.button_dock.show()
-            self.confirm_pressed = False
-            self.cancel_pressed = False
-            """
 
     def chain_not_created(self):
         error_dialog = ErrorDialog('Please create a chain first.')

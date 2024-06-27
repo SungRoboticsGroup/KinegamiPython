@@ -239,13 +239,25 @@ class Joint(ABC):
     def generate_angles(self, num_points=10):
         angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
         return angles
+    
+    def rotate_vector(self, vector, axis='x'):
+        if axis == 'x':
+            rotation_matrix = np.array([
+                [1, 0, 0],
+                [0, 0, -1],
+                [0, 1, 0]
+            ])
+        elif axis == 'y':
+            rotation_matrix = np.array([
+                [0, 0, 1],
+                [0, 1, 0],
+                [-1, 0, 0]
+            ])
 
-    def addTranslateArrows(self, widget, selectedArrow=-1, local=True):
-        if local:
-            axes = [self.Pose.R[:, i] for i in range(3)]
-        else:
-            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+        rotated_vector = np.dot(rotation_matrix, vector)
+        return rotated_vector
 
+    def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         rad = self.boundingBall().r
         colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
 
@@ -254,6 +266,14 @@ class Joint(ABC):
 
         extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
         point1 = self.Pose.t
+
+        if local:
+            axes = [self.Pose.R[:, i] for i in range(3)]
+        else:
+            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+
+        if frame:
+            axes = [frame.R[:, i] for i in range(3)]
 
         if selectedArrow != -1:
             point2 = point1 + rad * self.r * axes[selectedArrow]
@@ -277,11 +297,14 @@ class Joint(ABC):
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
     
-    def addRotateArrows(self, widget, selectedArrow=-1, local=True):
+    def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         if local:
             axes = [self.Pose.R[:, i] for i in range(3)]
         else: 
             axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+
+        if frame:
+            axes = [frame.R[:, i] for i in range(3)]
 
         rad = self.boundingBall().r
         colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
