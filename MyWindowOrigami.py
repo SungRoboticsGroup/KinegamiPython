@@ -706,8 +706,8 @@ class PointEditorWindow(QMainWindow):
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
         crease_dock_widget.setLayout(crease_dock_layout)
-        #crease_dock.setWidget(crease_dock_widget)
-        #self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        crease_dock.setWidget(crease_dock_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
         self.controls_dock = QDockWidget("Control options", self)
@@ -773,7 +773,32 @@ class PointEditorWindow(QMainWindow):
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)
-        plotPrintedTree(newTree, "manualHandPrinted")
+
+        self.plot_widget.clear()
+
+        grid = gl.GLGridItem()
+        self.plot_widget.addItem(grid)
+        grid.setColor((0,0,0,255))
+
+        for i in range(0,len(newTree.Children)):
+            start = time.time()
+            if len(newTree.Children[i]) > 0:
+                filepath = newTree.exportLink3DFile(i, "test" + "/poses", pose=True)
+                if filepath:
+                    plotSTL(self.plot_widget, filepath, newTree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2))
+                print(f"plotted links from {i}, Time: {time.time() - start}s")
+
+        #export and plot all the joints
+        for i in range(0,len(newTree.Joints)):
+            start = time.time()
+            if not isinstance(newTree.Joints[i],PrintedWaypoint):
+                file1, rot1, file2, rot2 = newTree.Joints[i].renderPose("test")
+                plotSTL(self.plot_widget, file1, newTree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,0.5,0))
+                if (file2 != None):
+                    plotSTL(self.plot_widget, file2, newTree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,0.5,0))
+            print(f"plotted joint {i}, Time: {time.time() - start}s")
+
+        #plotPrintedTree(newTree, "manualHandPrinted")
 
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
@@ -1304,9 +1329,9 @@ class PointEditorWindow(QMainWindow):
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 self.chain = KinematicChain(waypoint)
             elif waypoint.id != 0:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, safe=True)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, safe=False)
             else:
-                self.chain.append(waypoint, safe=True)
+                self.chain.append(waypoint, safe=False)
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)

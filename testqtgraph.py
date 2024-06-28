@@ -67,9 +67,13 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     grid.setColor((0,0,0,255))
     view3d.addItem(grid)
 
+    print("try1")
+
     # Show the plot
     view.show()
     app.exec_()
+
+    print("try2")
 
 def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
     # Load the STL file
