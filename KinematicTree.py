@@ -56,9 +56,28 @@ class KinematicTree(Generic[J]):
             self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
 
-    def changeRadius(self, r : float):
-        self.r = r
-        return True
+    def changeRadius(self, new_radius: float):
+        if self.r == new_radius:
+            return True
+
+        try:
+            new_root_joint = copy.deepcopy(self.Joints[0])
+            new_root_joint.changeRadius(new_radius)
+            new_tree = KinematicTree(new_root_joint, self.maxAnglePerElbow)
+
+            for i in range(1, len(self.Joints)):
+                parent_index = self.Parents[i]
+                new_joint = copy.deepcopy(self.Joints[i])
+                new_joint.changeRadius(new_radius)
+                
+                new_tree.addJoint(parent_index, new_joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
+
+            self.__dict__.update(new_tree.__dict__)
+            self.r = new_radius
+            return True
+        except Exception as e:
+            print(f"Failed to update radius due to an error: {e}")
+            return False
     
     def dataDeepCopy(self):
         return copy.deepcopy([self.r, self.numSides, self.Joints, self.Parents, 

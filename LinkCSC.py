@@ -119,9 +119,6 @@ class LinkCSC:
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
-
-    def changeRadius(self, r : float):
-        self.r = r
     
     def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
