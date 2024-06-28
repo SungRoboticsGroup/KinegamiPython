@@ -406,7 +406,7 @@ class Waypoint(OrigamiJoint):
         return [0,0]
     
     def boundingRadius(self) -> float:
-        return self.r
+        return math.sqrt(self.r)
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())

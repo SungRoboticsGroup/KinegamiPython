@@ -1120,12 +1120,7 @@ class PointEditorWindow(QMainWindow):
         value = float(value) if value else 0
         self.radius_label.setText(f'Edit Joint Radius: {int(value)}')
         if self.chain and self.selected_joint != -1:
-            for joint in self.chain.Joints:
-                joint.changeRadius(value)
-            for link in self.chain.Links:
-                link.changeRadius(value)
             if self.chain.changeRadius(value):
-                self.chain.recomputeBoundingBall()
                 self.r = value
                 self.update_joint()
                 self.OldRadiusVal = value
