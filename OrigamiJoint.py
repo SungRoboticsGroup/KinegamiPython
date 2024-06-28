@@ -136,7 +136,7 @@ class RevoluteJoint(OrigamiJoint):
             faces = np.append(faces, hull2.simplices + 6, axis=0)
 
             meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-            item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
+            item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True, id=self.id)
             item.setGLOptions('translucent')
             item.setObjectName("Joint")
             widget.plot_widget.addItem(item)

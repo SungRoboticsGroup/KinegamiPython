@@ -5,7 +5,7 @@ parent_dir = os.path.abspath(os.path.join(child_dir, '../..'))
 sys.path.append(parent_dir)
 
 from geometryHelpers import *
-from MyWindow import *
+from MyWindowOrigami import *
 from Joint import *
 from KinematicChain import *
 app = QApplication(sys.argv)
