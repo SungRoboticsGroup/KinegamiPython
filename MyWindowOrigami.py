@@ -846,10 +846,10 @@ class PointEditorWindow(QMainWindow):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
-            min = self.chain.Joints[self.selected_joint].stateRange()[0]
-            max = self.chain.Joints[self.selected_joint].stateRange()[1]
-            current = self.chain.Joints[self.selected_joint].state
-            self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 10000)}")
+            min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+            max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
+            current = math.degrees(self.chain.Joints[self.selected_joint].state)
+            self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
             self.update_state_slider()
             self.update_radius_slider()
 
@@ -946,12 +946,12 @@ class PointEditorWindow(QMainWindow):
             self.translationInput.setDisabled(True)
 
     def update_state_slider(self):
-        min = self.chain.Joints[self.selected_joint].stateRange()[0] * 10000
-        max = self.chain.Joints[self.selected_joint].stateRange()[1] * 10000
+        min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+        max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
         if self.selected_joint != -1 and min != 0 and max != 0:
             self.state_slider.setMinimum(int(min))
             self.state_slider.setMaximum(int(max))
-            current = int(self.chain.Joints[self.selected_joint].state * 10000)
+            current = int(math.degrees(self.chain.Joints[self.selected_joint].state))
             self.oldStateVal = current
             self.state_slider.blockSignals(True)
             self.state_label.setText(f"Edit Joint {self.selected_joint} State: {current}")
@@ -1025,14 +1025,14 @@ class PointEditorWindow(QMainWindow):
             edit = dialog.get_state()
             if edit is not None:
 
-                if self.chain.setJointState(self.selected_joint, edit):
+                if self.chain.setJointState(self.selected_joint, math.radians(edit)):
                     self.update_joint()
                     success_dialog = SuccessDialog('Joint state successfully edited!')
                     success_dialog.exec_()
-                    min = self.chain.Joints[self.selected_joint].stateRange()[0]
-                    max = self.chain.Joints[self.selected_joint].stateRange()[1]
-                    current = self.chain.Joints[self.selected_joint].state
-                    self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 1000)}")
+                    min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+                    max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
+                    current = math.degrees(self.chain.Joints[self.selected_joint].state)
+                    self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
                 else:
                     error_dialog = ErrorDialog('Error editing joint state.')
                     error_dialog.exec_()
@@ -1097,16 +1097,16 @@ class PointEditorWindow(QMainWindow):
         if not isinstance(value, float) and not isinstance(value, int):
             value = value.strip()
         value = float(value) if value else 0
-        actualVal = value / 10000
+        actualVal = math.radians(value)
         self.state_label.setText(f'Edit Joint {self.selected_joint} State: {int(value)}')
         if self.chain and self.selected_joint != -1:
             if self.chain.setJointState(self.selected_joint, actualVal):
                 self.update_joint()
                 self.OldStateVal = value
-                min = self.chain.Joints[self.selected_joint].stateRange()[0]
-                max = self.chain.Joints[self.selected_joint].stateRange()[1]
-                current = self.chain.Joints[self.selected_joint].state
-                self.current_state_label.setText(f"Min State: {int(min * 10000)} ≤ Current State: {int(current * 10000)} ≤ Max State: {int(max * 10000)}")
+                min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+                max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
+                current = math.degrees(self.chain.Joints[self.selected_joint].state)
+                self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
                 self.update_state_slider()
             else:
                 self.state_slider.blockSignals(True)
