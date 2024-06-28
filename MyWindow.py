@@ -15,7 +15,6 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from spatialmath import SE3
 import math
-from Joint import *
 from PathCSC import *
 from KinematicChain import *
 import re

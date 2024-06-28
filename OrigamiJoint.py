@@ -101,6 +101,51 @@ class RevoluteJoint(OrigamiJoint):
             
         return plotHandles
     
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        if showSurface:
+            scale = self.pattern.baseSideLength / 2
+            centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
+                                    self.Pose.t + scale * self.Pose.R[:, 2]])
+
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+
+            pose = self.ProximalFrame()
+            uhat = pose.R[:, 1]
+            vhat = pose.R[:, 2]
+            basePoints = np.array([pose.t + u[i] * uhat + v[i] * vhat for i in range(radialCount - 1)])
+            allPoints = np.vstack([basePoints, centerSegment])
+
+            hull = ConvexHull(allPoints)
+            vertices = allPoints[hull.vertices]
+            faces = hull.simplices
+
+            pose2 = self.DistalFrame()
+            uhat2 = pose2.R[:, 1]
+            vhat2 = pose2.R[:, 2]
+            basePoints2 = np.array([pose2.t + u[i] * uhat2 + v[i] * vhat2 for i in range(radialCount - 1)])
+            allPoints2 = np.vstack([basePoints2, centerSegment])
+
+            hull2 = ConvexHull(allPoints2)
+            vertices = np.append(vertices, allPoints2[hull2.vertices], axis=0)
+            faces = np.append(faces, hull2.simplices + 6, axis=0)
+
+            meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
+
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere, 
+                            surfaceColor, showSurface, showAxis,
+                            axisScale, showPoses, poseAxisScaleMultipler)
+    
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedOrthogonalRevoluteJoint
         return PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
@@ -322,6 +367,19 @@ class PrismaticJoint(OrigamiJoint):
             
         return plotHandles
     
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        if showSurface:
+            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor, 
+                                                is_joint=True, id=self.id)
+
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, showSurface, showAxis,
+                            axisScale, showPoses, poseAxisScaleMultipler)
+    
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedPrismaticJoint
         return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
@@ -379,6 +437,34 @@ class Waypoint(OrigamiJoint):
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedWaypoint
         return PrintedWaypoint(self.r, self.Pose, screwRadius, pathIndex = self.pidx)
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        
+        if showAxis:
+            zhat = self.Pose.R[:, 2] 
+            jointAxis = np.array([self.Pose.t - axisScale * self.r * zhat,
+                                self.Pose.t + axisScale * self.r * zhat])
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            widget.plot_widget.addItem(line_item)
+
+        if showPoses:
+            for i, axis_color in enumerate([xColor, yColor, zColor]):
+                poseAxisScale = self.r
+                if poseAxisScaleMultipler:
+                    poseAxisScale *= poseAxisScaleMultipler
+                start_point = self.Pose.t
+                end_point = start_point + poseAxisScale * self.Pose.R[:, i]
+                points = np.array([start_point, end_point])
+                line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+
+        if showSphere:
+            self.boundingBall().addToWidget(widget, sphereColor, is_waypoint=True, id=self.id)
+        else:
+            self.boundingBall().addToWidget(widget, (0,0,0,0.5), is_waypoint=True, id=self.id)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -458,6 +544,47 @@ class Tip(OrigamiJoint):
                     ax.add_collection3d(tri)
             
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        
+        if showSurface:
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+            scale = self.pattern.baseSideLength / 2
+
+            proximalPose = self.ProximalFrame()
+            distalPose = self.DistalFrame()
+            proximalBase = proximalPose.t + np.outer(u, proximalPose.R[:, 0]) + np.outer(v, proximalPose.R[:, 1])
+            distalBase = distalPose.t + np.outer(u, distalPose.R[:, 0]) + np.outer(v, distalPose.R[:, 1])
+
+            if self.forward:
+                # facing up
+                tipSegment = np.array([distalPose.t - scale * distalPose.R[:, 0],
+                                    distalPose.t + scale * distalPose.R[:, 0]])
+                tipPoints = np.vstack((proximalBase, tipSegment))
+            else:
+                # facing down
+                tipSegment = np.array([proximalPose.t - scale * proximalPose.R[:, 0],
+                                    proximalPose.t + scale * proximalPose.R[:, 0]])
+                tipPoints = np.vstack((distalBase, tipSegment))
+
+            hull = ConvexHull(tipPoints)
+            for s in hull.simplices:
+                vertices = tipPoints[s]
+                meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
+                item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent', id=self.id)
+                item.setObjectName("Joint")
+                widget.plot_widget.addItem(item)
+        
+        super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
+                            centerColor, distalColor, sphereColor, showSphere,
+                            surfaceColor, showSurface, showAxis,
+                            axisScale, showPoses, poseAxisScaleMultipler)
 
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedTip
