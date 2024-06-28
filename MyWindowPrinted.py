@@ -215,7 +215,7 @@ class AddRevoluteDialog(AddJointDialog):
     def onApplyClicked(self):
         bendingAngleText = float(self.angle_input.text())
 
-        self.jointToAdd = PrintedOrthogonalRevoluteJoint(r=self.r, startBendingAngle=math.radians(bendingAngleText), 
+        self.jointToAdd = PrintedOrthogonalRevoluteJoint(r=self.r, startBendingAngle=math.radians(-bendingAngleText), 
                                                          endBendingAngle=math.radians(bendingAngleText), Pose=SE3(), 
                                                          screwRadius = 0.05)
         self.accept()
@@ -757,6 +757,21 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.frame_dock)
 
         self.frame_dock.setMaximumSize(300, 200)
+
+        # ////////////////////////////////    STL CONVERSION    ///////////////////////////////////
+        self.random_btn_dock = QDockWidget("Control options", self)
+        self.random_btn_widget = QWidget()
+        self.random_btn_layout = QVBoxLayout()
+
+        self.random_btn = QPushButton("Set Frame")
+        self.random_btn.clicked.connect(self.set_joint_as_frame)
+        self.random_btn_layout.addWidget(self.random_btn)
+        
+        self.random_btn_widget.setLayout(self.random_btn_layout)
+        self.random_btn_dock.setWidget(self.random_btn_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
+
+        self.random_btn_dock.setMaximumSize(300, 100)
 
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint

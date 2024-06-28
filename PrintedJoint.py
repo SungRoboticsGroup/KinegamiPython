@@ -40,7 +40,7 @@ class PrintParameters:
         return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.075, r, screwRadius, thickness, screwRadius)
 
 class PrintedJoint(Joint):
-    def __init__(self, r : float, neutralLength : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
+    def __init__(self, r : float, neutralLength : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
         self.screwRadius = np.round(screwRadius, 4)
         self.printParameters = printParameters
         self.twistAngle = 0
@@ -171,7 +171,6 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
-    
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',

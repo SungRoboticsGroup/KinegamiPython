@@ -309,6 +309,50 @@ class Circle3D:
         # 3d circle points
         return self.c + u @ uhat + v @ vhat
 
+class Ball:
+    # closed ball centered at self.c of radius self.r
+    def __init__(self, center, radius):
+        self.c = center
+        self.r = radius
+    
+    def containsPoint(self, point):
+        return norm(self.c - point) <= self.r
+    
+    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
+        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
+        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
+        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
+        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
+        z = self.c[2] + self.r*np.cos(v)
+        if frame:
+            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
+        else:
+            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
+        
+    def addToWidget(self, widget, color=(0,0,0,0.5), is_waypoint=False, id=-1):
+        md = gl.MeshData.sphere(rows=20, cols=20)
+        sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
+        sphere.setGLOptions('translucent')
+        sphere.scale(self.r, self.r, self.r)
+        sphere.translate(*self.c)
+        if (is_waypoint):
+            sphere.setObjectName("Waypoint")
+            sphere.setGLOptions('opaque')
+            sphere.scale(self.r * 0.9, self.r * 0.9, self.r * 0.9)
+        widget.plot_widget.addItem(sphere)
+    
+    def show(self, color='black', alpha=1, frame=False, block=blockDefault):
+        ax = plt.figure().add_subplot(projection='3d')
+        plotHandles = self.addToPlot(ax, color, alpha, frame)
+        ax.set_aspect('equal')
+        plt.show(block=block)
+
+    def projectionOntoPlane(self, plane : Plane) -> Circle3D:
+        return Circle3D(self.r, plane.projectionOfPoint(self.c), plane.nhat)
+    
+    def translationToCenterOnPlane(self, plane : Plane):
+        return Ball(plane.projectionOfPoint(self.c), self.r)
+
 class Cylinder:
     def __init__(self, radius : float, start : np.ndarray, 
                  direction : np.ndarray, length : float, 
@@ -325,6 +369,41 @@ class Cylinder:
         else:
             uhat = uhat.reshape((3))    
         self.uhat = uhat / norm(uhat)
+    
+    def orientation(self) -> SO3:
+        return SO3(np.vstack((self.uhat, 
+                              cross(self.direction, self.uhat), 
+                              self.direction)).T)
+    
+    def end(self):
+        return self.start + self.length * self.direction
+
+    def startPlane(self) -> Plane:
+        return Plane(self.start, self.direction)
+    
+    def endPlane(self) -> Plane:
+        return Plane(self.end(), self.direction)
+
+    # Keeping self.direction constant, expand cylinder to include ball
+    def expandToIncludeBall(self, ball : Ball):
+        ballStart = ball.c - ball.r * self.direction
+        ballEnd = ball.c + ball.r * self.direction
+        distanceInBack = self.startPlane().signedDistanceToPoint(ballStart)
+        distanceInFront = self.endPlane().signedDistanceToPoint(ballEnd)
+
+        # Update cylinder forward/backward
+        if distanceInFront > 0:
+            self.length += distanceInFront
+        if distanceInBack < 0:
+            self.start = self.start + (distanceInBack * self.direction)
+            self.length -= distanceInBack
+            
+        # Update cylinder circular cross-section
+        ballTranslatedToStartPlane = ball.translationToCenterOnPlane(self.startPlane())
+        cylinderStartBall = Ball(self.start, self.r)
+        expandedStartBall = minBoundingBall(cylinderStartBall, ballTranslatedToStartPlane)
+        self.start = expandedStartBall.c
+        self.r = expandedStartBall.r
     
     def interpolateCircles(self, numPointsPerCircle=32, numCircles=2):
         radialCount = numPointsPerCircle+1 #the +1 is because the first equals the last
@@ -397,50 +476,6 @@ class Cylinder:
         plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
         ax.set_aspect('equal')
         plt.show(block=block)
-
-class Ball:
-    # closed ball centered at self.c of radius self.r
-    def __init__(self, center, radius):
-        self.c = center
-        self.r = radius
-    
-    def containsPoint(self, point):
-        return norm(self.c - point) <= self.r
-    
-    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
-        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
-        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
-        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
-        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
-        z = self.c[2] + self.r*np.cos(v)
-        if frame:
-            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
-        
-    def addToWidget(self, widget, color=(0,0,0,0.5), is_waypoint=False, id=-1):
-        md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
-        sphere.setGLOptions('translucent')
-        sphere.scale(self.r, self.r, self.r)
-        sphere.translate(*self.c)
-        if (is_waypoint):
-            sphere.setObjectName("Waypoint")
-            sphere.setGLOptions('opaque')
-            sphere.scale(self.r * 0.9, self.r * 0.9, self.r * 0.9)
-        widget.plot_widget.addItem(sphere)
-    
-    def show(self, color='black', alpha=1, frame=False, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, color, alpha, frame)
-        ax.set_aspect('equal')
-        plt.show(block=block)
-
-    def projectionOntoPlane(self, plane : Plane) -> Circle3D:
-        return Circle3D(self.r, plane.projectionOfPoint(self.c), plane.nhat)
-    
-    def translationToCenterOnPlane(self, plane : Plane):
-        return Ball(plane.projectionOfPoint(self.c), self.r)
 
 """
 Note: we don't need to guarantee minimality of our bounding balls, so we build

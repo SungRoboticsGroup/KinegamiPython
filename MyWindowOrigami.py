@@ -19,6 +19,7 @@ from PathCSC import *
 from KinematicChain import *
 import re
 from scipy.spatial.transform import Rotation as R
+from testqtgraph import *
 
 class EditJointStateDialog(QDialog):
     def __init__(self, parent=None):
@@ -754,6 +755,25 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.frame_dock)
 
         self.frame_dock.setMaximumSize(300, 200)
+
+        # ////////////////////////////////    STL CONVERSION    ///////////////////////////////////
+        self.random_btn_dock = QDockWidget("Control options", self)
+        self.random_btn_widget = QWidget()
+        self.random_btn_layout = QVBoxLayout()
+
+        self.random_btn = QPushButton("Generate STL")
+        self.random_btn.clicked.connect(self.generate_stl)
+        self.random_btn_layout.addWidget(self.random_btn)
+        
+        self.random_btn_widget.setLayout(self.random_btn_layout)
+        self.random_btn_dock.setWidget(self.random_btn_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
+
+        self.random_btn_dock.setMaximumSize(300, 100)
+
+    def generate_stl(self):
+        newTree = origamiToPrinted(self.chain, 0.05)
+        plotPrintedTree(newTree, "manualHandPrinted")
 
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
