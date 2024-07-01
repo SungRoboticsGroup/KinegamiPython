@@ -706,8 +706,8 @@ class PointEditorWindow(QMainWindow):
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
         crease_dock_widget.setLayout(crease_dock_layout)
-        crease_dock.setWidget(crease_dock_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        # crease_dock.setWidget(crease_dock_widget)
+        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
         self.controls_dock = QDockWidget("Control options", self)
@@ -749,6 +749,10 @@ class PointEditorWindow(QMainWindow):
         self.remove_frame = QPushButton("Cancel")
         self.remove_frame.clicked.connect(self.remove_frame_button)
         self.frame_layout.addWidget(self.remove_frame)
+
+        self.debug_btn = QPushButton("Debug")
+        self.debug_btn.clicked.connect(self.debug)
+        self.frame_layout.addWidget(self.debug_btn)
         
         self.frame_widget.setLayout(self.frame_layout)
         self.frame_dock.setWidget(self.frame_widget)
@@ -763,13 +767,19 @@ class PointEditorWindow(QMainWindow):
 
         self.random_btn = QPushButton("Generate STL")
         self.random_btn.clicked.connect(self.generate_stl)
-        self.random_btn_layout.addWidget(self.random_btn)
+        # self.random_btn_layout.addWidget(self.random_btn)
         
-        self.random_btn_widget.setLayout(self.random_btn_layout)
-        self.random_btn_dock.setWidget(self.random_btn_widget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
+        # self.random_btn_widget.setLayout(self.random_btn_layout)
+        # self.random_btn_dock.setWidget(self.random_btn_widget)
+        # self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
 
-        self.random_btn_dock.setMaximumSize(300, 100)
+        # self.random_btn_dock.setMaximumSize(300, 100)
+
+    def debug(self):
+        if (self.selected_joint_index != -1):
+            print("Current joint:", self.selected_joint_index)
+            print("Children:", self.chain.Children[self.selected_joint_index])
+            print("Parent:", self.chain.Parents[self.selected_joint_index])
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)

@@ -46,6 +46,8 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
+
+            """
             # parent of the selected joint
             parentIndex = self.Parents[jointIndex]
 
@@ -87,16 +89,23 @@ class KinematicChain(KinematicTree):
                 self.recomputeBoundingBall()
 
             """
-            nextJoint = self.Joints[jointIndex+1]
-            prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
-            newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                    nextJoint.ProximalDubinsFrame(),
-                                    self.maxAnglePerElbow)
-            linksBefore = self.Links[:jointIndex]
-            linksAfter = self.Links[jointIndex+2:]
-            self.Links = linksBefore + [newLink] + linksAfter
-            self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
-            self.recomputeBoundingBall()
+            
+            parentIndex = self.Parents[jointIndex]
+            prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
+
+            children = self.Children[jointIndex]
+            for child in children:
+                nextJoint = self.Joints[child]
+
+                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                        nextJoint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
+                
+                linksBefore = self.Links[:jointIndex]
+                linksAfter = self.Links[jointIndex+2:]
+                self.Links = linksBefore + [newLink] + linksAfter
+                self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
+                self.recomputeBoundingBall()
             
             self.Children = []
             for i in range(len(self.Joints)-1):
@@ -106,5 +115,5 @@ class KinematicChain(KinematicTree):
             self.Parents = []
             for i in range(len(self.Joints)):
                 self.Parents.append(i-1)
-            """
+            
         return True
