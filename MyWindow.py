@@ -776,10 +776,8 @@ class PointEditorWindow(QMainWindow):
         # self.random_btn_dock.setMaximumSize(300, 100)
 
     def debug(self):
-        if (self.selected_joint_index != -1):
-            print("Current joint:", self.selected_joint_index)
-            print("Children:", self.chain.Children[self.selected_joint_index])
-            print("Parent:", self.chain.Parents[self.selected_joint_index])
+        for i in range (0, len(self.chain.Joints)):
+            print("Joint:", i, "Children:", self.chain.Children[i], "Parent:", self.chain.Parents[i])
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)

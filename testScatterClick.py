@@ -3,7 +3,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow
-from MyWindowOrigami import ClickableGLViewWidget
+from MyWindow import ClickableGLViewWidget
 
 class PointEditorWindow(QMainWindow):
     def __init__(self):

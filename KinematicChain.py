@@ -10,6 +10,14 @@ from KinematicTree import KinematicTree
 from TubularPattern import *
 from LinkCSC import LinkCSC
 
+def remove_duplicates(arr):
+    seen = []
+    unique_arr = []
+    for item in arr:
+        if item not in seen:
+            unique_arr.append(item)
+            seen.append(item)
+    return unique_arr
 
 """
 A KinematicTree with no branching.
@@ -46,8 +54,6 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
-
-            """
             # parent of the selected joint
             parentIndex = self.Parents[jointIndex]
 
@@ -64,14 +70,14 @@ class KinematicChain(KinematicTree):
                 if parentIndex != -1:
                     self.Children[parentIndex].append(childIndex)
 
-            # creates new links between children and parent
-            if parentIndex != -1:
-                parentJoint = self.Joints[parentIndex]
-                for childIndex in children_to_reassign:
-                    childJoint = self.Joints[childIndex]
-                    newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                    childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
-                    self.Links[childIndex] = newLink
+            # # creates new links between children and parent
+            # if parentIndex != -1:
+            #     parentJoint = self.Joints[parentIndex]
+            #     for childIndex in children_to_reassign:
+            #         childJoint = self.Joints[childIndex]
+            #         newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
+            #                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+            #         self.Links[childIndex] = newLink
 
             # delete the selected joint
             self.Joints.pop(jointIndex)
@@ -84,12 +90,20 @@ class KinematicChain(KinematicTree):
 
             self.Children = [[child - 1 if child > jointIndex else child for child in children] 
                                 for children in self.Children]
+            
+            # creates new links between children and parent
+            if parentIndex != -1:
+                parentJoint = self.Joints[parentIndex]
+                for childIndex in children_to_reassign:
+                    childJoint = self.Joints[childIndex]
+                    newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
+                                    childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                    self.Links[childIndex] = newLink
 
             if len(self.Joints) > 0:
                 self.recomputeBoundingBall()
-
-            """
             
+            """
             parentIndex = self.Parents[jointIndex]
             prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
 
@@ -99,21 +113,25 @@ class KinematicChain(KinematicTree):
 
                 newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
                                         nextJoint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow)
-                
+                                        self.maxAnglePerElbow) 
+
                 linksBefore = self.Links[:jointIndex]
                 linksAfter = self.Links[jointIndex+2:]
                 self.Links = linksBefore + [newLink] + linksAfter
                 self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
-                self.recomputeBoundingBall()
+
+            self.recomputeBoundingBall()
             
-            self.Children = []
-            for i in range(len(self.Joints)-1):
-                self.Children.append([i+1])
-            self.Children.append([])
+            # recompute children and parents
+
+            # self.Children = []
+            # for i in range(len(self.Joints)-1):
+            #     self.Children.append([i+1])
+            # self.Children.append([])
             
-            self.Parents = []
-            for i in range(len(self.Joints)):
-                self.Parents.append(i-1)
-            
+            # self.Parents = []
+            # for i in range(len(self.Joints)):
+            #     self.Parents.append(i-1)
+            """
+
         return True
