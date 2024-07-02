@@ -228,7 +228,7 @@ class AddTipDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
-        self.isStart = False
+        self.isStart = True
 
         layout = QVBoxLayout()
 
@@ -412,16 +412,17 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 self.drag_change_rotation.emit(selected_rotate_point.rotation)
 
         else:
-            lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            if not hasattr(self, 'mousePos'):
+            if (self.is_dragging):
+                lpos = event.position() if hasattr(event, 'position') else event.localPos()
+                if not hasattr(self, 'mousePos'):
+                    self.mousePos = lpos
+                diff = lpos - self.mousePos
                 self.mousePos = lpos
-            diff = lpos - self.mousePos
-            self.mousePos = lpos
 
-            if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
-                self.pan(diff.x(), diff.y(), 0, relative='view')
-            elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
-                self.orbit(-diff.x(), diff.y())
+                if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
+                    self.pan(diff.x(), diff.y(), 0, relative='view')
+                elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
+                    self.orbit(-diff.x(), diff.y())
 
     def mouseReleaseEvent(self, event):
         if not self.is_dragging:

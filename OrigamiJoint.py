@@ -593,7 +593,9 @@ class Tip(OrigamiJoint):
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=False)
+        print("start")
 
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
         super().__init__(numSides, r, Pose, length, closesForward=True)
+        print("end")
