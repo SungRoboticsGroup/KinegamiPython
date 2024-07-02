@@ -350,8 +350,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     key_pressed = qc.pyqtSignal(str)
 
     selected_index = -1
-
     selected_arrow = None
+
+    camera_type = "Rotate"
 
     def toggle_lock(self):
         self.locked = not self.locked
@@ -422,7 +423,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
                     self.pan(diff.x(), diff.y(), 0, relative='view')
                 elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
-                    self.orbit(-diff.x(), diff.y())
+                    if (self.camera_type == "Rotate"):
+                        self.orbit(-diff.x(), diff.y())
+                    elif (self.camera_type == "Pan"):
+                        self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
         if not self.is_dragging:
@@ -729,6 +733,25 @@ class PointEditorWindow(QMainWindow):
         self.controls_dock.setWidget(self.controls_options_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
 
+        # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
+        self.camera_dock = QDockWidget("Camera controls", self)
+        self.camera_options_widget = QWidget()
+        self.camera_layout = QVBoxLayout()
+
+        self.camera1 = QRadioButton("Rotate Camera")
+        self.camera2 = QRadioButton("Pan Camera")
+        self.camera1.setChecked(True)
+
+        self.camera1.toggled.connect(self.change_camera_type)
+        self.camera2.toggled.connect(self.change_camera_type)
+    
+        self.camera_layout.addWidget(self.camera1)
+        self.camera_layout.addWidget(self.camera2)
+        
+        self.camera_options_widget.setLayout(self.camera_layout)
+        self.camera_dock.setWidget(self.camera_options_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_dock)
+
         # ////////////////////////////////    SELECT JOINT AS FRAME    ///////////////////////////////////
         self.frame_dock = QDockWidget("Control options", self)
         self.frame_widget = QWidget()
@@ -849,6 +872,14 @@ class PointEditorWindow(QMainWindow):
             self.control_type = "Translate"
         elif self.control2.isChecked():
             self.control_type = "Rotate"
+
+        self.update_joint()
+
+    def change_camera_type(self):
+        if self.camera1.isChecked():
+            self.plot_widget.camera_type = "Rotate"
+        elif self.camera2.isChecked():
+            self.plot_widget.camera_type = "Pan"
 
         self.update_joint()
     
