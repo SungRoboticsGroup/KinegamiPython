@@ -15,7 +15,7 @@
     - global optimization to be applied after finding local minimum with postOptimize (**NOTE: STILL IN PROGRESS**)
 
 ### Collision detection
-- `def detectCollisions(self, specificJointIndices = [], plot=False)`
+- `def detectCollisions(self, specificJointIndices = None, plot=False)`
     - returns the number of collisions detected in the kinematic tree. `specificJointIndices` is a list of specific joint indices to specifically test for collision, and if empty all joints will be evaluated. if plot is true, the tree will be plotted and any bodies that collide will be highlighted.
 
 ### Saving functions

@@ -115,4 +115,4 @@ tree.show()
 # tree.show(showJointPoses=False)
 
 
-#plotPrintedTree(origamiToPrinted(tree, 0.05), "origamiToPrintedTest")
+plotPrintedTree(origamiToPrinted(tree, 0.05), "origamiToPrintedTest")

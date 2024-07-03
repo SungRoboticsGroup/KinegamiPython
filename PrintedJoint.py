@@ -224,7 +224,13 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     def toOrigami(self, numSides : int, numLayers : int):
         from OrigamiJoint import ExtendedRevoluteJoint
         return ExtendedRevoluteJoint(numSides, self.r, max(-self.startBendingAngle, self.endBendingAngle)*2, self.bottomLength, self.Pose, numSinkLayers=numLayers, initialState=self.initialState)
+
+class PrintedInAxisRevoluteJoint(PrintedJoint):
+    def __init__(self, r: float, neutralLength : float, Pose : SE3, screwRadius : float, printParameters : PrintParameters = None, initialState : float = 0):
+        if printParameters == None:
+            printParameters = PrintParameters.default(r, screwRadius)
         
+        super().__init__(r, neutralLength, Pose, screwRadius, printParameters, initialState)
 
 class PrintedPrismaticJoint(PrintedJoint):
     def __init__(self, r : float, extensionLength : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):

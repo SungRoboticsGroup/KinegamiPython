@@ -273,7 +273,7 @@ class CollisionCapsule:
         
         return False, []
     
-    def collidesWith(self, other):
+    def collidesWith(self, other, includeEnds=False):
         #if too far away to collide, return false
         if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
             return False, None
@@ -305,12 +305,13 @@ class CollisionCapsule:
                 
 
         # Check distance between spherical ends
-        # for p1 in ends1:
-        #     for p2 in ends2:
-        #         distance = np.linalg.norm(p1 - p2)
-        #         if distance <= minDistance:
-        #             minDistance = distance
-        #             collisionPoint = 0.5 * (p1 + p2)
+        if includeEnds:
+            for p1 in ends1:
+                for p2 in ends2:
+                    distance = np.linalg.norm(p1 - p2)
+                    if distance <= minDistance:
+                        minDistance = distance
+                        collisionPoint = 0.5 * (p1 + p2)
 
         if minDistance <= self.radius + other.radius:
             return True, collisionPoint

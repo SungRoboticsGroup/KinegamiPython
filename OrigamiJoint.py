@@ -382,13 +382,14 @@ class Waypoint(OrigamiJoint):
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
-                 closesForward : bool = True):
+                 closesForward : bool = True, pathIndex : int = 2):
         super().__init__(numSides, r, length, Pose)
         self.pattern = TipPattern(numSides, r, length, closesForward)
         self.forward = closesForward
+        self.pidx = pathIndex
     
     def pathIndex(self) -> int:
-        return 2 # zhat
+        return self.pidx
     
     def stateChangeTransformation(self, stateChange : float) -> SE3:
         return SE3()
@@ -406,12 +407,13 @@ class Tip(OrigamiJoint):
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
              surfaceColor=linkColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
                           surfaceColor, surfaceOpacity, showSurface, showAxis,
                           axisScale, showPoses)
+
         if showSurface:
             #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
             radialCount = self.numSides + 1
@@ -420,7 +422,11 @@ class Tip(OrigamiJoint):
             v = self.r * np.sin(angle)
             scale = self.pattern.baseSideLength / 2
             
-            tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
+            match self.pidx:
+                case 0: tipSegmentIndex, uhatIndex, vhatIndex = 2,1,2
+                case 1: tipSegmentIndex, uhatIndex, vhatIndex = 0,2,0
+                case 2: tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
+
             
             if self.forward:
                 DistalPose = self.DistalFrame()
@@ -464,9 +470,9 @@ class Tip(OrigamiJoint):
         return PrintedTip(self.r, self.Pose, screwRadius)
     
 class StartTip(Tip):
-    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
-        super().__init__(numSides, r, Pose, length, closesForward=False)
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
+        super().__init__(numSides, r, Pose, length, closesForward=False, pathIndex=pathIndex)
 
 class EndTip(Tip):
-    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
-        super().__init__(numSides, r, Pose, length, closesForward=True)
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
+        super().__init__(numSides, r, Pose, length, closesForward=True, pathIndex=pathIndex)

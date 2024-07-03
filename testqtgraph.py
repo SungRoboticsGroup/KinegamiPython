@@ -50,6 +50,7 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
             filepath = tree.exportLink3DFile(i,folder + "/poses", pose=True)
             if filepath:
                 plotSTL(view3d, filepath, tree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2))
+            
             print(f"plotted links from {i}, Time: {time.time() - start}s")
     #export and plot all the joints
     for i in range(0,len(tree.Joints)):
@@ -59,7 +60,8 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
             plotSTL(view3d, file1, tree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,0.5,0))
             if (file2 != None):
                 plotSTL(view3d, file2, tree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,0.5,0))
-        print(f"plotted joint {i}, Time: {time.time() - start}s")
+        
+            print(f"plotted joint {i}, Time: {time.time() - start}s")
     
     print(f"TOTAL GENERATION TIME: {time.time() - real_start}s")
     #show axes
@@ -88,6 +90,10 @@ def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
 
     # Create a mesh item and add it to the view
     meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
-    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="viewNormalColor", color=color, drawEdges=False)
+    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader=None, color=color, drawEdges=False)
     mesh.setGLOptions('opaque')
     view.addItem(mesh)
+
+def plotPoint(view, position):
+    plot = gl.GLScatterPlotItem(pos=np.array([position.t]), size=np.array([1]), color=np.array([[1,0,0,1]]),pxMode=False)
+    view.addItem(plot)
