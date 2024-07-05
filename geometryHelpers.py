@@ -613,13 +613,11 @@ class Elbow:
     def circleEllipseCircleQT(self, numSides : int = 32):
 
         StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
-        vertices = np.vstack((StartCircle, MidEllipse, EndCircle))
-
-        print(StartCircle)
+        vertices = np.vstack((StartCircle[:numSides], MidEllipse[:numSides], EndCircle[:numSides]))
 
         faces = []
         for i in range(2):
-            for j in range(numSides):
+            for j in range(numSides): 
                 next_index = (j + 1) % numSides
                 faces.append([i * numSides + j, i * numSides + next_index, (i + 1) * numSides + j])
                 faces.append([(i + 1) * numSides + j, i * numSides + next_index, (i + 1) * numSides + next_index])
@@ -631,16 +629,12 @@ class Elbow:
     def addToWidget(self, widget, numSides : int = 16, color_list=(1, 1, 1, 1), 
                   alpha : float = 1.0, wireFrame : bool = True, 
                   showFrames : bool = False):
-        vertices, faces = self.circleEllipseCircleQT(8)
-
+        vertices, faces = self.circleEllipseCircleQT(numSides)
 
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
 
-        if (wireFrame):
-            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=True, shader='shaded', smooth=True)
-        else:
-            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=True, shader='shaded', smooth=True)
-
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=wireFrame, shader='shaded', smooth=True)
+        
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
             FwdRot = Fwd @ self.Rotate
