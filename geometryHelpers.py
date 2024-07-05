@@ -462,7 +462,7 @@ class Cylinder:
 
         return vertices, np.array(indices)
 
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5), is_joint=False, id=-1):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 1), is_joint=False, id=-1):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
         meshitem = MeshItemWithID(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True, id=id)
@@ -611,8 +611,11 @@ class Elbow:
         return frameHandles
     
     def circleEllipseCircleQT(self, numSides : int = 32):
+
         StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
         vertices = np.vstack((StartCircle, MidEllipse, EndCircle))
+
+        print(StartCircle)
 
         faces = []
         for i in range(2):
@@ -625,16 +628,18 @@ class Elbow:
 
         return vertices, faces
     
-    def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
-                  alpha : float = 1.0, wireFrame : bool = False, 
+    def addToWidget(self, widget, numSides : int = 16, color_list=(1, 1, 1, 1), 
+                  alpha : float = 1.0, wireFrame : bool = True, 
                   showFrames : bool = False):
-        vertices, faces = self.circleEllipseCircleQT(numSides)
+        vertices, faces = self.circleEllipseCircleQT(8)
+
+
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
 
         if (wireFrame):
             meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=True, shader='shaded', smooth=True)
         else:
-            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=True, shader='shaded', smooth=True)
 
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 

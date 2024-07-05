@@ -1,0 +1,51 @@
+import sys
+from PyQt5.QtWidgets import QApplication, QWidget, QRadioButton, QVBoxLayout
+from PyQt5.QtGui import QPixmap, QIcon
+
+class ImageRadioButton(QRadioButton):
+    def __init__(self, unchecked_img, checked_img, parent=None):
+        super().__init__(parent)
+        self.unchecked_img = QPixmap(unchecked_img)
+        self.checked_img = QPixmap(checked_img)
+        self.setIconSize(self.unchecked_img.size())
+        self.update_icon()
+
+        # Hide the default radio button indicator
+        self.setStyleSheet("QRadioButton::indicator { width: 0px; height: 0px; }")
+
+        # Connect the toggled signal to update the icon when the state changes
+        self.toggled.connect(self.update_icon)
+
+    def update_icon(self):
+        if self.isChecked():
+            self.setIcon(QIcon(self.checked_img))
+        else:
+            self.setIcon(QIcon(self.unchecked_img))
+
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        # Create a vertical layout
+        layout = QVBoxLayout()
+
+        # Create custom radio buttons with images
+        radio1 = ImageRadioButton("unchecked1.jpg", "checked1.jpg")
+        radio2 = ImageRadioButton("unchecked1.jpg", "checked1.jpg")
+
+        # Add radio buttons to the layout
+        layout.addWidget(radio1)
+        layout.addWidget(radio2)
+
+        # Set the layout for the main window
+        self.setLayout(layout)
+
+        # Set the window title and size
+        self.setWindowTitle("Image Radio Buttons")
+        self.resize(200, 150)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())

@@ -8,7 +8,7 @@ import pyqtgraph.opengl as gl
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent
+from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -321,6 +321,28 @@ class CreateNewChainDialog(QDialog):
     def getR(self):
         return self.r
     
+class ImageRadioButton(QRadioButton):
+    def __init__(self, unchecked_img, checked_img, tooltip_text, parent=None):
+        super().__init__(parent)
+        self.unchecked_img = QPixmap(unchecked_img)
+        self.checked_img = QPixmap(checked_img)
+        self.setIconSize(self.unchecked_img.size())
+        self.update_icon()
+
+        # Hide the default radio button indicator
+        self.setStyleSheet("QRadioButton::indicator { width: 0px; height: 0px; }")
+
+        # Connect the toggled signal to update the icon when the state changes
+        self.toggled.connect(self.update_icon)
+
+        self.setToolTip(tooltip_text)
+
+    def update_icon(self):
+        if self.isChecked():
+            self.setIcon(QIcon(self.checked_img))
+        else:
+            self.setIcon(QIcon(self.unchecked_img))   
+
 class ClickableGLViewWidget(gl.GLViewWidget):
     def __init__(self, parent=None):
         super(ClickableGLViewWidget, self).__init__(parent)
@@ -494,6 +516,7 @@ class PointEditorWindow(QMainWindow):
         self.current_point = 0
         self.chain = None
         self.chain_created = False
+        self.stl_generated = False
 
         self.numSides = 4
         self.r = 1
@@ -719,8 +742,8 @@ class PointEditorWindow(QMainWindow):
         self.controls_options_widget = QWidget()
         self.controls_layout = QVBoxLayout()
 
-        self.control1 = QRadioButton("Translate")
-        self.control2 = QRadioButton("Rotate")
+        self.control1 = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate Joint")
+        self.control2 = ImageRadioButton("ui/rotate_unchecked.png", "ui/rotate_checked.png", "Rotate Joint")
         self.control1.setChecked(True)
 
         self.control1.toggled.connect(self.change_control_type)
@@ -759,7 +782,7 @@ class PointEditorWindow(QMainWindow):
 
         self.set_frame_joint = QPushButton("Set Frame")
         self.set_frame_joint.clicked.connect(self.set_joint_as_frame)
-        self.frame_layout.addWidget(self.set_frame_joint)
+        #self.frame_layout.addWidget(self.set_frame_joint)
 
         frame_string = None
         if (self.selected_frame == -1):
@@ -767,12 +790,12 @@ class PointEditorWindow(QMainWindow):
         else: 
             frame_string = str(frame_string)
 
-        self.frame_label = QLabel("Joint selected as frame: " + frame_string)
-        self.frame_layout.addWidget(self.frame_label)
+        self.frame_label = QLabel("Frame: " + frame_string)
+        #self.frame_layout.addWidget(self.frame_label)
 
         self.remove_frame = QPushButton("Cancel")
         self.remove_frame.clicked.connect(self.remove_frame_button)
-        self.frame_layout.addWidget(self.remove_frame)
+        #self.frame_layout.addWidget(self.remove_frame)
 
         self.debug_btn = QPushButton("Debug")
         self.debug_btn.clicked.connect(self.debug)
@@ -791,7 +814,9 @@ class PointEditorWindow(QMainWindow):
 
         self.random_btn = QPushButton("Generate STL")
         self.random_btn.clicked.connect(self.generate_stl)
-        # self.random_btn_layout.addWidget(self.random_btn)
+        #self.random_btn_layout.addWidget(self.random_btn)
+
+        self.frame_layout.addWidget(self.random_btn)
         
         # self.random_btn_widget.setLayout(self.random_btn_layout)
         # self.random_btn_dock.setWidget(self.random_btn_widget)
@@ -817,7 +842,7 @@ class PointEditorWindow(QMainWindow):
             if len(newTree.Children[i]) > 0:
                 filepath = newTree.exportLink3DFile(i, "test" + "/poses", pose=True)
                 if filepath:
-                    plotSTL(self.plot_widget, filepath, newTree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2))
+                    plotSTL(self.plot_widget, filepath, newTree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2), color=(1,1,1,1))
                 print(f"plotted links from {i}, Time: {time.time() - start}s")
 
         #export and plot all the joints
@@ -825,11 +850,12 @@ class PointEditorWindow(QMainWindow):
             start = time.time()
             if not isinstance(newTree.Joints[i],PrintedWaypoint):
                 file1, rot1, file2, rot2 = newTree.Joints[i].renderPose("test")
-                plotSTL(self.plot_widget, file1, newTree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,0.5,0))
+                plotSTL(self.plot_widget, file1, newTree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,1,0))
                 if (file2 != None):
-                    plotSTL(self.plot_widget, file2, newTree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,0.5,0))
+                    plotSTL(self.plot_widget, file2, newTree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,1,0))
             print(f"plotted joint {i}, Time: {time.time() - start}s")
 
+        self.stl_generated = True
         #plotPrintedTree(newTree, "manualHandPrinted")
 
     def set_joint_as_frame(self):
@@ -1245,41 +1271,42 @@ class PointEditorWindow(QMainWindow):
     def update_joint(self):
         self.select_joint_options.blockSignals(True)
 
-        self.plot_widget.clear()
-        self.select_joint_options.clear()
+        if (not self.stl_generated):
+            self.plot_widget.clear()
+            self.select_joint_options.clear()
 
-        grid = gl.GLGridItem()
-        self.plot_widget.addItem(grid)
-        grid.setColor((0,0,0,255))
-        
-        if self.chain is not None:
-            self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
+            grid = gl.GLGridItem()
+            self.plot_widget.addItem(grid)
+            grid.setColor((0,0,0,255))
+            
+            if self.chain is not None:
+                self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
 
-            self.select_joint_options.blockSignals(False)
+                self.select_joint_options.blockSignals(False)
 
-            if (self.control_type == "Translate"):
-                for joint in self.chain.Joints:
-                    if (joint.id == self.selected_joint):
-                        if (self.selected_frame == -1):
-                            joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                        else:
-                            frame_joint = self.chain.Joints[self.selected_frame]
-                            joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
-            elif (self.control_type == "Rotate"):
-                for joint in self.chain.Joints:
-                    if (joint.id == self.selected_joint):
-                        if (self.selected_frame == -1):
-                            joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                        else: 
-                            frame_joint = self.chain.Joints[self.selected_frame]
-                            joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
+                if (self.control_type == "Translate"):
+                    for joint in self.chain.Joints:
+                        if (joint.id == self.selected_joint):
+                            if (self.selected_frame == -1):
+                                joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                            else:
+                                frame_joint = self.chain.Joints[self.selected_frame]
+                                joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
+                elif (self.control_type == "Rotate"):
+                    for joint in self.chain.Joints:
+                        if (joint.id == self.selected_joint):
+                            if (self.selected_frame == -1):
+                                joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                            else: 
+                                frame_joint = self.chain.Joints[self.selected_frame]
+                                joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
 
-        if self.selected_arrow != -1:
-            self.rotationSlider.setDisabled(False)
-            self.translate_slider.setDisabled(False)
-        else:
-            self.rotationSlider.setDisabled(True)
-            self.translate_slider.setDisabled(True)
+            if self.selected_arrow != -1:
+                self.rotationSlider.setDisabled(False)
+                self.translate_slider.setDisabled(False)
+            else:
+                self.rotationSlider.setDisabled(True)
+                self.translate_slider.setDisabled(True)
 
     def update_plot(self):
         self.plot_widget.clear()

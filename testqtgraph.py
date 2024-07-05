@@ -51,6 +51,7 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
             if filepath:
                 plotSTL(view3d, filepath, tree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2))
             print(f"plotted links from {i}, Time: {time.time() - start}s")
+            
     #export and plot all the joints
     for i in range(0,len(tree.Joints)):
         start = time.time()
@@ -92,6 +93,6 @@ def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
 
     # Create a mesh item and add it to the view
     meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
-    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="viewNormalColor", color=color, drawEdges=False)
+    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="shaded", color=color, drawEdges=False)
     mesh.setGLOptions('opaque')
     view.addItem(mesh)

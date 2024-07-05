@@ -12,9 +12,9 @@ distalColorDefault = (1.0, 1.0, 0.0, 1.0)  # yellow
 pathColorDefault = (0.0, 0.0, 0.0, 1.0)  # black
 sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
 
-surfaceOpacityDefault=0.8
-linkOpacityDefault=0.6
-linkColorDefault = (0.0, 0.0, 0.0, linkOpacityDefault)  # black
+surfaceOpacityDefault=1.0
+linkOpacityDefault=1.0
+linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # black
 jointColorDefault = (1.0, 0.0, 1.0, surfaceOpacityDefault)  # magenta
 jointEdgeColorDefault= (0.0, 0.0, 0.55, 1.0)  # darkblue
 groundPlaneColorDefault= (0.0, 0.0, 0.0, 1.0)  # black 
