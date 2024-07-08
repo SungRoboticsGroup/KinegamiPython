@@ -73,7 +73,17 @@ chain.translateJointAlongAxisOfMotion(6, -1500, propogate=True)
 chain.show(showLinkPath=False, showJointPoses=False, 
            showLinkPoses=False, showAxisGrids=False, 
            showGroundPlane=True, groundPlaneScale=800,
-           surfaceOpacity=0.5)
+           surfaceOpacity=0.5, block=False)
 # Plot the crease pattern
 #chain.creasePattern().show()
 
+chain.setJointState(1, np.pi/2)
+chain.setJointState(2, -np.pi/3)
+chain.setJointState(3, -np.pi/3)
+chain.setJointState(4, -np.pi/3)
+chain.setJointState(5, np.pi/3)
+chain.setJointState(6, np.pi/3)
+chain.show(showLinkPath=False, showJointPoses=False, 
+           showLinkPoses=False, showAxisGrids=False, 
+           showGroundPlane=True, groundPlaneScale=800,
+           surfaceOpacity=0.5)
