@@ -257,7 +257,9 @@ class KinematicTree(Generic[J]):
                         sphereColor, showSphere=showSpheres, 
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
+                
         for index, link in enumerate(self.Links):
+
             """
             if index > lastJoint:
                 link.addToWidget(widget, color=(1.0, 0.5, 0.5, 0.6), 
@@ -270,12 +272,14 @@ class KinematicTree(Generic[J]):
             else:
             """
             link.addToWidget(widget, color=linkColor, 
-                        alpha=linkOpacityDefault,
-                        showPath=showLinkPath, 
-                        pathColor=pathColor,
-                        showPathCircles=showPathCircles, 
-                        showFrames=showLinkPoses,
-                        showBoundary=showLinkSurface)
+                            alpha=linkOpacityDefault,
+                            showPath=showLinkPath, 
+                            pathColor=pathColor,
+                            showPathCircles=showPathCircles, 
+                            showFrames=showLinkPoses,
+                            showBoundary=showLinkSurface,
+                            linkID=index)
+
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
         widget.add_chain(self)

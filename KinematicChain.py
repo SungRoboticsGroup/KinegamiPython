@@ -54,6 +54,7 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
+            """
             # parent of the selected joint
             parentIndex = self.Parents[jointIndex]
 
@@ -102,8 +103,8 @@ class KinematicChain(KinematicTree):
 
             if len(self.Joints) > 0:
                 self.recomputeBoundingBall()
-            
             """
+            
             parentIndex = self.Parents[jointIndex]
             prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
 
@@ -124,14 +125,14 @@ class KinematicChain(KinematicTree):
             
             # recompute children and parents
 
-            # self.Children = []
-            # for i in range(len(self.Joints)-1):
-            #     self.Children.append([i+1])
-            # self.Children.append([])
+            self.Children = []
+            for i in range(len(self.Joints)-1):
+                self.Children.append([i+1])
+            self.Children.append([])
             
-            # self.Parents = []
-            # for i in range(len(self.Joints)):
-            #     self.Parents.append(i-1)
-            """
+            self.Parents = []
+            for i in range(len(self.Joints)):
+                self.Parents.append(i-1)
+            
 
         return True

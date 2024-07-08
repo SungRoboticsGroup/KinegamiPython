@@ -469,7 +469,11 @@ class Cylinder:
         meshitem.setGLOptions('translucent')
         if (is_joint):
             meshitem.setObjectName("Joint")
+        else:
+            meshitem.setObjectName("Link")
         widget.plot_widget.addItem(meshitem)
+
+        return vertices, indices
     
     def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
         ax = plt.figure().add_subplot(projection='3d')
@@ -629,11 +633,12 @@ class Elbow:
     def addToWidget(self, widget, numSides : int = 16, color_list=(1, 1, 1, 1), 
                   alpha : float = 1.0, wireFrame : bool = True, 
                   showFrames : bool = False):
+        
         vertices, faces = self.circleEllipseCircleQT(numSides)
 
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-
         meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=wireFrame, shader='shaded', smooth=True)
+        meshitem.setObjectName("Link")
         
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
@@ -648,8 +653,8 @@ class Elbow:
 
             x,y,z = Fwd.t
             u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
-            #line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=(1, 0, 0, 1), width=5) 
-            #widget.plot_widget.addItem(line)
+            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=(1, 0, 0, 1), width=5) 
+            widget.plot_widget.addItem(line)
 
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
@@ -722,6 +727,13 @@ class CompoundElbow:
         
         self.StartFrame = StartFrame
         self.EndFrame = self.elbows[-1].EndFrame
+
+    def circleEllipseCircleQT(self, numSides : int = 32):
+        allHandleSets = []
+        for elbow in self.elbows:
+            return elbow.circleEllipseCircleQT(numSides)
+        
+        return allHandleSets
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -741,15 +753,27 @@ class CompoundElbow:
                   alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = True, showBoundingBall : bool = False):
         allHandleSets = []
+        
         for elbow in self.elbows:
             elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames)
+
+            print("elbow")
             #if showFrames:
                 #allHandleSets.append(handleSet)
         
         if showBoundingBall:
-            self.boundingBall().addToWidget(widget, color=color, alpha = 0.25*alpha)
+            self.boundingBall().addToWidget(widget, color=tuple(color_list), alpha = 0.25*alpha)
         
         return allHandleSets
+    
+    def generateMesh(self, numSides : int = 32):
+        vertices = []
+        faces = []
+
+        for elbow in self.elbows:
+            v, f = elbow.circleEllipseCircleQT(numSides)
+
+            print("elbow")
 
     def boundingBall(self):
         ball = self.elbows[0].boundingBall()

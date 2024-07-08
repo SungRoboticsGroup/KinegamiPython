@@ -469,6 +469,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
                     joints.append(item)
 
+                if (item.objectName() == "Link"):
+                    print("link clicked")
+
             if (len(arrows) > 0 and self.selected_index != -1):
                 arrow_index = arrows[0].id
             else:
@@ -800,6 +803,10 @@ class PointEditorWindow(QMainWindow):
         self.debug_btn = QPushButton("Debug")
         self.debug_btn.clicked.connect(self.debug)
         self.frame_layout.addWidget(self.debug_btn)
+
+        self.insert_btn = QPushButton("Insert Waypoint")
+        self.insert_btn.clicked.connect(self.insert_waypoint)
+        self.frame_layout.addWidget(self.insert_btn)
         
         self.frame_widget.setLayout(self.frame_layout)
         self.frame_dock.setWidget(self.frame_widget)
@@ -823,6 +830,9 @@ class PointEditorWindow(QMainWindow):
         # self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
 
         # self.random_btn_dock.setMaximumSize(300, 100)
+
+    def insert_waypoint(self):
+        print("test")
 
     def debug(self):
         for i in range (0, len(self.chain.Joints)):

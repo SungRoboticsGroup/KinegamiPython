@@ -156,18 +156,46 @@ class LinkCSC:
                   showFrames : bool = False, showPath : bool = False, 
                   pathColor : str = pathColorDefault,
                   showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = False):
+                  showElbowBoundingBalls : bool = False, 
+                  linkID : int = -1):
         allElbowHandleSets = []
         if showBoundary:
+
+            vertices = []
+            faces = []
+
+            # if not self.elbow1 is None:
+            #     v, f = self.elbow1.circleEllipseCircleQT(numSides)
+            #     vertices.append(v)
+            #     faces.append(f)
+            
+            # if self.path.tMag > self.EPSILON:
+            #     v, f = self.cylinder.interpolateQtCircles(numSides, 2)
+            
+            # if not self.elbow2 is None:
+            #     v, f = self.elbow2.circleEllipseCircleQT(numSides)
+
+            # if (len(vertices) > 0 and len(faces) > 0):
+            #     vertices = np.array(vertices)[0]
+            #     faces = np.array(faces)[0]
+                
+            # meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+            # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
+            # meshitem.setObjectName("Link")
+
+            # print(vertices)
+            # print(faces)
+
             if not self.elbow1 is None:
                 self.elbow1.addToWidget(widget, numSides, color, 
                   alpha, wireFrame, 
                   showFrames)
             
             if self.path.tMag > self.EPSILON:
-                #(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 0.5))
-                self.cylinder.addToWidget(widget, numSides, 2, color)
-            
+                v, f = self.cylinder.addToWidget(widget, numSides, 2, color)
+                #print(v)
+                #print(f)
+
             if not self.elbow2 is None:
                 self.elbow2.addToWidget(widget, numSides, color, 
                   alpha, wireFrame, showFrames)
