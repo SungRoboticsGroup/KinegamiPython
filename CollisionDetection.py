@@ -155,7 +155,9 @@ class CollisionCapsule:
         self.height = height
         self.base = base @ SE3.Ry(np.pi/2)
         self.otherBase = self.base @ SE3.Trans(self.height * self.base.R[:,2])
+        self.start = (self.base @ SE3.Trans(-self.radius * self.base.R[:,2])).t
         self.center = (self.base @ SE3.Trans(self.height/2 * self.base.R[:,2])).t
+        self.end = (self.base @ SE3.Trans((self.height + self.radius) * self.base.R[:,2])).t
         self.halfDist = np.abs(self.height/2) + self.radius
 
     
@@ -220,7 +222,7 @@ class CollisionCapsule:
         #end_centers: Array with two points representing the centers of the spherical ends.
 
         bottom_center = self.base.t
-        top_center = bottom_center + self.height * self.base.R[:, 2]
+        top_center = self.otherBase.t#bottom_center + self.height * self.base.R[:, 2]
         return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
 
     def frameOverlap(self, frame, radius):
@@ -230,7 +232,7 @@ class CollisionCapsule:
             
         # Capsule endpoints
         capsuleStart = self.base.t
-        capsuleEnd = self.base.t + self.height * self.base.R[:,2]
+        capsuleEnd = self.otherBase.t# + self.height * self.base.R[:,2]
         
         # Circle center and normal
         circleCenter = frame.t
@@ -290,18 +292,20 @@ class CollisionCapsule:
 
             pt = 0.5 * (point + closestPoint)
             #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0:
-                minDistance = distance
-                collisionPoint = pt
+            if includeEnds or (distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0):
+                if distance < minDistance:
+                    minDistance = distance
+                    collisionPoint = pt
 
         for point in segment2:
             distance, closestPoint = pointToSegmentDistance(point, segment1)
 
             pt = 0.5 * (point + closestPoint)
             #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0:
-                minDistance = distance
-                collisionPoint = pt
+            if includeEnds or (distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0):
+                if distance < minDistance:
+                    minDistance = distance
+                    collisionPoint = pt
                 
 
         # Check distance between spherical ends
@@ -309,14 +313,76 @@ class CollisionCapsule:
             for p1 in ends1:
                 for p2 in ends2:
                     distance = np.linalg.norm(p1 - p2)
-                    if distance <= minDistance:
+                    if distance < minDistance:
                         minDistance = distance
                         collisionPoint = 0.5 * (p1 + p2)
 
-        if minDistance <= self.radius + other.radius:
+        extra = 0
+        if includeEnds:
+            extra = self.radius/100
+        
+        if minDistance <= self.radius + other.radius + extra:
             return True, collisionPoint
         else:
             return False, None
+    # def collidesWith(self, other, includeEnds=False):
+    #     #if too far away to collide, return false
+    #     if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
+    #         return False, None
+        
+    #     a_Normal = normalize(self.end - self.start)#normalize(a.tip – a.base); 
+    #     a_LineEndOffset = a_Normal * self.radius#a_Normal * a.radius; 
+    #     a_A = self.start + a_LineEndOffset#a.base + a_LineEndOffset; 
+    #     a_B = self.end - a_LineEndOffset#a.tip - a_LineEndOffset;
+
+    #     b_Normal = normalize(other.end - other.start)#normalize(b.tip – b.base); 
+    #     b_LineEndOffset = b_Normal * other.radius#b_Normal * b.radius; 
+    #     b_A = other.start + b_LineEndOffset#b.base + b_LineEndOffset; 
+    #     b_B = other.end - b_LineEndOffset#b.tip - b_LineEndOffset;
+
+    #     #vectors between line endpoints:
+    #     v0 = b_A - a_A
+    #     v1 = b_B - a_A
+    #     v2 = b_A - a_B
+    #     v3 = b_B - a_B
+
+    #     # squared distances:
+    #     d0 = np.dot(v0, v0)
+    #     d1 = np.dot(v1, v1) 
+    #     d2 = np.dot(v2, v2) 
+    #     d3 = np.dot(v3, v3)
+
+    #     #select best potential endpoint on capsule A:
+    #     bestA = a_A
+    #     if (d2 < d0 or d2 < d1 or d3 < d0 or d3 < d1):
+    #         bestA = a_B
+    #     # }
+    #     # else
+    #     # {
+    #     # bestA = a_A;
+    #     # }
+
+    #     # select point on capsule B line segment nearest to best potential endpoint on A capsule:
+    #     bestB = closestPointOnLineSegment(b_A, b_B, bestA)
+
+    #     # now do the same for capsule A segment:
+    #     bestA = closestPointOnLineSegment(a_A, a_B, bestB)
+
+    #     #We selected the two best possible candidates on both capsule axes. What remains is to place spheres on those points and perform the sphere intersection routine:
+
+    #     penetration_normal = bestA - bestB
+    #     length = np.linalg.norm(penetration_normal) #length(penetration_normal)
+    #     penetration_normal /= length;  #normalize
+    #     penetration_depth = self.radius + other.radius - length
+    #     intersects = penetration_depth > 0
+
+    #     return intersects, np.array([0,0,0])
+
+def closestPointOnLineSegment(A, B, Point):
+    AB = B - A
+    t = np.dot(Point - A, AB) / np.dot(AB, AB)
+    return A + min(max(t, 0), 1) * AB
+        
 
 def pointToSegmentDistance(point, segment):
     p = point
@@ -352,3 +418,9 @@ def closestPointToSegment(p, a, b):
     ba = b - a
     h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
     return a + h * ba
+
+def normalize(v):
+    norm = np.linalg.norm(v)
+    if norm == 0: 
+       return v
+    return v / norm

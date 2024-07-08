@@ -984,7 +984,7 @@ class KinematicTree(Generic[J]):
         parentIndex = self.Parents[index]
 
         def linkLoss(t, link):
-            d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * 2#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
+            d = 0#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
             return t.Links[index].path.length*2  + t.detectCollisions(specificJointIndices=[index], includeEnds=True) * 1000 + d# + curvinessOfLink(t.Links[index])
 
         def objective(params, plotCollisions=False):
@@ -999,26 +999,27 @@ class KinematicTree(Generic[J]):
             tree = copy.deepcopy(self)
             tree3 = copy.deepcopy(tree)
 
-            #print(1, time.time() - start)
+            print(1, time.time() - start)
 
             tryReverse = False
             try:
                 if not tree.transformJoint(index, SE3.Trans([0,0,translation]) @ SE3.Rz(rotation), propogate=False, safe=False, relative=True):
                     tryReverse = True
-                try:
-                    linkLoss1 = linkLoss(tree, index)
-                    tree2 = copy.deepcopy(tree)
-                    tree2.Joints[index].reverseZhat()
-                    if not tree2.transformJoint(index, SE3.Trans([0,0,-tree2.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True):
-                        raise Exception()
-                    
-                    #print(1.5, time.time() - start)
+                else: 
+                    try:
+                        linkLoss1 = linkLoss(tree, index)
+                        tree2 = copy.deepcopy(tree)
+                        tree2.Joints[index].reverseZhat()
+                        if not tree2.transformJoint(index, SE3.Trans([0,0,-tree2.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True):
+                            raise Exception()
+                        
+                        print(1.5, time.time() - start)
 
-                    linkLoss2 = linkLoss(tree2, index)
-                    if (linkLoss2 < linkLoss1):
-                        tree = tree2
-                except Exception as e:
-                    pass
+                        linkLoss2 = linkLoss(tree2, index)
+                        if (linkLoss2 < linkLoss1):
+                            tree = tree2
+                    except Exception as e:
+                        pass
 
                 if min(linkLoss1, linkLoss2) > 1000: #is a collision
                     tryReverse = True
@@ -1026,7 +1027,7 @@ class KinematicTree(Generic[J]):
             except Exception as e:
                 tryReverse = True
             
-            #print(2, time.time() - start)
+            print(2, time.time() - start)
             if tryReverse:
                 try:
                     tree3.Joints[parentIndex].reverseZhat()
@@ -1042,7 +1043,7 @@ class KinematicTree(Generic[J]):
                 except:
                     return min(linkLoss1, linkLoss2)
 
-            #print(3, time.time() - start)
+            print(3, time.time() - start)
             #path = tree.Links[index].path
 
             #pathCurviness = curvinessOfLink(tree.Links[index])
@@ -1055,7 +1056,7 @@ class KinematicTree(Generic[J]):
                 if plotCollisions:
                     tree.show()
 
-            #print(time.time() - start)
+            print(time.time() - start)
             return loss
         
         start = time.time()
@@ -1126,15 +1127,15 @@ class KinematicTree(Generic[J]):
         try:
             if not tree.transformJoint(index, SE3.Trans([0,0,result.x[0]]) @ SE3.Rz(result.x[1]), propogate=False, safe=False, relative=True):
                 tryReverse = True
-
-            try:
-                tree2 = copy.deepcopy(tree)
-                tree2.Joints[index].reverseZhat()
-                tree2.transformJoint(index, SE3.Trans([0,0,-tree2.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True)
-                if (linkLoss(tree2, index) < linkLoss(tree, index)):
-                    tree = tree2
-            except:
-                pass
+            else:
+                try:
+                    tree2 = copy.deepcopy(tree)
+                    tree2.Joints[index].reverseZhat()
+                    tree2.transformJoint(index, SE3.Trans([0,0,-tree2.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True)
+                    if (linkLoss(tree, index) < linkLoss(tree, index)):
+                        tree = tree2
+                except:
+                    pass
 
             if linkLoss(tree, index) > 1000:
                 tryReverse = True
@@ -1247,7 +1248,7 @@ class KinematicTree(Generic[J]):
             nonlocal tree
             nonlocal numOptimized
 
-            iters = 10
+            iters = 15
             if isOptimized[self.Parents[index]]:
                 iters = 50
 
