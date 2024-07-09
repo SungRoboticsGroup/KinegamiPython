@@ -175,9 +175,45 @@ class LinkCSC:
             # if not self.elbow2 is None:
             #     v, f = self.elbow2.circleEllipseCircleQT(numSides)
 
+            if not self.elbow1 is None:
+                v, f = self.elbow1.addToWidget(widget, numSides, color, 
+                  alpha, wireFrame, 
+                  showFrames)
+
+                # v = np.array(v)[0]
+                # f = np.array(f)[0]
+
+                # meshdata = gl.MeshData(vertexes=v, faces=f)
+                # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
+                # meshitem.setObjectName("Link")
+                # widget.plot_widget.addItem(meshitem)
+            
+            if self.path.tMag > self.EPSILON:
+                v, f = self.cylinder.addToWidget(widget, numSides, 2, color)
+
+                # v = np.array(v)[0]
+                # f = np.array(f)[0]
+
+                # meshdata = gl.MeshData(vertexes=v, faces=f)
+                # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
+                # meshitem.setObjectName("Link")
+                # widget.plot_widget.addItem(meshitem)
+
+            if not self.elbow2 is None:
+                v, f = self.elbow2.addToWidget(widget, numSides, color, 
+                  alpha, wireFrame, showFrames)
+                
+                # v = np.array(v)[0]
+                # f = np.array(f)[0]
+
+                # meshdata = gl.MeshData(vertexes=v, faces=f)
+                # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
+                # meshitem.setObjectName("Link")
+                # widget.plot_widget.addItem(meshitem)
+                
             # if (len(vertices) > 0 and len(faces) > 0):
-            #     vertices = np.array(vertices)[0]
-            #     faces = np.array(faces)[0]
+            # vertices = np.array(vertices)[0]
+            # faces = np.array(faces)[0]
                 
             # meshdata = gl.MeshData(vertexes=vertices, faces=faces)
             # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
@@ -185,20 +221,6 @@ class LinkCSC:
 
             # print(vertices)
             # print(faces)
-
-            if not self.elbow1 is None:
-                self.elbow1.addToWidget(widget, numSides, color, 
-                  alpha, wireFrame, 
-                  showFrames)
-            
-            if self.path.tMag > self.EPSILON:
-                v, f = self.cylinder.addToWidget(widget, numSides, 2, color)
-                #print(v)
-                #print(f)
-
-            if not self.elbow2 is None:
-                self.elbow2.addToWidget(widget, numSides, color, 
-                  alpha, wireFrame, showFrames)
         
         #if showPath:
         #    self.path.addToPlot(ax, showCircles=showPathCircles, 

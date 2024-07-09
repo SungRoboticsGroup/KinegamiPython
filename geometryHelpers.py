@@ -471,6 +471,7 @@ class Cylinder:
             meshitem.setObjectName("Joint")
         else:
             meshitem.setObjectName("Link")
+        
         widget.plot_widget.addItem(meshitem)
 
         return vertices, indices
@@ -658,6 +659,8 @@ class Elbow:
 
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
+
+        return vertices, faces
     
     def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
@@ -753,18 +756,20 @@ class CompoundElbow:
                   alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = True, showBoundingBall : bool = False):
         allHandleSets = []
+
+        vertices = []
+        faces = []
         
         for elbow in self.elbows:
             elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames)
 
-            print("elbow")
-            #if showFrames:
-                #allHandleSets.append(handleSet)
+            # vertices.append(v)
+            # faces.append(f)
         
         if showBoundingBall:
             self.boundingBall().addToWidget(widget, color=tuple(color_list), alpha = 0.25*alpha)
         
-        return allHandleSets
+        return vertices, faces
     
     def generateMesh(self, numSides : int = 32):
         vertices = []
@@ -772,8 +777,6 @@ class CompoundElbow:
 
         for elbow in self.elbows:
             v, f = elbow.circleEllipseCircleQT(numSides)
-
-            print("elbow")
 
     def boundingBall(self):
         ball = self.elbows[0].boundingBall()

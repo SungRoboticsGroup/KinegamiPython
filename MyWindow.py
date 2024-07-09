@@ -991,12 +991,12 @@ class PointEditorWindow(QMainWindow):
     @QtCore.pyqtSlot(np.ndarray)
     def drag_translate(self, new_position):
         propogate = self.propogateSliderCheckbox.isChecked()
-        relative = self.relativeSliderCheckbox.isChecked()
+        #relative = self.relativeSliderCheckbox.isChecked()
         old_position = self.chain.Joints[self.selected_joint].Pose.t
         trans = new_position - old_position
         transformation = SE3.Trans(trans[0], trans[1], trans[2])
 
-        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=False):
             self.update_joint()
 
         self.update_rotation_slider()
@@ -1006,7 +1006,7 @@ class PointEditorWindow(QMainWindow):
     def drag_rotate(self, new_rotation):
         transformation = SE3()
         propogate = self.propogateSliderCheckbox.isChecked()
-        relative = self.relativeSliderCheckbox.isChecked()
+        #relative = self.relativeSliderCheckbox.isChecked()
         if (self.selected_axis_name == 'X'):
             transformation = SE3.Rx(new_rotation)
         elif (self.selected_axis_name == 'Y'):
@@ -1014,7 +1014,7 @@ class PointEditorWindow(QMainWindow):
         elif (self.selected_axis_name == 'Z'):
             transformation = SE3.Rz(new_rotation)
 
-        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
             self.update_joint()
             self.update_rotation_slider()
             self.update_translate_slider()
