@@ -726,7 +726,7 @@ class PointEditorWindow(QMainWindow):
         crease_dock.setAllowedAreas(Qt.RightDockWidgetArea)
 
         crease_dock_widget = QWidget()
-        crease_dock_layout = QVBoxLayout(crease_dock_widget)
+        crease_dock_layout = QHBoxLayout(crease_dock_widget)
 
         self.crease_pattern_name_input = QLineEdit()
         self.crease_pattern_name_input.setPlaceholderText('Name')
@@ -737,8 +737,8 @@ class PointEditorWindow(QMainWindow):
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
         crease_dock_widget.setLayout(crease_dock_layout)
-        # crease_dock.setWidget(crease_dock_widget)
-        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        crease_dock.setWidget(crease_dock_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
         self.controls_dock = QDockWidget("Control options", self)
