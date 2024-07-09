@@ -654,6 +654,49 @@ class KinematicTree(Generic[J]):
                        propogate : bool = True, recomputeBoundingBall=True,
                        recomputeLinkPath : bool = True, 
                        safe : bool = True, relative : bool = False) -> bool:
+        
+        if relative:
+            Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+        
+        if safe:
+            backup = self.dataDeepCopy()
+            try:
+                self.transformJoint(jointIndex, Transformation, 
+                       propogate, recomputeBoundingBall,
+                       recomputeLinkPath, safe=False, relative=False)
+            except ValueError as err:
+                print("WARNING: something went wrong in transformJoint:")
+                print(err)
+                self.setTo(backup)
+                return False
+        else:
+            self.Joints[jointIndex].transformPoseBy(Transformation)
+            joint = self.Joints[jointIndex]
+            if recomputeLinkPath and jointIndex > 0:
+                parent = self.Joints[self.Parents[jointIndex]]
+                self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+                                        joint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
+            else:
+                self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            if propogate:
+                for c in self.Children[jointIndex]:
+                    self.transformJoint(c, Transformation, propogate=True, 
+                                        recomputeBoundingBall=False,
+                                        recomputeLinkPath=False,
+                                        safe=False, relative=False)
+            else:
+                for c in self.Children[jointIndex]:
+                    child = self.Joints[c]
+                    self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
+                                            child.ProximalDubinsFrame(),
+                                            self.maxAnglePerElbow)
+            if recomputeBoundingBall:
+                self.recomputeBoundingBall()
+
+        self.recursivelyRecomputeCollisionCapsules(jointIndex)
+        return True
+    
         if relative:
             Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
         
