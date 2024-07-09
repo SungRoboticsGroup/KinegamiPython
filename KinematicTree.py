@@ -686,12 +686,6 @@ class KinematicTree(Generic[J]):
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
                                         safe=False, relative=False)
-            else:
-                for c in self.Children[jointIndex]:
-                    child = self.Joints[c]
-                    self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
-                                            child.ProximalDubinsFrame(),
-                                            self.maxAnglePerElbow)
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
 
