@@ -54,85 +54,84 @@ class KinematicChain(KinematicTree):
                 self.setTo(backup)
                 return False
         else:
-            """
-            # parent of the selected joint
-            parentIndex = self.Parents[jointIndex]
+            if not all(len(children) <= 1 for children in self.Children):
+                # parent of the selected joint
+                parentIndex = self.Parents[jointIndex]
+                if parentIndex >= 0:
+                    self.Children[parentIndex].remove(jointIndex)
+                        
 
-            # children of the selected joint (represented as indices)
-            children_to_reassign = self.Children[jointIndex]
+                # children of the selected joint (represented as indices)
+                children_to_reassign = self.Children[jointIndex]
 
-            # not sure what this does?
-            children_to_reassign = [child for child in children_to_reassign if child < len(self.Parents)]
+                # assign every child of the joint to the new parent
+                # and assign the new parent to every child
+                for childIndex in children_to_reassign:
+                    self.Parents[childIndex] = parentIndex
+                    if parentIndex != -1:
+                        self.Children[parentIndex].append(childIndex)
 
-            # assign every child of the joint to the new parent
-            # and assign the new parent to every child
-            for childIndex in children_to_reassign:
-                self.Parents[childIndex] = parentIndex
+                # creates new links between children and parent
                 if parentIndex != -1:
-                    self.Children[parentIndex].append(childIndex)
+                     parentJoint = self.Joints[parentIndex]
+                     for childIndex in children_to_reassign:
+                         childJoint = self.Joints[childIndex]
+                         newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
+                                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                         self.Links[childIndex] = newLink
 
-            # # creates new links between children and parent
-            # if parentIndex != -1:
-            #     parentJoint = self.Joints[parentIndex]
-            #     for childIndex in children_to_reassign:
-            #         childJoint = self.Joints[childIndex]
-            #         newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-            #                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
-            #         self.Links[childIndex] = newLink
-
-            # delete the selected joint
-            self.Joints.pop(jointIndex)
-            self.Children.pop(jointIndex)
-            self.Parents.pop(jointIndex)
-            if jointIndex < len(self.Links):
+                # delete the selected joint
+                self.Joints.pop(jointIndex)
+                self.Children.pop(jointIndex)
+                self.Parents.pop(jointIndex)
                 self.Links.pop(jointIndex)
 
-            self.Parents = [p - 1 if p > jointIndex else p for p in self.Parents]
+                self.Parents = [p - 1 if p >= jointIndex else p for p in self.Parents]
 
-            self.Children = [[child - 1 if child > jointIndex else child for child in children] 
-                                for children in self.Children]
-            
-            # creates new links between children and parent
-            if parentIndex != -1:
-                parentJoint = self.Joints[parentIndex]
-                for childIndex in children_to_reassign:
-                    childJoint = self.Joints[childIndex]
-                    newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                    childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
-                    self.Links[childIndex] = newLink
+                self.Children = [[child - 1 if child >= jointIndex else child for child in children] 
+                                    for children in self.Children]
+                
+                # creates new links between children and parent
+                if parentIndex != -1:
+                    parentJoint = self.Joints[parentIndex]
+                    for childIndex in children_to_reassign:
+                        childIndex -= 1
+                        childJoint = self.Joints[childIndex]
+                        newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
+                                        childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                        self.Links[childIndex] = newLink
 
-            if len(self.Joints) > 0:
+                if len(self.Joints) > 0:
+                    self.recomputeBoundingBall()
+            else:
+                parentIndex = self.Parents[jointIndex]
+                prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
+
+                children = self.Children[jointIndex]
+                for child in children:
+                    nextJoint = self.Joints[child]
+
+                    newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                            nextJoint.ProximalDubinsFrame(),
+                                            self.maxAnglePerElbow) 
+
+                    linksBefore = self.Links[:jointIndex]
+                    linksAfter = self.Links[jointIndex+2:]
+                    self.Links = linksBefore + [newLink] + linksAfter
+                    self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
+
                 self.recomputeBoundingBall()
-            """
-            
-            parentIndex = self.Parents[jointIndex]
-            prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
+                
+                # recompute children and parents
 
-            children = self.Children[jointIndex]
-            for child in children:
-                nextJoint = self.Joints[child]
-
-                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                        nextJoint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow) 
-
-                linksBefore = self.Links[:jointIndex]
-                linksAfter = self.Links[jointIndex+2:]
-                self.Links = linksBefore + [newLink] + linksAfter
-                self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
-
-            self.recomputeBoundingBall()
-            
-            # recompute children and parents
-
-            self.Children = []
-            for i in range(len(self.Joints)-1):
-                self.Children.append([i+1])
-            self.Children.append([])
-            
-            self.Parents = []
-            for i in range(len(self.Joints)):
-                self.Parents.append(i-1)
+                self.Children = []
+                for i in range(len(self.Joints)-1):
+                    self.Children.append([i+1])
+                self.Children.append([])
+                
+                self.Parents = []
+                for i in range(len(self.Joints)):
+                    self.Parents.append(i-1)
             
 
         return True
