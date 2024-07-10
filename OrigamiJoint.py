@@ -30,7 +30,6 @@ class RevoluteJoint(OrigamiJoint):
         polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         neutralLength = 2*r*np.sin(polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
         self.totalBendingAngle = totalBendingAngle
-        self.numSinkLayers = numSinkLayers
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
@@ -52,13 +51,11 @@ class RevoluteJoint(OrigamiJoint):
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
     
-    
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
-             axisScale=10, showPoses=True):
+             axisScale=jointAxisScaleDefault, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
                           surfaceColor, surfaceOpacity, showSurface, showAxis,
@@ -94,13 +91,12 @@ class RevoluteJoint(OrigamiJoint):
             DistalHull = ConvexHull(DistalPoints)
             for s in DistalHull.simplices:
                 tri = Poly3DCollection([DistalPoints[s]])
-                tri.set_facecolor(surfaceColor)
-                tri.set_edgecolor(edgeColor)
+                tri.set_color(surfaceColor)
                 tri.set_alpha(surfaceOpacity)
                 ax.add_collection3d(tri)
             
         return plotHandles
-    
+        
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 

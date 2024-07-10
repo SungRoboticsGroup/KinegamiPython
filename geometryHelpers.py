@@ -660,8 +660,6 @@ class Elbow:
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
 
-        return vertices, faces
-    
     def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
              showFrames : bool = False, block : bool = False):
@@ -731,12 +729,27 @@ class CompoundElbow:
         self.StartFrame = StartFrame
         self.EndFrame = self.elbows[-1].EndFrame
 
-    def circleEllipseCircleQT(self, numSides : int = 32):
+    def circleEllipseCircleQT(self, numSides : int = 32, debug=False):
         allHandleSets = []
+
+        vertices = []
+        faces = []
+
         for elbow in self.elbows:
-            return elbow.circleEllipseCircleQT(numSides)
+            v, f = elbow.circleEllipseCircleQT(numSides)
+
+            if debug:
+                print("vertices", v)
+                print("faces", f)
+
+            vertices.append(v)
+            faces.append(f)
         
-        return allHandleSets
+        if debug:
+            print("full vertices", vertices)
+            print("full faces", faces)
+
+        return vertices, faces
     
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -756,20 +769,14 @@ class CompoundElbow:
                   alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = True, showBoundingBall : bool = False):
         allHandleSets = []
-
-        vertices = []
-        faces = []
         
         for elbow in self.elbows:
             elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames)
-
-            # vertices.append(v)
-            # faces.append(f)
         
         if showBoundingBall:
             self.boundingBall().addToWidget(widget, color=tuple(color_list), alpha = 0.25*alpha)
         
-        return vertices, faces
+        return allHandleSets
     
     def generateMesh(self, numSides : int = 32):
         vertices = []

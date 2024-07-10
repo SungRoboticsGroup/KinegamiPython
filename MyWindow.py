@@ -116,9 +116,24 @@ class ErrorDialog(QDialog):
 
 class AddJointDialog(QDialog):
     jointToAdd = None
+    relative = True
+    fixedPosition = False
+    fixedOrientation = False
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+    def getJoint(self):
+        return self.jointToAdd
+        
+    def getIsRelative(self):
+        return self.relative
+    
+    def getFixedPosition(self):
+        return self.fixedPosition
+    
+    def getFixedOrientation(self):
+        return self.fixedOrientation
     
     def getJoint(self):
         return self.jointToAdd
@@ -138,9 +153,21 @@ class AddJointDialog(QDialog):
             print("Error:", e)
             return None
         
+    def on_relative_clicked(self):
+        self.relative = True
+
+    def on_absolute_clicked(self):
+        self.relative = False
+
+    def on_fixed_position_toggled(self):
+        self.fixedPosition = not self.fixedPosition
+
+    def on_fixed_orientation_toggled(self):
+        self.fixedOrientation = not self.fixedOrientation
+        
 class AddPrismaticDialog(AddJointDialog):
-    def __init__(self, numSides, r, parent=None):
-        super().__init__(parent)
+    def __init__(self, numSides, r, pose : SE3 = None):
+        super().__init__()
         self.setWindowTitle('Add new prismatic joint')
         self.setGeometry(100, 100, 300, 100)
 
@@ -175,6 +202,7 @@ class AddPrismaticDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
+        self.pose = pose
 
     def onApplyClicked(self):
         try:
@@ -182,15 +210,15 @@ class AddPrismaticDialog(AddJointDialog):
             numLayers = int(self.numLayers_input.text())
             coneAngleText = float(self.angle_input.text())
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), SE3())
+            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), self.pose)
             self.accept()
         except ValueError:
             error_dialog = ErrorDialog('Please enter valid integers.')
             error_dialog.exec_()
         
 class AddRevoluteDialog(AddJointDialog):
-    def __init__(self, numSides, r, parent=None):
-        super().__init__(parent)
+    def __init__(self, numSides, r, pose : SE3 = None):
+        super().__init__()
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
 
@@ -211,24 +239,26 @@ class AddRevoluteDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
+        self.pose = pose
 
     def onApplyClicked(self):
         bendingAngleText = float(self.angle_input.text())
 
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
+        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), self.pose)
         self.accept()
 
 class AddTipDialog(AddJointDialog):
     isStart = True
 
-    def __init__(self, numSides, r, parent=None):
-        super().__init__(parent)
+    def __init__(self, numSides, r, pose : SE3 = None):
+        super().__init__()
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
 
         self.numSides = numSides
         self.r = r
         self.isStart = True
+        self.pose = pose
 
         layout = QVBoxLayout()
 
@@ -260,9 +290,9 @@ class AddTipDialog(AddJointDialog):
             neutralLength = float(self.length_input.text())
 
             if (self.isStart):
-                self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=neutralLength)
+                self.jointToAdd = StartTip(self.numSides, self.r, self.pose, length=neutralLength)
             else:
-                self.jointToAdd = EndTip(self.numSides, self.r, SE3(), length=neutralLength)
+                self.jointToAdd = EndTip(self.numSides, self.r, self.pose, length=neutralLength)
 
             self.accept()
         except ValueError:
@@ -1360,16 +1390,21 @@ class PointEditorWindow(QMainWindow):
                 joint.id = 0
             else:
                 joint.id = len(self.chain.Joints)
+                
+            isRelative = dialog.getIsRelative()
+            isFixedPosition = dialog.getFixedPosition()
+            isFixedOrientation = dialog.getFixedOrientation()
+            isSafe = True
 
-            if (self.chain == None) or len(self.chain.Joints) == 0:
+            if (isFixedPosition or isFixedOrientation):
+                isSafe = False
+
+            if (self.chain == None) :
                 self.chain = KinematicChain(joint)
-            elif joint.id != 0:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = joint)
-            else:
-                self.chain.append(joint)
-
+            else :
+                self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+            
             self.update_plot()
-            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
     def chain_not_created(self):
         error_dialog = ErrorDialog('Please create a chain first.')
@@ -1386,14 +1421,22 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
-            dialog = AddPrismaticDialog(self.numSides, self.r)
+            if (self.chain):
+                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4,0,0))
+            else:
+                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3())
+
             self.add_joint(dialog)
 
     def add_revolute_func(self):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
-            dialog = AddRevoluteDialog(self.numSides, self.r)
+            if (self.chain):
+                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4,0,0))
+            else:
+                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3())
+            
             self.add_joint(dialog)
 
     def add_waypoint_func(self):
@@ -1412,7 +1455,7 @@ class PointEditorWindow(QMainWindow):
             elif waypoint.id != 0:
                 self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, safe=False)
             else:
-                self.chain.append(waypoint, safe=False)
+                self.chain.append(waypoint, relative=True, fixedPosition=True, safe=False)
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
@@ -1421,7 +1464,11 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
-            dialog = AddTipDialog(self.numSides, self.r)
+            if (self.chain):
+                dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4,0,0))
+            else:
+                dialog = AddTipDialog(self.numSides, self.r, pose=SE3())
+
             self.add_joint(dialog)
 
     def create_new_chain_func(self):
