@@ -1204,7 +1204,7 @@ class KinematicTree(Generic[J]):
             initialGuess = [0]*6
             #initialTree.show()
 
-        initialLoss = objective(initialGuess)
+        initialLoss = objective([0]*6)
 
         def batch_objective_function(X):
             # X is a 2D array where each row is a particle

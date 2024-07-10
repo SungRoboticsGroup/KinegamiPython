@@ -8,6 +8,7 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.transform import Rotation
 import Joint
 from Joint import *
+from CollisionDetection import *
 import os
 
 class InvalidDimensionException(Exception):
