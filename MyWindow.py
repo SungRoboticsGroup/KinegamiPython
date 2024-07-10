@@ -581,9 +581,9 @@ class PointEditorWindow(QMainWindow):
         self.key_bar.setFixedHeight(40)
         self.init_key_bar()
 
-        top_dock_widget.setWidget(self.key_bar)
+        #top_dock_widget.setWidget(self.key_bar)
 
-        self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
+        #self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -766,9 +766,9 @@ class PointEditorWindow(QMainWindow):
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
-        crease_dock_widget.setLayout(crease_dock_layout)
-        crease_dock.setWidget(crease_dock_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        # crease_dock_widget.setLayout(crease_dock_layout)
+        # crease_dock.setWidget(crease_dock_widget)
+        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
         self.controls_dock = QDockWidget("Control options", self)
@@ -865,8 +865,8 @@ class PointEditorWindow(QMainWindow):
         print("test")
 
     def debug(self):
-        for i in range (0, len(self.chain.Joints)):
-            print("Joint:", i, "Children:", self.chain.Children[i], "Parent:", self.chain.Parents[i])
+        print(self.chain.Joints[self.selected_joint].Pose)
+        print(SE3().Trans(4,0,0) @ SE3().Ry(math.radians(90)))
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)
@@ -1404,6 +1404,7 @@ class PointEditorWindow(QMainWindow):
             else :
                 self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             
+            self.selected_joint = len(self.chain.Joints)
             self.update_plot()
 
     def chain_not_created(self):
@@ -1422,7 +1423,7 @@ class PointEditorWindow(QMainWindow):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
             if (self.chain):
-                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4,0,0))
+                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4 * self.r, 0, 0))
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3())
 
@@ -1433,7 +1434,7 @@ class PointEditorWindow(QMainWindow):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
             if (self.chain):
-                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4,0,0))
+                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3())
             
@@ -1449,7 +1450,7 @@ class PointEditorWindow(QMainWindow):
                 waypoint.id = 0
             else:
                 waypoint.id = len(self.chain.Joints)
-
+            
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 self.chain = KinematicChain(waypoint)
             elif waypoint.id != 0:
@@ -1465,7 +1466,7 @@ class PointEditorWindow(QMainWindow):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
             if (self.chain):
-                dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4,0,0))
+                dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
             else:
                 dialog = AddTipDialog(self.numSides, self.r, pose=SE3())
 
