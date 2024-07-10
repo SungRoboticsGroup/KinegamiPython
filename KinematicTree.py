@@ -257,9 +257,15 @@ class KinematicTree(Generic[J]):
             ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
-    def detectCollisions(self, specificJointIndices = None, plot=False, includeEnds=False):
+    def detectCollisions(self, specificJointIndices = None, plot=False, includeEnds=False, debug=False):
         def posesAreSame(pose1, pose2):
             return np.allclose(pose1.t, pose2.t, rtol=1e-05, atol=1e-08) and np.allclose(pose1.n, pose2.n, rtol=1e-05, atol=1e-08)
+
+        def waypointEdgeCase(link, joint):
+            if not isinstance(joint, Waypoint) and not isinstance(joint, PrintedWaypoint):
+                return False
+
+            return np.allclose(joint.DistalDubinsFrame().t, link.StartDubinsPose.t, rtol=1e-05, atol=1e-08) or np.allclose(joint.ProximalDubinsFrame().t, link.EndDubinsPose.t, rtol=1e-05, atol=1e-08)
 
         numCollisions = 0
         EPSILON = 0.001
@@ -290,6 +296,9 @@ class KinematicTree(Generic[J]):
                                 if didCollide:
                                     if plot:
                                         self.show(showSpecificCapsules=([(i, idx1),(j, idx2)],[]), showCollisionBoxes=False, plotPoint=collisionPoint)
+
+                                    if debug:
+                                        print("JOINT JOINT")
                                     numCollisions += 1
                                     jointsCollided = True
                                     break
@@ -305,7 +314,7 @@ class KinematicTree(Generic[J]):
             for j in range(0,len(self.Links)):
                 link = self.Links[j]
                 #check link and joint not connected
-                if not posesAreSame(link.StartDubinsPose, joint.DistalDubinsFrame()) and not posesAreSame(link.EndDubinsPose, joint.ProximalDubinsFrame()):
+                if not posesAreSame(link.StartDubinsPose, joint.DistalDubinsFrame()) and not posesAreSame(link.EndDubinsPose, joint.ProximalDubinsFrame()) and not waypointEdgeCase(link, joint):
                     collided = False
                     idx1 = 0
                     for capsule1 in joint.collisionCapsules:
@@ -317,6 +326,8 @@ class KinematicTree(Generic[J]):
                                     if plot:
                                         self.show(showSpecificCapsules=([(i, idx1)], [(j, idx2)]), showCollisionBoxes = False, plotPoint = collisionPoint)
                                     numCollisions += 1
+                                    if debug:
+                                        print("JOINT LINK")
                                     collided = True
                                     break
                                 idx2 += 1
@@ -345,6 +356,8 @@ class KinematicTree(Generic[J]):
                                     if plot:
                                         self.show(showSpecificCapsules=([(i, idx1)], [(j, idx2)]), showCollisionBoxes = False, plotPoint = collisionPoint)
                                     numCollisions += 1
+                                    if debug:
+                                        print("LINK JOINT")
                                     collided = True
                                     break
                                 idx2 += 1
@@ -374,17 +387,21 @@ class KinematicTree(Generic[J]):
                                     if plot:
                                         self.show(showSpecificCapsules=([], [(i, idx1), (j, idx2)]), showCollisionBoxes = False, plotPoint = collisionPoint)
                                     numCollisions += 1
+                                    if debug:
+                                        print("LINK LINK")
                                     linksCollided = True
                                     break
                                 idx2 += 1
                         idx1 += 1
                 
-                elif link2 != link and not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[j], Waypoint) and posesAreSame(link.StartDubinsPose, link2.StartDubinsPose):
+                elif link2 != link and not isWaypoint(self.Joints[i]) and not isWaypoint(self.Joints[j]) and posesAreSame(link.StartDubinsPose, link2.StartDubinsPose):
                     idx1 = 0
                     for capsule in link.collisionCapsules:
                         didOverlap, collisionPoint = capsule.frameOverlap(link2.EndDubinsPose, self.r)
                         if didOverlap:
                             numCollisions += 1
+                            if debug:
+                                print("LINK FRAME OVERLAP")
                             if plot:
                                 self.show(showSpecificCapsules=([], [(i, idx1), (j, len(link2.collisionCapsules) - 1)]), showCollisionBoxes=False, plotPoint = collisionPoint)
                             break
@@ -980,11 +997,11 @@ class KinematicTree(Generic[J]):
         else:
             raise Exception(f"Could not optimize joint {jointIndex} and previous waypoints")
 
-    def optimizeJointPlacement(self, index, maxiter=35):
+    def optimizeJointPlacement(self, index, maxiter=35, tol=1e-2, curveLossFactor=2, guess=True):
         parentIndex = self.Parents[index]
 
         def linkLoss(t, link):
-            d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * 2#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
+            d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * curveLossFactor#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
             return t.Links[index].path.length*2  + t.detectCollisions(specificJointIndices=[index], includeEnds=True) * 1000 + d# + curvinessOfLink(t.Links[index])
 
         def objective(params, plotCollisions=False):
@@ -999,34 +1016,36 @@ class KinematicTree(Generic[J]):
             tree = copy.deepcopy(self)
             tree3 = copy.deepcopy(tree)
 
-            #print(1, time.time() - start)
+            transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
             tryReverse = False
             try:
-                if not tree.transformJoint(index, SE3.Trans([0,0,translation]) @ SE3.Rz(rotation), propogate=False, safe=False, relative=True):
+                if not tree.transformJoint(index, transform, propogate=False, safe=False, relative=True):
                     tryReverse = True
+                    raise Exception()
+                
+                linkLoss1 = linkLoss(tree, index)
                 try:
-                    linkLoss1 = linkLoss(tree, index)
-                    tree2 = copy.deepcopy(tree)
-                    tree2.Joints[index].reverseZhat()
-                    if not tree2.transformJoint(index, SE3.Trans([0,0,-tree2.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True):
+                    tree.Joints[index].reverseZhat()
+                    if not tree.transformJoint(index, SE3.Trans([0,0,-tree.Joints[index].neutralLength]), safe=False, relative=True, propogate=False, recomputeLinkPath=True):
                         raise Exception()
                     
                     #print(1.5, time.time() - start)
 
-                    linkLoss2 = linkLoss(tree2, index)
-                    if (linkLoss2 < linkLoss1):
-                        tree = tree2
+                    linkLoss2 = linkLoss(tree, index)
+
                 except Exception as e:
                     pass
 
-                if min(linkLoss1, linkLoss2) > 1000: #is a collision
+                if min(linkLoss1, linkLoss2) > 1000: #has a collision
                     tryReverse = True
 
             except Exception as e:
                 tryReverse = True
             
-            #print(2, time.time() - start)
+            
+            loss = min(linkLoss1, linkLoss2)
+
             if tryReverse:
                 try:
                     tree3.Joints[parentIndex].reverseZhat()
@@ -1036,24 +1055,10 @@ class KinematicTree(Generic[J]):
                     
                     linkLoss3 = linkLoss(tree3, index)
 
-                    if linkLoss3 < min(linkLoss1, linkLoss2):
-                        linkLoss1 = linkLoss3
-                        tree = tree3
+                    if linkLoss3 < loss:
+                        loss = linkLoss3
                 except:
-                    return min(linkLoss1, linkLoss2)
-
-            #print(3, time.time() - start)
-            #path = tree.Links[index].path
-
-            #pathCurviness = curvinessOfLink(tree.Links[index])
-
-            #collisions = tree.detectCollisions(specificJointIndices=[index], includeEnds=True) * 1000
-
-            loss = min(linkLoss1, linkLoss2)#linkLoss(tree, index)
-
-            if loss == linkLoss2:
-                if plotCollisions:
-                    tree.show()
+                    return loss
 
             #print(time.time() - start)
             return loss
@@ -1068,14 +1073,17 @@ class KinematicTree(Generic[J]):
 
         transformation = frame1.inv() * frame2
 
-        #try to make initial guess right next to each other
-        initialPosition = transformation.t[2]
-        initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
-        initialGuess = [initialPosition,initialRotation]
-        initialTree = tree = copy.deepcopy(self)
-        try:
-            initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=False, safe=False, relative=True)
-        except:
+        if guess:
+            #try to make initial guess right next to each other
+            initialPosition = transformation.t[2]
+            initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
+            initialGuess = [initialPosition,initialRotation]
+            initialTree = tree = copy.deepcopy(self)
+            try:
+                initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=False, safe=False, relative=True)
+            except:
+                initialGuess = [0,0]
+        else:
             initialGuess = [0,0]
 
         initialLoss = objective(initialGuess)
@@ -1083,7 +1091,7 @@ class KinematicTree(Generic[J]):
         dist = self.Links[index].path.length
         # bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
         minResult = type('AnonymousObject', (object,), {'x': initialGuess, 'fun': initialLoss})()
-
+        
         numGuesses = 50
         for i in range(0, numGuesses + 1):
             guess = initialGuess.copy()
@@ -1091,24 +1099,25 @@ class KinematicTree(Generic[J]):
             guess[0] = initialPos + -dist*2 + dist*4*i/numGuesses
             guess[1] = (guess[1] + np.random.uniform(0, np.pi * 2)) % (np.pi * 2)
 
-            obj = objective(guess, plotCollisions=False)
+            obj = objective(guess)
             ctr = 0
-            while obj == 100000 and ctr < 10:
+            while obj == 100000 and ctr < 5:
                 guess[0] = initialPos + np.random.uniform(-dist*2, dist*2)
                 guess[1] = (guess[1] + np.random.uniform(0, np.pi * 2)) % (np.pi * 2)
                 obj = objective(guess)
                 ctr += 1
 
-            r = obj
-            if r < minResult.fun:
+            if obj < minResult.fun:
                 minResult.x = guess
-                minResult.fun = r
-            if index == 5:
-                print(f"guess {i} : {obj}")
+                minResult.fun = obj
+            
+            if not guess:
+                print(f"guess {i}, obj: {obj}")
 
         result = minimize(objective, minResult.x, method="Nelder-Mead",
             options={
             'maxiter': maxiter, 
+            'fatol' : tol,
             #'disp': True,
         })
 
@@ -1161,7 +1170,7 @@ class KinematicTree(Generic[J]):
 
         return tree, result.fun
 
-    def optimizeWaypointPlacement(self, index, maxiter=35):
+    def optimizeWaypointPlacement(self, index, maxiter=35, tol = 1e-2):
         dist = self.Links[index].path.length
         bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
 
@@ -1190,8 +1199,10 @@ class KinematicTree(Generic[J]):
 
         try:
             initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=False, safe=False, relative=False)
-        except:
+        except Exception as e:
+            print(f"INITIAL WAYPOINT GUESS NOT POSSIBLE : {e}")
             initialGuess = [0]*6
+            #initialTree.show()
 
         initialLoss = objective(initialGuess)
 
@@ -1199,11 +1210,11 @@ class KinematicTree(Generic[J]):
             # X is a 2D array where each row is a particle
             return np.array([objective(x) for x in X])
 
-        n_particles = 20
+        n_particles = 36
 
         result = type('AnonymousObject', (object,), {'x': initialGuess, 'fun': initialLoss})()
         init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
-        optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':0.5, 'c2':0.3, 'w':0.9},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=1e-2)
+        optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':0.7, 'c2':0.5, 'w':0.7},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
         # result = minimize(objective, minResult.x, method="Nelder-Mead", bounds=bounds, options={
         #     'maxiter':maxiter,
         #     'ftol':1e-2,
@@ -1223,7 +1234,7 @@ class KinematicTree(Generic[J]):
         i = 1
         while i < len(self.Joints):
             print(f"Starting with joint {i}...")
-            if (i < len(self.Joints) - 2) and isinstance(self.Joints[i], Waypoint) and isinstance(self.Joints[i + 1], Waypoint) and (len(self.Children[i]) == 1) and (len(self.Children[i + 1]) == 1):
+            if (i < len(self.Joints) - 2) and isWaypoint(self.Joints[i]) and isWaypoint(self.Joints[i + 1]) and (len(self.Children[i]) == 1) and (len(self.Children[i + 1]) == 1):
                 #two waypoints and joint case
                 tree, loss = tree.optimizeWaypointsAndJointPlacement(i, i + 1, i + 2)
                 i += 2
@@ -1236,7 +1247,10 @@ class KinematicTree(Generic[J]):
         print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
         return tree               
 
-    def squaredOptimize(self):
+    def squaredOptimize(self, showSteps=False):
+        if showSteps:
+            self.show()
+
         start = time.time()
 
         tree = copy.deepcopy(self)
@@ -1248,13 +1262,15 @@ class KinematicTree(Generic[J]):
             nonlocal numOptimized
 
             iters = 10
+            tolerance = 1e-2
             if isOptimized[self.Parents[index]]:
                 iters = 50
+                tolerance = 1e-3
 
-            if isinstance(self.Joints[index], Waypoint):
-                tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters)
+            if isWaypoint(self.Joints[index]):
+                tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters, tol=tolerance)
             else:
-                tree, loss = tree.optimizeJointPlacement(index, maxiter=iters)
+                tree, loss = tree.optimizeJointPlacement(index, maxiter=iters, tol=tolerance)
 
             if isOptimized[self.Parents[index]]:
                 isOptimized[index] = True
@@ -1271,11 +1287,34 @@ class KinematicTree(Generic[J]):
 
             print(f"OPTIMIZING CHAIN ENDING AT {i}:")
             start2 = time.time()
+            order = []
+
+            parent = i
+            while not isOptimized[parent]:
+                order.append(parent)
+                parent = self.Parents[parent]
+            order.reverse()
+
             while not isOptimized[i]:
                 optimizeFromIndex(i)
-            print(f"Optimized chain ending at {i} in {time.time() - start2}s")
+                print("")
 
-            #tree.show()
+                if showSteps:
+                    tree.show()
+            
+            for j in range(0, len(order)):
+                iters = 35
+                tolerance = 5e-3
+                
+                if isWaypoint(self.Joints[order[j]]):
+                    tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance)
+                else:
+                    tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, guess=False)
+            
+            if showSteps:
+                tree.show()
+
+            print(f"Optimized chain ending at {i} in {time.time() - start2}s")
 
         print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
         
@@ -1298,6 +1337,16 @@ class KinematicTree(Generic[J]):
                     save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.initialState) + " "
                 elif isinstance(joint, Tip):
                     save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " " + str(joint.pidx) + " "
+                elif isinstance(joint, PrintedWaypoint):
+                    save += "PrintedWaypoint " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString()
+                elif isinstance(joint, PrintedPrismaticJoint):
+                    save += "PrintedPrismaticJoint " + str(joint.r) + " " + str(joint.extensionLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                elif isinstance(joint, PrintedOrthogonalRevoluteJoint):
+                    save += "PrintedOrthogonalRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                elif isinstance(joint, PrintedInAxisRevoluteJoint):
+                    save += "PrintedInAxisRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                elif isinstance(joint, PrintedTip):
+                    save += "PrintedTip " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString()
                 else:
                     raise Exception("Not Implemented")
                 save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
@@ -1346,13 +1395,52 @@ def loadKinematicTree(filename : str):
                 closesForward = bool(first[5])
                 pidx = int(first[6])
                 return Tip(numSides, r, pose, length, closesForward, pathIndex=pidx)
+            case "PrintedWaypoint":
+                r = float(first[2])
+                screwRadius = float(first[3])
+                pathIndex = int(first[4])
+                printParameters = PrintParameters.fromString(first[5])
+                return PrintedWaypoint(r, pose, screwRadius, pathIndex, printParameters)
+            case "PrintedPrismaticJoint":
+                r = float(first[2])
+                extensionLength = float(first[3])
+                screwRadius = float(first[4])
+                initialState = float(first[5])
+                printParameters = PrintParameters.fromString(first[6])
+                return PrintedPrismaticJoint(r, extensionLength, pose, screwRadius, printParameters, initialState)
+            case "PrintedOrthogonalRevoluteJoint":
+                r = float(first[2])
+                startAngle = float(first[3])
+                endAngle = float(first[4])
+                screwRadius = float(first[5])
+                initialState = float(first[6])
+                printParameters = PrintParameters.fromString(first[7])
+                return PrintedOrthogonalRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
+            case "PrintedInAxisRevoluteJoint":
+                r = float(first[2])
+                neutralLength = float(first[3])
+                screwRadius = float(first[4])
+                initialState = float(first[5])
+                printParameters = PrintParameters.fromString(first[6])
+                return PrintedInAxisRevoluteJoint(r, neutralLength, pose, screwRadius, printParameters, initialState)
+            case "PrintedTip":
+                r = float(first[2])
+                screwRadius = float(first[3])
+                pathIndex = int(first[4])
+                printParameters = PrintParameters.fromString(first[5])
+                return PrintedTip(r, pose, screwRadius, pathIndex, printParameters)
+
 
         raise Exception(f"{first[1]} not implemented in save")
             
     try:
         with open(f"save/{filename}.tree") as f:
             lines = f.readlines()
-            tree = KinematicTree[OrigamiJoint](getJoint(lines[1]), float(lines[0]))
+            rootJoint = getJoint(lines[1])
+            if isinstance(rootJoint, OrigamiJoint):
+                tree = KinematicTree[OrigamiJoint](rootJoint, float(lines[0]))
+            else:
+                tree = KinematicTree[PrintedJoint](rootJoint, float(lines[0]))
             for i in range(2, len(lines)):
                 parent = int(lines[i].split(" ")[0])
                 tree.addJoint(parent, getJoint(lines[i]), relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
@@ -1361,6 +1449,9 @@ def loadKinematicTree(filename : str):
     except Exception as e:
         print(e)
         raise Exception(f"file save/{filename}.tree doesnt exist")
+
+def isWaypoint(joint):
+    return isinstance(joint, Waypoint) or isinstance(joint, PrintedWaypoint)
 
 def curvinessOfLink(link : LinkCSC):
     return link.path.theta1 ** 1.5 * link.path.r + link.path.theta2 ** 1.5 * link.path.r

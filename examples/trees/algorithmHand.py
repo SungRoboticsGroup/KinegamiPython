@@ -57,11 +57,11 @@ middleEnd = spec.addJoint(middle2, EndTip(numSides, r,
         
 tree = makeTubularKinematicTree(spec, plotSteps=False, optimize=False)
 
-tree = tree.postOptimize()
+tree = tree.squaredOptimize()
 
 tree.show()
 
-#tree.save("algorithmHandPostOptimized")
+tree.save("optimizedHand")
 
 #plotPrintedTree(origamiToPrinted(tree, 0.05), "algorithmHandPrinted")
 #tree.show()

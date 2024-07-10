@@ -274,6 +274,8 @@ class PrismaticJoint(OrigamiJoint):
         flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
         self.minLength = numLayers*flatLayerHalfHeight
         self.maxLength = 2*self.minLength
+        self.numLayers = numLayers
+        self.coneAngle = coneAngle
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = PrismaticJointPattern(numSides, r, neutralLength, 
                                              numLayers, coneAngle)
@@ -467,12 +469,17 @@ class Tip(OrigamiJoint):
 
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedTip
-        return PrintedTip(self.r, self.Pose, screwRadius)
+        return PrintedTip(self.r, self.Pose, screwRadius, pathIndex=self.pidx)
+    
+    def getCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength)]
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
+        self.pidx = pathIndex
         super().__init__(numSides, r, Pose, length, closesForward=False, pathIndex=pathIndex)
 
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
+        self.pidx = pathIndex
         super().__init__(numSides, r, Pose, length, closesForward=True, pathIndex=pathIndex)

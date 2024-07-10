@@ -29,15 +29,19 @@ class PrintParameters:
         self.nextHoleMargin = np.round(nextHoleMargin, 4)
         self.holeGridMargin = np.round(holeGridMargin, 4)
     
-    def calculateNumHoles(self, outerRadius : float):
-        #TODO
-        return 0
+    def toString(self):
+        return str(self.thickness) + ";" + str(self.gridHoleRadius) + ";" + str(self.holeMargin) + ";" + str(self.attachThickness) + ";" + str(self.tolerance) + ";" + str(self.nextR) + ";" + str(self.nextScrewRadius) + ";" + str(self.nextThickness) + ";" + str(self.nextHoleMargin)
     
     @staticmethod
     def default(r: float, screwRadius : float):
         thickness = r * 0.2
         gridHoleMargin = screwRadius*2.5
         return PrintParameters(thickness, screwRadius, screwRadius, gridHoleMargin, thickness/2, 0.075, r, screwRadius, thickness, screwRadius)
+
+    @staticmethod
+    def fromString(string):
+        x = [float(param) for param in string.split(';')]
+        return PrintParameters(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9])
 
 class PrintedJoint(Joint):
     def __init__(self, r : float, neutralLength : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters, initialState : float = 0):
@@ -225,15 +229,65 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         from OrigamiJoint import ExtendedRevoluteJoint
         return ExtendedRevoluteJoint(numSides, self.r, max(-self.startBendingAngle, self.endBendingAngle)*2, self.bottomLength, self.Pose, numSinkLayers=numLayers, initialState=self.initialState)
 
+    def getCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.bottomLength),
+                CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.topLength)]
+
 class PrintedInAxisRevoluteJoint(PrintedJoint):
     def __init__(self, r: float, neutralLength : float, Pose : SE3, screwRadius : float, printParameters : PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
         
         super().__init__(r, neutralLength, Pose, screwRadius, printParameters, initialState)
+    
+    def pathIndex(self) -> int:
+        return 2 # zhat
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return RotationAboutLine(rotAxisDir=self.Pose.R[:,0],
+                              rotAxisPoint=self.ProximalDubinsFrame().t,
+                              angle=stateChange)
+    
+    def stateRange(self) -> list:
+        return [0, np.pi*2]
+    
+    def boundingRadius(self) -> float:
+        return norm([self.r, self.neutralLength / 2])
+    
+    def center(self) -> np.ndarray:
+        return self.Pose.t + (self.state/2) * self.pathDirection()
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.center(), self.boundingRadius())
+    
+    def boundingCylinder(self) -> Cylinder:
+        uhat = (self.Pose @ SE3.Rz(np.pi/4)).R[:,1]
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
+                        self.neutralLength, uhat)
+    
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
+             axisScale=10, showPoses=True):
+        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, surfaceOpacity, showSurface, showAxis,
+                          axisScale, showPoses)
+        if showSurface:
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
+                                              alpha=surfaceOpacity, 
+                                              edgeColor=edgeColor,
+                                              numPointsPerCircle=4)
+            
+        return plotHandles
+    
+    def getCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength)]
 
 class PrintedPrismaticJoint(PrintedJoint):
-    def __init__(self, r : float, extensionLength : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
+    def __init__(self, r : float, extensionLength : float, Pose : SE3, screwRadius : float,  printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
         
@@ -369,12 +423,17 @@ class PrintedPrismaticJoint(PrintedJoint):
         coneAngle = np.arcsin(self.neutralLength/self.maxLength)
         return PrismaticJoint(numSides, self.r, self.neutralLength, numLayers, coneAngle, self.Pose, initialState=self.initialState)
 
+    def getCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
+
 class PrintedTip(PrintedJoint):
-    def __init__(self, r : float, Pose : SE3(), screwRadius : float, printParameters: PrintParameters = None):
+    def __init__(self, r : float, Pose : SE3(), screwRadius : float, pathIndex = 2, printParameters: PrintParameters = None):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
 
         neutralLength = printParameters.holeMargin + screwRadius*2 + r
+
+        self.pidx = pathIndex
 
         super().__init__(r, neutralLength, Pose, screwRadius, printParameters)
 
@@ -427,7 +486,7 @@ class PrintedTip(PrintedJoint):
         return filepath, rot1, None, None 
 
     def pathIndex(self) -> int:
-        return 2 # zhat
+        return self.pidx
     
     def stateChangeTransformation(self, stateChange : float) -> SE3:
         return SE3()
@@ -459,7 +518,10 @@ class PrintedTip(PrintedJoint):
             v = self.r * np.sin(angle)
             scale = self.r / 2
             
-            tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
+            match self.pidx:
+                case 0: tipSegmentIndex, uhatIndex, vhatIndex = 2,1,2
+                case 1: tipSegmentIndex, uhatIndex, vhatIndex = 0,2,0
+                case 2: tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
 
             DistalPose = self.DistalFrame()
             TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,tipSegmentIndex],
@@ -484,6 +546,8 @@ class PrintedTip(PrintedJoint):
         from OrigamiJoint import Tip
         return Tip(numSides, self.r, self.Pose, self.neutralLength)
 
+    def getCapsules(self):
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength)]
 
 class PrintedWaypoint(PrintedJoint):
     # path direction through a waypoint defaults to zhat
