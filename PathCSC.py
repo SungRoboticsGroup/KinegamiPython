@@ -70,7 +70,8 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     
     # solve for the path under all 4 sign combinations
     # solutions are values for tDirMag
-    with warnings.catch_warnings(action="ignore"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
                                 (r, startPosition, startDir, endPosition, endDir, 1, 1))
         solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=

@@ -105,33 +105,38 @@ class KinematicChain(KinematicTree):
                     self.recomputeBoundingBall()
             else:
                 parentIndex = self.Parents[jointIndex]
-                prevJoint = self.Joints[parentIndex] if jointIndex>0 else nextJoint
+                if jointIndex == len(self.Joints) - 1:
+                    self.Links.pop(-1)
+                    self.Joints.pop(-1)
+                elif jointIndex > 0:
+                    prevJoint = self.Joints[parentIndex]
+                    children = self.Children[jointIndex]
+                    for child in children:
+                        nextJoint = self.Joints[child]
 
-                children = self.Children[jointIndex]
-                for child in children:
-                    nextJoint = self.Joints[child]
+                        newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                                nextJoint.ProximalDubinsFrame(),
+                                                self.maxAnglePerElbow) 
 
-                    newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                            nextJoint.ProximalDubinsFrame(),
-                                            self.maxAnglePerElbow) 
+                        linksBefore = self.Links[:jointIndex]
+                        linksAfter = self.Links[jointIndex+2:]
+                        self.Links = linksBefore + [newLink] + linksAfter
+                        self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
 
-                    linksBefore = self.Links[:jointIndex]
-                    linksAfter = self.Links[jointIndex+2:]
-                    self.Links = linksBefore + [newLink] + linksAfter
-                    self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
+                        self.recomputeBoundingBall()
 
-                self.recomputeBoundingBall()
-                
-                # recompute children and parents
+                        # recompute children and parents
 
-                self.Children = []
-                for i in range(len(self.Joints)-1):
-                    self.Children.append([i+1])
-                self.Children.append([])
-                
-                self.Parents = []
-                for i in range(len(self.Joints)):
-                    self.Parents.append(i-1)
-            
+                        self.Children = []
+                        for i in range(len(self.Joints)-1):
+                            self.Children.append([i+1])
+                            self.Children.append([])                    
+                            
+                        self.Parents = []
+                        for i in range(len(self.Joints)):
+                            self.Parents.append(i-1)
+                else:
+                    self.Links.pop(0)
+                    self.Joints.pop(0)
 
         return True

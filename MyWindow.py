@@ -1187,10 +1187,6 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.rotationSlider.blockSignals(True)
                 self.rotationSlider.setValue(int(self.oldRotVal))
-                if value > self.oldRotVal:
-                    self.rotationSlider.setMaximum(int(self.oldRotVal))
-                else:
-                    self.rotationSlider.setMinimum(int(self.oldRotVal))
                 self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(self.oldRotVal)}°")
                 self.rotationSlider.blockSignals(False)
 
@@ -1364,7 +1360,7 @@ class PointEditorWindow(QMainWindow):
             else:
                 joint.id = len(self.chain.Joints)
 
-            if (self.chain == None) :
+            if (self.chain == None or len(self.chain.Joints) == 0) :
                 self.chain = KinematicChain(joint)
             else :
                 self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
@@ -1389,8 +1385,8 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                print(className)
-        
+            else:
+                className = None
             if (self.chain):
                 if className == "RevoluteJoint":
                     dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
@@ -1407,7 +1403,8 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-
+            else:
+                className = None
             if (self.chain):
                 if className == "RevoluteJoint":
                     dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
@@ -1424,7 +1421,8 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-
+            else:
+                className = None
             if (self.chain and className == "RevoluteJoint"):
                 waypoint = Waypoint(self.numSides, self.r, SE3(4 * self.r, 0, 0) @ SE3().Ry(math.radians(90)))
             else:
@@ -1454,7 +1452,8 @@ class PointEditorWindow(QMainWindow):
         elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-
+            else:
+                className = None
             if (self.chain):
                 if className == "RevoluteJoint":
                     dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
