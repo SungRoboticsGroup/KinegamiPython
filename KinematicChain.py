@@ -105,9 +105,22 @@ class KinematicChain(KinematicTree):
                     self.recomputeBoundingBall()
             else:
                 parentIndex = self.Parents[jointIndex]
-                if jointIndex == len(self.Joints) - 1:
-                    self.Joints.pop(-1)
-                    self.Links.pop(-1)
+                if jointIndex == 0:
+                    self.Joints.pop(0) 
+                    self.Links.pop(0)
+                    self.Parents = [p - 1 if p > 0 else -1 for p in self.Parents]
+                    self.Children = [[child - 1 for child in children] for children in self.Children[1:]]
+                    self.Children.insert(0, [])
+                    if len(self.Joints) > 0:
+                        self.recomputeBoundingBall()
+                elif jointIndex == len(self.Joints) - 1:
+                    self.Joints.pop(-1)  
+                    self.Links.pop(-1)  
+                    if len(self.Joints) > 0: 
+                        self.Parents.pop(-1)  
+                        if self.Children[self.Parents[-1]]:
+                            self.Children[self.Parents[-1]].remove(jointIndex)
+                    self.recomputeBoundingBall() 
                 elif jointIndex > 0:
                     prevJoint = self.Joints[parentIndex]
                     children = self.Children[jointIndex]
@@ -135,8 +148,4 @@ class KinematicChain(KinematicTree):
                         self.Parents = []
                         for i in range(len(self.Joints)):
                             self.Parents.append(i-1)
-                else:
-                    self.Joints.pop(0)
-                    self.Links.pop(0)
-
         return True
