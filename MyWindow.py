@@ -116,25 +116,10 @@ class ErrorDialog(QDialog):
 
 class AddJointDialog(QDialog):
     jointToAdd = None
-    relative = True
-    fixedPosition = False
-    fixedOrientation = False
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-    def getJoint(self):
-        return self.jointToAdd
-        
-    def getIsRelative(self):
-        return self.relative
-    
-    def getFixedPosition(self):
-        return self.fixedPosition
-    
-    def getFixedOrientation(self):
-        return self.fixedOrientation
-    
     def getJoint(self):
         return self.jointToAdd
         
@@ -152,18 +137,6 @@ class AddJointDialog(QDialog):
         except Exception as e:
             print("Error:", e)
             return None
-        
-    def on_relative_clicked(self):
-        self.relative = True
-
-    def on_absolute_clicked(self):
-        self.relative = False
-
-    def on_fixed_position_toggled(self):
-        self.fixedPosition = not self.fixedPosition
-
-    def on_fixed_orientation_toggled(self):
-        self.fixedOrientation = not self.fixedOrientation
         
 class AddPrismaticDialog(AddJointDialog):
     def __init__(self, numSides, r, pose : SE3 = None):
@@ -1390,14 +1363,6 @@ class PointEditorWindow(QMainWindow):
                 joint.id = 0
             else:
                 joint.id = len(self.chain.Joints)
-                
-            isRelative = dialog.getIsRelative()
-            isFixedPosition = dialog.getFixedPosition()
-            isFixedOrientation = dialog.getFixedOrientation()
-            isSafe = True
-
-            if (isFixedPosition or isFixedOrientation):
-                isSafe = False
 
             if (self.chain == None) :
                 self.chain = KinematicChain(joint)
@@ -1422,8 +1387,15 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
+            if (self.chain and len(self.chain.Joints) > 0):
+                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                print(className)
+        
             if (self.chain):
-                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4 * self.r, 0, 0))
+                if className == "RevoluteJoint":
+                    dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
+                else: 
+                    dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r))
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3())
 
@@ -1433,8 +1405,14 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
+            if (self.chain and len(self.chain.Joints) > 0):
+                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+
             if (self.chain):
-                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
+                if className == "RevoluteJoint":
+                    dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
+                else:
+                    dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r) @ SE3().Ry(math.radians(90)))
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3())
             
@@ -1444,7 +1422,13 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
-            waypoint = Waypoint(self.numSides, self.r, SE3())
+            if (self.chain and len(self.chain.Joints) > 0):
+                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+
+            if (self.chain and className == "RevoluteJoint"):
+                waypoint = Waypoint(self.numSides, self.r, SE3(4 * self.r, 0, 0) @ SE3().Ry(math.radians(90)))
+            else:
+                waypoint = Waypoint(self.numSides, self.r, SE3(0, 0, 4 * self.r))
             
             if (self.chain == None):
                 waypoint.id = 0
@@ -1452,11 +1436,14 @@ class PointEditorWindow(QMainWindow):
                 waypoint.id = len(self.chain.Joints)
             
             if (self.chain == None) or len(self.chain.Joints) == 0:
+                waypoint = Waypoint(self.numSides, self.r, SE3())
                 self.chain = KinematicChain(waypoint)
             elif waypoint.id != 0:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, safe=False)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                                    relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             else:
-                self.chain.append(waypoint, relative=True, fixedPosition=True, safe=False)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                                    relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_plot()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
