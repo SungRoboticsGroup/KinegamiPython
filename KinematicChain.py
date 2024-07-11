@@ -106,8 +106,8 @@ class KinematicChain(KinematicTree):
             else:
                 parentIndex = self.Parents[jointIndex]
                 if jointIndex == len(self.Joints) - 1:
-                    self.Links.pop(-1)
                     self.Joints.pop(-1)
+                    self.Links.pop(-1)
                 elif jointIndex > 0:
                     prevJoint = self.Joints[parentIndex]
                     children = self.Children[jointIndex]
@@ -136,7 +136,7 @@ class KinematicChain(KinematicTree):
                         for i in range(len(self.Joints)):
                             self.Parents.append(i-1)
                 else:
-                    self.Links.pop(0)
                     self.Joints.pop(0)
+                    self.Links.pop(0)
 
         return True
