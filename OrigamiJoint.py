@@ -129,7 +129,7 @@ class RevoluteJoint(OrigamiJoint):
 
             hull2 = ConvexHull(allPoints2)
             vertices = np.append(vertices, allPoints2[hull2.vertices], axis=0)
-            faces = np.append(faces, hull2.simplices + 6, axis=0)
+            faces = np.append(faces, hull2.simplices + self.numSides + 2, axis=0)
 
             meshdata = gl.MeshData(vertexes=vertices, faces=faces)
             item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True, id=self.id)

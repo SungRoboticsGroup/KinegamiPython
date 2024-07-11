@@ -1452,8 +1452,14 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif self.is_parent_joint_selected():
+            if (self.chain and len(self.chain.Joints) > 0):
+                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+
             if (self.chain):
-                dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
+                if className == "RevoluteJoint":
+                    dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
+                else: 
+                    dialog = AddTipDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r))
             else:
                 dialog = AddTipDialog(self.numSides, self.r, pose=SE3())
 
