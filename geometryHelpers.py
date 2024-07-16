@@ -633,13 +633,20 @@ class Elbow:
     
     def addToWidget(self, widget, numSides : int = 16, color_list=(1, 1, 1, 1), 
                   alpha : float = 1.0, wireFrame : bool = True, 
-                  showFrames : bool = False):
+                  showFrames : bool = False, debug : bool = False):
         
         vertices, faces = self.circleEllipseCircleQT(numSides)
 
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
         meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=wireFrame, shader='shaded', smooth=True)
         meshitem.setObjectName("Link")
+
+        if debug:
+            scatter = gl.GLScatterPlotItem(pos=vertices, color=(1,0,0,1), size=10)
+            widget.plot_widget.addItem(scatter)
+
+            print(faces, len(faces))
+            print("# of verts:", len(vertices))
         
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
@@ -767,11 +774,11 @@ class CompoundElbow:
     
     def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
                   alpha : float = 1.0, wireFrame : bool = False, 
-                  showFrames : bool = True, showBoundingBall : bool = False):
+                  showFrames : bool = True, showBoundingBall : bool = False, debug : bool = False):
         allHandleSets = []
         
         for elbow in self.elbows:
-            elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames)
+            elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames, debug)
         
         if showBoundingBall:
             self.boundingBall().addToWidget(widget, color=tuple(color_list), alpha = 0.25*alpha)

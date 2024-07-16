@@ -834,6 +834,12 @@ class PointEditorWindow(QMainWindow):
 
         # self.random_btn_dock.setMaximumSize(300, 100)
 
+        joint1 = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
+        joint2 = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
+        self.chain = KinematicChain(joint1)
+        self.chain.addJoint(0, joint2)
+        self.update_plot()
+
     def insert_waypoint(self):
         print("test")
 

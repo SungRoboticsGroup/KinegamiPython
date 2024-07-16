@@ -163,73 +163,80 @@ class LinkCSC:
 
             vertices = []
             faces = []
+            vertex_offset = 0
 
             if not self.elbow1 is None:
-                self.elbow1.addToWidget(widget, numSides, color, 
-                  alpha, wireFrame, 
-                  showFrames)
-            
-            if self.path.tMag > self.EPSILON:
-                v, f = self.cylinder.addToWidget(widget, numSides, 2, color)
-                #print(v)
-                #print(f)
+                vertices, faces = self.elbow1.circleEllipseCircleQT(numSides)
 
-            if not self.elbow2 is None:
-                self.elbow2.addToWidget(widget, numSides, color, 
-                  alpha, wireFrame, showFrames)
+                # new_verts = []
+                # for array in vertices:
+                #     for row in array:
+                #         new_verts.append(row.tolist())
 
-                # v, f = self.elbow2.circleEllipseCircleQT(numSides, debug=True)
-                
-                # v = np.array(v)
-                # f = np.array(f)
+                # new_faces = []
+                # for index, array in enumerate(faces):
+                #     for row in array:
+                #         new_row = row.tolist()
 
-                # meshdata = gl.MeshData(vertexes=v, faces=f)
-                # meshitem = gl.GLMeshItem(meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
-                # meshitem.setObjectName("Link")
-                # widget.plot_widget.addItem(meshitem)
+                #         new_faces.append([item + index * numSides * 3 for item in new_row])
 
-            """
-            if not self.elbow1 is None:
-                v, f = self.elbow1.circleEllipseCircleQT(numSides)
+                new_verts = np.array(vertices)
+                new_faces = np.array(faces)
 
-                v = np.array(v)[0]
-                f = np.array(f)[0]
-
-                meshdata = gl.MeshData(vertexes=v, faces=f)
-                meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
-                meshitem.setObjectName("Link")
-                widget.plot_widget.addItem(meshitem)
+                vertices.append(new_verts)
+                faces.append(new_faces + vertex_offset)
+                vertex_offset += len(new_verts)
             
             if self.path.tMag > self.EPSILON:
                 v, f = self.cylinder.interpolateQtCircles(numSides, 2)
 
-                meshdata = gl.MeshData(vertexes=v, faces=f)
-                meshitem = gl.GLMeshItem(meshdata=meshdata, color=(0,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
-                meshitem.setObjectName("Link")
-                widget.plot_widget.addItem(meshitem)
-                
-            if not self.elbow2 is None:
-                v, f = self.elbow2.circleEllipseCircleQT(numSides)
-                
-                v = np.array(v)[0]
-                f = np.array(f)[0]
+                vertices.append(v)
+                faces.append(f + vertex_offset)
+                vertex_offset += len(v)
 
-                meshdata = gl.MeshData(vertexes=v, faces=f)
-                meshitem = gl.GLMeshItem(meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
-                meshitem.setObjectName("Link")
-                widget.plot_widget.addItem(meshitem)
-            """
-                
+            if not self.elbow2 is None:
+                vertices, faces = self.elbow2.circleEllipseCircleQT(numSides)
+
+                # new_verts = []
+                # for array in vertices:
+                #     for row in array:
+                #         new_verts.append(row.tolist())
+
+                # new_faces = []
+                # for index, array in enumerate(faces):
+                #     for row in array:
+                #         new_row = row.tolist()
+
+                #         new_faces.append([item + index * numSides * 3 for item in new_row])
+
+                new_verts = np.array(vertices)
+                new_faces = np.array(faces)
+
+                vertices.append(new_verts)
+                faces.append(new_faces + vertex_offset)
+                vertex_offset += len(new_verts)
+
+            print(vertices)
+            print(faces)
+
+            # if vertices: 
+            #     vertices = np.concatenate(vertices, axis=0)
+            #     vertices = vertices.tolist()
+            
+            # if faces: 
+            #     faces = np.concatenate(faces, axis=0)
+            #     faces = faces.tolist()
+
             # if (len(vertices) > 0 and len(faces) > 0):
             # vertices = np.array(vertices)[0]
             # faces = np.array(faces)[0]
                 
-            # meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-            # meshitem = gl.GLMeshItem(meshdata=meshdata, color=(1,0,0,1), drawEdges=wireFrame, shader='shaded', smooth=True)
-            # meshitem.setObjectName("Link")
-
-            # print(vertices)
-            # print(faces)
+            # if vertices and faces:
+            #     meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+            #     meshitem = gl.GLMeshItem(meshdata=meshdata, color=linkColorDefault, drawEdges=wireFrame, shader='shaded', smooth=True)
+            #     meshitem.setObjectName("Link")
+            #     meshitem.setGLOptions('translucent')
+            #     widget.plot_widget.addItem(meshitem)
         
         # if showPath:
         #    self.path.addToPlot(ax, showCircles=showPathCircles, 
