@@ -736,25 +736,20 @@ class CompoundElbow:
         self.StartFrame = StartFrame
         self.EndFrame = self.elbows[-1].EndFrame
 
-    def circleEllipseCircleQT(self, numSides : int = 32, debug=False):
+    def circleEllipseCircleQT(self, numSides : int = 32):
         allHandleSets = []
 
         vertices = []
         faces = []
+        vertex_offset = 0
 
         for elbow in self.elbows:
             v, f = elbow.circleEllipseCircleQT(numSides)
 
-            if debug:
-                print("vertices", v)
-                print("faces", f)
-
-            vertices.append(v)
-            faces.append(f)
-        
-        if debug:
-            print("full vertices", vertices)
-            print("full faces", faces)
+            vertices.extend(v.tolist())
+            f2 = [[item + vertex_offset for item in sublist] for sublist in f.tolist()]
+            faces.extend(f2)
+            vertex_offset += len(v)
 
         return vertices, faces
     

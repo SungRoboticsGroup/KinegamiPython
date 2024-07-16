@@ -166,81 +166,34 @@ class LinkCSC:
             vertex_offset = 0
 
             if not self.elbow1 is None:
-                vertices, faces = self.elbow1.circleEllipseCircleQT(numSides)
+                v, f = self.elbow1.circleEllipseCircleQT(numSides)
 
-                # new_verts = []
-                # for array in vertices:
-                #     for row in array:
-                #         new_verts.append(row.tolist())
-
-                # new_faces = []
-                # for index, array in enumerate(faces):
-                #     for row in array:
-                #         new_row = row.tolist()
-
-                #         new_faces.append([item + index * numSides * 3 for item in new_row])
-
-                new_verts = np.array(vertices)
-                new_faces = np.array(faces)
-
-                vertices.append(new_verts)
-                faces.append(new_faces + vertex_offset)
-                vertex_offset += len(new_verts)
+                vertices.extend(v)
+                faces.extend(f)
+                vertex_offset += len(v)
             
             if self.path.tMag > self.EPSILON:
                 v, f = self.cylinder.interpolateQtCircles(numSides, 2)
 
-                vertices.append(v)
-                faces.append(f + vertex_offset)
+                vertices.extend(v)
+                f2 = [[item + vertex_offset for item in sublist] for sublist in f]
+                faces.extend(f2)
                 vertex_offset += len(v)
 
             if not self.elbow2 is None:
-                vertices, faces = self.elbow2.circleEllipseCircleQT(numSides)
+                v, f = self.elbow2.circleEllipseCircleQT(numSides)
 
-                # new_verts = []
-                # for array in vertices:
-                #     for row in array:
-                #         new_verts.append(row.tolist())
+                vertices.extend(v)
+                f2 = [[item + vertex_offset for item in sublist] for sublist in f]
+                faces.extend(f2)
+                vertex_offset += len(v)
 
-                # new_faces = []
-                # for index, array in enumerate(faces):
-                #     for row in array:
-                #         new_row = row.tolist()
-
-                #         new_faces.append([item + index * numSides * 3 for item in new_row])
-
-                new_verts = np.array(vertices)
-                new_faces = np.array(faces)
-
-                vertices.append(new_verts)
-                faces.append(new_faces + vertex_offset)
-                vertex_offset += len(new_verts)
-
-            print(vertices)
-            print(faces)
-
-            # if vertices: 
-            #     vertices = np.concatenate(vertices, axis=0)
-            #     vertices = vertices.tolist()
-            
-            # if faces: 
-            #     faces = np.concatenate(faces, axis=0)
-            #     faces = faces.tolist()
-
-            # if (len(vertices) > 0 and len(faces) > 0):
-            # vertices = np.array(vertices)[0]
-            # faces = np.array(faces)[0]
-                
-            # if vertices and faces:
-            #     meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-            #     meshitem = gl.GLMeshItem(meshdata=meshdata, color=linkColorDefault, drawEdges=wireFrame, shader='shaded', smooth=True)
-            #     meshitem.setObjectName("Link")
-            #     meshitem.setGLOptions('translucent')
-            #     widget.plot_widget.addItem(meshitem)
-        
-        # if showPath:
-        #    self.path.addToPlot(ax, showCircles=showPathCircles, 
-        #                        showPoses=showFrames, pathColor=pathColor)
+            if (len(vertices) > 0 and len(faces) > 0):
+                meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
+                meshitem = gl.GLMeshItem(meshdata=meshdata, color=linkColorDefault, drawEdges=wireFrame, shader='shaded', smooth=True)
+                meshitem.setObjectName("Link")
+                meshitem.setGLOptions('translucent')
+                widget.plot_widget.addItem(meshitem)
         
         return allElbowHandleSets
     def endBoundingBalls2r(self):
@@ -297,7 +250,6 @@ class LinkCSC:
                 composed.append(elbow2PartPattern)
         
         return composed
-    
 
     def collisionBoxes(self):
         return [CollisionBox(startDubinsFrame=self.StartDubinsPose, endDubinsFrame=self.Elbow1EndFrame, r=self.r),

@@ -21,6 +21,9 @@ import re
 from scipy.spatial.transform import Rotation as R
 from testqtgraph import *
 
+import warnings
+warnings.filterwarnings("ignore")
+
 class EditJointStateDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
