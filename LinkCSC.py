@@ -190,7 +190,7 @@ class LinkCSC:
 
             if (len(vertices) > 0 and len(faces) > 0):
                 meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
-                meshitem = gl.GLMeshItem(meshdata=meshdata, color=linkColorDefault, drawEdges=wireFrame, shader='shaded', smooth=True)
+                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
                 meshitem.setObjectName("Link")
                 meshitem.setGLOptions('translucent')
                 widget.plot_widget.addItem(meshitem)

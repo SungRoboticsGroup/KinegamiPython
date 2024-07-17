@@ -373,12 +373,14 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     lock_status_changed = pyqtSignal(bool)
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
+    click_signal_link = qc.pyqtSignal(int)
     drag_change_position = qc.pyqtSignal(np.ndarray)
     drag_change_rotation = qc.pyqtSignal(float)
     key_pressed = qc.pyqtSignal(str)
 
     selected_index = -1
     selected_arrow = None
+    selected_link_index = -1
 
     camera_type = "Rotate"
 
@@ -467,6 +469,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             joints = []
             arrows = []
+            links = []
 
             for item in self.itemsAt(region):
                 if (item.objectName() == "Arrow"):
@@ -476,7 +479,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     joints.append(item)
 
                 if (item.objectName() == "Link"):
-                    print("link clicked")
+                    links.append(item)
 
             if (len(arrows) > 0 and self.selected_index != -1):
                 arrow_index = arrows[0].id
@@ -485,9 +488,15 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     self.selected_index = joints[0].id
                 else:
                     self.selected_index = -1
+
+                if(len(links) > 0):
+                    self.selected_link_index = links[0].id
+                else:
+                    self.selected_link_index = -1
             
             self.click_signal.emit(self.selected_index)
             self.click_signal_arrow.emit(arrow_index)
+            self.click_signal_link.emit(self.selected_link_index)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_W:
@@ -537,12 +546,14 @@ class PointEditorWindow(QMainWindow):
 
         self.selected_joint = -1
         self.selected_arrow = -1
+        self.selected_link = -1
         self.selected_axis_name = 'N/A'
         self.last_joint = -1
         self.selected_frame = -1
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
+        self.plot_widget.click_signal_link.connect(self.link_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_translate)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
         self.plot_widget.key_pressed.connect(self.key_pressed)
@@ -1000,6 +1011,11 @@ class PointEditorWindow(QMainWindow):
             self.update_rotation_slider()
             self.update_translate_slider()
 
+    @QtCore.pyqtSlot(int)
+    def link_selection_changed(self, index):
+        self.selected_link = index
+        self.update_joint()
+
     @QtCore.pyqtSlot(np.ndarray)
     def drag_translate(self, new_position):
         propogate = self.propogateSliderCheckbox.isChecked()
@@ -1302,7 +1318,7 @@ class PointEditorWindow(QMainWindow):
             grid.setColor((0,0,0,255))
             
             if self.chain is not None:
-                self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
+                self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
 
                 self.select_joint_options.blockSignals(False)
 
@@ -1341,7 +1357,7 @@ class PointEditorWindow(QMainWindow):
         for index, joint in enumerate(self.chain.Joints):
             joint.id = index
 
-        self.chain.addToWidget(self, selectedJoint=self.selected_joint, lastJoint = self.last_joint)
+        self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)

@@ -227,7 +227,8 @@ class KinematicTree(Generic[J]):
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, selectedJoint=None, lastJoint = 123456789):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None, 
+                  selectedJoint=None, selectedLink=None):
         # TODO: IMPLEMENT showGlobalFrame
         #print(lastJoint)
         for index, joint in enumerate(self.Joints):
@@ -271,14 +272,24 @@ class KinematicTree(Generic[J]):
                             showBoundary=showLinkSurface)
             else:
             """
-            link.addToWidget(widget, color=linkColor, 
-                            alpha=linkOpacityDefault,
-                            showPath=showLinkPath, 
-                            pathColor=pathColor,
-                            showPathCircles=showPathCircles, 
-                            showFrames=showLinkPoses,
-                            showBoundary=showLinkSurface,
-                            linkID=index)
+            if index == selectedLink:
+                link.addToWidget(widget, color=(1.0, 1.0, 0.5, 0.5), 
+                                alpha=linkOpacityDefault,
+                                showPath=showLinkPath, 
+                                pathColor=pathColor,
+                                showPathCircles=showPathCircles, 
+                                showFrames=showLinkPoses,
+                                showBoundary=showLinkSurface,
+                                linkID=index)
+            else:
+                link.addToWidget(widget, color=linkColorDefault, 
+                                alpha=linkOpacityDefault,
+                                showPath=showLinkPath, 
+                                pathColor=pathColor,
+                                showPathCircles=showPathCircles, 
+                                showFrames=showLinkPoses,
+                                showBoundary=showLinkSurface,
+                                linkID=index)
 
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
