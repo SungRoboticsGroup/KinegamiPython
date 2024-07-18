@@ -489,7 +489,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 else:
                     self.selected_index = -1
 
-                if(len(links) > 0):
+                if(len(links) > 0 and self.selected_index == -1):
                     self.selected_link_index = links[0].id
                 else:
                     self.selected_link_index = -1

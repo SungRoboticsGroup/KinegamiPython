@@ -273,7 +273,7 @@ class KinematicTree(Generic[J]):
             else:
             """
             if index == selectedLink:
-                link.addToWidget(widget, color=(1.0, 1.0, 0.5, 0.5), 
+                link.addToWidget(widget, color=(1.0, 1.0, 0.0, 0.5), 
                                 alpha=linkOpacityDefault,
                                 showPath=showLinkPath, 
                                 pathColor=pathColor,
