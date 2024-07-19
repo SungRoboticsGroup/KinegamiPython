@@ -21,12 +21,12 @@ import scipy
 from scipy.linalg import null_space
 from numpy.linalg import norm
 import matplotlib.pyplot as plt
-import geometryHelpers
-from geometryHelpers import *
 from spatialmath import SE3
 import pyqtgraph.opengl as gl
 
 import warnings
+
+from geometryHelpers import *
 
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,

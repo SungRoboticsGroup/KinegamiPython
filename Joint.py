@@ -6,13 +6,25 @@ Created on Fri Jun 23 21:54:54 2023
 """
 from spatialmath import SE3
 from abc import ABC, abstractmethod
-from geometryHelpers import *
 import matplotlib.pyplot as plt
-from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import pyqtgraph.opengl as gl
-from meshHelpers import *
+
+from TubularPattern import *
+from geometryHelpers import *
+
+class LineItemWithID(gl.GLLinePlotItem):
+    def __init__(self, id : int = -1, **kwds):
+        """All keyword arguments are passed to setData()"""
+        super().__init__(**kwds)
+        self.id = id
+
+class LineSphere(gl.GLMeshItem):
+    def __init__(self, position = [], rotation=0.0, **kwds):
+        super().__init__(**kwds)
+        self.position = position
+        self.rotation = rotation
 
 class Joint(ABC):
     """

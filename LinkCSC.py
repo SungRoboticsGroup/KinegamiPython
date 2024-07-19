@@ -8,20 +8,21 @@ import numpy as np
 from numpy import cross, dot, arctan2
 from numpy.linalg import norm
 from spatialmath import SO3, SE3
-from PathCSC import *
-from geometryHelpers import *
 import matplotlib.pyplot as plt
+
 import TubularPattern
 from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 from CollisionDetection import *
-
-
+from PathCSC import *
+from geometryHelpers import *
+from meshHelpers import *
 
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, 
-                 path : PathCSC = None, EPSILON : float = 0.01):
+                 path : PathCSC = None, EPSILON : float = 0.01,
+                 lastJoint : Joint = None, nextJoint : Joint = None):
         assert(r>0)
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.r = r
@@ -35,6 +36,8 @@ class LinkCSC:
                                 self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
         else:
             self.path = path
+        self.lastJoint = lastJoint
+        self.nextJoint = nextJoint
         
         if norm(self.path.error) > self.DISTANCE_EPSILON:
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
@@ -190,7 +193,8 @@ class LinkCSC:
 
             if (len(vertices) > 0 and len(faces) > 0):
                 meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
-                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
+                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True,
+                                    lastJoint=self.lastJoint, nextJoint=self.nextJoint)
                 meshitem.setObjectName("Link")
                 meshitem.setGLOptions('translucent')
                 widget.plot_widget.addItem(meshitem)

@@ -477,9 +477,11 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
                 if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
                     joints.append(item)
+                    print("joint id", item.id)
 
                 if (item.objectName() == "Link"):
                     links.append(item)
+                    print(item.lastJoint.id)
 
             if (len(arrows) > 0 and self.selected_index != -1):
                 arrow_index = arrows[0].id
@@ -848,10 +850,11 @@ class PointEditorWindow(QMainWindow):
 
         # self.random_btn_dock.setMaximumSize(300, 100)
 
-        joint1 = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
-        joint2 = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
-        self.chain = KinematicChain(joint1)
-        self.chain.addJoint(0, joint2)
+        testJoint = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
+        self.chain = KinematicChain(testJoint)
+        self.chain.addJoint(0, testJoint)
+        self.chain.addJoint(1, testJoint)
+        self.chain_created = True
         self.update_plot()
 
     def insert_waypoint(self):

@@ -14,10 +14,26 @@ from spatialmath import SO3, SE3
 import matplotlib.pyplot as plt
 import math
 from math import remainder
-from style import *
 import pyqtgraph.opengl as gl
-from meshHelpers import *
 from matplotlib import cm
+
+from style import *
+
+class MeshItemWithID(gl.GLMeshItem):
+    def __init__(self, id : int = -1, **kwds):
+        self.opts = {
+            'meshdata': None,
+            'color': (1., 1., 1., 1.),
+            'drawEdges': False,
+            'drawFaces': True,
+            'edgeColor': (0.5, 0.5, 0.5, 1.0),
+            'shader': None,
+            'smooth': True,
+            'computeNormals': True,
+        }
+        
+        super().__init__(**kwds)        
+        self.id = id
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -640,13 +656,6 @@ class Elbow:
         meshdata = gl.MeshData(vertexes=vertices, faces=faces)
         meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=wireFrame, shader='shaded', smooth=True)
         meshitem.setObjectName("Link")
-
-        if debug:
-            scatter = gl.GLScatterPlotItem(pos=vertices, color=(1,0,0,1), size=10)
-            widget.plot_widget.addItem(scatter)
-
-            print(faces, len(faces))
-            print("# of verts:", len(vertices))
         
         if showFrames:
             Fwd = self.StartFrame @ self.Forward 
