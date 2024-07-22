@@ -61,7 +61,7 @@ module bottom_joint() {
     out_hole_angle = 60;
 
     //grid of holes
-    hole_grid(hole_radius*2 + hole_attach_height * 2, grid_hole_radius);
+    //hole_grid(hole_radius*2 + hole_attach_height * 2, grid_hole_radius);
    
     difference() {
         //outer cylinder

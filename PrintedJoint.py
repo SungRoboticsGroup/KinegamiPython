@@ -84,9 +84,11 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
 
     def extendSegment(self, amount):
         self.topLength += amount
+        self.neutralLength += amount
     
     def extendBottomSegment(self, amount):
         self.bottomLength += amount
+        self.neutralLength += amount
 
     def recomputeDimensions(self):
         self.bottomLength = self.printParameters.holeMargin*4 + self.screwRadius*4 + maxTurnDist + self.printParameters.attachThickness + self.printParameters.holeGridMargin
@@ -310,6 +312,7 @@ class PrintedPrismaticJoint(PrintedJoint):
 
     def extendSegment(self, amount):
         self.minLength += amount
+        self.neutralLength += amount
 
     def export3DFile(self, index: int, folder : str, fileFormat = "stl"):
         name = f"prismatic_{index}." + fileFormat

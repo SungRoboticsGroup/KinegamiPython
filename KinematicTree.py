@@ -495,7 +495,6 @@ class KinematicTree(Generic[J]):
         return f"3d_output/{folder}/{name}"
 
     def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
-        assert(isinstance(self, KinematicTree[PrintedJoint]))
         if (folder != ""):
             os.makedirs(f"scad_output/{folder}", exist_ok=True)
             os.makedirs(f"3d_output/{folder}", exist_ok=True)

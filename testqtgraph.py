@@ -90,7 +90,7 @@ def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
 
     # Create a mesh item and add it to the view
     meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
-    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader=None, color=color, drawEdges=False)
+    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="normalColor", color=color, drawEdges=False)
     mesh.setGLOptions('opaque')
     view.addItem(mesh)
 

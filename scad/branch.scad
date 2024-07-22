@@ -212,7 +212,7 @@ module CSC_REMOVE_OVERLAP(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_ra
 module branch(branch_list, _outer, _inner) {
     union() {
         //make grid of holes
-        hole_grid(hole_radius*2 + hole_attach_height * 2, grid_hole_radius);
+        //hole_grid(hole_radius*2 + hole_attach_height * 2, grid_hole_radius);
         
         //make CSC shells for each CSC in branch_list
         difference() {

@@ -8,15 +8,16 @@ sys.path.append(main_dir)
 from KinematicTree import *
 from testqtgraph import *
 
+scale = 30 #in mm
 r = 1
 
 numSides = 4
 
-jointLength = 4
+jointLength = 75/scale
 unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutralLength
 extensionLength = (jointLength - unextendedRevoluteJointLength)/2
 
-twistJointLength = 2.5
+twistJointLength = 60/scale
 
 tree = KinematicTree[OrigamiJoint](Waypoint(numSides, r, SE3()))
 
@@ -51,6 +52,6 @@ bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, EndTip(numSides, r, SE3.Tra
 
 tree.show()
 
-# printedTree = origamiToPrinted(tree, 0.05)
+printedTree = origamiToPrinted(tree, 1.5/scale)
 
-# plotPrintedTree(printedTree, "manualHexapod")
+plotPrintedTree(printedTree, "manualHexapod")

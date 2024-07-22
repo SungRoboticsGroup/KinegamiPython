@@ -385,10 +385,10 @@ class Waypoint(OrigamiJoint):
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
                  closesForward : bool = True, pathIndex : int = 2):
+        self.pidx = pathIndex
         super().__init__(numSides, r, length, Pose)
         self.pattern = TipPattern(numSides, r, length, closesForward)
         self.forward = closesForward
-        self.pidx = pathIndex
     
     def pathIndex(self) -> int:
         return self.pidx
@@ -476,10 +476,8 @@ class Tip(OrigamiJoint):
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
-        self.pidx = pathIndex
         super().__init__(numSides, r, Pose, length, closesForward=False, pathIndex=pathIndex)
 
 class EndTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):
-        self.pidx = pathIndex
         super().__init__(numSides, r, Pose, length, closesForward=True, pathIndex=pathIndex)
