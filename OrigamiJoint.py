@@ -50,52 +50,6 @@ class RevoluteJoint(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
-    
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
-             axisScale=jointAxisScaleDefault, showPoses=True):
-        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
-                          centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
-        if showSurface:
-            scale = self.pattern.baseSideLength / 2
-            CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
-                                      self.Pose.t + scale * self.Pose.R[:,2]])
-            #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
-            
-            radialCount = self.numSides + 1
-            angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
-            u = self.r * np.cos(angle)
-            v = self.r * np.sin(angle)
-            ProximalPose = self.ProximalFrame()
-            uhatProximal = ProximalPose.R[:,1]
-            vhatProximal = ProximalPose.R[:,2]
-            ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
-            
-            ProximalPoints = np.vstack((ProximalBase, CenterSegment))
-            ProximalHull = ConvexHull(ProximalPoints)
-            for s in ProximalHull.simplices:
-                tri = Poly3DCollection([ProximalPoints[s]])
-                tri.set_color(surfaceColor)
-                tri.set_alpha(surfaceOpacity)
-                ax.add_collection3d(tri)
-            
-            DistalPose = self.DistalFrame()
-            uhatDistal = DistalPose.R[:,1]
-            vhatDistal = DistalPose.R[:,2]
-            DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
-            DistalPoints = np.vstack((DistalBase, CenterSegment))
-            DistalHull = ConvexHull(DistalPoints)
-            for s in DistalHull.simplices:
-                tri = Poly3DCollection([DistalPoints[s]])
-                tri.set_color(surfaceColor)
-                tri.set_alpha(surfaceOpacity)
-                ax.add_collection3d(tri)
-            
-        return plotHandles
         
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
@@ -202,81 +156,6 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         return Cylinder(self.r, self.DistalFrame().t, -DF.R[:,0], 
                         self.tubeLength, uhat)
 
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
-             axisScale=10, showPoses=True):
-        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
-                          centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
-        if showSurface:
-            scale = self.pattern.baseSideLength / 2
-            CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
-                                      self.Pose.t + scale * self.Pose.R[:,2]])
-            #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
-            
-            radialCount = self.numSides + 1
-            angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
-            u = self.r * np.cos(angle)
-            v = self.r * np.sin(angle)
-            RevoluteProximalPose = self.RevoluteProximalFrame()
-            uhatProximal = RevoluteProximalPose.R[:,1]
-            vhatProximal = RevoluteProximalPose.R[:,2]
-            RevoluteProximalBase = RevoluteProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
-            
-            ProximalPoints = np.vstack((RevoluteProximalBase, CenterSegment))
-            ProximalHull = ConvexHull(ProximalPoints)
-            for s in ProximalHull.simplices:
-                tri = Poly3DCollection([ProximalPoints[s]])
-                tri.set_color(surfaceColor)
-                tri.set_alpha(surfaceOpacity)
-                ax.add_collection3d(tri)
-            
-            RevoluteDistalPose = self.RevoluteDistalFrame()
-            uhatDistal = RevoluteDistalPose.R[:,1]
-            vhatDistal = RevoluteDistalPose.R[:,2]
-            DistalBase = RevoluteDistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
-            DistalPoints = np.vstack((DistalBase, CenterSegment))
-            DistalHull = ConvexHull(DistalPoints)
-            for s in DistalHull.simplices:
-                tri = Poly3DCollection([DistalPoints[s]])
-                tri.set_facecolor(surfaceColor)
-                tri.set_edgecolor(edgeColor)
-                tri.set_alpha(surfaceOpacity)
-                ax.add_collection3d(tri)
-            
-            self.proximalCylinder().addToPlot(ax, color=surfaceColor, 
-                                              alpha=surfaceOpacity, 
-                                              edgeColor=edgeColor,
-                                              numPointsPerCircle=self.numSides)
-            self.distalCylinder().addToPlot(ax, color=surfaceColor, 
-                                              alpha=surfaceOpacity, 
-                                              edgeColor=edgeColor,
-                                              numPointsPerCircle=self.numSides)
-        return plotHandles
-    
-    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
-             axisScale=10, showPoses=True, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, xColor, yColor, zColor, 
-                                        proximalColor, centerColor, distalColor,
-                                        sphereColor, showSphere, 
-                                        surfaceColor, edgeColor,
-                                        surfaceOpacity, showSurface, showAxis,
-                                        axisScale, showPoses)
-        if showPoses:
-            xHats, yHats, zHats, origins = plotHandles
-            ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
-        ax.set_aspect('equal')
-        plt.show(block=block)
-
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedOrthogonalRevoluteJoint
 
@@ -345,24 +224,6 @@ class PrismaticJoint(OrigamiJoint):
         return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
                         self.length(), uhat)
     
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
-             axisScale=10, showPoses=True):
-        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
-                          centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
-        if showSurface:
-            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
-                                              alpha=surfaceOpacity, 
-                                              edgeColor=edgeColor,
-                                              numPointsPerCircle=self.numSides)
-            
-        return plotHandles
-    
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
@@ -381,8 +242,7 @@ class PrismaticJoint(OrigamiJoint):
         return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
     
     def getCapsules(self):
-        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
-        
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)] 
     
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
@@ -406,29 +266,6 @@ class Waypoint(OrigamiJoint):
     
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
-    
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
-             axisScale=10, showPoses=True):
-        if showAxis:
-            zhat = self.Pose.R[:,2]
-            JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
-                                  self.Pose.t + axisScale*self.r*zhat])
-            ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
-                    linestyle='--', color='silver')
-        if showSphere:
-            self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
-        if showPoses:
-            Poses = np.array([self.Pose])
-            oColors = np.array([centerColor])
-            plotHandles = addPosesToPlot(Poses, ax, self.r, 
-                                         xColor, yColor, zColor, oColors)
-        else:
-            plotHandles = None
-        return plotHandles
     
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedWaypoint
@@ -484,63 +321,6 @@ class Tip(OrigamiJoint):
     def boundingBall(self) -> Ball:
         return Ball(self.Pose.t, self.boundingRadius())
 
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=linkColorDefault, edgeColor=jointEdgeColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
-             axisScale=10, showPoses=True):
-        plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
-                          centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
-        if showSurface:
-            #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
-            radialCount = self.numSides + 1
-            angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
-            u = self.r * np.cos(angle)
-            v = self.r * np.sin(angle)
-            scale = self.pattern.baseSideLength / 2
-            
-            tipSegmentIndex, uhatIndex, vhatIndex = 1,0,1
-            
-            if self.forward:
-                DistalPose = self.DistalFrame()
-                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:,tipSegmentIndex],
-                                          DistalPose.t + scale * DistalPose.R[:,tipSegmentIndex]])
-                
-                ProximalPose = self.ProximalFrame()
-                uhatProximal = ProximalPose.R[:,uhatIndex]
-                vhatProximal = ProximalPose.R[:,vhatIndex]
-                ProximalBase = ProximalPose.t + u.reshape(-1,1) @ uhatProximal.reshape(1,3) + v.reshape(-1,1) @ vhatProximal.reshape(1,3)
-                ProximalPoints = np.vstack((ProximalBase, TipSegment))
-                ProximalHull = ConvexHull(ProximalPoints)
-                for s in ProximalHull.simplices:
-                    tri = Poly3DCollection([ProximalPoints[s]])
-                    tri.set_facecolor(linkColorDefault)
-                    tri.set_edgecolor(None)
-                    tri.set_alpha(surfaceOpacity)
-                    ax.add_collection3d(tri)
-            else:
-                ProximalPose = self.ProximalFrame()
-                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:,tipSegmentIndex],
-                                          ProximalPose.t + scale * ProximalPose.R[:,tipSegmentIndex]])
-                
-                DistalPose = self.DistalFrame()
-                uhatDistal = DistalPose.R[:,uhatIndex]
-                vhatDistal = DistalPose.R[:,vhatIndex]
-                DistalBase = DistalPose.t + u.reshape(-1,1) @ uhatDistal.reshape(1,3) + v.reshape(-1,1) @ vhatDistal.reshape(1,3)
-                DistalPoints = np.vstack((DistalBase, TipSegment))
-                DistalHull = ConvexHull(DistalPoints)
-                for s in DistalHull.simplices:
-                    tri = Poly3DCollection([DistalPoints[s]])
-                    tri.set_facecolor(surfaceColor)
-                    tri.set_edgecolor(edgeColor)
-                    tri.set_alpha(surfaceOpacity)
-                    ax.add_collection3d(tri)
-            
-        return plotHandles
-    
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,

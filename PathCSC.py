@@ -212,47 +212,6 @@ class PathCSC:
                         ", circle1sign="+repr(self.circle1sign)+\
                         ", circle2sign="+repr(self.circle2sign)+")"
     
-    def addToPlot(self, ax, showCircles=True, showPoses=True, 
-                  startColor='r', endColor='b', pathColor=pathColorDefault,
-                  cscBoundaryMarker='*', showTunit=False):
-        if showPoses:
-            # start pose
-            x1,y1,z1 = self.startPosition
-            u1,v1,w1 = self.startDir
-            ax.quiver(x1,y1,z1,u1,v1,w1,
-                      length=self.r, color=startColor, label='start')
-            # end pose
-            x2,y2,z2 = self.endPosition
-            u2,v2,w2 = self.endDir
-            ax.quiver(x2,y2,z2,u2,v2,w2,
-                      length=self.r, color=endColor, label='end')
-        
-        if showCircles:
-            # circles
-            c1x, c1y, c1z = Circle3D(self.r, 
-                            self.circleCenter1, self.circleNormal1).interpolate().T
-            ax.plot(c1x, c1y, c1z, color = startColor)
-            c2x, c2y, c2z = Circle3D(self.r, 
-                            self.circleCenter2, self.circleNormal2).interpolate().T
-            ax.plot(c2x, c2y, c2z, color = endColor)
-        
-        # path arcs (C components)
-        a1x, a1y, a1z = Arc3D(self.circleCenter1, 
-                self.startPosition, self.startDir, self.theta1).interpolate().T
-        ax.plot(a1x, a1y, a1z, color = pathColor)
-        a2x, a2y, a2z = Arc3D(self.circleCenter2, 
-                self.turn2start, self.tUnit, self.theta2).interpolate().T
-        ax.plot(a2x, a2y, a2z, color = pathColor)
-        
-        # path S component
-        sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
-        ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
-        
-        if showTunit:
-            x,y,z = self.turn1end
-            u,v,w = self.tUnit
-            ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
-    
     # add to existing GLViewWidget ax
     def add(self, widget, showCircles=True, showPoses=True, 
                   startColor='r', endColor='b', pathColor=pathColorDefault,
@@ -320,11 +279,3 @@ class PathCSC:
         ax.set_aspect('equal')
         ax.legend()
         plt.show(block=block)
-        
-        
-        
-        
-        
-        
-        
-        

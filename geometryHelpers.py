@@ -187,8 +187,6 @@ class Ray:
     def contains(self, point):
         return self.distanceToPoint(point) < self.EPSILON
 
-
-
 def unitSphereParameterization(theta, phi):
     return np.array([np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)])
 
@@ -295,13 +293,6 @@ class Plane:
                 grid[u,v] = self.p + range[u]*uhat + range[v]*vhat
         return grid
 
-    def addToPlot(self, ax, color='red', alpha=0.5, scale=20):
-        grid = self.grid(scale, numPoints=9)
-        X = grid[:,:,0]
-        Y = grid[:,:,1]
-        Z = grid[:,:,2]
-        ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
-
 def planeFromThreePoints(p1, p2, p3):
     normal = unit(cross(p2-p1, p3-p1))
     return Plane(p1, normal)
@@ -333,17 +324,6 @@ class Ball:
     
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
-    
-    def addToPlot(self, ax, color='black', alpha=0.1, frame=False):
-        #https://www.tutorialspoint.com/plotting-a-3d-cube-a-sphere-and-a-vector-in-matplotlib
-        u, v = np.mgrid[0:2*np.pi:40j, 0:np.pi:20j]
-        x = self.c[0] + self.r*np.cos(u)*np.sin(v)
-        y = self.c[1] + self.r*np.sin(u)*np.sin(v)
-        z = self.c[2] + self.r*np.cos(v)
-        if frame:
-            return ax.plot_wireframe(x, y, z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(x, y, z, color=color, alpha=alpha)
         
     def addToWidget(self, widget, color=(0,0,0,0.5), is_waypoint=False, id=-1):
         md = gl.MeshData.sphere(rows=20, cols=20)
@@ -356,12 +336,6 @@ class Ball:
             sphere.setGLOptions('opaque')
             sphere.scale(self.r * 0.9, self.r * 0.9, self.r * 0.9)
         widget.plot_widget.addItem(sphere)
-    
-    def show(self, color='black', alpha=1, frame=False, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, color, alpha, frame)
-        ax.set_aspect('equal')
-        plt.show(block=block)
 
     def projectionOntoPlane(self, plane : Plane) -> Circle3D:
         return Circle3D(self.r, plane.projectionOfPoint(self.c), plane.nhat)
@@ -433,16 +407,6 @@ class Cylinder:
         segment = np.linspace(self.start, self.end, numCircles)
         circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
         return circlePoints.reshape((numCircles, radialCount, 3))
-    
-    def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2):
-        circles = self.interpolateCircles(numPointsPerCircle, numCircles)
-        X = circles[:,:,0]
-        Y = circles[:,:,1]
-        Z = circles[:,:,2]
-        if frame:
-            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
-        else:
-            return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
         
     def interpolateQtCircles(self, numPointsPerCircle=32, numCircles=10):
 
@@ -492,12 +456,6 @@ class Cylinder:
 
         return vertices, indices
     
-    def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=False):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numPointsPerCircle, color, alpha, frame, numCircles)
-        ax.set_aspect('equal')
-        plt.show(block=block)
-
 """
 Note: we don't need to guarantee minimality of our bounding balls, so we build
 bounding balls of bounding balls in a greedy fashion based on the below 
@@ -600,37 +558,6 @@ class Elbow:
         
         return StartCircle, MidEllipse, EndCircle
     
-    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
-                  alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False):
-        
-        StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
-        ellipses = np.array([StartCircle, MidEllipse, EndCircle])
-        X = ellipses[:,:,0]
-        Y = ellipses[:,:,1]
-        Z = ellipses[:,:,2]
-        
-        if wireFrame:
-            surfaceHandle = ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
-        else:
-            surfaceHandle = ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
-        
-        frameHandles = []
-        if showFrames:
-            Fwd = self.StartFrame @ self.Forward 
-            FwdRot = Fwd @ self.Rotate
-            FwdRotFwd = FwdRot @ self.Forward
-            Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
-            aHats, bHats, cHats, origins = addPosesToPlot(Poses, ax, 
-                                        axisLength=1, xColor='darkred', 
-                                        yColor='darkblue', zColor='darkgreen')
-            frameHandles = [aHats, bHats, cHats, origins]
-            x,y,z = Fwd.t
-            u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
-            ax.quiver(x,y,z,u,v,w,length=2,normalize=True)
-        
-        return frameHandles
-    
     def circleEllipseCircleQT(self, numSides : int = 32):
 
         StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
@@ -675,15 +602,6 @@ class Elbow:
 
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
-
-    def show(self, numSides : int = 32, color : str = 'black', 
-             alpha : float = 0.5, wireFrame : bool = False, 
-             showFrames : bool = False, block : bool = False):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
-                                     showFrames)
-        ax.set_aspect('equal')
-        plt.show(block=block)
 
 def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor=yColorDefault, 
                      zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
@@ -762,20 +680,6 @@ class CompoundElbow:
 
         return vertices, faces
     
-    def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
-                  alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = True, showBoundingBall : bool = False):
-        allHandleSets = []
-        for elbow in self.elbows:
-            handleSet = elbow.addToPlot(ax, numSides, color, alpha, wireFrame, showFrames)
-            if showFrames:
-                allHandleSets.append(handleSet)
-        
-        if showBoundingBall:
-            self.boundingBall().addToPlot(ax, color=color, alpha = 0.25*alpha)
-        
-        return allHandleSets
-    
     def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
                   alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = True, showBoundingBall : bool = False, debug : bool = False):
@@ -801,17 +705,6 @@ class CompoundElbow:
         for elbow in self.elbows[1:]:
             ball = minBoundingBall(ball, elbow.boundingBall())
         return ball
-    
-    def show(self, numSides : int = 32, color_list=(1, 1, 1, 0.5),
-             alpha : float = 0.5, wireFrame : bool = False, 
-             showFrames : bool = True, showBoundingBall : bool = False,
-             block : bool = True):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, numSides, color_list, alpha, wireFrame, 
-                                     showFrames, showBoundingBall)
-        ax.set_aspect('equal')
-        plt.show(block=block)
-        
     
 class Arc3D:
     def __init__(self, circleCenter, startPoint, startDir, theta):
@@ -846,16 +739,6 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
-    
-    def addToPlot(self, ax, color='black', alpha=1):
-        X,Y,Z = self.interpolate().T
-        return ax.plot(X, Y, Z, color=color, alpha=alpha)
-
-    def show(self, color='black', alpha=1, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandle = self.addToPlot(ax, color, alpha)
-        ax.set_aspect('equal')
-        plt.show(block=block)
         
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
@@ -899,8 +782,6 @@ def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, z
     ax.set_aspect('equal')
     plt.show(block=block)
 
-
-
 """
 Returns the common normal from line 1 to line 2, input in point-direction form.
 If the lines intersect, return the given value representing undefined.
@@ -928,7 +809,6 @@ def commonNormal(point1, direction1, point2, direction2, undefined=None):
         return -nhat
     else: # axes instersect
         return undefined
-
 
 class Torus:
     def __init__(self, majorRadius, minorRadius, center, axisDirection):

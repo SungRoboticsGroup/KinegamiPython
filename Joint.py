@@ -159,29 +159,6 @@ class Joint(ABC):
         Transform[0:3,3] = self.Pose.t
         self.Pose = SE3(Transform)
 
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault,
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
-             axisScale=10, showPoses=True):
-        if showAxis:
-            zhat = self.Pose.R[:,2]
-            JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
-                                  self.Pose.t + axisScale*self.r*zhat])
-            ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
-                    linestyle='--', color='silver')
-        if showSphere:
-            self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
-        if showPoses:
-            Poses = np.array([self.ProximalFrame(), self.DistalFrame(), self.Pose])
-            oColors = np.array([proximalColor, distalColor, centerColor])
-            plotHandles = addPosesToPlot(Poses, ax, self.r, 
-                                         xColor, yColor, zColor, oColors)
-        else:
-            plotHandles = None
-        return plotHandles
-
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
@@ -402,21 +379,3 @@ class Joint(ABC):
             line = LineItemWithID(pos=arrows, color=colors[i], width=15, antialias=True, id=i)
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
-
-    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
-             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
-             axisScale=jointAxisScaleDefault, showPoses=True, block=blockDefault):
-        ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
-                                     proximalColor, centerColor, distalColor,
-                                     sphereColor, showSphere, surfaceColor,
-                                     surfaceOpacity, showSurface, showAxis,
-                                     axisScale, showPoses)
-        if showPoses:
-            xHats, yHats, zHats, origins = plotHandles
-            ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
-        ax.set_aspect('equal')
-        plt.show(block=block)
-    
