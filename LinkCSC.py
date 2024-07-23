@@ -38,6 +38,7 @@ class LinkCSC:
             self.path = path
         self.lastJoint = lastJoint
         self.nextJoint = nextJoint
+        self.id = -1
         
         if norm(self.path.error) > self.DISTANCE_EPSILON:
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
@@ -121,7 +122,7 @@ class LinkCSC:
                        Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
-                       EPSILON = self.EPSILON)
+                       EPSILON = self.EPSILON, lastJoint=self.lastJoint, nextJoint=self.nextJoint)
     
     def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -162,6 +163,7 @@ class LinkCSC:
                   showElbowBoundingBalls : bool = False, 
                   linkID : int = -1):
         allElbowHandleSets = []
+        self.id = linkID
         if showBoundary:
 
             vertices = []
