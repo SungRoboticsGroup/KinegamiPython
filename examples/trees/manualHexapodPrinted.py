@@ -30,7 +30,7 @@ tree = KinematicTree[PrintedJoint](PrintedWaypoint(r, SE3(), screwR))
 
 spine1Joint = PrintedOrthogonalRevoluteJoint(r, -angle, angle, SE3.Trans([0,jointLength, jointLength/2]) @ SE3.Rz(np.pi/2), screwR)
 spine1Joint.extendSegment(extensionLength)
-spine1 = tree.addJoint(0, spine1Joint, fixedOrientation=True, fixedPosition=True, safe=False)
+spine1 = tree.addJoint(0, spine1Joint, fixedOrientation=True, fixedPosition=True, safe=False)   
 
 topRightJoint1 = PrintedPrismaticJoint(r, 0, SE3.Trans([jointLength, jointLength, 0]) @ SE3.Rx(-np.pi/2), screwR)
 topRightJoint1.extendSegment(prismaticExtensionLength)
@@ -97,5 +97,6 @@ bottomLeftOrthogonal = tree.addJoint(bottomLeftInAxis, bottomLeftJoint2, fixedOr
 
 bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, PrintedTip(r, SE3.Trans([jointLength,0,0]), screwR, pathIndex=0), fixedOrientation=True, fixedPosition=True, safe=False)
 
+tree.save("printedManualHexapod")
 plotPrintedTree(tree, "test")
 #tree.export3DKinematicTree("manualHexapodPrinted")

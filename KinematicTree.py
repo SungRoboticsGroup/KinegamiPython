@@ -1320,6 +1320,7 @@ class KinematicTree(Generic[J]):
         return tree
     
     def save(self, filename: str):
+        #TODO: ADD EXTENSIONS FOR PRINTED JOINTS
         with open(f"save/{filename}.tree", "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
             for i in range(0, len(self.Joints)):
@@ -1337,15 +1338,15 @@ class KinematicTree(Generic[J]):
                 elif isinstance(joint, Tip):
                     save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " " + str(joint.pidx) + " "
                 elif isinstance(joint, PrintedWaypoint):
-                    save += "PrintedWaypoint " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString()
+                    save += "PrintedWaypoint " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedPrismaticJoint):
-                    save += "PrintedPrismaticJoint " + str(joint.r) + " " + str(joint.extensionLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                    save += "PrintedPrismaticJoint " + str(joint.r) + " " + str(joint.extensionLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.minLength) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedOrthogonalRevoluteJoint):
-                    save += "PrintedOrthogonalRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                    save += "PrintedOrthogonalRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.bottomLength) + " " + str(joint.topLength) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedInAxisRevoluteJoint):
-                    save += "PrintedInAxisRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString()
+                    save += "PrintedInAxisRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedTip):
-                    save += "PrintedTip " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString()
+                    save += "PrintedTip " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
                 else:
                     raise Exception("Not Implemented")
                 save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
@@ -1405,16 +1406,24 @@ def loadKinematicTree(filename : str):
                 extensionLength = float(first[3])
                 screwRadius = float(first[4])
                 initialState = float(first[5])
-                printParameters = PrintParameters.fromString(first[6])
-                return PrintedPrismaticJoint(r, extensionLength, pose, screwRadius, printParameters, initialState)
+                minLength = float(first[6])
+                printParameters = PrintParameters.fromString(first[7])
+                newJoint = PrintedPrismaticJoint(r, extensionLength, pose, screwRadius, printParameters, initialState)
+                newJoint.extendSegment(minLength - newJoint.minLength)
+                return newJoint
             case "PrintedOrthogonalRevoluteJoint":
                 r = float(first[2])
                 startAngle = float(first[3])
                 endAngle = float(first[4])
                 screwRadius = float(first[5])
                 initialState = float(first[6])
-                printParameters = PrintParameters.fromString(first[7])
-                return PrintedOrthogonalRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
+                bottomLength = float(first[7])
+                topLength = float(first[8])
+                printParameters = PrintParameters.fromString(first[9])
+                newJoint = PrintedOrthogonalRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
+                newJoint.extendSegment(topLength - newJoint.topLength)
+                newJoint.extendBottomSegment(bottomLength - newJoint.bottomLength)
+                return newJoint
             case "PrintedInAxisRevoluteJoint":
                 r = float(first[2])
                 neutralLength = float(first[3])

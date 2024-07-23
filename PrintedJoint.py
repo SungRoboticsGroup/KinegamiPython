@@ -31,7 +31,7 @@ class PrintParameters:
         self.holeGridMargin = np.round(holeGridMargin, 4)
     
     def toString(self):
-        return str(self.thickness) + ";" + str(self.gridHoleRadius) + ";" + str(self.holeMargin) + ";" + str(self.attachThickness) + ";" + str(self.tolerance) + ";" + str(self.nextR) + ";" + str(self.nextScrewRadius) + ";" + str(self.nextThickness) + ";" + str(self.nextHoleMargin)
+        return str(self.thickness) + ";" + str(self.gridHoleRadius) + ";" + str(self.holeMargin) + ";" + str(self.holeGridMargin) + ";" + str(self.attachThickness) + ";" + str(self.tolerance) + ";" + str(self.nextR) + ";" + str(self.nextScrewRadius) + ";" + str(self.nextThickness) + ";" + str(self.nextHoleMargin)
     
     @staticmethod
     def default(r: float, screwRadius : float):
@@ -293,7 +293,7 @@ class PrintedPrismaticJoint(PrintedJoint):
     def __init__(self, r : float, extensionLength : float, Pose : SE3, screwRadius : float,  printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
-        
+        self.extensionLength = extensionLength
         #subject to change, check scad
         outHoleAngle = np.rad2deg(60)
         guideHeight = printParameters.holeMargin*2 + screwRadius*2 + printParameters.gridHoleRadius*2 + printParameters.gridHoleRadius*2/np.sin(outHoleAngle) + printParameters.thickness/np.tan(outHoleAngle)
@@ -313,6 +313,7 @@ class PrintedPrismaticJoint(PrintedJoint):
     def extendSegment(self, amount):
         self.minLength += amount
         self.neutralLength += amount
+        self.maxLength += amount
 
     def export3DFile(self, index: int, folder : str, fileFormat = "stl"):
         name = f"prismatic_{index}." + fileFormat
