@@ -180,7 +180,7 @@ class KinematicTree(Generic[J]):
 
         newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
-                                self.maxAnglePerElbow, lastJoint=parent)
+                                self.maxAnglePerElbow, lastJoint=parent, nextJoint=newJoint)
         if newLink is None:
             print("WARNING: no valid path found to newJoint, chain not changed.")
             return None
@@ -295,66 +295,6 @@ class KinematicTree(Generic[J]):
             self.boundingBall.addToWidget(widget, color=sphereColor)
         widget.add_chain(self)
 
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-                  proximalColor='c', centerColor='m', distalColor='y',
-                  showJointSurface=True, jointColor=jointColorDefault,
-                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
-                  linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
-                  showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
-                  showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, showCollisionBoxes=False, showSpecificCapsules = ([],[]), plotPoint=None):
-        xyzHandles = []
-        abcHandles = []
-        
-        if showGlobalFrame:
-            handles = addPosesToPlot(SE3(), ax, globalAxisScale, xColor, yColor, zColor)
-            if not handles is None:
-                xyzHandles.append(handles)
-        
-        for joint in self.Joints:
-            handles = joint.addToPlot(ax, xColor, yColor, zColor, 
-                                    proximalColor, centerColor, distalColor, 
-                                    sphereColor=sphereColor, showSphere=showSpheres, 
-                                    surfaceColor=jointColor, surfaceOpacity=surfaceOpacity,
-                                    showSurface=showJointSurface, axisScale=jointAxisScale,
-                                    showPoses=showJointPoses)
-            if not handles is None:
-                xyzHandles.append(handles)
-
-            if showCollisionBoxes:
-                for capsule in joint.collisionCapsules:
-                    capsule.addToPlot(ax)
-
-        for link in self.Links:
-            handles = link.addToPlot(ax, color=linkColor, 
-                                   alpha=surfaceOpacity, 
-                                   showPath=showLinkPath, 
-                                   pathColor=pathColor,
-                                   showPathCircles=showPathCircles, 
-                                   showFrames=showLinkPoses,
-                                   showBoundary=showLinkSurface)
-            if showLinkPoses:
-                for elbowHandles in handles:
-                    abcHandles.append(elbowHandles)
-            
-            if showCollisionBoxes:
-                for capsule in link.collisionCapsules:
-                    capsule.addToPlot(ax)
-        
-        for jointIndex, capsuleIndex in showSpecificCapsules[0]:
-            self.Joints[jointIndex].collisionCapsules[capsuleIndex].addToPlot(ax)
-
-        for linkIndex, capsuleIndex in showSpecificCapsules[1]:
-            self.Links[linkIndex].collisionCapsules[capsuleIndex].addToPlot(ax)
-        
-        if showSpheres:
-            self.boundingBall.addToPlot(ax, color=sphereColor, 
-                                        alpha=0.05, frame=True)
-        
-        if not plotPoint is None:
-            ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
-        return np.array(xyzHandles), np.array(abcHandles)
-    
     def detectCollisions(self, specificJointIndices = [], plot=False):
         def posesAreSame(pose1, pose2):
             return np.allclose(pose1.t, pose2.t, rtol=1e-05, atol=1e-08) and np.allclose(pose1.n, pose2.n, rtol=1e-05, atol=1e-08)
@@ -597,59 +537,6 @@ class KinematicTree(Generic[J]):
                 self.Joints[i].export3DFile(i,folder,fileFormat)
             print(f"Finished joint {i}/{len(self.Joints) - 1}, Time: {time.time() - start} \r")
         
-
-    def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
-             proximalColor='c', centerColor='m', distalColor='y',
-             showJointSurface=True, jointColor=jointColorDefault, 
-             jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
-             linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
-             showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
-             showPathCircles=False, sphereColor=sphereColorDefault,
-             showSpheres=False, block=blockDefault, showAxisGrids=False, 
-             showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault,
-             showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault,
-             groundPlaneColor=groundPlaneColorDefault, showCollisionBoxes=False, showSpecificCapsules=([],[]), plotPoint = None):
-        ax = plt.figure().add_subplot(projection='3d')
-        if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
-            xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
-            xx = xx - groundPlaneScale/2
-            yy = yy - groundPlaneScale/2
-            z = 0*xx #(9 - xx - yy) / 2 
-
-            # plot the plane
-            ax.plot_surface(xx, yy, z, alpha=surfaceOpacity/4, color=groundPlaneColor)
-        xyzHandles, abcHandles = self.addToPlot(ax, xColor, yColor, zColor, 
-                                    proximalColor, centerColor, distalColor,
-                                    showJointSurface, jointColor, 
-                                    jointAxisScale, showJointPoses,
-                                    linkColor, surfaceOpacity, showLinkSurface, 
-                                    showLinkPoses, showLinkPath, pathColor,
-                                    showPathCircles, sphereColor,
-                                    showSpheres, showGlobalFrame, globalAxisScale, showCollisionBoxes=showCollisionBoxes, showSpecificCapsules=showSpecificCapsules, plotPoint=plotPoint)
-        
-        handleGroups = []
-        labels = []
-        if showJointPoses or showGlobalFrame:
-            xHats = xyzHandles[:,0]
-            yHats = xyzHandles[:,1]
-            zHats = xyzHandles[:,2]
-            origins = xyzHandles[:,3]
-            handleGroups += [tuple(xHats), tuple(yHats), tuple(zHats)]
-            labels += [r'$\^x$', r'$\^y$', r'$\^z$']
-        if showLinkPoses:
-            aHats = abcHandles[:,0]
-            bHats = abcHandles[:,1]
-            cHats = abcHandles[:,2]
-            handleGroups += [tuple(aHats), tuple(bHats), tuple(cHats)]
-            labels += [r'$\^a$', r'$\^b$', r'$\^c$']
-        if not handleGroups==[]:
-            ax.legend(handleGroups, labels)
-        
-        ax.set_aspect('equal')
-        if not showAxisGrids:
-            plt.axis('off')
-        plt.show(block=block)
-
     def transformAll(self, Transformation : SE3):
         self.transformJoint(0, Transformation, safe=False)
 
@@ -687,7 +574,7 @@ class KinematicTree(Generic[J]):
             if recomputeLinkPath and jointIndex > 0:
                 self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                         joint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow, lastJoint=parent)
+                                        self.maxAnglePerElbow, lastJoint=parent, nextJoint=joint)
             else:
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
             if propogate:
@@ -702,7 +589,8 @@ class KinematicTree(Generic[J]):
                     self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
                                             child.ProximalDubinsFrame(),
                                             self.maxAnglePerElbow, 
-                                            lastJoint=child)
+                                            lastJoint=joint,
+                                            nextJoint=child)
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
 

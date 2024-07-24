@@ -38,6 +38,7 @@ class LinkCSC:
             self.path = path
         self.lastJoint = lastJoint
         self.nextJoint = nextJoint
+        self.id = -1
         
         if norm(self.path.error) > self.DISTANCE_EPSILON:
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
@@ -121,38 +122,7 @@ class LinkCSC:
                        Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
-                       EPSILON = self.EPSILON)
-    
-    def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
-                  alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False, showPath : bool = False, 
-                  pathColor : str = pathColorDefault,
-                  showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = False):
-        allElbowHandleSets = []
-        if showBoundary:
-            if not self.elbow1 is None:
-                elbow1HandleSets = self.elbow1.addToPlot(ax, numSides, color, 
-                                                alpha, wireFrame, showFrames,
-                                                showElbowBoundingBalls)
-                if showFrames:
-                    allElbowHandleSets += elbow1HandleSets
-            
-            if self.path.tMag > self.DISTANCE_EPSILON:
-                self.cylinder.addToPlot(ax, numSides, color, alpha, wireFrame)
-            
-            if not self.elbow2 is None:
-                elbow2HandleSets = self.elbow2.addToPlot(ax, numSides, color, 
-                                                    alpha, wireFrame, showFrames,
-                                                    showElbowBoundingBalls)
-                if showFrames:
-                    allElbowHandleSets += elbow2HandleSets
-        
-        if showPath:
-            self.path.addToPlot(ax, showCircles=showPathCircles, 
-                                showPoses=showFrames, pathColor=pathColor)
-        
-        return allElbowHandleSets
+                       EPSILON = self.EPSILON, lastJoint=self.lastJoint, nextJoint=self.nextJoint)
     
     def addToWidget(self, widget, numSides : int = 32, color = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -162,6 +132,7 @@ class LinkCSC:
                   showElbowBoundingBalls : bool = False, 
                   linkID : int = -1):
         allElbowHandleSets = []
+        self.id = linkID
         if showBoundary:
 
             vertices = []
@@ -204,19 +175,6 @@ class LinkCSC:
         startBall = Ball(self.path.circleCenter1, 2*self.r) if self.elbow1 else Ball(self.StartDubinsPose.t, self.r)
         endBall = Ball(self.path.circleCenter2, 2*self.r) if self.elbow2 else Ball(self.EndDubinsPose.t, self.r)
         return startBall, endBall
-
-    def show(self, numSides : int = 32, color : str = linkColorDefault, 
-                  alpha : float = 0.5, wireFrame : bool = False, 
-                  showFrames : bool = False, showPath : bool = True, 
-                  pathColor : str = pathColorDefault,
-                  showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = False, block : bool = False):
-        ax = plt.figure().add_subplot(projection='3d')
-        allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
-                                     showFrames, showPath, pathColor, showPathCircles,
-                                     showBoundary, showElbowBoundingBalls)
-        ax.set_aspect('equal')
-        plt.show(block=block)
     
     def creasePattern(self, numSides : int, twistPortion : float = 0.2) -> TubularPattern:
         assert(numSides >= 4 and numSides%2==0)

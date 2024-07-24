@@ -59,7 +59,6 @@ class KinematicChain(KinematicTree):
                 parentIndex = self.Parents[jointIndex]
                 if parentIndex >= 0:
                     self.Children[parentIndex].remove(jointIndex)
-                        
 
                 # children of the selected joint (represented as indices)
                 children_to_reassign = self.Children[jointIndex]
@@ -77,7 +76,8 @@ class KinematicChain(KinematicTree):
                      for childIndex in children_to_reassign:
                          childJoint = self.Joints[childIndex]
                          newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow,
+                                         lastJoint=parentJoint, nextJoint=childJoint)
                          self.Links[childIndex] = newLink
 
                 # delete the selected joint
@@ -98,7 +98,8 @@ class KinematicChain(KinematicTree):
                         childIndex -= 1
                         childJoint = self.Joints[childIndex]
                         newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                        childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow)
+                                        childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow,
+                                        lastJoint=parentJoint, nextJoint=childJoint)
                         self.Links[childIndex] = newLink
 
                 if len(self.Joints) > 0:
@@ -125,11 +126,13 @@ class KinematicChain(KinematicTree):
                     prevJoint = self.Joints[parentIndex]
                     children = self.Children[jointIndex]
                     for child in children:
-                        nextJoint = self.Joints[child]
+                        childJoint = self.Joints[child]
 
                         newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                                nextJoint.ProximalDubinsFrame(),
-                                                self.maxAnglePerElbow) 
+                                                childJoint.ProximalDubinsFrame(),
+                                                self.maxAnglePerElbow, 
+                                                lastJoint=prevJoint,
+                                                nextJoint=childJoint) 
 
                         linksBefore = self.Links[:jointIndex]
                         linksAfter = self.Links[jointIndex+2:]

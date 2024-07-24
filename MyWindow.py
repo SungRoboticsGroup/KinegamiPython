@@ -477,11 +477,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
                 if (item.objectName() == "Joint" or item.objectName() == "Waypoint"):
                     joints.append(item)
-                    print("joint id", item.id)
 
                 if (item.objectName() == "Link"):
                     links.append(item)
-                    print(item.lastJoint.id)
 
             if (len(arrows) > 0 and self.selected_index != -1):
                 arrow_index = arrows[0].id
@@ -861,8 +859,14 @@ class PointEditorWindow(QMainWindow):
         print("test")
 
     def debug(self):
-        print(self.chain.Joints[self.selected_joint].Pose)
-        print(SE3().Trans(4,0,0) @ SE3().Ry(math.radians(90)))
+        # print("link id", self.selected_link)
+        # parent = self.chain.Joints[self.chain.Parents[id]]
+
+        if (self.selected_joint != -1):
+            print("joint id", self.chain.Joints[self.selected_joint].id)
+        
+        if (self.selected_link != -1):
+            print("link id", self.chain.Links[self.selected_link].id)
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)
@@ -1403,7 +1407,7 @@ class PointEditorWindow(QMainWindow):
 
     def is_parent_joint_selected(self):
         if self.selected_joint == -1 and self.chain is not None:
-            QMessageBox.warning(self, "Selection Required", "Please select a parent joint before adding a new one.")
+            QMessageBox.warning(self, "Selection Required", "Please select a parent joint or link before adding a new one.")
             return False
         return True
 
@@ -1441,6 +1445,30 @@ class PointEditorWindow(QMainWindow):
     def add_waypoint_func(self):
         if (not self.chain_created):
             self.chain_not_created()
+        elif (self.selected_link != -1):
+            lastJoint = self.chain.Links[self.selected_link].lastJoint
+            nextJoint = self.chain.Links[self.selected_link].nextJoint
+
+            lastPose = np.array(lastJoint.Pose.t.tolist())
+            nextPose = np.array(nextJoint.Pose.t.tolist())
+            
+            average = (lastPose + nextPose) / 2
+            pos = average.tolist()
+
+            newPos = SE3().Trans(x=pos[0], y=pos[1], z=pos[2])
+
+            waypoint = Waypoint(self.numSides, self.r, newPos)
+            waypoint.id = len(self.chain.Joints)
+            
+            self.chain.addJoint(parentIndex = lastJoint.id, newJoint = waypoint, 
+                                relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
+            self.chain.Links[nextJoint.id] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
+                                            nextJoint.ProximalDubinsFrame(),
+                                            self.chain.maxAnglePerElbow, lastJoint=waypoint, nextJoint=nextJoint)
+            self.chain.Parents[nextJoint.id] = waypoint.id
+            self.chain.Children[waypoint.id].append(nextJoint.id)
+            self.update_plot()
+
         elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
