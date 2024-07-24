@@ -570,9 +570,9 @@ class PointEditorWindow(QMainWindow):
         self.key_bar.setFixedHeight(40)
         self.init_key_bar()
 
-        #top_dock_widget.setWidget(self.key_bar)
+        top_dock_widget.setWidget(self.key_bar)
 
-        #self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
+        self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -755,12 +755,12 @@ class PointEditorWindow(QMainWindow):
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         crease_dock_layout.addWidget(self.save_crease_pattern_button)  
 
-        # crease_dock_widget.setLayout(crease_dock_layout)
-        # crease_dock.setWidget(crease_dock_widget)
-        # self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+        crease_dock_widget.setLayout(crease_dock_layout)
+        crease_dock.setWidget(crease_dock_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
-        self.controls_dock = QDockWidget("Control options", self)
+        self.controls_dock = QDockWidget("Joint Transformation", self)
         self.controls_options_widget = QWidget()
         self.controls_layout = QVBoxLayout()
 
@@ -840,15 +840,15 @@ class PointEditorWindow(QMainWindow):
 
         self.random_btn = QPushButton("Generate STL")
         self.random_btn.clicked.connect(self.generate_stl)
-        #self.random_btn_layout.addWidget(self.random_btn)
+        self.random_btn_layout.addWidget(self.random_btn)
 
         self.frame_layout.addWidget(self.random_btn)
         
-        # self.random_btn_widget.setLayout(self.random_btn_layout)
-        # self.random_btn_dock.setWidget(self.random_btn_widget)
-        # self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
+        self.random_btn_widget.setLayout(self.random_btn_layout)
+        self.random_btn_dock.setWidget(self.random_btn_widget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
 
-        # self.random_btn_dock.setMaximumSize(300, 100)
+        self.random_btn_dock.setMaximumSize(300, 100)
 
         testJoint = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
         self.chain = KinematicChain(testJoint)
