@@ -563,13 +563,11 @@ class PointEditorWindow(QMainWindow):
         top_dock_widget.setAllowedAreas(Qt.TopDockWidgetArea)
 
         self.key_bar = QWidget()
-        self.key_bar_layout = QHBoxLayout(self.key_bar)
-        self.key_bar.setLayout(self.key_bar_layout)
+        self.key_bar_layout = QHBoxLayout(self.key_bar)  # Layout is initialized and set to the widget here
         self.key_bar.setFixedHeight(40)
         self.init_key_bar()
 
         top_dock_widget.setWidget(self.key_bar)
-
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
@@ -580,17 +578,25 @@ class PointEditorWindow(QMainWindow):
         self.create_new_chain = QPushButton("Create New Chain")
 
         add_joints_layout = QVBoxLayout()
+        add_chain_layout = QVBoxLayout()
         add_joints_layout.addWidget(self.add_prismatic)
         add_joints_layout.addWidget(self.add_revolute)
         add_joints_layout.addWidget(self.add_waypoint)
         add_joints_layout.addWidget(self.add_tip)
-        add_joints_layout.addWidget(self.create_new_chain)
+        add_chain_layout.addWidget(self.create_new_chain)
 
         self.add_prismatic.clicked.connect(self.add_prismatic_func)
         self.add_revolute.clicked.connect(self.add_revolute_func)
         self.add_waypoint.clicked.connect(self.add_waypoint_func)
         self.add_tip.clicked.connect(self.add_tip_func)
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
+
+        add_chain_dock = QDockWidget("Create Chain", self)
+        self.add_chain_widget = QWidget()
+        self.add_chain_widget.setLayout(add_chain_layout)
+        add_chain_dock.setWidget(self.add_chain_widget)
+
+        self.addDockWidget(Qt.RightDockWidgetArea, add_chain_dock)
 
         add_joints_dock = QDockWidget("Add Joints", self)
         self.add_joints_widget = QWidget()
@@ -615,13 +621,13 @@ class PointEditorWindow(QMainWindow):
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.select_joint_options = QComboBox()
         self.delete_joint_button = QPushButton("Delete Joint")
-        self.edit_joint_state_button = QPushButton("Edit Joint State")
+        # self.edit_joint_state_button = QPushButton("Edit Joint State")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         joint_layout = QVBoxLayout()
         joint_layout.addWidget(self.select_joint_options)
         joint_layout.addWidget(self.delete_joint_button)
-        joint_layout.addWidget(self.edit_joint_state_button)
+        # joint_layout.addWidget(self.edit_joint_state_button)
         joint_layout.addWidget(self.current_state_label)
 
         main_layout = QVBoxLayout()
@@ -634,14 +640,14 @@ class PointEditorWindow(QMainWindow):
         dock.setWidget(button_widget)
 
         self.delete_joint_button.clicked.connect(self.delete_joint)
-        self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
+        # self.edit_joint_state_button.clicked.connect(self.edit_joint_state)
 
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
 
         # ////////////////////////////////    SLIDERS    ///////////////////////////////////
-        slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
-        slider_joints_widget = QWidget() 
-        mainLayout = QVBoxLayout(slider_joints_widget)  
+        # slider_joints_dock = QDockWidget("Edit Joints (Sliders)", self)
+        # slider_joints_widget = QWidget() 
+        # mainLayout = QVBoxLayout(slider_joints_widget)  
 
         self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
         self.rotationSlider = QSlider(Qt.Horizontal)
@@ -675,28 +681,28 @@ class PointEditorWindow(QMainWindow):
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
         self.rotationInput.setPlaceholderText("Enter angle in degrees")
-        mainLayout.addWidget(self.rotationLabel)
+        main_layout.addWidget(self.rotationLabel)
         rotationLayout.addWidget(self.rotationSlider)
         rotationLayout.addWidget(self.rotationInput)  
 
         translationLayout = QHBoxLayout()
         self.translationInput = QLineEdit(self)
         self.translationInput.setPlaceholderText("Enter distance")
-        mainLayout.addWidget(self.translate_label)
+        main_layout.addWidget(self.translate_label)
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
         stateLayout = QHBoxLayout()
         self.stateInput = QLineEdit(self)
         self.stateInput.setPlaceholderText("Enter state")
-        mainLayout.addWidget(self.state_label)
+        main_layout.addWidget(self.state_label)
         stateLayout.addWidget(self.state_slider)
         stateLayout.addWidget(self.stateInput) 
 
         radiusLayout = QHBoxLayout()
         self.radiusInput = QLineEdit(self)
         self.radiusInput.setPlaceholderText("Enter radius")
-        mainLayout.addWidget(self.radius_label)
+        main_layout.addWidget(self.radius_label)
         radiusLayout.addWidget(self.radius_slider)
         radiusLayout.addWidget(self.radiusInput) 
 
@@ -705,10 +711,10 @@ class PointEditorWindow(QMainWindow):
         self.stateInput.textChanged.connect(self.adjust_state)
         self.radiusInput.textChanged.connect(self.adjust_radius)
 
-        mainLayout.addLayout(rotationLayout)
-        mainLayout.addLayout(translationLayout)
-        mainLayout.addLayout(stateLayout)
-        mainLayout.addLayout(radiusLayout)
+        main_layout.addLayout(rotationLayout)
+        main_layout.addLayout(translationLayout)
+        main_layout.addLayout(stateLayout)
+        main_layout.addLayout(radiusLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -720,10 +726,10 @@ class PointEditorWindow(QMainWindow):
 
         self.relativeSliderCheckbox.stateChanged.connect(self.relative_clicked)
 
-        mainLayout.addLayout(checkboxLayout)
+        main_layout.addLayout(checkboxLayout)
 
-        slider_joints_dock.setWidget(slider_joints_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
+        # slider_joints_dock.setWidget(slider_joints_widget)
+        # self.addDockWidget(Qt.RightDockWidgetArea, slider_joints_dock)
 
         self.oldRotVal = 0
         self.oldTransVal = 0
@@ -738,30 +744,14 @@ class PointEditorWindow(QMainWindow):
         self.stateInput.setDisabled(True)
         self.radiusInput.setDisabled(True)
 
-        # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
-        crease_dock = QDockWidget("Save Crease Pattern", self)
-        crease_dock.setAllowedAreas(Qt.RightDockWidgetArea)
-
-        crease_dock_widget = QWidget()
-        crease_dock_layout = QHBoxLayout(crease_dock_widget)
-
-        self.crease_pattern_name_input = QLineEdit()
-        self.crease_pattern_name_input.setPlaceholderText('Name')
-        crease_dock_layout.addWidget(self.crease_pattern_name_input)
-
-        self.save_crease_pattern_button = QPushButton('Save Crease Pattern')
-        self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
-        crease_dock_layout.addWidget(self.save_crease_pattern_button)  
-
-        crease_dock_widget.setLayout(crease_dock_layout)
-        crease_dock.setWidget(crease_dock_widget)
-        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
-
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
+
         self.controls_dock = QDockWidget("Joint Transformation", self)
         self.controls_options_widget = QWidget()
         self.controls_layout = QVBoxLayout()
 
+        self.control1_label = QLabel("Translate Joint")
+        self.control2_label = QLabel("Rotate Joint")
         self.control1 = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate Joint")
         self.control2 = ImageRadioButton("ui/rotate_unchecked.png", "ui/rotate_checked.png", "Rotate Joint")
         self.control1.setChecked(True)
@@ -769,7 +759,10 @@ class PointEditorWindow(QMainWindow):
         self.control1.toggled.connect(self.change_control_type)
         self.control2.toggled.connect(self.change_control_type)
     
+        self.controls_layout.addWidget(self.control1_label)
         self.controls_layout.addWidget(self.control1)
+
+        self.controls_layout.addWidget(self.control2_label)
         self.controls_layout.addWidget(self.control2)
         
         self.controls_options_widget.setLayout(self.controls_layout)
@@ -777,7 +770,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.controls_dock)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
-        self.camera_dock = QDockWidget("Camera controls", self)
+        self.camera_dock = QDockWidget("Camera Controls", self)
         self.camera_options_widget = QWidget()
         self.camera_layout = QVBoxLayout()
 
@@ -796,7 +789,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_dock)
 
         # ////////////////////////////////    SELECT JOINT AS FRAME    ///////////////////////////////////
-        self.frame_dock = QDockWidget("Control options", self)
+        self.frame_dock = QDockWidget("Control Options", self)
         self.frame_widget = QWidget()
         self.frame_layout = QVBoxLayout()
 
@@ -831,22 +824,41 @@ class PointEditorWindow(QMainWindow):
 
         self.frame_dock.setMaximumSize(300, 200)
 
+        # ////////////////////////////////    CREASE PATTERN   ///////////////////////////////////
+        crease_dock = QDockWidget("Export Options", self)
+        crease_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+
+        crease_dock_widget = QWidget()
+        crease_dock_layout = QHBoxLayout(crease_dock_widget)
+
+        self.crease_pattern_name_input = QLineEdit()
+        self.crease_pattern_name_input.setPlaceholderText('Name')
+        crease_dock_layout.addWidget(self.crease_pattern_name_input)
+
+        self.save_crease_pattern_button = QPushButton('Save Crease Pattern')
+        self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
+        crease_dock_layout.addWidget(self.save_crease_pattern_button)  
+
+        crease_dock_widget.setLayout(crease_dock_layout)
+        crease_dock.setWidget(crease_dock_widget)
+        self.addDockWidget(Qt.RightDockWidgetArea, crease_dock)
+
         # ////////////////////////////////    STL CONVERSION    ///////////////////////////////////
-        self.random_btn_dock = QDockWidget("Control options", self)
-        self.random_btn_widget = QWidget()
-        self.random_btn_layout = QVBoxLayout()
+        # self.random_btn_dock = QDockWidget("Export Options", self)
+        # self.random_btn_widget = QWidget()
+        # self.random_btn_layout = QVBoxLayout()
 
         self.random_btn = QPushButton("Generate STL")
         self.random_btn.clicked.connect(self.generate_stl)
-        self.random_btn_layout.addWidget(self.random_btn)
+        crease_dock_layout.addWidget(self.random_btn)
 
-        self.frame_layout.addWidget(self.random_btn)
+        crease_dock_layout.addWidget(self.random_btn)
         
-        self.random_btn_widget.setLayout(self.random_btn_layout)
-        self.random_btn_dock.setWidget(self.random_btn_widget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
+        # self.random_btn_widget.setLayout(self.random_btn_layout)
+        # self.random_btn_dock.setWidget(self.random_btn_widget)
+        # self.addDockWidget(Qt.LeftDockWidgetArea, self.random_btn_dock)
 
-        self.random_btn_dock.setMaximumSize(300, 100)
+        # self.random_btn_dock.setMaximumSize(300, 100)
 
         testJoint = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
         self.chain = KinematicChain(testJoint)
@@ -911,6 +923,12 @@ class PointEditorWindow(QMainWindow):
         self.update_joint()
 
     def init_key_bar(self):
+        # Create a spacer that will expand to push the content to the center
+        left_spacer = QWidget()
+        left_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.key_bar_layout.addWidget(left_spacer)
+
+        # Add instructions centered
         instructions = [
             "Middle Mouse Button: Pan Around",
             "W: Translate",
@@ -922,12 +940,13 @@ class PointEditorWindow(QMainWindow):
         ]
         for instruction in instructions:
             label = QLabel(instruction)
-            label.setAlignment(Qt.AlignCenter) 
+            label.setAlignment(Qt.AlignCenter)
             self.key_bar_layout.addWidget(label)
 
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.key_bar_layout.addWidget(spacer)
+        # Create a spacer that will expand to push the content to the center from the right side
+        right_spacer = QWidget()
+        right_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.key_bar_layout.addWidget(right_spacer)
 
     def relative_clicked(self):
         self.is_local = self.relativeSliderCheckbox.isChecked()
