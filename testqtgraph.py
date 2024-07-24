@@ -74,25 +74,29 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     app.exec_()
 
 def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
-    # Load the STL file
-    stl_mesh = Mesh.from_file(filepath)
+    try:
+        # Load the STL file
+        stl_mesh = Mesh.from_file(filepath)
 
-    # Extract vertices and faces from the loaded STL
-    vertices = stl_mesh.vectors.reshape(-1, 3)
-    faces = np.arange(vertices.shape[0]).reshape(-1, 3)
+        # Extract vertices and faces from the loaded STL
+        vertices = stl_mesh.vectors.reshape(-1, 3)
+        faces = np.arange(vertices.shape[0]).reshape(-1, 3)
 
-    matrix = pose.A#SE3.Trans(pose.t).A
-    #apply pose
+        matrix = pose.A#SE3.Trans(pose.t).A
+        #apply pose
 
-    homogenous_vertices = np.hstack((vertices, np.ones((vertices.shape[0], 1))))
-    #transformed_vertices = homogenous_vertices.dot(matrix.T)[:, :3]
-    transformed_vertices = (pose * vertices.T).T
+        homogenous_vertices = np.hstack((vertices, np.ones((vertices.shape[0], 1))))
+        #transformed_vertices = homogenous_vertices.dot(matrix.T)[:, :3]
+        transformed_vertices = (pose * vertices.T).T
 
-    # Create a mesh item and add it to the view
-    meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
-    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="normalColor", color=color, drawEdges=False)
-    mesh.setGLOptions('opaque')
-    view.addItem(mesh)
+        # Create a mesh item and add it to the view
+        meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
+        mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="normalColor", color=color, drawEdges=False)
+        mesh.setGLOptions('opaque')
+        view.addItem(mesh)
+
+    except Exception as e:
+        print(f"ERROR: {filepath} \n {e}")
 
 def plotPoint(view, position):
     plot = gl.GLScatterPlotItem(pos=np.array([position.t]), size=np.array([1]), color=np.array([[1,0,0,1]]),pxMode=False)

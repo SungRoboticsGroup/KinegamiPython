@@ -3,3 +3,4 @@ kinegamienv/
 scad_output/*
 scad/old/
 3d_output/*
+report.log

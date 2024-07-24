@@ -280,6 +280,18 @@ class CollisionCapsule:
         if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
             return False, None
 
+        minDistance, collisionPoint = self.collisionDistance(other, includeEnds=includeEnds)
+
+        extra = 0
+        if includeEnds:
+            extra = self.radius/100
+        
+        if minDistance <= self.radius + other.radius + extra:
+            return True, collisionPoint
+        else:
+            return False, None
+
+    def collisionDistance(self, other, includeEnds=False):
         segment1, ends1 = self.decomposeCapsule()
         segment2, ends2 = other.decomposeCapsule()
 
@@ -317,14 +329,7 @@ class CollisionCapsule:
                         minDistance = distance
                         collisionPoint = 0.5 * (p1 + p2)
 
-        extra = 0
-        if includeEnds:
-            extra = self.radius/100
-        
-        if minDistance <= self.radius + other.radius + extra:
-            return True, collisionPoint
-        else:
-            return False, None
+        return minDistance, collisionPoint
     # def collidesWith(self, other, includeEnds=False):
     #     #if too far away to collide, return false
     #     if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:

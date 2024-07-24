@@ -24,6 +24,7 @@ from geometryHelpers import *
 from pyswarm import pso
 import pyswarms as ps
 import logging
+import tensorflow as tf
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('pyswarms')
@@ -431,6 +432,7 @@ class KinematicTree(Generic[J]):
                 else:
                     print(f"Skipping link between joint {parentIndex} and joint {i}. Extending joint {parentIndex} by {self.Links[i].path.tMag} instead")
                     source.extendSegment(self.Links[i].path.tMag)
+                    return None
 
         sourceParameters = source.printParameters
 
@@ -1247,7 +1249,7 @@ class KinematicTree(Generic[J]):
         return tree               
 
     def squaredOptimize(self, showSteps=False):
-        if showSteps:
+        if showSteps and isinstance(self.Joints[0], OrigamiJoint):
             self.show()
 
         start = time.time()
@@ -1310,13 +1312,32 @@ class KinematicTree(Generic[J]):
                 else:
                     tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, guess=False)
             
-            if showSteps:
+            if showSteps and isinstance(self.Joints[0], OrigamiJoint):
                 tree.show()
 
             print(f"Optimized chain ending at {i} in {time.time() - start2}s")
 
         print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
         
+        return tree
+
+    def optimizeJointDifferentiable(self, index):
+        
+        @tf.custom_gradient
+        def objective(params):
+            #assume params is [translation1, rotation1, ]..etc. (all joints for now)
+            
+            def grad(dx):
+                pass
+            
+    def deterministicOptimize(self):
+        tree = copy.deepcopy(self)
+        for i in range(0, len(self.Joints)):
+            print(f"OPTIMIZING JOINT {i}")
+            start = time.time()
+            tree = tree.optimizeJointDifferentiable(i)
+            print(f"took {time.time() - start}")
+
         return tree
     
     def save(self, filename: str):
