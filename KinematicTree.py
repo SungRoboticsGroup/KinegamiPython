@@ -1321,22 +1321,112 @@ class KinematicTree(Generic[J]):
         
         return tree
 
-    def optimizeJointDifferentiable(self, index):
-        
+    def getChangedTree(self, params):
+        tree = copy.deepcopy(self)
+        #assume params is [translation1, rotation1, ]..etc.
+        jointsToMove = list(range(1, len(self.Joints)))
+        indices = [-1]
+        for i in range(1, len(self.Joints)):
+            if isWaypoint(self.Joints[i]):
+                indices.append(indices[-1] + 6)
+            else:
+                indices.append(indices[-1] + 2)
+
+        ctr = 0
+        while len(jointsToMove) > 0:
+            idx = jointsToMove[0]
+            jointsToMove.remove(idx)
+
+            if ctr > len(jointsToMove):
+                return None
+            if isWaypoint(self.Joints[idx]):
+                try:
+                    if not tree.transformJoint(idx, SE3.Trans(params[indices[idx]:indices[idx] + 3]) @ SE3.Rz(params[indices[idx] + 3]) @ SE3.Ry(params[indices[idx] + 4]) @ SE3.Rz(params[indices[idx] + 5]),  propogate=False, safe=False, relative=False):
+                        ctr += 1
+                        jointsToMove.append(idx)
+                        continue
+                except:
+                    ctr += 1
+                    jointsToMove.append(idx)
+                    continue                
+            else:
+                try:
+                    if not tree.transformJoint(idx, SE3.Trans([0,0,params[indices[idx]]]) @ SE3.Rz(params[indices[idx] + 1]), propogate=False, safe=False, relative=True):
+                        ctr += 1
+                        jointsToMove.append(idx) 
+                        continue
+                except:
+                    ctr += 1
+                    jointsToMove.append(idx) 
+                    continue
+
+            ctr = 0
+
+            return tree
+    
+    def optimizeJointsDifferentiable(self):
+        def linkLoss(t, link):
+            d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * 0#curveLossFactor#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
+            return t.Links[index].path.length*2  + t.detectCollisions(specificJointIndices=[index], includeEnds=True) * 1000 + d# + curvinessOfLink(t.Links[index])
+
+        def calcLoss(tree):
+            loss = 1000000
+
+            if not (tree is None):
+                loss = tree.detectCollisions(includeEnds=True)*1000 + np.sum(np.array([link.path.length for link in tree.Links]))
+            return loss
+
         @tf.custom_gradient
         def objective(params):
-            #assume params is [translation1, rotation1, ]..etc. (all joints for now)
             
+            params = params.numpy()
+
+            tree = self.getChangedTree(params)
+            loss = calcLoss(tree)
             def grad(dx):
-                pass
+                gradient = np.zeros(len(params))
+                for i in range(0, len(params)):
+                    newParams = np.zeros(len(params))
+                    newParams[i] = params[i]
+                    tree2 = self.getChangedTree(newParams)
+                    gradient[i] = calcLoss(tree2) - loss
+
+                return gradient * dx
+
+            return loss, grad
+
+        numParams = 0
+        for i in range(1, len(self.Joints)):
+            if isWaypoint(self.Joints[i]):
+                numParams += 6
+            else:
+                numParams += 2
+
+        params = tf.Variable(tf.random.normal([numParams]))
+
+        optimizer = tf.optimizers.SGD(learning_rate=0.01)
+
+        for step in range(100):
+            start = time.time()
+            with tf.GradientTape() as tape:
+                # Compute the loss
+                loss = objective(params)
+            
+            # Compute gradients with respect to the variable tensor
+            gradients = tape.gradient(loss, [params])
+            
+            # Apply gradients to update the parameters
+            optimizer.apply_gradients(zip(gradients, [params]))
+            
+            # Print the current loss and parameters
+            print(f"Step {step}: Loss = {loss.numpy()}, Params = {params.numpy()}, Time:{time.time() - start}")
+
+        return self.getChangedTree(params.numpy())
+        
             
     def deterministicOptimize(self):
         tree = copy.deepcopy(self)
-        for i in range(0, len(self.Joints)):
-            print(f"OPTIMIZING JOINT {i}")
-            start = time.time()
-            tree = tree.optimizeJointDifferentiable(i)
-            print(f"took {time.time() - start}")
+        tree = tree.optimizeJointsDifferentiable()
 
         return tree
     
