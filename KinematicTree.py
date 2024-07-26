@@ -1364,6 +1364,41 @@ class KinematicTree(Generic[J]):
 
             return tree
     
+    def optimizePSO(self):
+        def calcLoss(tree):
+            loss = 1000000
+
+            if not (tree is None):
+                loss = tree.detectCollisions(includeEnds=True)*1000 + np.sum(np.array([link.path.length for link in tree.Links]))
+            return loss
+
+        def objective(params):
+            tree = self.getChangedTree(params)
+            return calcLoss(tree)
+        
+        def batch_objective_function(X):
+            return np.array([objective(x) for x in X])
+
+        numParams = 0
+        for i in range(1, len(self.Joints)):
+            if isWaypoint(self.Joints[i]):
+                numParams += 6
+            else:
+                numParams += 2
+
+        n_particles = 36
+
+        init_pos = np.tile(np.array([0]*numParams, dtype='float64'), (n_particles,1))
+        optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=numParams,options={'c1':0.5, 'c2':0.7, 'w':0.8},init_pos=init_pos)
+        # result = minimize(objective, minResult.x, method="Nelder-Mead", bounds=bounds, options={
+        #     'maxiter':maxiter,
+        #     'ftol':1e-2,
+        # })
+        loss, result = optimizer.optimize(batch_objective_function, iters=100,verbose=True)
+
+        return self.getChangedTree(result)
+
+
     def optimizeJointsDifferentiable(self):
         def linkLoss(t, link):
             d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * 0#curveLossFactor#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
@@ -1401,12 +1436,11 @@ class KinematicTree(Generic[J]):
                 numParams += 6
             else:
                 numParams += 2
-
         params = tf.Variable(tf.random.normal([numParams]))
 
         optimizer = tf.optimizers.SGD(learning_rate=0.01)
 
-        for step in range(100):
+        for step in range(1000):
             start = time.time()
             with tf.GradientTape() as tape:
                 # Compute the loss
@@ -1419,7 +1453,7 @@ class KinematicTree(Generic[J]):
             optimizer.apply_gradients(zip(gradients, [params]))
             
             # Print the current loss and parameters
-            print(f"Step {step}: Loss = {loss.numpy()}, Params = {params.numpy()}, Time:{time.time() - start}")
+            print(f"Step {step}: Loss = {loss.numpy()}, Time:{time.time() - start}")
 
         return self.getChangedTree(params.numpy())
         

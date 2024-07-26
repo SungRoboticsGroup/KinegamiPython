@@ -2100,3 +2100,43 @@ ValueError: User-defined init_pos is out of bounds.
 2024-07-25 14:19:46,171 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
 2024-07-25 14:20:23,118 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
 2024-07-25 14:21:33,107 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 14:22:12,627 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 16:07:51,565 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 16:08:26,085 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 16:10:39,026 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 16:11:50,857 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-25 16:13:34,007 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:14:56,867 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:24:54,376 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:28:33,653 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:43:41,814 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:43:42,370 - pyswarms.single.global_best - INFO - Optimize for 100 iters with {'c1': 0.7, 'c2': 0.5, 'w': 0.7}
+2024-07-26 12:44:18,424 - pyswarms.single.global_best - INFO - Optimization finished | best cost: 312.24227681243525, best pos: [0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
+ 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+2024-07-26 12:44:48,475 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:44:49,014 - pyswarms.single.global_best - INFO - Optimize for 100 iters with {'c1': 0.7, 'c2': 0.5, 'w': 0.7}
+2024-07-26 12:45:24,669 - pyswarms.single.global_best - INFO - Optimization finished | best cost: 312.24227681243525, best pos: [0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.
+ 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+2024-07-26 12:47:37,664 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 12:47:38,211 - pyswarms.single.global_best - INFO - Optimize for 100 iters with {'c1': 0.5, 'c2': 0.5, 'w': 0.3}
+2024-07-26 13:17:39,421 - pyswarms.single.global_best - INFO - Optimization finished | best cost: 312.09197407132274, best pos: [-0.01246602 -0.10666293 -0.02018228 -0.00454599  0.01413384 -0.00314893
+ -0.01458186 -0.02656812  0.06905484  0.01373025  0.01904315  0.03101402
+ -0.03072247 -0.00329024 -0.01032128 -0.01485663  0.01754657 -0.04065917
+  0.0102474  -0.0039492   0.06660133 -0.01958102  0.01249005  0.04263078
+ -0.01440645 -0.0577993   0.04829457 -0.02454979 -0.00660717 -0.0403999
+ -0.05226939  0.01736626  0.01817676  0.00239095 -0.00184048 -0.02099409
+ -0.03766726  0.06180609  0.01092219  0.00392428]
+2024-07-26 13:27:35,614 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 13:27:36,158 - pyswarms.single.global_best - INFO - Optimize for 100 iters with {'c1': 0.5, 'c2': 0.5, 'w': 0.7}
+2024-07-26 13:56:58,586 - pyswarms.single.global_best - INFO - Optimization finished | best cost: 306.3861798382748, best pos: [-0.44788438 -6.70983011  0.0509057  -1.09753649  0.1215896  -0.51313822
+  0.1479152  -0.86274685 -0.62345688 -0.19395134 -0.57830904 -0.24304334
+ -0.27006803 -0.90821733  0.1812286  -0.41047213 -0.52530649  0.99293169
+ -0.54329291  0.19921237 -1.24913524 -0.08806379 -0.61599963 -0.18779439
+ -1.21340528 -1.10078374  0.15935529 -0.56406134 -0.84041551 -1.02420436
+ -0.0495     -0.80207718 -1.30094626  0.43776755 -1.33153581 -0.23504332
+  0.21622857 -0.70397865  0.07892998 -0.55515062]
+2024-07-26 13:57:15,690 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 14:06:13,673 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 14:06:27,581 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 14:06:41,268 - OpenGL.acceleratesupport - INFO - No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+2024-07-26 14:06:41,796 - pyswarms.single.global_best - INFO - Optimize for 100 iters with {'c1': 0.5, 'c2': 0.7, 'w': 0.8}

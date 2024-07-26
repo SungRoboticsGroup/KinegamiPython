@@ -8,6 +8,6 @@ import time
 
 tree = loadKinematicTree("algorithmHand")
 
-tree2 = tree.deterministicOptimize()
+tree2 = tree.optimizePSO()
 
 tree2.show()
