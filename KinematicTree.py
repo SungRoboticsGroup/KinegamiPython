@@ -1325,7 +1325,9 @@ class KinematicTree(Generic[J]):
         tree = copy.deepcopy(self)
         #assume params is [translation1, rotation1, ]..etc.
         jointsToMove = list(range(1, len(self.Joints)))
-        indices = [-1]
+        indices = [-2]
+        if isWaypoint(self.Joints[1]):
+            indices = [-6]
         for i in range(1, len(self.Joints)):
             if isWaypoint(self.Joints[i]):
                 indices.append(indices[-1] + 6)
@@ -1362,8 +1364,8 @@ class KinematicTree(Generic[J]):
 
             ctr = 0
 
-            return tree
-    
+        return tree
+
     def optimizePSO(self):
         def calcLoss(tree):
             loss = 1000000
@@ -1398,8 +1400,152 @@ class KinematicTree(Generic[J]):
 
         return self.getChangedTree(result)
 
+    def getChangedTree2(self, params):
+        tree = copy.deepcopy(self)
+        #assume params is [translation1, rotation1, ]..etc.
+        jointsToMove = list(range(1, len(self.Joints)))
+
+        ctr = 0
+        while len(jointsToMove) > 0:
+            idx = jointsToMove[0]
+            jointsToMove.remove(idx)
+
+            if ctr > len(jointsToMove):
+                return None
+
+            i = idx - 1
+            try:
+                if not tree.transformJoint(idx, SE3.Trans([0,0,params[i*2]]) @ SE3.Rz(params[i*2 + 1]), propogate=False, safe=False, relative=True):
+                    ctr += 1
+                    jointsToMove.append(idx) 
+                    continue
+            except:
+                ctr += 1
+                jointsToMove.append(idx) 
+                continue
+
+            ctr = 0
+
+        return tree
 
     def optimizeJointsDifferentiable(self):
+        numParams = 0
+        for i in range(1, len(self.Joints)):
+            # if isWaypoint(self.Joints[i]):
+            #     numParams += 6
+            # else:
+            #     numParams += 2
+            numParams += 2
+        params = tf.Variable(tf.random.normal([numParams]))
+
+        poses = []
+        #TODO:calc distal dubins frame instead of bringing proximal frames closer
+        for i in range(0, len(self.Joints)):
+            #position
+            poses.append(self.Joints[i].ProximalDubinsFrame().t[0])
+            poses.append(self.Joints[i].ProximalDubinsFrame().t[1])
+            poses.append(self.Joints[i].ProximalDubinsFrame().t[2])
+            #z axis dir
+            poses.append(self.Joints[i].ProximalDubinsFrame().a[0])
+            poses.append(self.Joints[i].ProximalDubinsFrame().a[1])
+            poses.append(self.Joints[i].ProximalDubinsFrame().a[2])
+        
+        initialPositions = tf.constant(poses, dtype=tf.float32)
+
+        proximalRotations = []
+        for i in range(0, len(self.Joints)):
+            proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[0])
+            proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[1])
+            proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[2])
+        initialProximalRotations = tf.constant(proximalRotations,dtype=tf.float32)
+
+        distalRotations = []
+        for i in range(0, len(self.Joints)):
+            distalRotations.append(self.Joints[i].DistalDubinsFrame().n[0])
+            distalRotations.append(self.Joints[i].DistalDubinsFrame().n[1])
+            distalRotations.append(self.Joints[i].DistalDubinsFrame().n[2])
+        initialDistalRotations = tf.constant(distalRotations,dtype=tf.float32)
+
+        def jointDistance(pos1, pos2):
+            return tf.sqrt(tf.reduce_sum(tf.square(pos1 - pos2)))
+        def translateJoint(p, r, trans, rot):
+            return p + trans*r
+        def rotateVector(u, zaxis, theta):
+            term1 = u * tf.cos(theta)
+            term2 = tf.linalg.cross(zaxis, u) * tf.sin(theta)
+            term3 = zaxis * tf.tensordot(zaxis, u, 1) * (1 - tf.cos(theta))
+
+            return term1 + term2 + term3
+        def angleToAlign(u, v, t):
+            #rotate u about v to approach t
+            A = tf.tensordot(u, t, 1) - tf.tensordot(v, t, 1) * tf.tensordot(v, u, 1)
+            B = tf.tensordot(tf.linalg.cross(v, u), t, 1)
+            
+            # Compute optimal theta
+            theta = tf.atan2(B, A)
+            
+            return theta
+
+        def objective(parameters):
+            distance = 0
+            angleOff = 0
+
+            idx = 0
+            for jointIndex in range(1, len(self.Joints)):
+                parentIndex = self.Parents[jointIndex]
+                i = jointIndex - 1
+                j = parentIndex - 1
+                pos = initialPositions[jointIndex*6:jointIndex*6+6]
+                distance += jointDistance(translateJoint(initialPositions[parentIndex*6:parentIndex*6+3], initialPositions[parentIndex*6 + 3:parentIndex*6+6], parameters[j*2], parameters[j*2 + 1]), translateJoint(pos[0:3], pos[3:6], parameters[i*2], parameters[i*2+1]))
+                
+                desiredOrientation = rotateVector(initialDistalRotations[parentIndex*3:parentIndex*3+3], initialPositions[parentIndex*6 + 3:parentIndex*6+6],parameters[j*2 + 1])
+                desiredAngle = angleToAlign(initialProximalRotations[jointIndex*3:jointIndex*3 + 3], initialPositions[jointIndex*6 + 3:jointIndex*6+6], desiredOrientation)
+                
+                angleOff += ((parameters[i*2 + 1] - desiredAngle) * 2) ** 2
+
+            return distance + angleOff
+
+        optimizer = tf.optimizers.SGD(learning_rate=0.01)
+
+        newTree = copy.deepcopy(self)
+
+        for step in range(10000):
+            start = time.time()
+            with tf.GradientTape() as tape:
+                # Compute the loss
+                loss = objective(params)
+            
+            # Compute gradients with respect to the variable tensor
+            gradients = tape.gradient(loss, [params])
+
+            #print(gradients)
+            
+            # Apply gradients to update the parameters
+            optimizer.apply_gradients(zip(gradients, [params]))
+
+            if step % 100 == 0:
+                best = self.getChangedTree2(params.numpy())
+                if best != None:
+                    newTree = best
+                    print("NEW BEST")
+            
+            # Print the current loss and parameters
+            print(f"Step {step}: Loss = {loss.numpy()}, Time:{time.time() - start}")
+
+        def calcLoss(tree):
+            loss = 1000000
+
+            if not (tree is None):
+                loss = np.sum(np.array([link.path.length for link in tree.Links]))
+            return loss
+
+        print(f"ORIGINAL: {calcLoss(self)}, NEW: {calcLoss(newTree)}")
+        
+        return newTree
+            
+
+                
+    def optimizeJointsDifferentiable2(self):
         def linkLoss(t, link):
             d = (t.Links[index].path.theta1 * t.r + t.Links[index].path.theta2 * t.r) * 0#curveLossFactor#np.linalg.norm(t.Joints[index].DistalDubinsFrame() - t.Links[index].StartDubinsPose) / t.r
             return t.Links[index].path.length*2  + t.detectCollisions(specificJointIndices=[index], includeEnds=True) * 1000 + d# + curvinessOfLink(t.Links[index])
@@ -1422,7 +1568,7 @@ class KinematicTree(Generic[J]):
                 gradient = np.zeros(len(params))
                 for i in range(0, len(params)):
                     newParams = np.zeros(len(params))
-                    newParams[i] = params[i]
+                    newParams[i] = params[i] * 0.01
                     tree2 = self.getChangedTree(newParams)
                     gradient[i] = calcLoss(tree2) - loss
 
@@ -1440,7 +1586,7 @@ class KinematicTree(Generic[J]):
 
         optimizer = tf.optimizers.SGD(learning_rate=0.01)
 
-        for step in range(1000):
+        for step in range(200):
             start = time.time()
             with tf.GradientTape() as tape:
                 # Compute the loss
