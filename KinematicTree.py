@@ -1400,35 +1400,9 @@ class KinematicTree(Generic[J]):
 
         return self.getChangedTree(result)
 
-    def getChangedTree2(self, params):
-        tree = copy.deepcopy(self)
-        #assume params is [translation1, rotation1, ]..etc.
-        jointsToMove = list(range(1, len(self.Joints)))
-
-        ctr = 0
-        while len(jointsToMove) > 0:
-            idx = jointsToMove[0]
-            jointsToMove.remove(idx)
-
-            if ctr > len(jointsToMove):
-                return None
-
-            i = idx - 1
-            try:
-                if not tree.transformJoint(idx, SE3.Trans([0,0,params[i*2]]) @ SE3.Rz(params[i*2 + 1]), propogate=False, safe=False, relative=True):
-                    ctr += 1
-                    jointsToMove.append(idx) 
-                    continue
-            except:
-                ctr += 1
-                jointsToMove.append(idx) 
-                continue
-
-            ctr = 0
-
-        return tree
 
     def optimizeJointsDifferentiable(self):
+
         numParams = 0
         for i in range(1, len(self.Joints)):
             # if isWaypoint(self.Joints[i]):
@@ -1436,35 +1410,35 @@ class KinematicTree(Generic[J]):
             # else:
             #     numParams += 2
             numParams += 2
-        params = tf.Variable(tf.random.normal([numParams]))
+        params = tf.Variable(tf.random.normal([numParams], dtype=tf.float64))
 
         poses = []
         #TODO:calc distal dubins frame instead of bringing proximal frames closer
         for i in range(0, len(self.Joints)):
             #position
-            poses.append(self.Joints[i].ProximalDubinsFrame().t[0])
-            poses.append(self.Joints[i].ProximalDubinsFrame().t[1])
-            poses.append(self.Joints[i].ProximalDubinsFrame().t[2])
+            poses.append(self.Joints[i].Pose.t[0])
+            poses.append(self.Joints[i].Pose.t[1])
+            poses.append(self.Joints[i].Pose.t[2])
             #z axis dir
-            poses.append(self.Joints[i].ProximalDubinsFrame().a[0])
-            poses.append(self.Joints[i].ProximalDubinsFrame().a[1])
-            poses.append(self.Joints[i].ProximalDubinsFrame().a[2])
+            poses.append(self.Joints[i].Pose.a[0])
+            poses.append(self.Joints[i].Pose.a[1])
+            poses.append(self.Joints[i].Pose.a[2])
         
-        initialPositions = tf.constant(poses, dtype=tf.float32)
+        initialPositions = tf.constant(poses, dtype=tf.float64)
 
         proximalRotations = []
         for i in range(0, len(self.Joints)):
             proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[0])
             proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[1])
             proximalRotations.append(self.Joints[i].ProximalDubinsFrame().n[2])
-        initialProximalRotations = tf.constant(proximalRotations,dtype=tf.float32)
+        initialProximalRotations = tf.constant(proximalRotations,dtype=tf.float64)
 
         distalRotations = []
         for i in range(0, len(self.Joints)):
             distalRotations.append(self.Joints[i].DistalDubinsFrame().n[0])
             distalRotations.append(self.Joints[i].DistalDubinsFrame().n[1])
             distalRotations.append(self.Joints[i].DistalDubinsFrame().n[2])
-        initialDistalRotations = tf.constant(distalRotations,dtype=tf.float32)
+        initialDistalRotations = tf.constant(distalRotations,dtype=tf.float64)
 
         def jointDistance(pos1, pos2):
             return tf.sqrt(tf.reduce_sum(tf.square(pos1 - pos2)))
@@ -1509,7 +1483,51 @@ class KinematicTree(Generic[J]):
 
         newTree = copy.deepcopy(self)
 
-        for step in range(10000):
+        def getChangedTree2(params):
+            tree = copy.deepcopy(self)
+            #assume params is [translation1, rotation1, ]..etc.
+            jointsToMove = list(range(1, len(self.Joints)))
+
+            ctr = 0
+            while len(jointsToMove) > 0:
+                idx = jointsToMove[0]
+                jointsToMove.remove(idx)
+
+                if ctr > len(jointsToMove):
+                    return None
+
+                i = idx - 1
+                
+                try:
+                    # print(idx, tree.Joints[idx].Pose.t)
+                    # print(idx, initialPositions[idx*6:idx*6+3].numpy())
+                    # print(idx, tree.Joints[idx].Pose.a)
+                    # print(idx, initialPositions[idx*6+3:idx*6+6].numpy())
+                    # print(idx, translateJoint(tree.Joints[idx].Pose.t, tree.Joints[idx].Pose.a, params[i*2], None))
+                    if not tree.transformJoint(idx, SE3.Trans([0,0,params[i*2]]) @ SE3.Rz(params[i*2 + 1]), propogate=False, safe=False, relative=True):
+                        ctr += 1
+                        jointsToMove.append(idx) 
+                        continue
+                    # print(idx, tree.Joints[idx].Pose.t)
+                    # print(idx, translateJoint(initialPositions[idx*6:idx*6+3], initialPositions[idx*6+3:idx*6+6], params[i*2], None).numpy())
+                except:
+                    ctr += 1
+                    jointsToMove.append(idx) 
+                    continue
+                ctr = 0
+            # steps = 250
+            # for _ in range(steps):
+            #     for idx in range(1, len(self.Joints)):
+            #         i = idx - 1
+            #         try:
+            #             if not tree.transformJoint(idx, SE3.Trans([0,0,params[i*2]/steps]) @ SE3.Rz(params[i*2 + 1]/steps), propogate=False, safe=False, relative=True):
+            #                 return None
+            #         except:
+            #             return None
+
+            return tree
+
+        for step in range(10001):
             start = time.time()
             with tf.GradientTape() as tape:
                 # Compute the loss
@@ -1524,7 +1542,12 @@ class KinematicTree(Generic[J]):
             optimizer.apply_gradients(zip(gradients, [params]))
 
             if step % 100 == 0:
-                best = self.getChangedTree2(params.numpy())
+                best = getChangedTree2(params.numpy())
+
+                # for idx in range(1, len(best.Joints)):
+                #     i = idx - 1
+                #     print(np.allclose(best.Joints[idx].Pose.t, translateJoint(initialPositions[idx*6:idx*6+3], initialPositions[idx*6+3:idx*6+6], params[i*2], None).numpy(), rtol=1e-05, atol=1e-08))
+                
                 if best != None:
                     newTree = best
                     print("NEW BEST")
@@ -1532,6 +1555,7 @@ class KinematicTree(Generic[J]):
             # Print the current loss and parameters
             print(f"Step {step}: Loss = {loss.numpy()}, Time:{time.time() - start}")
 
+   
         def calcLoss(tree):
             loss = 1000000
 
@@ -1540,7 +1564,7 @@ class KinematicTree(Generic[J]):
             return loss
 
         print(f"ORIGINAL: {calcLoss(self)}, NEW: {calcLoss(newTree)}")
-        
+  
         return newTree
             
 
