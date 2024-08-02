@@ -432,7 +432,7 @@ class KinematicTree(Generic[J]):
                 else:
                     print(f"Skipping link between joint {parentIndex} and joint {i}. Extending joint {parentIndex} by {self.Links[i].path.tMag} instead")
                     source.extendSegment(self.Links[i].path.tMag)
-                    return None
+                    #return None
 
         sourceParameters = source.printParameters
 
@@ -1470,12 +1470,13 @@ class KinematicTree(Generic[J]):
                 i = jointIndex - 1
                 j = parentIndex - 1
                 pos = initialPositions[jointIndex*6:jointIndex*6+6]
-                distance += jointDistance(translateJoint(initialPositions[parentIndex*6:parentIndex*6+3], initialPositions[parentIndex*6 + 3:parentIndex*6+6], parameters[j*2], parameters[j*2 + 1]), translateJoint(pos[0:3], pos[3:6], parameters[i*2], parameters[i*2+1]))
-                
+                dist = jointDistance(translateJoint(initialPositions[parentIndex*6:parentIndex*6+3], initialPositions[parentIndex*6 + 3:parentIndex*6+6], parameters[j*2], parameters[j*2 + 1]), translateJoint(pos[0:3], pos[3:6], parameters[i*2], parameters[i*2+1]))
+                distance += dist ** 2
+
                 desiredOrientation = rotateVector(initialDistalRotations[parentIndex*3:parentIndex*3+3], initialPositions[parentIndex*6 + 3:parentIndex*6+6],parameters[j*2 + 1])
                 desiredAngle = angleToAlign(initialProximalRotations[jointIndex*3:jointIndex*3 + 3], initialPositions[jointIndex*6 + 3:jointIndex*6+6], desiredOrientation)
                 
-                angleOff += ((parameters[i*2 + 1] - desiredAngle) * 2) ** 2
+                angleOff += (parameters[i*2 + 1] - desiredAngle) ** 2
 
             return distance + angleOff
 
@@ -1527,7 +1528,7 @@ class KinematicTree(Generic[J]):
 
             return tree
 
-        for step in range(10001):
+        for step in range(2501):
             start = time.time()
             with tf.GradientTape() as tape:
                 # Compute the loss

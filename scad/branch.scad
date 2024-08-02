@@ -203,7 +203,7 @@ module CSC_REMOVE_OVERLAP(_r, _t1, _ta1, _tr1, _h, _t2, _ta2, _tr2, next_hole_ra
         translate([0, 0, _h])
         translate([pos2*cos(_t2),pos2*sin(_t2),_tr2*sin(_ta2)])
         rotate([0,-_ta2,_t2]) {
-            cylinder(h=999999, r=_r + tolerance, $fn=fn);
+//            cylinder(h=999999, r=_r + tolerance, $fn=fn);
         }
     }
 }
