@@ -27,34 +27,34 @@ palm = tree.addJoint(0, palmJoint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-thumb0Joint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(4*multiplier,0,0)@SE3.Rx(3*np.pi/4), screwRadius)
+thumb0Joint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(3*multiplier,0,0)@SE3.Rx(np.pi/2), screwRadius)
 thumb0 = tree.addJoint(palm, thumb0Joint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 thumb1 = tree.addJoint(thumb0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                                           SE3.Trans(4*multiplier,0,0), screwRadius),
+            SE3.Trans(4*multiplier,0,0)@SE3.Rx(np.pi/4), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 thumbEnd = tree.addJoint(thumb1, PrintedTip(r, 
-        SE3.Trans(4*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
+            SE3.Trans(4*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 
 pointer1 = tree.addJoint(0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-            SE3.Trans(0,0,8*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi), screwRadius),
+            SE3.Trans(0,0,5*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 pointer2 = tree.addJoint(pointer1, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
-                        SE3.Trans(4*multiplier,0,0), screwRadius),
+                        SE3.Trans(5*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
 pointerEnd = tree.addJoint(pointer2, PrintedTip(r, 
-        SE3.Trans(3*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
+        SE3.Trans(4*multiplier,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
@@ -91,29 +91,29 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
 #     tree.setJointState(pointer2, np.pi/4.25)
 
 
-# Cylindrical grasp
-tree.setJointState(middle0, np.pi/4)
-tree.setJointState(palm, -np.pi/2)
-for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
-    tree.setJointState(i, 0)
-    tree.setJointState(middle1, np.pi/4)
-    tree.setJointState(middle2, np.pi/3.75)
-    tree.setJointState(thumb0, -np.pi/4)
-    tree.setJointState(thumb1, np.pi/2)
-    tree.setJointState(pointer1, np.pi/2)
-    tree.setJointState(pointer2, np.pi/4)
+# # Cylindrical grasp
+# tree.setJointState(middle0, np.pi/2)
+# tree.setJointState(palm, np.pi/2)
+# for i in [middle1, middle2, pointer1, pointer2, thumb0, thumb1]:
+#     tree.setJointState(i, 0)
+#     tree.setJointState(middle1, np.pi/4)
+#     tree.setJointState(middle2, np.pi/3.75)
+#     tree.setJointState(thumb0, -np.pi/2)
+#     tree.setJointState(thumb1, -np.pi/4)
+#     tree.setJointState(pointer1, np.pi/2)
+#     tree.setJointState(pointer2, np.pi/4)
 
 # # Pinch grasp
 # tree.setJointState(middle0, np.pi/8)
-# tree.setJointState(palm, -np.pi/8)
+# tree.setJointState(palm, -np.pi/2)
 # for i in [middle2, pointer2, thumb1]:
 #     tree.setJointState(i, 0)
-#     tree.setJointState(middle1, np.pi/g)
+#     tree.setJointState(middle1, np.pi/2)
 #     tree.setJointState(middle2, 0)
 #     tree.setJointState(thumb0, -np.pi/2)
 #     tree.setJointState(thumb1, 0)
-#     tree.setJointState(pointer1, np.pi/2)
-#     tree.setJointState(pointer2, np.pi/8)
+#     tree.setJointState(pointer1, np.pi/2.75)
+#     tree.setJointState(pointer2, np.pi/4)
 
 
 plotPrintedTree(tree, "manualHandPrinted")
