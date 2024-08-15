@@ -25,6 +25,7 @@ from pyswarm import pso
 import pyswarms as ps
 import logging
 import tensorflow as tf
+import collections
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('pyswarms')
@@ -422,6 +423,8 @@ class KinematicTree(Generic[J]):
         name += "." + fileFormat
         
         source = self.Joints[parentIndex]
+
+        children = self.Children[parentIndex]
         params = np.round(self.branchingParametersFrom(parentIndex), 4)
 
         #check link min length        
@@ -503,19 +506,42 @@ class KinematicTree(Generic[J]):
 
         print(f"Printing modules for {folder[:-1]}...")
 
+        tree = copy.deepcopy(self)
+        #fix issue with overlapping waypoints
+        # for i in range(0, len(self.Joints)):
+        #     currentFrame = tree.Joints[i].DistalDubinsFrame().t
+
+        #     while True:
+        #         children = tree.Children[i].copy()
+        #         for j in range(0, len(children)):
+        #             if isWaypoint(tree.Joints[children[j]]) and np.allclose(tree.Joints[children[j]].ProximalDubinsFrame().t, currentFrame, rtol=1e-05, atol=1e-08):
+        #                 tree.Children[i].remove(children[j])
+        #                 for child in tree.Children[children[j]]:
+        #                     tree.Parents[child] = i
+        #                 tree.Children[i] += tree.Children[children[j]]
+        #                 tree.Children[children[j]] = []
+                
+        #         if collections.Counter(children) == collections.Counter(tree.Children[i]):
+        #             break
+
+        # for i in range(0, len(tree.Joints)):
+        #     tree.transformJoint(i, SE3(), recomputeLinkPath=True, safe=False)
+
+        # print("Done shrinking tree.")
+
         #export all the links
-        for i in range(0,len(self.Children)):
+        for i in range(0,len(tree.Children)):
             start = time.time()
-            if len(self.Children[i]) > 0:
-                self.exportLink3DFile(i,folder,fileFormat)
-            print(f"Finished link {i}/{len(self.Children) - 1}, Time: {time.time() - start} \r")
+            if len(tree.Children[i]) > 0:
+                tree.exportLink3DFile(i,folder,fileFormat)
+            print(f"Finished link {i}/{len(tree.Children) - 1}, Time: {time.time() - start} \r")
         
         #export all the joints
-        for i in range(0,len(self.Joints)):
+        for i in range(0,len(tree.Joints)):
             start = time.time()
-            if not isinstance(self.Joints[i],PrintedWaypoint):
-                self.Joints[i].export3DFile(i,folder,fileFormat)
-            print(f"Finished joint {i}/{len(self.Joints) - 1}, Time: {time.time() - start} \r")
+            if not isinstance(tree.Joints[i],PrintedWaypoint):
+                tree.Joints[i].export3DFile(i,folder,fileFormat)
+            print(f"Finished joint {i}/{len(tree.Joints) - 1}, Time: {time.time() - start} \r")
         
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
@@ -998,7 +1024,7 @@ class KinematicTree(Generic[J]):
         else:
             raise Exception(f"Could not optimize joint {jointIndex} and previous waypoints")
 
-    def optimizeJointPlacement(self, index, maxiter=35, tol=1e-2, curveLossFactor=2, guess=True):
+    def optimizeJointPlacement(self, index, maxiter=35, tol=1e-2, curveLossFactor=2, showGuess=True):
         parentIndex = self.Parents[index]
 
         def linkLoss(t, link):
@@ -1019,7 +1045,7 @@ class KinematicTree(Generic[J]):
 
             transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
-            tryReverse = False
+            tryReverse = True
             try:
                 if not tree.transformJoint(index, transform, propogate=False, safe=False, relative=True):
                     tryReverse = True
@@ -1074,23 +1100,24 @@ class KinematicTree(Generic[J]):
 
         transformation = frame1.inv() * frame2
 
-        if guess:
-            #try to make initial guess right next to each other
-            initialPosition = transformation.t[2]
-            initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
-            initialGuess = [initialPosition,initialRotation]
-            initialTree = tree = copy.deepcopy(self)
-            try:
-                initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=False, safe=False, relative=True)
-            except:
-                initialGuess = [0,0]
-        else:
+        #try to make initial guess right next to each other
+        initialPosition = transformation.t[2]
+        initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
+        initialGuess = [initialPosition,initialRotation]
+        initialTree = tree = copy.deepcopy(self)
+        try:
+            initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=False, safe=False, relative=True)
+        except:
             initialGuess = [0,0]
 
         initialLoss = objective(initialGuess)
-
-        dist = self.Links[index].path.length
-        # bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
+        
+        current = index
+        dist = 0
+        while current != 0:
+            dist += self.Links[current].path.length
+            current = self.Parents[current]
+        bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
         minResult = type('AnonymousObject', (object,), {'x': initialGuess, 'fun': initialLoss})()
         
         numGuesses = 50
@@ -1112,15 +1139,38 @@ class KinematicTree(Generic[J]):
                 minResult.x = guess
                 minResult.fun = obj
             
-            if not guess:
-                print(f"guess {i}, obj: {obj}")
+            # if showGuess:
+            #     print(f"guess {i}, obj: {obj}")
 
-        result = minimize(objective, minResult.x, method="Nelder-Mead",
-            options={
-            'maxiter': maxiter, 
-            'fatol' : tol,
-            #'disp': True,
-        })
+        for i in range(0, numGuesses + 1):
+            guess = initialGuess.copy()
+            guess[0] = initialGuess[0] + np.random.uniform(-dist*2, dist*2)
+            guess[1] = (initialGuess[1] + np.random.uniform(0, np.pi * 2)) % (np.pi * 2)
+
+            obj = objective(guess)
+
+            if obj < minResult.fun:
+                minResult.x = guess
+                minResult.fun = obj
+
+        # result = minimize(objective, minResult.x, method="Nelder-Mead",
+        #     options={
+        #     'maxiter': maxiter, 
+        #     'fatol' : tol,
+        #     #'disp': True,
+        # })
+
+        def batch_objective_function(X):
+            # X is a 2D array where each row is a particle
+            return np.array([objective(x) for x in X])
+        n_particles = 24
+
+        result = type('AnonymousObject', (object,), {'x': initialGuess, 'fun': initialLoss})()
+        init_pos = np.tile(np.array(minResult.x, dtype='float64'), (n_particles,1))
+        optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.8, 'c2':0.5, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
+        result.fun, result.x = optimizer.optimize(batch_objective_function, iters=maxiter,verbose=False)
+
+
 
         if (result.fun > initialLoss):
             print(f"Optimized joint {index} in {time.time() - start}s")
@@ -1132,7 +1182,7 @@ class KinematicTree(Generic[J]):
 
         tree = copy.deepcopy(self)
         tree3 = copy.deepcopy(tree)
-        tryReverse = False
+        tryReverse = True
         try:
             if not tree.transformJoint(index, SE3.Trans([0,0,result.x[0]]) @ SE3.Rz(result.x[1]), propogate=False, safe=False, relative=True):
                 tryReverse = True
@@ -1310,7 +1360,7 @@ class KinematicTree(Generic[J]):
                 if isWaypoint(self.Joints[order[j]]):
                     tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance)
                 else:
-                    tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, guess=False)
+                    tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, showGuess=False)
             
             if showSteps and isinstance(self.Joints[0], OrigamiJoint):
                 tree.show()

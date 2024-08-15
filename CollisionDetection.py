@@ -162,16 +162,16 @@ class CollisionCapsule:
 
     
     def addToPlot(self, ax, color='r', alpha=0.25):
-        def create_circle_points(center, radius, normal, num_points=50):
+        def createCirclePoints(center, radius, normal, num_points=50):
             """Generate points on a circle in 3D."""
             angles = np.linspace(0, 2 * np.pi, num_points)
             circle_points = []
             for angle in angles:
-                point = center + radius * (np.cos(angle) * orthogonal_vector(normal) + np.sin(angle) * np.cross(normal, orthogonal_vector(normal)))
+                point = center + radius * (np.cos(angle) * orthogonalVector(normal) + np.sin(angle) * np.cross(normal, orthogonalVector(normal)))
                 circle_points.append(point)
             return np.array(circle_points)
         
-        def orthogonal_vector(v):
+        def orthogonalVector(v):
             """Find an orthogonal vector to v."""
             if np.isclose(v[0], 0) and np.isclose(v[1], 0):
                 if np.isclose(v[2], 0):
@@ -185,8 +185,8 @@ class CollisionCapsule:
             top_center = bottom_center + self.height * self.base.R[:,2]
 
             # Generate points on the bottom and top circles
-            bottom_circle_points = create_circle_points(bottom_center, self.radius, self.base.R[:,2])
-            top_circle_points = create_circle_points(top_center, self.radius, self.base.R[:,2])
+            bottom_circle_points = createCirclePoints(bottom_center, self.radius, self.base.R[:,2])
+            top_circle_points = createCirclePoints(top_center, self.radius, self.base.R[:,2])
 
             # Create the spherical end caps
             theta, phi = np.mgrid[0:np.pi:10j, 0:2*np.pi:10j]

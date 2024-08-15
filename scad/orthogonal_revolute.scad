@@ -18,7 +18,7 @@ hole_twist = 0;
 eps = tolerance/100;
 inner_radius = outer_radius - thickness;
 axle_offset = attach_thickness;
-bottom_joint_attach_radius = outer_radius - hole_attach_height - grid_hole_radius*2 - tolerance;
+bottom_joint_attach_radius = outer_radius*0.9 - hole_attach_height - grid_hole_radius*2 - tolerance;
 fn = outer_radius * 100;
 fnh = hole_radius * 1000;
 

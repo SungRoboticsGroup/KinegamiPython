@@ -9,16 +9,15 @@ from KinematicTree import *
 from testqtgraph import *
 from makeKinematicTree import *
 
-scale = 30 #in mm
 r = 1
 
 numSides = 4
 
-jointLength = 75/scale
+jointLength = 4
 unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutralLength
 extensionLength = (jointLength - unextendedRevoluteJointLength)/2
 
-twistJointLength = 60/scale
+twistJointLength = 2.5
 
 tree = JointSpecificationTree(Waypoint(numSides, r, SE3()))
 
@@ -59,6 +58,6 @@ optimizedHexapod = hexapod.squaredOptimize(showSteps=False)
 
 optimizedHexapod.show(showCollisionBoxes=False)
 
-optimizedHexapod.save("optimizedHexapod2")
+optimizedHexapod.save("optimizedHexapod")
 
 print(optimizedHexapod.detectCollisions(plot=True, includeEnds=True, debug=True))

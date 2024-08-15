@@ -3,10 +3,10 @@ from testqtgraph import *
 import time
 from makeKinematicTree import *
 
-tree = loadKinematicTree("optimizedHexapod")
-tree = origamiToPrinted(tree, 0.0625)
-plotPrintedTree(tree, "optimizedHexapodPrinted")
-tree.export3DKinematicTree("optimizedHexapodPrinted")
+tree = loadKinematicTree("optimizedHexapod2")
+tree = origamiToPrinted(tree, 1.5/30)
+#plotPrintedTree(tree, "optimizedHexapodPrinted")
+tree.export3DKinematicTree("optimizedHexapodPrinted2")
 print(tree.detectCollisions(plot=False, debug=True))
 
 # tree = loadKinematicTree("algorithmHand")
