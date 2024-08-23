@@ -100,5 +100,5 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
 # for i in [middle1, pointer1, thumb0]:
 #     tree.setJointState(i, np.pi/2)
 
-#tree.export3DKinematicTree("manualHand")
-plotPrintedTree(tree, "manualHandPrinted")
+#tree.export3DKinematicTree("manualHandTesting")
+plotPrintedTree(tree, "manualHandTesting")

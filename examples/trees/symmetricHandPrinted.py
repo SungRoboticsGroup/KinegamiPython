@@ -90,7 +90,6 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
 #     tree.setJointState(pointer1, np.pi/2)
 #     tree.setJointState(pointer2, np.pi/2.5)
 
-
 # # Cylindrical grasp
 # tree.setJointState(middle0, -np.pi/2)
 # tree.setJointState(palm, np.pi/2)
@@ -103,17 +102,17 @@ middleEnd = tree.addJoint(middle2, PrintedTip(r,
 #     tree.setJointState(pointer1, np.pi/2)
 #     tree.setJointState(pointer2, np.pi/2.5)
 
-# # Pinch grasp
-# tree.setJointState(middle0, np.pi/2)
-# tree.setJointState(palm, -np.pi/2)
-# for i in [middle2, pointer2, thumb1]:
-#     tree.setJointState(i, 0)
-#     tree.setJointState(middle1, -np.pi/2)
-#     tree.setJointState(middle2, 0)
-#     tree.setJointState(thumb0, -np.pi/2)
-#     tree.setJointState(thumb1, 0)
-#     tree.setJointState(pointer1, np.pi/3.25)
-#     tree.setJointState(pointer2, np.pi/3)
+# Pinch grasp
+tree.setJointState(middle0, np.pi/2)
+tree.setJointState(palm, -np.pi/2)
+for i in [middle2, pointer2, thumb1]:
+    tree.setJointState(i, 0)
+    tree.setJointState(middle1, -np.pi/2)
+    tree.setJointState(middle2, 0)
+    tree.setJointState(thumb0, -np.pi/2)
+    tree.setJointState(thumb1, 0)
+    tree.setJointState(pointer1, np.pi/3.25)
+    tree.setJointState(pointer2, np.pi/3)
 
 
 plotPrintedTree(tree, "manualHandPrinted")
