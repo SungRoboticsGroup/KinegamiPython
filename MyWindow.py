@@ -55,7 +55,8 @@ class EditJointStateDialog(QDialog):
             state = float(self.state_input.text())
             return state
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
+            self.show_error("Please enter a valid join state.")
+            # QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
             self.exec_() 
             return None
  
@@ -80,7 +81,7 @@ class DeleteDialog(QDialog):
 
     def onApplyClicked(self):
         self.accept()
-
+'''
 class SuccessDialog(QDialog):
     def __init__(self, message, parent=None):
         super().__init__(parent)
@@ -116,6 +117,7 @@ class ErrorDialog(QDialog):
         layout.addWidget(close_button)
 
         self.setLayout(layout)
+'''
 
 class AddJointDialog(QDialog):
     jointToAdd = None
@@ -189,8 +191,9 @@ class AddPrismaticDialog(AddJointDialog):
             self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), self.pose)
             self.accept()
         except ValueError:
-            error_dialog = ErrorDialog('Please enter valid integers.')
-            error_dialog.exec_()
+            self.show_error('Please enter valid integers.')
+            # error_dialog = ErrorDialog('Please enter valid integers.')
+            # error_dialog.exec_()
         
 class AddRevoluteDialog(AddJointDialog):
     def __init__(self, numSides, r, pose : SE3 = None):
@@ -272,8 +275,9 @@ class AddTipDialog(AddJointDialog):
 
             self.accept()
         except ValueError:
-            error_dialog = ErrorDialog('Please enter valid integers.')
-            error_dialog.exec_()
+            self.show_error('Please enter valid integers.')
+            # error_dialog = ErrorDialog('Please enter valid integers.')
+            # error_dialog.exec_()
 
     def updateVariable(self):
         if self.radio_start.isChecked():
@@ -318,8 +322,9 @@ class CreateNewChainDialog(QDialog):
             self.r = int(self.r_input.text())
             self.accept()
         except ValueError:
-            error_dialog = ErrorDialog('Please enter valid integers.')
-            error_dialog.exec_()
+            self.show_error('Please enter valid integers.')
+            # error_dialog = ErrorDialog('Please enter valid integers.')
+            # error_dialog.exec_()
 
     def getNumSides(self):
         return self.numSides
@@ -867,6 +872,30 @@ class PointEditorWindow(QMainWindow):
         self.chain_created = True
         self.update_plot()
 
+        # Create a layout specifically for success/error messages
+        self.message_layout = QHBoxLayout()
+
+        # Create a label to display success/error messages
+        self.status_label = QLabel('')
+        self.message_layout.addWidget(self.status_label)
+
+        # Add the message layout to the main layout
+        self.frame_layout.addLayout(self.message_layout)
+
+    # Success message method with timer
+    def show_success(self, message):
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet("color: green")
+
+    # Error message method with timer
+    def show_error(self, message):
+        self.status_label.setText(message)
+        self.status_label.setStyleSheet("color: red")
+
+    # Method to clear the message
+    def clear_message(self):
+        self.status_label.setText('')
+
     def insert_waypoint(self):
         print("test")
 
@@ -983,12 +1012,14 @@ class PointEditorWindow(QMainWindow):
                 if self.chain.delete(self.selected_joint):
                     self.reload_IDs()
                     self.update_joint()
-                    success_dialog = SuccessDialog('Joint successfully deleted!')
-                    success_dialog.exec_()
+                    self.show_success('Joint successfully deleted!')
+                    # success_dialog = SuccessDialog('Joint successfully deleted!')
+                    # success_dialog.exec_()
                     self.last_joint = temp_last
                 else:
-                    error_dialog = ErrorDialog('Error deleting joint.')
-                    error_dialog.exec_()
+                    self.show_error('Error deleting joint.')
+                    # error_dialog = ErrorDialog('Error deleting joint.')
+                    # error_dialog.exec_()
         elif key == "X":
             self.arrow_selection_changed(0)
         elif key == "Y":
@@ -1195,26 +1226,30 @@ class PointEditorWindow(QMainWindow):
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
         if not self.chain:
-            error_dialog = ErrorDialog('Please initialize a chain.')
-            error_dialog.exec_()
+            self.show_error('Please initialize a chain.')
+            # error_dialog = ErrorDialog('Please initialize a chain.')
+            # error_dialog.exec_()
         if self.selected_joint == -1:
-            error_dialog = ErrorDialog('Please select a joint.')
-            error_dialog.exec_()
+            self.show_error('Please select a joint.')
+            # error_dialog = ErrorDialog('Please select a joint.')
+            # error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
             edit = dialog.get_state()
             if edit is not None:
 
                 if self.chain.setJointState(self.selected_joint, math.radians(edit)):
                     self.update_joint()
-                    success_dialog = SuccessDialog('Joint state successfully edited!')
-                    success_dialog.exec_()
+                    self.show_success('Joint state successfully edited!')
+                    # success_dialog = SuccessDialog('Joint state successfully edited!')
+                    # success_dialog.exec_()
                     min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
                     max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
                     current = math.degrees(self.chain.Joints[self.selected_joint].state)
                     self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
                 else:
-                    error_dialog = ErrorDialog('Error editing joint state.')
-                    error_dialog.exec_()
+                    self.show_error('Error editing joint state.')
+                    # error_dialog = ErrorDialog('Error editing joint state.')
+                    # error_dialog.exec_()
 
     def adjust_rotation(self, value):
         # if not isinstance(value, float):
@@ -1309,23 +1344,27 @@ class PointEditorWindow(QMainWindow):
     def delete_joint(self):
         dialog = DeleteDialog(self)
         if not self.chain:
-            error_dialog = ErrorDialog('Please initialize a chain.')
-            error_dialog.exec_()
+            self.show_error('Please initialize a chain.')
+            # error_dialog = ErrorDialog('Please initialize a chain.')
+            # error_dialog.exec_()
         if self.selected_joint == -1:
-            error_dialog = ErrorDialog('Please select a joint.')
-            error_dialog.exec_()
+            self.show_error('Please select a joint.')
+            # error_dialog = ErrorDialog('Please select a joint.')
+            # error_dialog.exec_()
         elif dialog.exec_() == QDialog.Accepted:
             self.selected_joint = self.select_joint_options.currentIndex() 
             temp_last = len(self.chain.Joints) - 1
             if self.chain.delete(self.selected_joint):
                 self.reload_IDs()
                 self.update_joint()
-                success_dialog = SuccessDialog('Joint successfully deleted!')
-                success_dialog.exec_()
+                self.show_success('Joint successfully deleted!')
+                # success_dialog = SuccessDialog('Joint successfully deleted!')
+                # success_dialog.exec_()
                 self.last_joint = temp_last
             else:
-                error_dialog = ErrorDialog('Error deleting joint.')
-                error_dialog.exec_()
+                self.show_error('Error deleting joint.')
+                # error_dialog = ErrorDialog('Error deleting joint.')
+                # error_dialog.exec_()
 
     def reload_IDs(self):
         if self.chain is not None:
@@ -1420,13 +1459,15 @@ class PointEditorWindow(QMainWindow):
             self.update_plot()
 
     def chain_not_created(self):
-        error_dialog = ErrorDialog('Please create a chain first.')
-        error_dialog.exec_()
+        self.show_error('Please create a chain first.')
+        # error_dialog = ErrorDialog('Please create a chain first.')
+        # error_dialog.exec_()
         self.create_new_chain_func()
 
     def is_parent_joint_selected(self):
         if self.selected_joint == -1 and self.chain is not None:
-            QMessageBox.warning(self, "Selection Required", "Please select a parent joint or link before adding a new one.")
+            self.show_error("Please select a parent joint or link first.")
+            # QMessageBox.warning(self, "Selection Required", "Please select a parent joint or link before adding a new one.")
             return False
         return True
 
@@ -1548,8 +1589,9 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.addItem(grid)
             grid.setColor((0,0,0,255))
 
-            success_dialog = SuccessDialog('Chain created!')
-            success_dialog.exec_()
+            self.show_success('Chain created!')
+            # success_dialog = SuccessDialog('Chain created!')
+            # success_dialog.exec_()
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_W:
@@ -1567,12 +1609,14 @@ class PointEditorWindow(QMainWindow):
                 if self.chain.delete(self.selected_joint):
                     self.reload_IDs()
                     self.update_joint()
-                    success_dialog = SuccessDialog('Joint successfully deleted!')
-                    success_dialog.exec_()
+                    self.show_success('Joint successfully deleted!')
+                    # success_dialog = SuccessDialog('Joint successfully deleted!')
+                    # success_dialog.exec_()
                     self.last_joint = temp_last
                 else:
-                    error_dialog = ErrorDialog('Error deleting joint.')
-                    error_dialog.exec_()
+                    self.show_error('Error deleting joint.')
+                    # error_dialog = ErrorDialog('Error deleting joint.')
+                    # error_dialog.exec_()
         elif event.key() == Qt.Key_X:
             self.arrow_selection_changed(0)
         elif event.key() == Qt.Key_Y:
