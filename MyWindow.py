@@ -60,6 +60,7 @@ class EditJointStateDialog(QDialog):
             self.exec_() 
             return None
  
+"""
 class DeleteDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,6 +82,32 @@ class DeleteDialog(QDialog):
 
     def onApplyClicked(self):
         self.accept()
+"""
+
+class DeleteWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Confirm Delete')
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel('Are you sure you want to delete the joint?'))
+
+        self.apply_button = QPushButton('Confirm')
+        self.apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(self.apply_button)
+
+        self.cancel_button = QPushButton('Cancel')
+        self.cancel_button.clicked.connect(self.onCancelClicked)
+        layout.addWidget(self.cancel_button)
+
+        self.setLayout(layout)
+
+    def onApplyClicked(self):
+        self.window().delete_selected_joint()
+
+    def onCancelClicked(self):
+        self.window().delete_joint_dock.setVisible(False)
+
 '''
 class SuccessDialog(QDialog):
     def __init__(self, message, parent=None):
@@ -882,6 +909,14 @@ class PointEditorWindow(QMainWindow):
         # Add the message layout to the main layout
         self.frame_layout.addLayout(self.message_layout)
 
+        self.delete_joint_widget = DeleteWidget(self)
+
+        # Create dock for the delete widget
+        self.delete_joint_dock = QDockWidget("Confirm Delete", self)
+        self.delete_joint_dock.setWidget(self.delete_joint_widget)
+        self.delete_joint_dock.setVisible(False)
+        self.addDockWidget(Qt.TopDockWidgetArea, self.delete_joint_dock)
+
     # Success message method with timer
     def show_success(self, message):
         self.status_label.setText(message)
@@ -895,6 +930,25 @@ class PointEditorWindow(QMainWindow):
     # Method to clear the message
     def clear_message(self):
         self.status_label.setText('')
+
+    def show_delete_widget(self):
+        self.delete_joint_dock.setVisible(True)
+
+    def delete_selected_joint(self):
+        self.selected_joint = self.select_joint_options.currentIndex() 
+        temp_last = len(self.chain.Joints) - 1
+        if self.chain.delete(self.selected_joint):
+            self.reload_IDs()
+            self.update_joint()
+            self.show_success('Joint successfully deleted!')
+                # success_dialog = SuccessDialog('Joint successfully deleted!')
+                # success_dialog.exec_()
+            self.last_joint = temp_last
+        else:
+            self.show_error('Error deleting joint.')
+                # error_dialog = ErrorDialog('Error deleting joint.')
+                # error_dialog.exec_()
+        self.window().delete_joint_dock.setVisible(False)
 
     def insert_waypoint(self):
         print("test")
@@ -1342,7 +1396,7 @@ class PointEditorWindow(QMainWindow):
                 self.radius_label.blockSignals(False)
 
     def delete_joint(self):
-        dialog = DeleteDialog(self)
+        # dialog = DeleteDialog(self)
         if not self.chain:
             self.show_error('Please initialize a chain.')
             # error_dialog = ErrorDialog('Please initialize a chain.')
@@ -1351,20 +1405,8 @@ class PointEditorWindow(QMainWindow):
             self.show_error('Please select a joint.')
             # error_dialog = ErrorDialog('Please select a joint.')
             # error_dialog.exec_()
-        elif dialog.exec_() == QDialog.Accepted:
-            self.selected_joint = self.select_joint_options.currentIndex() 
-            temp_last = len(self.chain.Joints) - 1
-            if self.chain.delete(self.selected_joint):
-                self.reload_IDs()
-                self.update_joint()
-                self.show_success('Joint successfully deleted!')
-                # success_dialog = SuccessDialog('Joint successfully deleted!')
-                # success_dialog.exec_()
-                self.last_joint = temp_last
-            else:
-                self.show_error('Error deleting joint.')
-                # error_dialog = ErrorDialog('Error deleting joint.')
-                # error_dialog.exec_()
+        else:
+            self.show_delete_widget()
 
     def reload_IDs(self):
         if self.chain is not None:
