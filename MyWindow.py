@@ -312,6 +312,7 @@ class AddTipDialog(AddJointDialog):
         elif self.radio_end.isChecked():
             self.isStart = False
 
+"""
 class CreateNewChainDialog(QDialog):
     numSides = 4
     r = 1
@@ -358,6 +359,64 @@ class CreateNewChainDialog(QDialog):
     
     def getR(self):
         return self.r
+"""
+    
+class AddChainWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Create New Chain')
+
+        layout = QVBoxLayout()
+
+        # Input for the number of sides
+        numSides_layout = QHBoxLayout()
+        numSides_label = QLabel("Number of Sides:")
+        self.numSides_input = QLineEdit()
+        self.numSides_input.setPlaceholderText("Enter number of sides")
+        numSides_layout.addWidget(numSides_label)
+        numSides_layout.addWidget(self.numSides_input)
+        layout.addLayout(numSides_layout)
+
+        # Input for the radius
+        radius_layout = QHBoxLayout()
+        radius_label = QLabel("Radius:")
+        self.radius_input = QLineEdit()
+        self.radius_input.setPlaceholderText("Enter radius")
+        radius_layout.addWidget(radius_label)
+        radius_layout.addWidget(self.radius_input)
+        layout.addLayout(radius_layout)
+
+        # Apply button to create the chain
+        self.create_button = QPushButton('Create Chain', self)
+        self.create_button.clicked.connect(self.onCreateClicked)
+        layout.addWidget(self.create_button)
+
+        # Cancel button to close the widget
+        self.cancel_button = QPushButton('Cancel', self)
+        self.cancel_button.clicked.connect(self.onCancelClicked)
+        layout.addWidget(self.cancel_button)
+
+        self.setLayout(layout)
+
+    def onCreateClicked(self):
+        try:
+            # Get input values
+            numSides = int(self.numSides_input.text())
+            radius = float(self.radius_input.text())
+            
+            # Call a function in the main window to create the new chain
+            self.window().create_new_chains(numSides, radius)            
+            # Optionally hide the widget after successful creation
+            self.window().add_chain_dock.setVisible(False)
+        except ValueError:
+            self.show_error("Please enter valid integers.")
+
+    def onCancelClicked(self):
+        # Hide the widget if the user cancels
+        self.window().add_chain_dock.setVisible(False)
+
+    def show_error(self, message):
+        QMessageBox.warning(self, "Invalid Input", message)
     
 class ImageRadioButton(QRadioButton):
     def __init__(self, unchecked_img, checked_img, tooltip_text, parent=None):
@@ -917,6 +976,12 @@ class PointEditorWindow(QMainWindow):
         self.delete_joint_dock.setVisible(False)
         self.addDockWidget(Qt.TopDockWidgetArea, self.delete_joint_dock)
 
+        self.add_chain_widget = AddChainWidget(self)
+        self.add_chain_dock = QDockWidget("Create New Chain", self)
+        self.add_chain_dock.setWidget(self.add_chain_widget)
+        self.add_chain_dock.setVisible(False)  # Initially hidden
+        self.addDockWidget(Qt.TopDockWidgetArea, self.add_chain_dock)
+
     # Success message method with timer
     def show_success(self, message):
         self.status_label.setText(message)
@@ -949,6 +1014,27 @@ class PointEditorWindow(QMainWindow):
                 # error_dialog = ErrorDialog('Error deleting joint.')
                 # error_dialog.exec_()
         self.window().delete_joint_dock.setVisible(False)
+
+    def create_new_chain_func(self):
+        # Show the AddChainWidget dock when this function is called
+        self.add_chain_dock.setVisible(True)
+
+    def create_new_chains(self, numSides, radius):
+        # Implement chain creation logic here
+        self.chain = None
+        self.chain_created = True
+        self.numSides = numSides
+        self.selected_joint = -1
+        self.r = radius
+        self.plot_widget.clear()
+        self.plot_widget.radius = self.r
+        self.setCentralWidget(self.plot_widget)
+
+        grid = gl.GLGridItem()
+        self.plot_widget.addItem(grid)
+        grid.setColor((0,0,0,255))
+
+        self.show_success('Chain created!')
 
     def insert_waypoint(self):
         print("test")
@@ -1613,25 +1699,9 @@ class PointEditorWindow(QMainWindow):
 
             self.add_joint(dialog)
 
-    def create_new_chain_func(self):
-        dialog = CreateNewChainDialog()
-        if dialog.exec_() == QDialog.Accepted:
-
+    # def create_new_chain_func(self):
+        # dialog = CreateNewChainDialog()
             # clears everything
-            self.chain = None
-            self.chain_created = True
-            self.numSides = dialog.getNumSides()
-            self.selected_joint = -1
-            self.r = dialog.getR()
-            self.plot_widget.clear()
-            self.plot_widget.radius = self.r
-            self.setCentralWidget(self.plot_widget)
-
-            grid = gl.GLGridItem()
-            self.plot_widget.addItem(grid)
-            grid.setColor((0,0,0,255))
-
-            self.show_success('Chain created!')
             # success_dialog = SuccessDialog('Chain created!')
             # success_dialog.exec_()
 
