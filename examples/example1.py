@@ -39,6 +39,6 @@ chain.show(showGlobalFrame=True)
 
 # Example 1D
 pattern = chain.creasePattern()
-pattern.save(dxfName="examplePatterns/example1.dxf")
+pattern.save(dxfName="example1.dxf")
 pattern.show()
 

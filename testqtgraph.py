@@ -76,7 +76,7 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
 
     print("try2")
 
-def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
+def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1), scale=1.0):
     # Load the STL file
     stl_mesh = Mesh.from_file(filepath)
 
@@ -89,10 +89,30 @@ def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1)):
 
     homogenous_vertices = np.hstack((vertices, np.ones((vertices.shape[0], 1))))
     #transformed_vertices = homogenous_vertices.dot(matrix.T)[:, :3]
-    transformed_vertices = (pose * vertices.T).T
+    transformed_vertices = scale * (pose * vertices.T).T
 
     # Create a mesh item and add it to the view
     meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
     mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="shaded", color=color, drawEdges=False)
     mesh.setGLOptions('opaque')
     view.addItem(mesh)
+
+def stlToMeshItem(filepath : str, pose : SE3 = SE3(), scale=1.0, color=(0.5,0.5,0.5,1)):
+    # Load the STL file
+    stl_mesh = Mesh.from_file(filepath)
+
+    # Extract vertices and faces from the loaded STL
+    vertices = stl_mesh.vectors.reshape(-1, 3)
+    faces = np.arange(vertices.shape[0]).reshape(-1, 3)
+
+    matrix = pose.A
+    homogenous_vertices = np.hstack((vertices, np.ones((vertices.shape[0], 1))))
+    transformed_vertices = scale * (pose * vertices.T).T
+
+    meshdata = gl.MeshData(vertexes = transformed_vertices, faces = faces)
+    mesh = gl.GLMeshItem(meshdata = meshdata, smooth=True, shader="shaded", color=color, drawEdges=False)
+    mesh.setGLOptions('opaque')
+
+    return mesh
+
+

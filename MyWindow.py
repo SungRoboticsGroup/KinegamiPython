@@ -360,7 +360,66 @@ class CreateNewChainDialog(QDialog):
     def getR(self):
         return self.r
 """
-    
+
+# Widget to add a new mesh to the scene, imported from a file
+class AddMeshWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Reference Mesh')
+        layout = QVBoxLayout()
+
+        # Input for the file path
+        file_layout = QHBoxLayout()
+        file_label = QLabel("STL File Path:")
+        self.file_input = QLineEdit()
+        self.file_input.setPlaceholderText("Enter file path")
+        file_layout.addWidget(file_label)
+        file_layout.addWidget(self.file_input)
+        layout.addLayout(file_layout)
+
+        # Scale input
+        scale_layout = QHBoxLayout()
+        scale_label = QLabel("Scale:")
+        self.scale_input = QLineEdit()
+        self.scale_input.setPlaceholderText("Enter scale factor")
+        scale_layout.addWidget(scale_label)
+        scale_layout.addWidget(self.scale_input)
+        layout.addLayout(scale_layout)
+
+        # Apply button to add the mesh
+        self.add_button = QPushButton('Add Mesh', self)
+        self.add_button.clicked.connect(self.onAddClicked)
+        layout.addWidget(self.add_button)
+
+        # Clear button to remove the mesh
+        self.clear_button = QPushButton('Clear Mesh', self)
+        self.clear_button.clicked.connect(self.onClearClicked)
+        layout.addWidget(self.clear_button)
+        
+        self.setLayout(layout)
+
+    def onAddClicked(self):
+        try:
+            # Get the file path and call a function in the main window to add the mesh
+            file_path = self.file_input.text()
+            scale_factor = float(self.scale_input.text())
+            mesh = stlToMeshItem(file_path, scale=scale_factor)
+            self.window().referenceMesh = mesh
+            self.window().update_plot()
+            #plotSTL(self.window().plot_widget, file_path, SE3(), scale=scale_factor)
+            #self.window().add_mesh_dock.setVisible(False)
+        except ValueError:
+            self.show_error("Please enter a valid file path.")
+
+    def onClearClicked(self):
+        self.window().referenceMesh = None
+        self.window().update_plot()
+
+    def show_error(self, message):
+        QMessageBox.warning(self, "Invalid Input", message)
+
+
+
 class AddChainWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -626,6 +685,7 @@ class PointEditorWindow(QMainWindow):
         self.chain = None
         self.chain_created = False
         self.stl_generated = False
+        self.referenceMesh = None
 
         self.numSides = 4
         self.r = 1
@@ -981,6 +1041,13 @@ class PointEditorWindow(QMainWindow):
         self.add_chain_dock.setWidget(self.add_chain_widget)
         self.add_chain_dock.setVisible(False)  # Initially hidden
         self.addDockWidget(Qt.TopDockWidgetArea, self.add_chain_dock)
+
+        self.add_mesh_widget = AddMeshWidget(self)
+        self.add_mesh_dock = QDockWidget("Import Mesh", self)
+        self.add_mesh_dock.setWidget(self.add_mesh_widget)
+        self.add_mesh_dock.setVisible(True) 
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
+
 
     # Success message method with timer
     def show_success(self, message):
@@ -1509,6 +1576,9 @@ class PointEditorWindow(QMainWindow):
             grid = gl.GLGridItem()
             self.plot_widget.addItem(grid)
             grid.setColor((0,0,0,255))
+
+            if self.referenceMesh is not None:
+                self.plot_widget.addItem(self.referenceMesh)
             
             if self.chain is not None:
                 self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
@@ -1546,6 +1616,9 @@ class PointEditorWindow(QMainWindow):
         grid = gl.GLGridItem()
         self.plot_widget.addItem(grid)
         grid.setColor((0,0,0,255))
+
+        if self.referenceMesh is not None:
+            self.plot_widget.addItem(self.referenceMesh)
 
         for index, joint in enumerate(self.chain.Joints):
             joint.id = index
