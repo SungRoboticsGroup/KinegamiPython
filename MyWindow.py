@@ -381,7 +381,7 @@ class AddMeshWidget(QWidget):
         scale_layout = QHBoxLayout()
         scale_label = QLabel("Scale:")
         self.scale_input = QLineEdit()
-        self.scale_input.setPlaceholderText("Enter scale factor")
+        self.scale_input.setPlaceholderText("Enter scale factor (defaults to 1)")
         scale_layout.addWidget(scale_label)
         scale_layout.addWidget(self.scale_input)
         layout.addLayout(scale_layout)
@@ -402,14 +402,20 @@ class AddMeshWidget(QWidget):
         try:
             # Get the file path and call a function in the main window to add the mesh
             file_path = self.file_input.text()
-            scale_factor = float(self.scale_input.text())
+            scale_factor_string = self.scale_input.text()
+            if scale_factor_string is None or scale_factor_string == "":
+                scale_factor = 1
+            else:
+                scale_factor = float(scale_factor_string)
+            if (scale_factor <= 0):
+                raise ValueError
             mesh = stlToMeshItem(file_path, scale=scale_factor)
             self.window().referenceMesh = mesh
             self.window().update_plot()
             #plotSTL(self.window().plot_widget, file_path, SE3(), scale=scale_factor)
             #self.window().add_mesh_dock.setVisible(False)
         except ValueError:
-            self.show_error("Please enter a valid file path.")
+            self.show_error("Please enter a valid file path and scale factor.")
 
     def onClearClicked(self):
         self.window().referenceMesh = None
