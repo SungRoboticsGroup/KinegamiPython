@@ -146,6 +146,8 @@ class ErrorDialog(QDialog):
         self.setLayout(layout)
 '''
 
+'''
+
 class AddJointDialog(QDialog):
     jointToAdd = None
 
@@ -311,6 +313,169 @@ class AddTipDialog(AddJointDialog):
             self.isStart = True
         elif self.radio_end.isChecked():
             self.isStart = False
+'''
+
+# Widget for adding a Prismatic Joint
+class AddPrismaticWidget(QWidget):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.numSides = numSides
+        self.r = r
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+
+        # Neutral length input
+        length_layout = QHBoxLayout()
+        length_label = QLabel("Neutral Length:")
+        self.length_input = QLineEdit()
+        length_layout.addWidget(length_label)
+        length_layout.addWidget(self.length_input)
+        layout.addLayout(length_layout)
+
+        # Number of layers input
+        num_layers_layout = QHBoxLayout()
+        num_layers_label = QLabel("Number of Layers:")
+        self.num_layers_input = QLineEdit()
+        num_layers_layout.addWidget(num_layers_label)
+        num_layers_layout.addWidget(self.num_layers_input)
+        layout.addLayout(num_layers_layout)
+
+        # Cone angle input
+        angle_layout = QHBoxLayout()
+        angle_label = QLabel("Cone Angle (degrees):")
+        self.angle_input = QLineEdit()
+        angle_layout.addWidget(angle_label)
+        angle_layout.addWidget(self.angle_input)
+        layout.addLayout(angle_layout)
+
+        # Apply and Cancel buttons
+        button_layout = QHBoxLayout()
+        self.apply_button = QPushButton("Add Prismatic Joint")
+        self.cancel_button = QPushButton("Cancel")
+        self.apply_button.clicked.connect(self.on_apply_clicked)
+        self.cancel_button.clicked.connect(self.cancel_clicked)
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def on_apply_clicked(self):
+        try:
+            neutralLength = float(self.length_input.text())
+            numLayers = int(self.num_layers_input.text())
+            coneAngleText = float(self.angle_input.text())
+
+            joint = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), self.window().prismaticpose)
+            self.window().add_joint(joint)
+            self.window().add_prismatic_dock.setVisible(False)
+        except ValueError:
+            self.show_error("Please enter valid numbers.")
+
+    def cancel_clicked(self):
+        self.window().add_prismatic_dock.setVisible(False)
+
+# Widget for adding a Revolute Joint
+class AddRevoluteWidget(QWidget):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.numSides = numSides
+        self.r = r
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+
+        # Bending angle input
+        angle_layout = QHBoxLayout()
+        angle_label = QLabel("Total Bending Angle (degrees):")
+        self.angle_input = QLineEdit()
+        angle_layout.addWidget(angle_label)
+        angle_layout.addWidget(self.angle_input)
+        layout.addLayout(angle_layout)
+
+        # Apply and Cancel buttons
+        button_layout = QHBoxLayout()
+        self.apply_button = QPushButton("Add Revolute Joint")
+        self.cancel_button = QPushButton("Cancel")
+        self.apply_button.clicked.connect(self.on_apply_clicked)
+        self.cancel_button.clicked.connect(self.cancel_clicked)
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def on_apply_clicked(self):
+        try:
+            bendingAngleText = float(self.angle_input.text())
+
+            joint = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), self.window().revolutepose)
+            self.window().add_joint(joint)
+            self.window().add_revolute_dock.setVisible(False)
+        except ValueError:
+            self.show_error("Please enter a valid number.")
+
+    def cancel_clicked(self):
+        self.window().add_revolute_dock.setVisible(False)
+
+
+# Widget for adding a Tip Joint
+class AddTipWidget(QWidget):
+    def __init__(self, numSides, r, parent=None):
+        super().__init__(parent)
+        self.numSides = numSides
+        self.r = r
+        self.setup_ui()
+
+    def setup_ui(self):
+        layout = QVBoxLayout()
+
+        # Length input
+        length_layout = QHBoxLayout()
+        length_label = QLabel("Length:")
+        self.length_input = QLineEdit()
+        length_layout.addWidget(length_label)
+        length_layout.addWidget(self.length_input)
+        layout.addLayout(length_layout)
+
+        # Radio buttons for start/end tip
+        radio_layout = QHBoxLayout()
+        self.radio_start = QRadioButton("Start Tip")
+        self.radio_end = QRadioButton("End Tip")
+        self.radio_start.setChecked(True)
+        radio_layout.addWidget(self.radio_start)
+        radio_layout.addWidget(self.radio_end)
+        layout.addLayout(radio_layout)
+
+        # Apply and Cancel buttons
+        button_layout = QHBoxLayout()
+        self.apply_button = QPushButton("Add Tip Joint")
+        self.cancel_button = QPushButton("Cancel")
+        self.apply_button.clicked.connect(self.on_apply_clicked)
+        self.cancel_button.clicked.connect(self.cancel_clicked)
+        button_layout.addWidget(self.apply_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def on_apply_clicked(self):
+        try:
+            neutralLength = float(self.length_input.text())
+            if self.radio_start.isChecked():
+                joint = StartTip(self.numSides, self.r, self.window().tippose, length=neutralLength)
+            else:
+                joint = EndTip(self.numSides, self.r, self.window().tippose, length=neutralLength)
+                self.window().add_joint(joint)
+                self.window().add_tip_dock.setVisible(False)
+        except ValueError:
+            self.show_error("Please enter a valid number.")
+
+    def cancel_clicked(self):
+        self.window().add_tip_dock.setVisible(False)
 
 """
 class CreateNewChainDialog(QDialog):
@@ -722,7 +887,17 @@ class PointEditorWindow(QMainWindow):
         self.key_bar = QWidget()
         self.key_bar_layout = QHBoxLayout(self.key_bar)  # Layout is initialized and set to the widget here
         self.key_bar.setFixedHeight(40)
+
+        top_dock_widget.setWidget(self.key_bar)
+        self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
+
         self.init_key_bar()
+
+        # Success/failure messages under the key instructions bar
+        self.status_label = QLabel('')
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: green")  # Default color for success messages
+        self.key_bar_layout.addWidget(self.status_label)
 
         top_dock_widget.setWidget(self.key_bar)
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
@@ -907,6 +1082,40 @@ class PointEditorWindow(QMainWindow):
         self.controls_options_widget = QWidget()
         self.controls_layout = QVBoxLayout()
 
+        # Dock for adding prismatic joint
+        self.add_prismatic_widget = AddPrismaticWidget(self.numSides, self.r, parent=self)
+        self.add_prismatic_dock = QDockWidget("Add Prismatic Joint", self)
+        self.add_prismatic_dock.setWidget(self.add_prismatic_widget)
+        self.add_prismatic_dock.setVisible(False)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.add_prismatic_dock)
+
+        # Dock for adding revolute joint
+        self.add_revolute_widget = AddRevoluteWidget(self.numSides, self.r, parent=self)
+        self.add_revolute_dock = QDockWidget("Add Revolute Joint", self)
+        self.add_revolute_dock.setWidget(self.add_revolute_widget)
+        self.add_revolute_dock.setVisible(False)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.add_revolute_dock)
+
+        # Dock for adding tip joint
+        self.add_tip_widget = AddTipWidget(self.numSides, self.r, parent=self)
+        self.add_tip_dock = QDockWidget("Add Tip Joint", self)
+        self.add_tip_dock.setWidget(self.add_tip_widget)
+        self.add_tip_dock.setVisible(False)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.add_tip_dock)
+
+        self.delete_joint_widget = DeleteWidget(self)
+
+        self.delete_joint_dock = QDockWidget("Confirm Delete", self)
+        self.delete_joint_dock.setWidget(self.delete_joint_widget)
+        self.delete_joint_dock.setVisible(False)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.delete_joint_dock)
+
+        self.add_chain_widget = AddChainWidget(self)
+        self.add_chain_dock = QDockWidget("Create New Chain", self)
+        self.add_chain_dock.setWidget(self.add_chain_widget)
+        self.add_chain_dock.setVisible(False)  # Initially hidden
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
+
         self.control1_label = QLabel("Translate Joint")
         self.control2_label = QLabel("Rotate Joint")
         self.control1 = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate Joint")
@@ -1005,11 +1214,11 @@ class PointEditorWindow(QMainWindow):
         # self.random_btn_widget = QWidget()
         # self.random_btn_layout = QVBoxLayout()
 
-        self.random_btn = QPushButton("Generate STL")
-        self.random_btn.clicked.connect(self.generate_stl)
-        crease_dock_layout.addWidget(self.random_btn)
+        # self.random_btn = QPushButton("Generate STL")
+        # self.random_btn.clicked.connect(self.generate_stl)
+        # crease_dock_layout.addWidget(self.random_btn)
 
-        crease_dock_layout.addWidget(self.random_btn)
+        # crease_dock_layout.addWidget(self.random_btn)
         
         # self.random_btn_widget.setLayout(self.random_btn_layout)
         # self.random_btn_dock.setWidget(self.random_btn_widget)
@@ -1023,30 +1232,6 @@ class PointEditorWindow(QMainWindow):
         self.chain.addJoint(1, testJoint)
         self.chain_created = True
         self.update_plot()
-
-        # Create a layout specifically for success/error messages
-        self.message_layout = QHBoxLayout()
-
-        # Create a label to display success/error messages
-        self.status_label = QLabel('')
-        self.message_layout.addWidget(self.status_label)
-
-        # Add the message layout to the main layout
-        self.frame_layout.addLayout(self.message_layout)
-
-        self.delete_joint_widget = DeleteWidget(self)
-
-        # Create dock for the delete widget
-        self.delete_joint_dock = QDockWidget("Confirm Delete", self)
-        self.delete_joint_dock.setWidget(self.delete_joint_widget)
-        self.delete_joint_dock.setVisible(False)
-        self.addDockWidget(Qt.TopDockWidgetArea, self.delete_joint_dock)
-
-        self.add_chain_widget = AddChainWidget(self)
-        self.add_chain_dock = QDockWidget("Create New Chain", self)
-        self.add_chain_dock.setWidget(self.add_chain_widget)
-        self.add_chain_dock.setVisible(False)  # Initially hidden
-        self.addDockWidget(Qt.TopDockWidgetArea, self.add_chain_dock)
 
         self.add_mesh_widget = AddMeshWidget(self)
         self.add_mesh_dock = QDockWidget("Import Mesh", self)
@@ -1121,7 +1306,7 @@ class PointEditorWindow(QMainWindow):
         
         if (self.selected_link != -1):
             print("link id", self.chain.Links[self.selected_link].id)
-
+    """
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)
 
@@ -1151,6 +1336,7 @@ class PointEditorWindow(QMainWindow):
 
         self.stl_generated = True
         #plotPrintedTree(newTree, "manualHandPrinted")
+    """
 
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
@@ -1648,22 +1834,27 @@ class PointEditorWindow(QMainWindow):
         widget.setLayout(layout)
         return widget
     
-    def add_joint(self, dialog):
-        if dialog.exec_() == QDialog.Accepted:
-            joint : Joint = dialog.getJoint()
+    def add_joint(self, joint):
+        if joint is None:
+            self.show_error("Invalid joint. Please check your input.")
+            return
 
-            if (self.chain == None):
-                joint.id = 0
-            else:
-                joint.id = len(self.chain.Joints)
+        # Assign ID to the new joint
+        if self.chain is None:
+            joint.id = 0
+            self.chain = KinematicChain(joint)
+        else:
+            joint.id = len(self.chain.Joints)
+            self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
 
-            if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
-            else :
-                self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-            
-            self.selected_joint = len(self.chain.Joints)
-            self.update_plot()
+        # Set the selected joint to the new joint
+        self.selected_joint = len(self.chain.Joints) - 1
+
+        # Update the plot
+        self.update_plot()
+
+        # Show a success message and optionally hide the widget
+        self.show_success("Joint added successfully!")
 
     def chain_not_created(self):
         self.show_error('Please create a chain first.')
@@ -1685,13 +1876,12 @@ class PointEditorWindow(QMainWindow):
             if (self.chain and len(self.chain.Joints) > 0):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 if className == "RevoluteJoint":
-                    dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
+                    self.prismaticpose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90))
                 else: 
-                    dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r))
+                    self.prismaticpose=SE3(0,0,4 * self.r)
             else:
-                dialog = AddPrismaticDialog(self.numSides, self.r, pose=SE3())
-
-            self.add_joint(dialog)
+                self.prismaticpose=SE3()
+            self.add_prismatic_dock.setVisible(True)
 
     def add_revolute_func(self):
         if (not self.chain_created):
@@ -1701,13 +1891,12 @@ class PointEditorWindow(QMainWindow):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 if (self.chain):
                     if className == "RevoluteJoint":
-                        dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0))
+                        self.revolutepose=SE3(4 * self.r,0,0)
                     else:
-                        dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r) @ SE3().Ry(math.radians(90)))
+                        self.revolutepose=SE3(0,0,4 * self.r) @ SE3().Ry(math.radians(90))
             else:
-                dialog = AddRevoluteDialog(self.numSides, self.r, pose=SE3())
-            
-            self.add_joint(dialog)
+                self.revolutepose=SE3()
+            self.add_revolute_dock.setVisible(True)
 
     def add_waypoint_func(self):
         if (not self.chain_created):
@@ -1770,13 +1959,12 @@ class PointEditorWindow(QMainWindow):
                 className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 if (self.chain):
                     if className == "RevoluteJoint":
-                        dialog = AddTipDialog(self.numSides, self.r, pose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90)))
+                        self.tippose=SE3(4 * self.r,0,0) @ SE3().Ry(math.radians(90))
                     else: 
-                        dialog = AddTipDialog(self.numSides, self.r, pose=SE3(0,0,4 * self.r))
+                        self.tippose=SE3(0,0,4 * self.r)
             else:
-                dialog = AddTipDialog(self.numSides, self.r, pose=SE3())
-
-            self.add_joint(dialog)
+                self.tippose=SE3()
+            self.add_tip_dock.setVisible(True)
 
     # def create_new_chain_func(self):
         # dialog = CreateNewChainDialog()
