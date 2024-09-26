@@ -33,6 +33,7 @@ class RevoluteJoint(OrigamiJoint):
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
+        self.numSinkLayers = numSinkLayers
     
     def pathIndex(self) -> int:
         return 0 # xhat
