@@ -30,6 +30,8 @@ class Joint(ABC):
         self.TransformStateTo(initialState)
 
         self.collisionCapsules = self.getCapsules()
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -50,6 +52,9 @@ class Joint(ABC):
     @abstractmethod
     def boundingBall(self) -> Ball:
         pass
+    
+    def copy(self):
+        return Joint(self.r, self.neutralLength, self.Pose, self.initialState)
     
     def ProximalFrame(self) -> SE3:
         return SE3.Trans(-(self.neutralLength/2) * self.pathDirection()) @ self.Pose
@@ -76,12 +81,17 @@ class Joint(ABC):
     
     def reverseZhat(self):
         self.Pose = self.Pose @ SE3.Rx(np.pi)
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
     
     def reversePathDirection(self):
         if self.pathIndex() == 2:
             self.Pose = self.Pose @ SE3.Rx(np.pi)
         else:
             self.Pose = self.Pose @ SE3.Rz(np.pi)
+        
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
 
     # Indices 0,1,2,3 with 0,1,2 cycled to begin with pathDirection
     def dubinsColumnOrder(self) -> np.ndarray:
@@ -105,21 +115,23 @@ class Joint(ABC):
     
     def transformPoseIntoFrame(self, Frame : SE3):
         self.Pose = Frame @ self.Pose
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
 
     def transformPoseBy(self, Transformation: SE3):
         self.Pose = Transformation @ self.Pose
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
     
     def applyTransformationToPose(self, Transformation : SE3):
         self.Pose = self.Pose @ Transformation
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
 
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
-    
-    def translateAlongX(self, xChange : float):
-        self.Pose = self.Pose @ SE3.Trans([xChange,0,0])
-
-    def translateAlongY(self, yChange : float):
-        self.Pose = self.Pose @ SE3.Trans([0,yChange,0])
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
 
     def rotateAboutZ(self, angleToRotateAboutZ):
         self.applyTransformationToPose(SE3.Rz(angleToRotateAboutZ))
@@ -135,6 +147,8 @@ class Joint(ABC):
         Transform[0:3,2] = zhat
         Transform[0:3,3] = self.Pose.t
         self.Pose = SE3(Transform)
+        self.proximalDubins = self.ProximalDubinsFrame()
+        self.distalDubins = self.DistalDubinsFrame()
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',

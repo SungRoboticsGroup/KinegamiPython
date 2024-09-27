@@ -50,6 +50,7 @@ bottomLeftInAxis = tree.addJoint(spine2, PrismaticJoint(numSides, r, twistJointL
 bottomLeftOrthogonal = tree.addJoint(bottomLeftInAxis, RevoluteJoint(numSides, r, np.pi, SE3.Rz(np.pi/2) @ SE3.Trans([jointLength,0,jointLength])), fixedOrientation=True, fixedPosition=True, safe=False)
 bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, EndTip(numSides, r, SE3.Trans([jointLength,0,0]) @ SE3.Ry(np.pi/2), 0.5), fixedOrientation=True, fixedPosition=True, safe=False)
 
+tree.save("manualHexapod")
 tree.show()
 
 printedTree = origamiToPrinted(tree, 1.5/scale)

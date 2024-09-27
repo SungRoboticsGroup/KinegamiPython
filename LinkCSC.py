@@ -215,15 +215,21 @@ class LinkCSC:
     def getCapsules(self):
         capsules = [CollisionCapsule(base=self.Elbow1EndFrame, radius=self.r, height=np.linalg.norm(self.Elbow2StartFrame.t - self.Elbow1EndFrame.t))]
 
+        lastFrame = [float('inf')] * 3
         if self.elbow1:
             for elbow in self.elbow1.elbows:
-                capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
-                capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+                if np.linalg.norm(elbow.StartFrame.t - lastFrame) > self.r/2:
+                    capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
+                    capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+                    lastFrame = elbow.EndFrame.t
         
+        lastFrame = [float('inf')] * 3
         if self.elbow2:
             for elbow in self.elbow2.elbows:
-                capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
-                capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+                if np.linalg.norm(elbow.StartFrame.t - lastFrame) > self.r/2:
+                    capsules.append(CollisionCapsule(base=elbow.StartFrame, radius = self.r, height=np.linalg.norm(elbow.StartFrame.t - elbow.midPoint)))
+                    capsules.append(CollisionCapsule(base=elbow.EndFrame, radius = self.r, height=-np.linalg.norm(elbow.EndFrame.t - elbow.midPoint)))
+                    lastFrame = elbow.EndFrame.t
         return capsules
 
     def recomputeCollisionCapsules(self):

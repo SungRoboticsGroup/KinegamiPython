@@ -61,7 +61,7 @@ tree = tree.squaredOptimize()
 
 tree.show()
 
-tree.save("optimizedHand")
+tree.save("optimizedHand-new2")
 
 #plotPrintedTree(origamiToPrinted(tree, 0.05), "algorithmHandPrinted")
 #tree.show()

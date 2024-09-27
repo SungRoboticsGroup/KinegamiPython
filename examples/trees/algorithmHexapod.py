@@ -51,14 +51,14 @@ bottomLeftInAxis = tree.addJoint(spine2, PrismaticJoint(numSides, r, twistJointL
 bottomLeftOrthogonal = tree.addJoint(bottomLeftInAxis, RevoluteJoint(numSides, r, np.pi, SE3.Rz(np.pi/2) @ SE3.Trans([jointLength,0,jointLength])))
 bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, EndTip(numSides, r, SE3.Trans([jointLength,0,0]), 0.5, pathIndex=0))
 
-hexapod = makeTubularKinematicTree(tree, plotSteps=False, optimize=False)
+hexapod = makeTubularKinematicTree(tree, plotSteps=False)
 
-hexapod.show()
+#hexapod.show()
 
-optimizedHexapod = hexapod.squaredOptimize(showSteps=False)
+optimizedHexapod = hexapod.squaredOptimize(showSteps=False,guarantee=False)
 
-optimizedHexapod.show(showCollisionBoxes=False)
+optimizedHexapod.show()
 
-optimizedHexapod.save("optimizedHexapod2")
+optimizedHexapod.save("optimizedHexapod10")
 
-print(optimizedHexapod.detectCollisions(plot=True, includeEnds=True, debug=True))
+print(optimizedHexapod.detectCollisions(plot=True, includeEnds=False, debug=True))

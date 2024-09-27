@@ -1,5 +1,6 @@
 __pycache__/
 kinegamienv/
+old/
 scad_output/*
 scad/old/
 3d_output/*

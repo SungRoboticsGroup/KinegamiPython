@@ -109,6 +109,9 @@ class RevoluteJoint(OrigamiJoint):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
     
+    def copy(self):
+        return RevoluteJoint(self.numSides, self.r, self.totalBendingAngle, self.Pose, self.numSinkLayers, self.initialState)
+    
 class ExtendedRevoluteJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
                  tubeLength: float, Pose : SE3, numSinkLayers : int = 1,
@@ -264,6 +267,9 @@ class ExtendedRevoluteJoint(OrigamiJoint):
     def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
+    
+    def copy(self):
+        return ExtendedRevoluteJoint(self.numSides, self.r, self.totalBendingAngle, self.tubeLength, self.Pose, self.numSinkLayers, self.initialState)
 
 
 class PrismaticJoint(OrigamiJoint):
@@ -330,15 +336,19 @@ class PrismaticJoint(OrigamiJoint):
     
     def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
+
+    def copy(self):
+        return PrismaticJoint(self.numSides, self.r, self.neutralLength, self.numLayers, self.coneAngle, self.Pose, self.initialState)
         
     
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
     def __init__(self, numSides : int, r : float, Pose : SE3, pathIndex : int = 2):
         assert(pathIndex in [0,1,2])
-        super().__init__(numSides, r, 0, Pose)
         self.pidx = pathIndex
         self.pattern = TubularPattern(numSides, r)
+        super().__init__(numSides, r, 0, Pose)
+
     
     def pathIndex(self) -> int:
         return self.pidx
@@ -381,6 +391,9 @@ class Waypoint(OrigamiJoint):
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedWaypoint
         return PrintedWaypoint(self.r, self.Pose, screwRadius, pathIndex = self.pidx)
+
+    def copy(self):
+        return Waypoint(self.numSides, self.r, self.Pose, self.pidx)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -473,6 +486,9 @@ class Tip(OrigamiJoint):
     
     def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength)]
+
+    def copy(self):
+        return Tip(self.numSides, self.r, self.Pose, self.neutralLength, self.forward, self.pidx)
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):

@@ -1,5 +1,6 @@
 from KinematicTree import *
-
+from OrigamiJoint import *
+from PrintedJoint import *
 """
 A tree of Joint objects.
 Unlike KinematicTree, this does not have any link geometry connecting the joints.
@@ -59,7 +60,7 @@ Input:
 Output: a KinematicTree object that instantiates the desired kinematics
         as a tubular tree with radius r
 """
-def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False, optimize = False) -> KinematicTree:
+def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bool = False, orientUp : bool = False) -> KinematicTree:
     planeNormal = directionNotOrthogonalToAnyOf(jointSpecs.zHats())
     rootJoint = jointSpecs.Joints[0]
     # Set orientation appropriately
@@ -152,12 +153,6 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         ball1,ball2 = KT.Links[jInKT].endBoundingBalls2r()
         boundingCylinder.expandToIncludeBall(ball1)
         boundingCylinder.expandToIncludeBall(ball2)
-
-        if optimize:
-            if len(addedWaypoints) > 0:
-                KT, loss = KT.optimizeWaypointsAndJointPlacement(addedWaypoints[0], addedWaypoints[1], jInKT)
-            else:
-                KT, loss = KT.optimizeJointPlacement(jInKT)
     
     if orientUp:
         z = planeNormal / np.linalg.norm(planeNormal)
@@ -165,5 +160,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
         y = np.cross(z,x)
         R = SO3(np.array([x,y,z]).T)
         KT.transformAll(SE3.Rt(R, np.zeros(3)))
-
+    
+    for i in range(0, len(KT.Joints)):
+        KT.Joints[i].recomputeCollisionCapsules()
     return KT

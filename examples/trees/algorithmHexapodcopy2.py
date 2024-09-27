@@ -58,6 +58,6 @@ optimizedHexapod = hexapod.squaredOptimize(showSteps=False)
 
 optimizedHexapod.show(showCollisionBoxes=False)
 
-optimizedHexapod.save("optimizedHexapod")
+optimizedHexapod.save("optimizedHexapodTest2")
 
 print(optimizedHexapod.detectCollisions(plot=True, includeEnds=True, debug=True))

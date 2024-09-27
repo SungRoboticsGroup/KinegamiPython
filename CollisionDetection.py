@@ -10,166 +10,208 @@ class CollisionBox:
     def __init__(self, points=None, startDubinsFrame=None, endDubinsFrame=None,r=None):
         if points is None:
             if startDubinsFrame is None or endDubinsFrame is None or r is None:
-                points = np.zeros((8, 3))
+                self.points = np.zeros((8, 3))
             else:
-                points = np.array([
-                    startDubinsFrame.t + r*startDubinsFrame.o + r*startDubinsFrame.a,
-                    startDubinsFrame.t - r*startDubinsFrame.o + r*startDubinsFrame.a,
-                    startDubinsFrame.t - r*startDubinsFrame.o - r*startDubinsFrame.a,
-                    startDubinsFrame.t + r*startDubinsFrame.o - r*startDubinsFrame.a,
-                    endDubinsFrame.t + r*endDubinsFrame.o - r*endDubinsFrame.a,
-                    endDubinsFrame.t - r*endDubinsFrame.o - r*endDubinsFrame.a,
-                    endDubinsFrame.t - r*endDubinsFrame.o + r*endDubinsFrame.a,
-                    endDubinsFrame.t + r*endDubinsFrame.o + r*endDubinsFrame.a,
-                ])
-    
-                # Compute the covariance matrix
-                covariance_matrix = np.cov(points, rowvar=False)
-                
-                # Perform eigen decomposition to get principal components
-                eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
-                
-                # Sort the eigenvectors by eigenvalues in descending order
-                idx = np.argsort(eigenvalues)[::-1]
-                eigenvectors = eigenvectors[:, idx]
-                
-                # Project the points onto the principal components
-                projected_points = points @ eigenvectors
-                
-                # Get the min and max points in the new basis
-                min_point = np.min(projected_points, axis=0)
-                max_point = np.max(projected_points, axis=0)
-                
-                # Define the 8 corners of the bounding box in the new basis
-                box_corners = np.array([
-                    [min_point[0], min_point[1], min_point[2]],
-                    [min_point[0], min_point[1], max_point[2]],
-                    [min_point[0], max_point[1], min_point[2]],
-                    [min_point[0], max_point[1], max_point[2]],
-                    [max_point[0], min_point[1], min_point[2]],
-                    [max_point[0], min_point[1], max_point[2]],
-                    [max_point[0], max_point[1], min_point[2]],
-                    [max_point[0], max_point[1], max_point[2]]
-                ])
-                
-                # Transform the box corners back to the original coordinate system
-                box_corners = box_corners @ eigenvectors.T
+                self.width = r*2
+                self.axis = endDubinsFrame.t - startDubinsFrame.t
+                self.height = np.linalg.norm(self.axis)
+                self.center = startDubinsFrame.t + self.axis/2
 
-                self.points= box_corners
+                self.points = np.array([
+                    startDubinsFrame.t + r * startDubinsFrame.n + r * startDubinsFrame.o,
+                    startDubinsFrame.t - r * startDubinsFrame.n - r * startDubinsFrame.o,
+                    startDubinsFrame.t - r * startDubinsFrame.n + r * startDubinsFrame.o,
+                    startDubinsFrame.t + r * startDubinsFrame.n - r * startDubinsFrame.o,
+                    endDubinsFrame.t + r * endDubinsFrame.n + r * endDubinsFrame.o,
+                    endDubinsFrame.t - r * endDubinsFrame.n - r * endDubinsFrame.o,
+                    endDubinsFrame.t - r * endDubinsFrame.n + r * endDubinsFrame.o,
+                    endDubinsFrame.t + r * endDubinsFrame.n - r * endDubinsFrame.o
+                ])
         else:
             self.points = np.array(points)
     
-    def _get_bounds(self):
-        min_bound = self.points.min(axis=0)
-        max_bound = self.points.max(axis=0)
-        return min_bound, max_bound
 
-    def expand_to_envelop(self, other):
-        """Expand this box to envelop another box."""
-        min_bound_self, max_bound_self = self._get_bounds()
-        min_bound_other, max_bound_other = other._get_bounds()
+    def rotate(self, angle):
+        if self.height == 0:
+            return self.points
 
-        new_min_bound = np.minimum(min_bound_self, min_bound_other)
-        new_max_bound = np.maximum(max_bound_self, max_bound_other)
-
-        # Create new points based on the new bounds
-        self.points = np.array([
-            [new_min_bound[0], new_min_bound[1], new_min_bound[2]],  # Bottom-front-left
-            [new_max_bound[0], new_min_bound[1], new_min_bound[2]],  # Bottom-front-right
-            [new_max_bound[0], new_max_bound[1], new_min_bound[2]],  # Bottom-back-right
-            [new_min_bound[0], new_max_bound[1], new_min_bound[2]],  # Bottom-back-left
-            [new_min_bound[0], new_min_bound[1], new_max_bound[2]],  # Top-front-left
-            [new_max_bound[0], new_min_bound[1], new_max_bound[2]],  # Top-front-right
-            [new_max_bound[0], new_max_bound[1], new_max_bound[2]],  # Top-back-right
-            [new_min_bound[0], new_max_bound[1], new_max_bound[2]]   # Top-back-left
-        ])
+        newPoints = rotate_box_arbitrary_axis(self.points, angle, self.center - self.axis/2, self.axis)
+        return newPoints
     
     def addToPlot(self, ax, color='r', alpha=0.4):
         try:
-            hull = ConvexHull(self.points)
+            hull = ConvexHull(self.points)#, qhull_options='Qs QJ')
 
-            # Get the vertices of the convex hull
             vertices = hull.points[hull.vertices]
             
-            # Collect the faces from the convex hull
             faces = hull.simplices
             
-            # Create the 3D polygon collection
+            # create the 3D polygon collection
             poly3d = [[vertices[vidx] for vidx in face] for face in faces]
             box_faces = Poly3DCollection(poly3d, facecolors=color, linewidths=1, edgecolors=None, alpha=alpha)
             
-            # Add the box to the plot
+            # add box to plot
             ax.add_collection3d(box_faces)
-        except:
+            for plotPoint in self.points:
+                ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=25)
+        except Exception as e:
             pass
 
-def separating_axis_theorem(box1, box2):
-    box1 = box1.points
-    box2 = box2.points
-    # Function to project a box onto an axis and return the min and max projections
-    def project_box(box, axis):
-        projections = [np.dot(vertex, axis) for vertex in box]
-        return min(projections), max(projections)
+def separatingAxisTheorem(b1, b2):
+    """
+    Check if two arbitrarily oriented boxes collide using the Separating Axis Theorem.
     
-    # Function to check if projections on a given axis overlap
-    def overlap(proj1, proj2):
-        return proj1[0] <= proj2[1] and proj2[0] <= proj1[1]
-    
-    # Extract edges and face normals
-    def get_edges_and_normals(box):
-        edges = []
-        normals = []
-        for i in range(4):
-            edge1 = box[i+4] - box[i]
-            edge2 = box[(i+1)%4 + 4] - box[i+4]
-            edge3 = box[i] - box[(i+1)%4]
-            edges.append(edge1)
-            edges.append(edge2)
-            edges.append(edge3)
-            normals.append(np.cross(edge1, edge2))
-        return edges, normals
-    
-    # Get edges and normals for both boxes
-    edges1, normals1 = get_edges_and_normals(box1)
-    edges2, normals2 = get_edges_and_normals(box2)
-    
-    # List of potential separating axes
-    axes = normals1 + normals2 + [np.cross(e1, e2) for e1 in edges1 for e2 in edges2]
-    
-    # Check for a separating axis
-    for axis in axes:
-        if np.linalg.norm(axis) == 0:
-            continue
-        axis = axis / np.linalg.norm(axis)
-        projection1 = project_box(box1, axis)
-        projection2 = project_box(box2, axis)
-        if not overlap(projection1, projection2):
-            return False  # Found a separating axis, hence boxes do not intersect
-    
-    return True  # No separating axis found, hence boxes intersect
+    :param box1: List of 8 points (x, y, z) representing the corners of the first box
+    :param box2: List of 8 points (x, y, z) representing the corners of the second box
+    :return: Boolean indicating whether the boxes collide
+    """
 
+    if b1.height < 1e-4 or b2.height < 1e-4:
+        return False
+
+    if np.linalg.norm(b1.center - b2.center) > np.linalg.norm([b1.height,b1.width,b1.width]) / 2 + np.linalg.norm([b2.height,b2.width,b2.width]) / 2:
+        return False
+
+    box1 = np.array(b1.points)
+    box2 = np.array(b2.points)
+
+    def get_box_axes(box):
+        # Compute three edges from a corner
+        edges = [
+            box[1] - box[0],
+            box[3] - box[0],
+            box[4] - box[0]
+        ]
+        # Normalize the edges, handling zero-length edges
+        return [normalize(edge) for edge in edges if not np.allclose(edge, 0)]
+
+    def normalize(v):
+        norm = np.linalg.norm(v)
+        if norm == 0:
+            return v
+        return v / norm
+    
+    def project_box_onto_axis(box, axis):
+        projections = np.dot(box, axis)
+        return np.min(projections), np.max(projections)
+
+    axes1 = get_box_axes(box1)
+    axes2 = get_box_axes(box2)
+
+    # Check all 15 potential separating axes
+    for axis in axes1 + axes2 + [np.cross(a, b) for a in axes1 for b in axes2]:
+        if np.all(axis == 0):
+            continue  # Skip zero vectors resulting from parallel edges
+
+        projection1 = project_box_onto_axis(box1, axis)
+        projection2 = project_box_onto_axis(box2, axis)
+
+        if projection1[1] < projection2[0] or projection2[1] < projection1[0]:
+            return False  # Separating axis found, no collision
+
+    return True  # No separating axis found, boxes collide
+
+def rotate_box_arbitrary_axis(box, angle_deg, axis_point, axis_direction):
+    """
+    Rotate a box around an arbitrary axis positioned at a specific point in space.
+    
+    :param box: Array of shape (8, 3) representing the box corners
+    :param angle_deg: Rotation angle in degrees
+    :param axis_point: 3D point that the axis passes through
+    :param axis_direction: 3D vector representing the direction of the axis
+    :return: Rotated box
+    """
+    angle_rad = np.radians(angle_deg)
+    axis_point = np.array(axis_point)
+    axis_direction = np.array(axis_direction)
+    axis_direction = axis_direction / np.linalg.norm(axis_direction)  # Normalize the axis direction
+    
+    # Translate box so that rotation axis passes through origin
+    translated_box = box - axis_point
+    
+    # Compute rotation matrix (Rodrigues' rotation formula)
+    K = np.array([
+        [0, -axis_direction[2], axis_direction[1]],
+        [axis_direction[2], 0, -axis_direction[0]],
+        [-axis_direction[1], axis_direction[0], 0]
+    ])
+    rotation_matrix = (
+        np.eye(3) + 
+        np.sin(angle_rad) * K + 
+        (1 - np.cos(angle_rad)) * np.dot(K, K)
+    )
+    
+    # Apply rotation and translate back
+    rotated_box = np.dot(translated_box, rotation_matrix.T) + axis_point
+    
+    return rotated_box
+
+def vectorized_box_collision(boxes1, boxes2):
+    """
+    Vectorized function to check collisions between multiple pairs of boxes.
+    
+    :param boxes1: Array of shape (N, 8, 3) representing N boxes
+    :param boxes2: Array of shape (N, 8, 3) representing N boxes
+    :return: Boolean array of shape (N,) indicating collisions
+    """
+    def get_box_axes(boxes):
+        edges = boxes[:, [1, 3, 4]] - boxes[:, 0][:, np.newaxis]
+        norms = np.linalg.norm(edges, axis=2, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)  # Avoid division by zero
+        return edges / norms
+
+    def project_boxes_onto_axis(boxes, axis):
+        projections = np.dot(boxes, axis)
+        return np.min(projections, axis=1), np.max(projections, axis=1)
+
+    axes1 = get_box_axes(boxes1)
+    axes2 = get_box_axes(boxes2)
+
+    all_axes = np.concatenate([
+        axes1.reshape(-1, 3),
+        axes2.reshape(-1, 3),
+        np.cross(axes1[:, :, np.newaxis], axes2[:, np.newaxis, :]).reshape(-1, 3)
+    ])
+
+    collisions = np.ones(len(boxes1), dtype=bool)
+
+    for axis in all_axes:
+        if np.allclose(axis, 0):
+            continue
+
+        proj1_min, proj1_max = project_boxes_onto_axis(boxes1, axis)
+        proj2_min, proj2_max = project_boxes_onto_axis(boxes2, axis)
+
+        collisions &= (proj1_max >= proj2_min) & (proj2_max >= proj1_min)
+
+        if not np.any(collisions):
+            break
+
+    return collisions
 
 class CollisionCapsule:
     def __init__(self, base : SE3(), radius : float, height : float):
         self.radius = radius
         self.height = height
         self.base = base @ SE3.Ry(np.pi/2)
-        self.otherBase = self.base @ SE3.Trans(self.height * self.base.R[:,2])
-        self.start = (self.base @ SE3.Trans(-self.radius * self.base.R[:,2])).t
-        self.center = (self.base @ SE3.Trans(self.height/2 * self.base.R[:,2])).t
-        self.end = (self.base @ SE3.Trans((self.height + self.radius) * self.base.R[:,2])).t
+        self.otherBase = self.base @ SE3.Trans([0,0,self.height])
+        self.start = (self.base @ SE3.Trans([0,0,-self.radius])).t
+        self.center = (self.base @ SE3.Trans([0,0,self.height/2])).t
+        self.end = (self.base @ SE3.Trans([0,0,self.height + self.radius])).t
         self.halfDist = np.abs(self.height/2) + self.radius
+
+        self.box = CollisionBox(startDubinsFrame=self.base, endDubinsFrame=self.otherBase, r=self.radius)
 
     
     def addToPlot(self, ax, color='r', alpha=0.25):
         def createCirclePoints(center, radius, normal, num_points=50):
             """Generate points on a circle in 3D."""
             angles = np.linspace(0, 2 * np.pi, num_points)
-            circle_points = []
+            circlePoints = []
             for angle in angles:
                 point = center + radius * (np.cos(angle) * orthogonalVector(normal) + np.sin(angle) * np.cross(normal, orthogonalVector(normal)))
-                circle_points.append(point)
-            return np.array(circle_points)
+                circlePoints.append(point)
+            return np.array(circlePoints)
         
         def orthogonalVector(v):
             """Find an orthogonal vector to v."""
@@ -180,252 +222,157 @@ class CollisionCapsule:
             return np.array([-v[1], v[0], 0])
 
         try:
-            # Bottom and top circles centers
-            bottom_center = self.base.t
-            top_center = bottom_center + self.height * self.base.R[:,2]
+            bottomCenter = self.base.t
+            topCenter = bottomCenter + self.height * self.base.R[:,2]
 
-            # Generate points on the bottom and top circles
-            bottom_circle_points = createCirclePoints(bottom_center, self.radius, self.base.R[:,2])
-            top_circle_points = createCirclePoints(top_center, self.radius, self.base.R[:,2])
+            bottomCirclePoints = createCirclePoints(bottomCenter, self.radius, self.base.R[:,2])
+            topCirclePoints = createCirclePoints(topCenter, self.radius, self.base.R[:,2])
 
-            # Create the spherical end caps
             theta, phi = np.mgrid[0:np.pi:10j, 0:2*np.pi:10j]
             x = self.radius * np.sin(theta) * np.cos(phi)
             y = self.radius * np.sin(theta) * np.sin(phi)
             z = self.radius * np.cos(theta)
 
-             # Bottom spherical cap
-            bottom_cap = np.vstack((x.flatten(), y.flatten(), z.flatten())).T
-            bottom_cap = bottom_cap @ self.base.R.T + bottom_center
+            bottomCap = np.vstack((x.flatten(), y.flatten(), z.flatten())).T
+            bottomCap = bottomCap @ self.base.R.T + bottomCenter
 
-            # Top spherical cap
-            top_cap = np.vstack((x.flatten(), y.flatten(), -z.flatten())).T
-            top_cap = top_cap @ self.base.R.T + top_center
+            topCap = np.vstack((x.flatten(), y.flatten(), -z.flatten())).T
+            topCap = topCap @ self.base.R.T + topCenter
 
-            # Combine all points
-            all_points = np.vstack((bottom_circle_points, top_circle_points, bottom_cap, top_cap))
-            hull = ConvexHull(all_points)
+            allPoints = np.vstack((bottomCirclePoints, topCirclePoints, bottomCap, topCap))
+            hull = ConvexHull(allPoints)
 
-            # Plot the capsule
             # for simplex in hull.simplices:
-            #     ax.plot(all_points[simplex, 0], all_points[simplex, 1], all_points[simplex, 2], 'k-')
-            ax.add_collection3d(Poly3DCollection(all_points[hull.simplices], facecolors=color, linewidths=1, edgecolors=None, alpha=alpha))
+            #     ax.plot(allPoints[simplex, 0], allPoints[simplex, 1], allPoints[simplex, 2], 'k-')
+            ax.add_collection3d(Poly3DCollection(allPoints[hull.simplices], facecolors=color, linewidths=1, edgecolors=None, alpha=alpha))
 
             # Plot bottom and top circles
-            # ax.plot(bottom_circle_points[:, 0], bottom_circle_points[:, 1], bottom_circle_points[:, 2], 'b-')
-            # ax.plot(top_circle_points[:, 0], top_circle_points[:, 1], top_circle_points[:, 2], 'b-')
+            # ax.plot(bottomCirclePoints[:, 0], bottomCirclePoints[:, 1], bottomCirclePoints[:, 2], 'b-')
+            # ax.plot(topCirclePoints[:, 0], topCirclePoints[:, 1], topCirclePoints[:, 2], 'b-')
         except:
             pass
-    
-    def decomposeCapsule(self):
-        #segment: Array with two points representing the segment.
-        #end_centers: Array with two points representing the centers of the spherical ends.
 
-        bottom_center = self.base.t
-        top_center = self.otherBase.t#bottom_center + self.height * self.base.R[:, 2]
-        return np.array([bottom_center, top_center]), np.array([bottom_center, top_center])
-
-    def frameOverlap(self, frame, radius):
-        #if too far away to overlap, return false
-        if (np.linalg.norm(self.base.t - frame.t) > self.radius + radius) and (np.linalg.norm(self.otherBase.t - frame.t) > self.radius + radius):
-            return False, None
-            
-        # Capsule endpoints
-        capsuleStart = self.base.t
-        capsuleEnd = self.otherBase.t# + self.height * self.base.R[:,2]
-        
-        # Circle center and normal
-        circleCenter = frame.t
-        circleNormal = frame.R[:, 2]
-
-        # Project the circle's center onto the line defined by the capsule's segment
-        closestPoint = closestPointToSegment(circleCenter, capsuleStart, capsuleEnd)
-        
-        # Distance from the circle's center to the closest point on the capsule's line segment
-        lineDist = np.linalg.norm(circleCenter - closestPoint)
-        
-        if lineDist <= radius + self.radius:
-            # Calculate intersection points
-            intersectionPoints = []
-            
-            # Check if the circle intersects with the cylindrical part of the capsule
-            if lineDist <= radius + self.radius:
-                intersectionPoints.append(closestPoint)
-            
-            # Check hemispherical ends of the capsule
-            startDist = np.linalg.norm(circleCenter - capsuleStart)
-            endDist = np.linalg.norm(circleCenter - capsuleEnd)
-            
-            if startDist <= radius + self.radius:
-                intersectionPoints.append(capsuleStart)
-            
-            if endDist <= radius + self.radius:
-                intersectionPoints.append(capsuleEnd)
-            
-            # If the normal projection of the circle center to the capsule line segment is outside the segment, then it won't intersect
-            normalProjection = np.dot(circleCenter - capsuleStart, circleNormal)
-            closestPointOnCirclePlane = circleCenter - normalProjection * circleNormal
-            
-            circlePlaneDist = pointToLine(closestPointOnCirclePlane, capsuleStart, capsuleEnd)
-            
-            if circlePlaneDist <= radius + self.radius:
-                intersectionPoints.append(closestPointOnCirclePlane)
-            
-            return True, intersectionPoints[0]
-        
-        return False, []
-    
     def collidesWith(self, other, includeEnds=False):
         #if too far away to collide, return false
         if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
             return False, None
-
-        minDistance, collisionPoint = self.collisionDistance(other, includeEnds=includeEnds)
-
-        extra = 0
-        if includeEnds:
-            extra = self.radius/100
         
-        if minDistance <= self.radius + other.radius + extra:
-            return True, collisionPoint
+        result, point = capsuleCollision(self, other)
+
+        return result, point
+
+def pointInCapsuleHemisphere(point, capsule):
+    start, end, radius = capsule
+    axis = end - start
+    axis_length = np.linalg.norm(axis)
+
+    # Check distance from point to start and end
+    distToStart = np.linalg.norm(point - start)
+    distToEnd = np.linalg.norm(point - end)
+
+    # Check if point is closer to an end than the cylinder part
+    if distToStart < distToEnd and distToStart < radius:
+        return True  # In start hemisphere
+    elif distToEnd < distToStart and distToEnd < radius:
+        return True  # In end hemisphere
+    
+    return False  # Not in either hemisphere
+
+def closest_point_on_line_segment(a, b, p):
+    ab = b - a
+    t = np.dot(p - a, ab) / np.dot(ab, ab)
+    return a + np.clip(t, 0, 1) * ab
+
+    
+def capsuleCollision(capsule1, capsule2):
+    # find closest points between the line segments of both capsules
+    p1, p2 = closestPointsBetweenLineSegments(capsule1.start, capsule1.end, capsule2.start, capsule2.end)
+    
+    vector = p2 - p1
+    distance = np.linalg.norm(vector)
+    
+    sumRadii = capsule1.radius + capsule2.radius
+
+    if distance < sumRadii:
+        collisionPoint = p1 + vector * 0.5
+        
+        if distance > sumRadii/10000 and (pointInCapsuleHemisphere(collisionPoint, (capsule1.start, capsule1.end, capsule1.radius)) or pointInCapsuleHemisphere(collisionPoint, (capsule2.start, capsule2.end, capsule2.radius))):
+            if not separatingAxisTheorem(CollisionBox(startDubinsFrame=capsule1.base, endDubinsFrame=capsule1.otherBase, r = capsule1.radius/(2**0.5) - capsule1.radius/1000), CollisionBox(startDubinsFrame=capsule2.base, endDubinsFrame=capsule2.otherBase, r = capsule2.radius/(2**0.5) - capsule2.radius/1000)):
+                return False, None
+
+        return True, collisionPoint
+    else:
+        return False, None
+
+def closestPointsBetweenLineSegments(a1, a2, b1, b2):
+    """
+    Find the closest points between two line segments, preferring solutions closer to midpoints.
+    
+    :param a1: Start point of the first line segment
+    :param a2: End point of the first line segment
+    :param b1: Start point of the second line segment
+    :param b2: End point of the second line segment
+    :return: Tuple of closest points (point_on_segment_a, point_on_segment_b)
+    """
+    # Convert inputs to numpy arrays
+    a1, a2, b1, b2 = map(np.array, (a1, a2, b1, b2))
+    
+    # Vectors
+    d1 = a2 - a1
+    d2 = b2 - b1
+    r = a1 - b1
+    
+    # Midpoints
+    mid_a = (a1 + a2) / 2
+    mid_b = (b1 + b2) / 2
+    
+    a = np.dot(d1, d1)
+    e = np.dot(d2, d2)
+    f = np.dot(d2, r)
+    
+    # check if segments degenerate into points
+    if a <= 1e-8 and e <= 1e-8:
+        # both segments degenerate into points
+        return a1, b1
+    
+    if a <= 1e-8:
+        # first segment degenerates into a point
+        s = 0
+        t = np.clip(f / e, 0, 1)
+    elif e <= 1e-8:
+        # second segment degenerates into a point
+        t = 0
+        s = np.clip(-np.dot(d1, r) / a, 0, 1)
+    else:
+        # non-degenerate case
+        c = np.dot(d1, d2)
+        b = np.dot(d1, r)
+        denom = a * e - c * c
+        
+        if abs(denom) > 1e-8:
+            s = np.clip((b * e - c * f) / denom, 0, 1)
         else:
-            return False, None
-
-    def collisionDistance(self, other, includeEnds=False):
-        segment1, ends1 = self.decomposeCapsule()
-        segment2, ends2 = other.decomposeCapsule()
-
-        minDistance = float('inf')
-        collisionPoint = None
+            #lines are parallel
+            s_numer = np.dot(b1 - a1, a2 - a1)
+            s_denom = np.dot(a2 - a1, a2 - a1)
+            s = np.clip(s_numer / s_denom, 0, 1)
         
-        # Check distance between cylindrical segments
-        for point in segment1:
-            distance, closestPoint = pointToSegmentDistance(point, segment2)
-
-            pt = 0.5 * (point + closestPoint)
-            #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if includeEnds or (distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0):
-                if distance < minDistance:
-                    minDistance = distance
-                    collisionPoint = pt
-
-        for point in segment2:
-            distance, closestPoint = pointToSegmentDistance(point, segment1)
-
-            pt = 0.5 * (point + closestPoint)
-            #if point is on the same side of both circular bases of the capsule, then contact point is not in cylinder
-            if includeEnds or (distance <= minDistance and signedDistanceToFrame(pt, self.base) * signedDistanceToFrame(pt, self.otherBase) <= 0 and signedDistanceToFrame(pt, other.base) * signedDistanceToFrame(pt, other.otherBase) <= 0):
-                if distance < minDistance:
-                    minDistance = distance
-                    collisionPoint = pt
-                
-
-        # Check distance between spherical ends
-        if includeEnds:
-            for p1 in ends1:
-                for p2 in ends2:
-                    distance = np.linalg.norm(p1 - p2)
-                    if distance < minDistance:
-                        minDistance = distance
-                        collisionPoint = 0.5 * (p1 + p2)
-
-        return minDistance, collisionPoint
-    # def collidesWith(self, other, includeEnds=False):
-    #     #if too far away to collide, return false
-    #     if np.linalg.norm(self.center - other.center) > self.halfDist + other.halfDist:
-    #         return False, None
+        t = np.clip((c * s + f) / e, 0, 1)
         
-    #     a_Normal = normalize(self.end - self.start)#normalize(a.tip – a.base); 
-    #     a_LineEndOffset = a_Normal * self.radius#a_Normal * a.radius; 
-    #     a_A = self.start + a_LineEndOffset#a.base + a_LineEndOffset; 
-    #     a_B = self.end - a_LineEndOffset#a.tip - a_LineEndOffset;
-
-    #     b_Normal = normalize(other.end - other.start)#normalize(b.tip – b.base); 
-    #     b_LineEndOffset = b_Normal * other.radius#b_Normal * b.radius; 
-    #     b_A = other.start + b_LineEndOffset#b.base + b_LineEndOffset; 
-    #     b_B = other.end - b_LineEndOffset#b.tip - b_LineEndOffset;
-
-    #     #vectors between line endpoints:
-    #     v0 = b_A - a_A
-    #     v1 = b_B - a_A
-    #     v2 = b_A - a_B
-    #     v3 = b_B - a_B
-
-    #     # squared distances:
-    #     d0 = np.dot(v0, v0)
-    #     d1 = np.dot(v1, v1) 
-    #     d2 = np.dot(v2, v2) 
-    #     d3 = np.dot(v3, v3)
-
-    #     #select best potential endpoint on capsule A:
-    #     bestA = a_A
-    #     if (d2 < d0 or d2 < d1 or d3 < d0 or d3 < d1):
-    #         bestA = a_B
-    #     # }
-    #     # else
-    #     # {
-    #     # bestA = a_A;
-    #     # }
-
-    #     # select point on capsule B line segment nearest to best potential endpoint on A capsule:
-    #     bestB = closestPointOnLineSegment(b_A, b_B, bestA)
-
-    #     # now do the same for capsule A segment:
-    #     bestA = closestPointOnLineSegment(a_A, a_B, bestB)
-
-    #     #We selected the two best possible candidates on both capsule axes. What remains is to place spheres on those points and perform the sphere intersection routine:
-
-    #     penetration_normal = bestA - bestB
-    #     length = np.linalg.norm(penetration_normal) #length(penetration_normal)
-    #     penetration_normal /= length;  #normalize
-    #     penetration_depth = self.radius + other.radius - length
-    #     intersects = penetration_depth > 0
-
-    #     return intersects, np.array([0,0,0])
-
-def closestPointOnLineSegment(A, B, Point):
-    AB = B - A
-    t = np.dot(Point - A, AB) / np.dot(AB, AB)
-    return A + min(max(t, 0), 1) * AB
-        
-
-def pointToSegmentDistance(point, segment):
-    p = point
-    v = segment[0]
-    w = segment[1]
+        # check multiple solutions
+        if abs(np.dot(d1, d2)) > 1 - 1e-8:  # nearly parallel
+            s_start = max(0, min(1, s, (c - f) / e))
+            s_end = min(1, max(0, s, (c + f) / e))
+            
+            # choose s closest to midpoint
+            if abs(s_start - 0.5) < abs(s_end - 0.5):
+                s = s_start
+            else:
+                s = s_end
+            
+            t = np.clip((c * s + f) / e, 0, 1)
     
-    l2 = np.sum((v - w) ** 2)
-    if l2 == 0:
-        return np.linalg.norm(p - v), point
+    point_on_segment_a = a1 + s * d1
+    point_on_segment_b = b1 + t * d2
     
-    t = max(0, min(1, np.dot(p - v, w - v) / l2))
-    projection = v + t * (w - v)
-
-    return np.linalg.norm(p - projection), projection
-
-def signedDistanceToFrame(point, frame : SE3()):
-    vector = point - frame.t
-    dist = np.dot(vector, frame.n)
-
-    return dist
-
-
-def pointToLine(p, a, b):
-    """Compute the minimum distance from point p to line segment ab."""
-    pa = p - a
-    ba = b - a
-    h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
-    return np.linalg.norm(pa - h * ba)
-
-def closestPointToSegment(p, a, b):
-    """Compute the closest point from point p to line segment ab."""
-    pa = p - a
-    ba = b - a
-    h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
-    return a + h * ba
-
-def normalize(v):
-    norm = np.linalg.norm(v)
-    if norm == 0: 
-       return v
-    return v / norm
+    return point_on_segment_a, point_on_segment_b

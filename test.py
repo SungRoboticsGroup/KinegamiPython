@@ -1,39 +1,46 @@
+import os
+import sys
+this_dir = os.path.dirname(__file__)
+main_dir = os.path.abspath(os.path.join(this_dir, '../..'))
+sys.path.append(main_dir)
+
+# Example 1A
 from KinematicTree import *
 from testqtgraph import *
-import time
 from makeKinematicTree import *
 
-tree = loadKinematicTree("optimizedHexapod2")
-tree = origamiToPrinted(tree, 1.5/30)
-#plotPrintedTree(tree, "optimizedHexapodPrinted")
-tree.export3DKinematicTree("optimizedHexapodPrinted2")
-print(tree.detectCollisions(plot=False, debug=True))
+tree = loadKinematicTree("optimizedHexapod9")
 
-# tree = loadKinematicTree("algorithmHand")
+tree.show()
+# #tree.show()
+# #tree.show(showSpecificCapsules=([(23, 0)],[(27, 5)]))
 
-# r = 1
-# numSides = 4
-# jointLength = 0.45/0.245
-# unextendedRevoluteJointLength = RevoluteJoint(numSides, r, np.pi, SE3()).neutralLength
-# extensionLength = (jointLength - unextendedRevoluteJointLength)/2
+# for i in range(0, len(tree.Joints)):
+#     specificJointIndices = [i]
+#     capsules = tree.selectCollisionCapsules(specificJointIndices=specificJointIndices, ignoreLater=False)
+#     #print(f"checking {i}")
+#     if tree.detectCollisionsWithCapsules(specificJointIndices, capsules, show=True, debug=True) > 0:
+#         print(i)
+
+# # print(separatingAxisTheorem(tree.Joints[23].collisionCapsules[0].box, tree.Links[27].collisionCapsules[5].box))
+# # print(tree.Joints[23].collisionCapsules[0].box.points, tree.Links[27].collisionCapsules[5].box.points)
+# # if tree.Joints[23].collisionCapsules[0].collidesWith(tree.Links[27].collisionCapsules[5])[0]:
+# #     print("SUCCESS")
 
 
-# spec = JointSpecificationTree(Waypoint(numSides, r, Pose=SE3()))
-# palmJoint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(4,0,3)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4))
-# palm = spec.addJoint(0, palmJoint, relative=True)
+# # specificJointIndices = [7]
+# # capsules = tree.selectCollisionCapsules(specificJointIndices=specificJointIndices, ignoreLater=True)
+# # print(tree.detectCollisionsWithCapsules(specificJointIndices, capsules, show=True))
+# #tree.show()
+# # print(tree.Joints[7].collisionCapsules[0].collidesWith(tree.Joints[2].collisionCapsules[0]))
+# # print(tree.Joints[2].collisionCapsules[0].collidesWith(tree.Joints[7].collisionCapsules[0]))
 
 
-# thumb0Joint = ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength, SE3.Trans(jointLength,0,0)@SE3.Rx(np.pi/2))
-# thumb0 = spec.addJoint(palm, thumb0Joint, relative=True)
+# # for i in range(0, len(tree.Links[7].collisionCapsules)):
+# #     for j in range(0, len(tree.Joints[2].collisionCapsules)):
+# #         if tree.Links[7].collisionCapsules[i].collidesWith(tree.Joints[2].collisionCapsules[j])[0]:
+# #             print(i, j)
+# #         if tree.Joints[2].collisionCapsules[j].collidesWith(tree.Links[7].collisionCapsules[i])[0]:
+# #             print(i, j)
 
-# thumb1 = spec.addJoint(thumb0, ExtendedRevoluteJoint(numSides, r, np.pi, extensionLength,
-#                                            SE3.Trans(4,0,0)), relative=True)
-
-# thumbEnd = spec.addJoint(thumb1, EndTip(numSides, r, 
-#         SE3.Trans(3,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
-
-# tree = makeTubularKinematicTree(spec, plotSteps=False, optimize=False)
-
-# tree2 = tree.optimizeJointsDifferentiable()
-
-# tree2.show()
+# #tree.show(addCapsules=[tree.Joints[4].collisionCapsules[0], tree.Joints[3].collisionCapsules[0]])
