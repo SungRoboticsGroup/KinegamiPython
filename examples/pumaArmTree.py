@@ -58,7 +58,7 @@ chain.transformAll(SE3.Trans(0,0,660.4))
 # Plot the resulting chain
 chain.show()
 
-newChain = chain.squaredOptimize()
+newChain = chain.squaredOptimize(guarantee=True)
 
 newChain.show()
 # # Adjust the resulting chain to shorten links

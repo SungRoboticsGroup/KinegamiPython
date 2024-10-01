@@ -55,7 +55,7 @@ hexapod = makeTubularKinematicTree(tree, plotSteps=False)
 
 #hexapod.show()
 
-optimizedHexapod = hexapod.squaredOptimize(showSteps=False,guarantee=False)
+optimizedHexapod = hexapod.squaredOptimize(showSteps=False, childParentRatio = 0, streamline=True, guarantee=False)
 
 optimizedHexapod.show()
 

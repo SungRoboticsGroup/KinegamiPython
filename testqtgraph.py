@@ -30,7 +30,7 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     layout.addWidget(view3d)
 
     # Set the background color to white
-    view3d.setBackgroundColor(QColor('white'))
+    view3d.setBackgroundColor(QColor('black'))
 
     # Enable antialiasing for smoother rendering
     view3d.opts['antialiasing'] = True
@@ -66,7 +66,7 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     print(f"TOTAL GENERATION TIME: {time.time() - real_start}s")
     #show axes
     grid = gl.GLGridItem()
-    grid.setColor((0,0,0,255))
+    grid.setColor((255,255,255,255))
     view3d.addItem(grid)
 
     # Show the plot

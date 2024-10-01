@@ -9,6 +9,10 @@ from KinematicTree import *
 from testqtgraph import *
 from makeKinematicTree import *
 
+tree = loadKinematicTree("unchangedHexapod")
+
+tree.show()
+
 tree = loadKinematicTree("optimizedHexapod9")
 
 tree.show()

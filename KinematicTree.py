@@ -982,16 +982,16 @@ class KinematicTree(Generic[J]):
                 self.transformJoint(jointIndex, Rotation, propogate, safe=False)
         return True
 
-    def optimizeJointPlacement(self, index, maxiter, tol, collisionError, showGuess = False, ignorePlacement=False, ignoreLater = False):
+    def optimizeJointPlacement(self, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater = False):
         parentIndex = self.Parents[index]
 
         selectedIndices = [index] if ignorePlacement else ([index] + self.Children[index])
         selectedCapsules = self.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater)
         def linkLoss(t, link, curveLossFactor = 2):
             #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
-            #return (t.Links[index].path.length - t.r*2) ** 2  + d + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError #t.detectCollisions(specificJointIndices=[index] if ignorePlacement else ([index] + self.Children[index]), includeEnds=ignorePlacement, ignoreLater=ignoreLater) * collisionError
             d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
-            return t.Links[index].path.length ** 2 + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d * t.r
+            childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childParentRatio
+            return t.Links[index].path.length ** 2 + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d * t.r + childrenLength
         def objective(params, returnWhich = False):
             tree = self.copyAbbreviatedSelf(ignoreLater, index)
 
@@ -1147,7 +1147,7 @@ class KinematicTree(Generic[J]):
                 raise Exception()
             return tree, loss
 
-    def optimizeWaypointPlacement(self, index, maxiter, tol, collisionError, ignorePlacement=False, ignoreLater=False):
+    def optimizeWaypointPlacement(self, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater=False):
         current = index
         dist = 0
         while current != 0:
@@ -1173,7 +1173,8 @@ class KinematicTree(Generic[J]):
 
         def linkLoss(t, link, curveLossFactor = np.pi):
             d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
-            return t.Links[index].path.length ** 2  + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d
+            childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childParentRatio
+            return t.Links[index].path.length ** 2  + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d * t.r + childrenLength
 
         def objective(params):
             tree = self.copyAbbreviatedSelf(ignoreLater, index)
@@ -1192,7 +1193,7 @@ class KinematicTree(Generic[J]):
             if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=False, relative=False, recomputeBoundingBall=False):
                 raise Exception("failed")
 
-            print(f"INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
+            #print(f"INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
 
             #initialTree.detectCollisions(debug=True)
         except Exception as e:
@@ -1217,9 +1218,9 @@ class KinematicTree(Generic[J]):
                 if not success:
                     raise Exception("failed")
 
-                print(f"NVM: {e}, INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
+                #print(f"NVM: {e}, INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
             except Exception as e:
-                print(f"INITIAL WAYPOINT GUESS NOT POSSIBLE : {e}")
+                #print(f"INITIAL WAYPOINT GUESS NOT POSSIBLE : {e}")
                 initialGuess = [0]*6
             
         initialLoss = objective([0]*6)
@@ -1253,7 +1254,7 @@ class KinematicTree(Generic[J]):
         else:
             raise Exception("Optimization failed dramatically")
 
-    def squaredOptimize(self, showSteps=False, guarantee=False):
+    def squaredOptimize(self, showSteps=False, childParentRatio=1, streamline = False, guarantee=False):
         for i in range(0, len(self.Joints)):
             self.Joints[i].recomputeCollisionCapsules()
 
@@ -1293,9 +1294,9 @@ class KinematicTree(Generic[J]):
                 tolerance = self.r/10
 
             if isWaypoint(self.Joints[index]):
-                tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, ignoreLater = (not guarantee))
+                tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee))
             else:
-                tree, loss = tree.optimizeJointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, ignoreLater = (not guarantee))
+                tree, loss = tree.optimizeJointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee))
 
             if isOptimized[self.Parents[index]]:
                 isOptimized[index] = True
@@ -1309,10 +1310,6 @@ class KinematicTree(Generic[J]):
             for j in range(len(self.Joints) - 1, 0, -1):
                 if not isOptimized[j] and len(self.Children[j]) == 0:
                     i = j
-
-            if i == None:
-                print("SOMETHING TERRIBLY WRONG")
-                break
 
             print(f"OPTIMIZING CHAIN ENDING AT {i}:")
             start2 = time.time()
@@ -1332,7 +1329,7 @@ class KinematicTree(Generic[J]):
                 
                 if isWaypoint(self.Joints[order[j]]):
                     try:
-                        tree2, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, ignorePlacement=True, ignoreLater = (not guarantee))
+                        tree2, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee))
 
                         if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
                             raise Exception("Moving all children caused collision.")
@@ -1354,13 +1351,13 @@ class KinematicTree(Generic[J]):
                         #         isOptimized[idx] = False
                         #         numOptimized -= 1
 
-                        tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, ignorePlacement=False, ignoreLater = (not guarantee))
+                        tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=False, ignoreLater = (not guarantee))
                         print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
                         #tree.show()
                         break
                 else:
                     try:
-                        tree2, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, showGuess=False, ignorePlacement=True, ignoreLater = (not guarantee))
+                        tree2, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee))
 
                         if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
                             raise Exception("Moving all children caused collision.")
@@ -1382,36 +1379,28 @@ class KinematicTree(Generic[J]):
                         #         isOptimized[idx] = False
                         #         numOptimized -= 1
 
-                        tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, showGuess=False, ignorePlacement=True, ignoreLater = (not guarantee))
+                        tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee))
                         print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
                         break
                 
-            #tree.show()
 
             while not isOptimized[i]:
                 optimizeFromIndex(i)
-            
+
+            # Another pass, not totally necessary but helps streamline shape, commented out to improve runtime
+            if streamline:
+                for j in range(0, len(order)):
+                    iters = 50
+                    tolerance = self.r/10
+                    
+                    if isWaypoint(self.Joints[order[j]]):
+                        tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee))
+                    else:
+                        tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee))
+
             print("CURRENT COLLISIONS")
             if tree.detectCollisions(debug=True) == 0:
                 print("NONE")
-            else:
-                pass
-                #tree.show()
-
-            # print("")
-            # Another pass, not totally necessary but helps streamline shape, commented out to improve runtime
-            # for j in range(0, len(order)):
-            #     iters = 50
-            #     tolerance = self.r/10
-                
-            #     if isWaypoint(self.Joints[order[j]]):
-            #         tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, ignoreLater = (not guarantee))
-            #     else:
-            #         tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, showGuess=False, ignoreLater = (not guarantee))
-
-            # print("CURRENT COLLISIONS (p2):")
-            # if tree.detectCollisions(debug=True) == 0:
-            #     print("NONE")
 
             print(f"Optimized chain ending at {i} in {time.time() - start2}s \n")
 
