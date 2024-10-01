@@ -811,10 +811,11 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
         self.plot_widget.setBackgroundColor(255,255,255,255)
 
-        grid = gl.GLGridItem()
+        self.grid = gl.GLGridItem()
 
-        self.plot_widget.addItem(grid)
-        grid.setColor((0,0,0,255))
+        self.plot_widget.addItem(self.grid)
+        self.grid.setColor((0,0,0,255))
+        self.grid_on = True
 
         self.current_point = 0
         self.chain = None
@@ -1112,6 +1113,10 @@ class PointEditorWindow(QMainWindow):
         self.insert_btn = QPushButton("Insert Waypoint")
         self.insert_btn.clicked.connect(self.insert_waypoint)
         self.frame_layout.addWidget(self.insert_btn)
+
+        self.toggle_grid = QPushButton("Hide Grid")
+        self.toggle_grid.clicked.connect(self.toggle_grid_func)
+        self.frame_layout.addWidget(self.toggle_grid)
         
         self.frame_widget.setLayout(self.frame_layout)
         self.frame_dock.setWidget(self.frame_widget)
@@ -1204,6 +1209,14 @@ class PointEditorWindow(QMainWindow):
         self.add_mesh_dock.setVisible(True) 
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
 
+    def toggle_grid_func(self):
+        if self.grid_on:
+            self.plot_widget.removeItem(self.grid)
+            self.toggle_grid.setText("Show Grid")
+        else:
+            self.plot_widget.addItem(self.grid)
+            self.toggle_grid.setText("Hide Grid")
+        self.grid_on = not self.grid_on
 
     # Success message method with timer
     def show_success(self, message):
@@ -1253,9 +1266,11 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.radius = self.r
         self.setCentralWidget(self.plot_widget)
 
-        grid = gl.GLGridItem()
-        self.plot_widget.addItem(grid)
-        grid.setColor((0,0,0,255))
+        self.grid = gl.GLGridItem()
+        self.grid.setColor((0,0,0,255))
+
+        if self.grid_on:
+            self.plot_widget.addItem(self.grid)
 
         self.show_success('Chain created!')
 
@@ -1277,9 +1292,11 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget.clear()
 
-        grid = gl.GLGridItem()
-        self.plot_widget.addItem(grid)
-        grid.setColor((0,0,0,255))
+        self.grid = gl.GLGridItem()
+        self.grid.setColor((0,0,0,255))
+
+        if self.grid_on:
+            self.plot_widget.addItem(self.grid)
 
         for i in range(0,len(newTree.Children)):
             start = time.time()
@@ -1743,10 +1760,12 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.clear()
             self.select_joint_options.clear()
 
-            grid = gl.GLGridItem()
-            self.plot_widget.addItem(grid)
-            grid.setColor((0,0,0,255))
+            self.grid = gl.GLGridItem()
+            self.grid.setColor((0,0,0,255))
 
+            if self.grid_on:
+                self.plot_widget.addItem(self.grid)
+        
             if self.referenceMesh is not None:
                 self.plot_widget.addItem(self.referenceMesh)
             
@@ -1783,9 +1802,11 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.clear()
         self.setCentralWidget(self.plot_widget)
 
-        grid = gl.GLGridItem()
-        self.plot_widget.addItem(grid)
-        grid.setColor((0,0,0,255))
+        self.grid = gl.GLGridItem()
+        self.grid.setColor((0,0,0,255))
+
+        if self.grid_on:
+            self.plot_widget.addItem(self.grid)
 
         if self.referenceMesh is not None:
             self.plot_widget.addItem(self.referenceMesh)
