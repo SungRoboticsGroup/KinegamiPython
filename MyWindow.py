@@ -784,9 +784,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.click_signal_link.emit(self.selected_link_index)
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_W:
+        if event.key() == Qt.Key_T:
             self.key_pressed.emit("Translate")
-        elif event.key() == Qt.Key_E:
+        elif event.key() == Qt.Key_R:
             self.key_pressed.emit("Rotate")
         elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             self.key_pressed.emit("Enter")
@@ -800,6 +800,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.key_pressed.emit("Y")
         elif event.key() == Qt.Key_Z:
             self.key_pressed.emit("Z")
+        elif event.key() == Qt.Key_G:
+            self.key_pressed.emit("G")
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -1406,6 +1408,8 @@ class PointEditorWindow(QMainWindow):
             self.arrow_selection_changed(1)
         elif key == "Z":
             self.arrow_selection_changed(2)
+        elif key == "G":
+            self.toggle_grid_func()
 
         self.update_joint()
 
@@ -1967,11 +1971,11 @@ class PointEditorWindow(QMainWindow):
             # success_dialog.exec_()
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_W:
+        if event.key() == Qt.Key_T:
             self.control_type = "Translate"
             self.control1.setChecked(True)
             self.update_joint()
-        elif event.key() == Qt.Key_E:
+        elif event.key() == Qt.Key_R:
             self.control_type = "Rotate"
             self.control2.setChecked(True)
             self.update_joint()
@@ -1996,6 +2000,8 @@ class PointEditorWindow(QMainWindow):
             self.arrow_selection_changed(1)
         elif event.key() == Qt.Key_Z:
             self.arrow_selection_changed(2)
+        elif event.key() == Qt.Key_G:
+            self.toggle_grid_func()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
