@@ -303,11 +303,11 @@ class Joint(ABC):
             widget.plot_widget.addItem(extended_axis_line)
 
             for line in extended_line_points:
-                md = gl.MeshData.sphere(rows=2, cols=2)
+                md = gl.MeshData.sphere(rows=3, cols=2)
                 sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
                 sphere.setObjectName("line_sphere")
                 sphere.setGLOptions('translucent')
-                sphere.scale(0.02, 0.02, 0.02)
+                sphere.scale(2.0, 2.0, 0.1)
                 sphere.translate(*line)
                 widget.plot_widget.addItem(sphere)
 
