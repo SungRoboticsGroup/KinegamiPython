@@ -829,7 +829,6 @@ class PointEditorWindow(QMainWindow):
         self.r = 1
         self.plot_widget.radius = 1
 
-        self.crease_pattern = None
         self.control_type = "Translate"
         self.is_local = True
 
@@ -997,22 +996,24 @@ class PointEditorWindow(QMainWindow):
         stateLayout.addWidget(self.state_slider)
         stateLayout.addWidget(self.stateInput) 
 
+        """
         radiusLayout = QHBoxLayout()
         self.radiusInput = QLineEdit(self)
         self.radiusInput.setPlaceholderText("Enter radius")
         main_layout.addWidget(self.radius_label)
         radiusLayout.addWidget(self.radius_slider)
         radiusLayout.addWidget(self.radiusInput) 
+        """
 
         self.rotationInput.textChanged.connect(self.adjust_rotation)
         self.translationInput.textChanged.connect(self.adjust_translation)
         self.stateInput.textChanged.connect(self.adjust_state)
-        self.radiusInput.textChanged.connect(self.adjust_radius)
+        #self.radiusInput.textChanged.connect(self.adjust_radius)
 
         main_layout.addLayout(rotationLayout)
         main_layout.addLayout(translationLayout)
         main_layout.addLayout(stateLayout)
-        main_layout.addLayout(radiusLayout)
+        #main_layout.addLayout(radiusLayout)
 
         checkboxLayout = QHBoxLayout() 
         self.propogateSliderCheckbox = QCheckBox("Propagate")
@@ -1040,7 +1041,7 @@ class PointEditorWindow(QMainWindow):
         self.rotationInput.setDisabled(True)
         self.translationInput.setDisabled(True)
         self.stateInput.setDisabled(True)
-        self.radiusInput.setDisabled(True)
+        #self.radiusInput.setDisabled(True)
 
         # ////////////////////////////////    WIDGETS DOCK    ///////////////////////////////////
 
@@ -1415,12 +1416,11 @@ class PointEditorWindow(QMainWindow):
 
     def save_crease_pattern(self):
         crease_pattern_name = self.crease_pattern_name_input.text()
-        if self.crease_pattern == None:
-            self.crease_pattern = self.chain.creasePattern()
+        crease_pattern = self.chain.creasePattern()
         if len(crease_pattern_name) > 0:
-            self.crease_pattern.show(dxfName=crease_pattern_name)
+            crease_pattern.show(dxfName="save/"+crease_pattern_name)
         else:
-            self.crease_pattern.show()
+            crease_pattern.show()
 
     def save_chain(self):
         chain_name = self.crease_pattern_name_input.text()
@@ -1450,7 +1450,7 @@ class PointEditorWindow(QMainWindow):
             current = math.degrees(self.chain.Joints[self.selected_joint].state)
             self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
             self.update_state_slider()
-            self.update_radius_slider()
+            #self.update_radius_slider()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -1849,7 +1849,8 @@ class PointEditorWindow(QMainWindow):
             if (self.chain == None or len(self.chain.Joints) == 0) :
                 self.chain = KinematicChain(joint)
             else :
-                self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             
             self.selected_joint = len(self.chain.Joints)
             self.update_plot()
@@ -1870,9 +1871,10 @@ class PointEditorWindow(QMainWindow):
     def add_prismatic_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif self.is_parent_joint_selected():
+        else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
-                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
                 dialog = AddPrismaticDialog(self.numSides, self.r, prevClass=className)
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.r)
@@ -1882,9 +1884,10 @@ class PointEditorWindow(QMainWindow):
     def add_revolute_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif self.is_parent_joint_selected():
+        else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
-                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
                 dialog = AddRevoluteDialog(self.numSides, self.r, prevClass=className)
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.r)
@@ -1918,9 +1921,10 @@ class PointEditorWindow(QMainWindow):
             self.chain.Children[waypoint.id].append(nextJoint.id)
             self.update_plot()
 
-        elif self.is_parent_joint_selected():
+        else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
-                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
                 button = self.sender()  
                 button_name = button.text()  
                 print(button_name)
@@ -1955,9 +1959,10 @@ class PointEditorWindow(QMainWindow):
     def add_tip_func(self):
         if (not self.chain_created):
             self.chain_not_created()
-        elif self.is_parent_joint_selected():
+        else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
-                className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
+                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
                 dialog = AddTipDialog(self.numSides, self.r, prevClass=className)
             else:
                 dialog = AddTipDialog(self.numSides, self.r)
