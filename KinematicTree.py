@@ -33,7 +33,7 @@ class KinematicTree(Generic[J]):
         r               tubular radius
         Joints          array of Joint objects (nodes)
         Parents         array of parent indices in self.Joints
-        Paths           array of CSC Dubins paths to each joint from its parent
+        Links           array of CSC Links to each joint from its parent
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """

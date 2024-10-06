@@ -1262,17 +1262,25 @@ class PointEditorWindow(QMainWindow):
     def delete_selected_joint(self):
         self.selected_joint = self.select_joint_options.currentIndex() 
         temp_last = len(self.chain.Joints) - 1
-        if self.chain.delete(self.selected_joint):
-            self.reload_IDs()
-            self.update_joint()
+        if len(self.chain.Joints) == 1:
+            self.chain = None
+            self.chain_created = False
+            self.plot_widget.clear()
+            self.plot_widget.radius = 1
+            self.setCentralWidget(self.plot_widget)
             self.show_success('Joint successfully deleted!')
-                # success_dialog = SuccessDialog('Joint successfully deleted!')
-                # success_dialog.exec_()
-            self.last_joint = temp_last
+            self.last_joint = -1
         else:
-            self.show_error('Error deleting joint.')
-                # error_dialog = ErrorDialog('Error deleting joint.')
-                # error_dialog.exec_()
+            backup = copy.deepcopy(self.chain)
+            try:
+                self.chain = chainWithJointDeleted(self.chain, self.selected_joint)
+                self.reload_IDs()
+                self.update_joint()
+                self.show_success('Joint successfully deleted!')
+            except Exception as e:
+                print(e)
+                self.chain = backup
+                self.show_error('Error deleting joint.')
         self.window().delete_joint_dock.setVisible(False)
 
     def create_new_chain_func(self):
@@ -1410,20 +1418,8 @@ class PointEditorWindow(QMainWindow):
             self.control_type = key
             self.control2.setChecked(True)
         elif key == "Delete":
-            if (self.chain and self.selected_joint != -1):
-                self.selected_joint = self.select_joint_options.currentIndex() 
-                temp_last = len(self.chain.Joints) - 1
-                if self.chain.delete(self.selected_joint):
-                    self.reload_IDs()
-                    self.update_joint()
-                    self.show_success('Joint successfully deleted!')
-                    # success_dialog = SuccessDialog('Joint successfully deleted!')
-                    # success_dialog.exec_()
-                    self.last_joint = temp_last
-                else:
-                    self.show_error('Error deleting joint.')
-                    # error_dialog = ErrorDialog('Error deleting joint.')
-                    # error_dialog.exec_()
+            if self.chain and self.selected_joint != -1:
+                self.delete_selected_joint()
         elif key == "X":
             self.arrow_selection_changed(0)
         elif key == "Y":
@@ -2005,19 +2001,7 @@ class PointEditorWindow(QMainWindow):
             self.update_joint()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             if (self.chain and self.selected_joint != -1):
-                self.selected_joint = self.select_joint_options.currentIndex() 
-                temp_last = len(self.chain.Joints) - 1
-                if self.chain.delete(self.selected_joint):
-                    self.reload_IDs()
-                    self.update_joint()
-                    self.show_success('Joint successfully deleted!')
-                    # success_dialog = SuccessDialog('Joint successfully deleted!')
-                    # success_dialog.exec_()
-                    self.last_joint = temp_last
-                else:
-                    self.show_error('Error deleting joint.')
-                    # error_dialog = ErrorDialog('Error deleting joint.')
-                    # error_dialog.exec_()
+                self.delete_selected_joint()
         elif event.key() == Qt.Key_X:
             self.arrow_selection_changed(0)
         elif event.key() == Qt.Key_Y:

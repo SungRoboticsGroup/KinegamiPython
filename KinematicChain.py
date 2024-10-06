@@ -41,8 +41,11 @@ class KinematicChain(KinematicTree):
             chainPattern.append(self.Joints[j].pattern)
         return chainPattern
     
+    """ WARNING: this might have bugs. Or the bugs might be in the GUI.
+    I don't have time to figure it out right now, so I'm implementing the
+    (less efficient) deleteJoint function instead of using this method. """
     def delete(self, jointIndex : int, safe : bool = True) -> bool:
-        assert(jointIndex>=0)
+        assert(jointIndex>=0 and jointIndex<len(self.Joints) and len(self.Joints)>1)
         if safe:
             backup = self.dataDeepCopy()
             try:
@@ -53,105 +56,39 @@ class KinematicChain(KinematicTree):
                 print("Deletion canceled.")
                 self.setTo(backup)
                 return False
+        elif jointIndex == len(self.Joints)-1:
+            self.Links = self.Links[:-1]
+            self.Joints = self.Joints[:-1]
+            self.Children = self.Children[:-1]
+            self.Children[-1] = []
+            self.Parents = self.Parents[:-1]
+            self.recomputeBoundingBall()
         else:
-            if not all(len(children) <= 1 for children in self.Children):
-                # parent of the selected joint
-                parentIndex = self.Parents[jointIndex]
-                if parentIndex >= 0:
-                    self.Children[parentIndex].remove(jointIndex)
-
-                # children of the selected joint (represented as indices)
-                children_to_reassign = self.Children[jointIndex]
-
-                # assign every child of the joint to the new parent
-                # and assign the new parent to every child
-                for childIndex in children_to_reassign:
-                    self.Parents[childIndex] = parentIndex
-                    if parentIndex != -1:
-                        self.Children[parentIndex].append(childIndex)
-
-                # creates new links between children and parent
-                if parentIndex != -1:
-                     parentJoint = self.Joints[parentIndex]
-                     for childIndex in children_to_reassign:
-                         childJoint = self.Joints[childIndex]
-                         newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                         childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow,
-                                         lastJoint=parentJoint, nextJoint=childJoint)
-                         self.Links[childIndex] = newLink
-
-                # delete the selected joint
-                self.Joints.pop(jointIndex)
-                self.Children.pop(jointIndex)
-                self.Parents.pop(jointIndex)
-                self.Links.pop(jointIndex)
-
-                self.Parents = [p - 1 if p >= jointIndex else p for p in self.Parents]
-
-                self.Children = [[child - 1 if child >= jointIndex else child for child in children] 
-                                    for children in self.Children]
-                
-                # creates new links between children and parent
-                if parentIndex != -1:
-                    parentJoint = self.Joints[parentIndex]
-                    for childIndex in children_to_reassign:
-                        childIndex -= 1
-                        childJoint = self.Joints[childIndex]
-                        newLink = LinkCSC(self.r, parentJoint.DistalDubinsFrame(), 
-                                        childJoint.ProximalDubinsFrame(), self.maxAnglePerElbow,
-                                        lastJoint=parentJoint, nextJoint=childJoint)
-                        self.Links[childIndex] = newLink
-
-                if len(self.Joints) > 0:
-                    self.recomputeBoundingBall()
+            nextJoint = self.Joints[jointIndex+1]
+            if jointIndex>0:
+                prevJoint = self.Joints[jointIndex-1]
+                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+                                        nextJoint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
             else:
-                parentIndex = self.Parents[jointIndex]
-                if jointIndex == 0:
-                    self.Joints.pop(0) 
-                    self.Links.pop(0)
-                    self.Parents = [p - 1 if p > 0 else -1 for p in self.Parents]
-                    self.Children = [[child - 1 for child in children] for children in self.Children[1:]]
-                    self.Children.insert(0, [])
-                    if len(self.Joints) > 0:
-                        self.recomputeBoundingBall()
-                elif jointIndex == len(self.Joints) - 1:
-                    self.Joints.pop(-1)  
-                    self.Links.pop(-1)  
-                    if len(self.Joints) > 0: 
-                        self.Parents.pop(-1)  
-                        if self.Children[self.Parents[-1]]:
-                            self.Children[self.Parents[-1]].remove(jointIndex)
-                    self.recomputeBoundingBall() 
-                elif jointIndex > 0:
-                    prevJoint = self.Joints[parentIndex]
-                    children = self.Children[jointIndex]
-                    for child in children:
-                        childJoint = self.Joints[child]
-
-                        newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                                childJoint.ProximalDubinsFrame(),
-                                                self.maxAnglePerElbow, 
-                                                lastJoint=prevJoint,
-                                                nextJoint=childJoint) 
-
-                        linksBefore = self.Links[:jointIndex]
-                        linksAfter = self.Links[jointIndex+2:]
-                        self.Links = linksBefore + [newLink] + linksAfter
-                        self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
-
-                        self.recomputeBoundingBall()
-
-                        # recompute children and parents
-
-                        self.Children = []
-                        for i in range(len(self.Joints)-1):
-                            self.Children.append([i+1])
-                            self.Children.append([])                    
-                            
-                        self.Parents = []
-                        for i in range(len(self.Joints)):
-                            self.Parents.append(i-1)
-        return True
+                newLink = LinkCSC(self.r, nextJoint.ProximalDubinsFrame(), 
+                                        nextJoint.ProximalDubinsFrame(),
+                                        self.maxAnglePerElbow)
+            linksBefore = self.Links[:jointIndex]
+            linksAfter = self.Links[jointIndex+2:]
+            self.Links = linksBefore + [newLink] + linksAfter
+            self.Joints = self.Joints[:jointIndex] + self.Joints[jointIndex+1:]
+            self.recomputeBoundingBall()
+            
+            self.Children = []
+            for i in range(len(self.Joints)-1):
+                self.Children.append([i+1])
+            self.Children.append([])
+            
+            self.Parents = []
+            for i in range(len(self.Joints)):
+                self.Parents.append(i-1)
+            return True
     
     def save(self, filename: str):
         with open(f"save/{filename}.chain", "w") as f:
@@ -233,3 +170,22 @@ def loadKinematicChain(filename : str):
     except Exception as e:
         print(e)
         raise Exception(f"file save/{filename}.chain does not exist")
+
+
+def chainWithJointDeleted(chain : KinematicChain, jointIndex : int) -> KinematicChain:
+    assert(len(chain.Joints) > 1)
+    if jointIndex == 0:
+        newChain = KinematicChain(chain.Joints[1])
+        for i in range(2, len(chain.Joints)):
+            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
+                            fixedOrientation=True, safe=False)
+        return newChain
+    else:
+        newChain = KinematicChain(chain.Joints[0])
+        for i in range(1, jointIndex):
+            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
+                            fixedOrientation=True, safe=False)
+        for i in range(jointIndex+1, len(chain.Joints)):
+            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
+                            fixedOrientation=True, safe=False)
+        return newChain
