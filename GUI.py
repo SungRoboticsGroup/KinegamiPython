@@ -179,21 +179,21 @@ class AddPrismaticDialog(AddJointDialog):
         layout = QVBoxLayout()
         
         length_layout = QHBoxLayout()
-        length_label = QLabel("Neutral Length:")
+        length_label = QLabel("Neutral Length (defaults to 3r):")
         self.length_input = QLineEdit()
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
 
         numLayers_layout = QHBoxLayout()
-        numLayers_label = QLabel("Number of Layers:")
+        numLayers_label = QLabel("Number of Layers (defaults to 3):")
         self.numLayers_input = QLineEdit()
         numLayers_layout.addWidget(numLayers_label)
         numLayers_layout.addWidget(self.numLayers_input)
         layout.addLayout(numLayers_layout)
 
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Cone Angle (degrees):")
+        angle_label = QLabel("Cone Angle (degrees, defaults to 60):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -253,15 +253,15 @@ class AddPrismaticDialog(AddJointDialog):
                 self.pose = SE3(0,0,4 * self.r)
 
     def onApplyClicked(self):
-        try:
-            neutralLength = float(self.length_input.text())
-            numLayers = int(self.numLayers_input.text())
-            coneAngleText = float(self.angle_input.text())
+        try:            
+            neutralLength = 3*self.r if self.length_input.text()=="" else float(self.length_input.text())
+            numLayers = 3 if self.numLayers_input.text()=="" else int(self.numLayers_input.text())
+            coneAngleText = 60 if self.angle_input.text()=="" else float(self.angle_input.text())
 
             self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), self.pose)
             self.accept()
         except ValueError:
-            self.show_error('Please enter valid integers.')
+            self.show_error('Please enter valid numbers.')
             # error_dialog = ErrorDialog('Please enter valid integers.')
             # error_dialog.exec_()
         
@@ -274,7 +274,7 @@ class AddRevoluteDialog(AddJointDialog):
         layout = QVBoxLayout()
         
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Total Bending Angle (degrees):")
+        angle_label = QLabel("Total Bending Angle (degrees, defaults to 180):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -311,7 +311,7 @@ class AddRevoluteDialog(AddJointDialog):
             self.pose = SE3(6 * self.r,0,0)
 
     def onApplyClicked(self):
-        bendingAngleText = float(self.angle_input.text())
+        bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
 
         self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), self.pose)
         self.accept()
