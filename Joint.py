@@ -4,7 +4,7 @@ Created on Fri Jun 23 21:54:54 2023
 
 @author: dfesh
 """
-from spatialmath import SE3
+from spatialmath import SE3, SO3
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -88,6 +88,11 @@ class Joint(ABC):
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
     
+    def pathDirectionLocal(self) -> np.ndarray:
+        direction = np.array([0,0,0])
+        direction[self.pathIndex()] = 1
+        return direction
+
     def reverseZhat(self):
         self.Pose = self.Pose @ SE3.Rx(np.pi)
     
@@ -129,6 +134,16 @@ class Joint(ABC):
     def translateAlongZ(self, zChange : float):
         self.Pose = self.Pose @ SE3.Trans([0,0,zChange])
 
+    def placeInFrontOf(self, otherJoint : 'Joint', distance : float):
+        translation = SE3.Trans((distance + self.neutralLength/2)*otherJoint.pathDirectionLocal())
+        position = otherJoint.distalPosition() + (distance + self.neutralLength/2)*otherJoint.pathDirection()
+        rotation = SO3()
+        if self.pathIndex() == 0 and otherJoint.pathIndex() == 2:
+            rotation = SO3.Ry(np.pi/2)
+        elif self.pathIndex() == 2 and otherJoint.pathIndex() == 0:
+            rotation = SO3.Ry(-np.pi/2)
+        self.Pose = SE3.Rt(rotation @ SO3(otherJoint.Pose.R), position)
+    
     def changeRadius(self, r : float):
         self.r = r
     

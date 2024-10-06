@@ -195,6 +195,8 @@ class PrismaticJoint(OrigamiJoint):
         flatLayerHalfHeight = neutralLayerHeight / (2*np.sin(coneAngle))
         self.minLength = numLayers*flatLayerHalfHeight
         self.maxLength = 2*self.minLength
+        self.numLayers = numLayers
+        self.coneAngle = coneAngle
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = PrismaticJointPattern(numSides, r, neutralLength, 
                                              numLayers, coneAngle)

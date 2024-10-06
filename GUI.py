@@ -171,7 +171,7 @@ class AddJointDialog(QDialog):
             return None
         
 class AddPrismaticDialog(AddJointDialog):
-    def __init__(self, numSides, r, prevClass : str = None):
+    def __init__(self, numSides, r, prevJoint : Joint = None):
         super().__init__()
         self.setWindowTitle('Add new prismatic joint')
         self.setGeometry(100, 100, 300, 100)
@@ -199,6 +199,7 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
+        """
         radio_layout = QHBoxLayout()
         self.radio_x = QRadioButton('X Axis')
         self.radio_y = QRadioButton('Y Axis')
@@ -211,6 +212,7 @@ class AddPrismaticDialog(AddJointDialog):
         self.radio_y.toggled.connect(self.updateAxis)
         self.radio_z.toggled.connect(self.updateAxis)
         layout.addLayout(radio_layout)
+        """
 
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -220,15 +222,9 @@ class AddPrismaticDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
-        self.prevClass = prevClass
-        
-        if (self.prevClass == None):
-            self.pose = SE3()
-        elif (self.prevClass == "RevoluteJoint"):
-            self.pose = SE3(4 * self.r,0,0)
-        else: 
-            self.pose = SE3(4 * self.r,0,0)
+        self.prevJoint = prevJoint
 
+    """
     def updateAxis(self):
         if self.radio_x.isChecked():
             if (self.prevClass == None):
@@ -251,22 +247,31 @@ class AddPrismaticDialog(AddJointDialog):
                 self.pose = SE3(0,0,4 * self.r)
             else: 
                 self.pose = SE3(0,0,4 * self.r)
-
+    """
+                
     def onApplyClicked(self):
         try:            
             neutralLength = 3*self.r if self.length_input.text()=="" else float(self.length_input.text())
             numLayers = 3 if self.numLayers_input.text()=="" else int(self.numLayers_input.text())
             coneAngleText = 60 if self.angle_input.text()=="" else float(self.angle_input.text())
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), self.pose)
+            if (self.prevJoint is None):
+                pose = SE3()
+            else:
+                distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
+                pose = SE3(0,0,distance)
+                if self.prevJoint.pathIndex() == 0:
+                    pose = SE3.Ry(np.pi/2) @ pose
+
+            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
             self.accept()
         except ValueError:
             self.show_error('Please enter valid numbers.')
             # error_dialog = ErrorDialog('Please enter valid integers.')
             # error_dialog.exec_()
-        
+
 class AddRevoluteDialog(AddJointDialog):
-    def __init__(self, numSides, r, prevClass : str = None):
+    def __init__(self, numSides, r, prevJoint : Joint = None):
         super().__init__()
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
@@ -280,6 +285,7 @@ class AddRevoluteDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
+        """
         radio_layout = QHBoxLayout()
         self.radio_x = QRadioButton('X Axis')
         self.radio_y = QRadioButton('Y Axis')
@@ -291,7 +297,8 @@ class AddRevoluteDialog(AddJointDialog):
         self.radio_x.toggled.connect(self.updateAxis)
         self.radio_y.toggled.connect(self.updateAxis)
         self.radio_z.toggled.connect(self.updateAxis)
-        layout.addLayout(radio_layout)
+        layout.addLayout(radio_layout) 
+        """
 
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -301,21 +308,34 @@ class AddRevoluteDialog(AddJointDialog):
 
         self.numSides = numSides
         self.r = r
-        self.prevClass = prevClass
+        self.prevJoint = prevJoint
+        #self.prevClass = prevClass
         
+        """
         if (self.prevClass == None):
             self.pose = SE3()
         elif (self.prevClass == "RevoluteJoint"):
             self.pose = SE3(4 * self.r, 0,0)
         else: 
             self.pose = SE3(6 * self.r,0,0)
+        """
 
     def onApplyClicked(self):
         bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
+        
+        
+        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
 
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), self.pose)
+        if not self.prevJoint is None:
+            distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2
+            pose = SE3(distance,0,0)
+            if self.prevJoint.pathIndex() == 2:
+                pose = SE3.Ry(-np.pi/2) @ pose
+            self.jointToAdd.Pose = pose
+    
         self.accept()
 
+    """
     def updateAxis(self):
         if self.radio_x.isChecked():
             if (self.prevClass == None):
@@ -338,6 +358,7 @@ class AddRevoluteDialog(AddJointDialog):
                 self.pose = SE3(0,0,4 * self.r)
             else: 
                 self.pose = SE3(0,0,6 * self.r)
+    """
 
 class AddTipDialog(AddJointDialog):
     isStart = True
@@ -1432,7 +1453,7 @@ class PointEditorWindow(QMainWindow):
         chain_name = self.crease_pattern_name_input.text()
         if chain_name is None or chain_name == "":
             chain_name = "chain"
-        self.chain = loadKinematicTree(chain_name)
+        self.chain = loadKinematicChain(chain_name)
         self.chain_created = True
         self.update_plot()
 
@@ -1874,8 +1895,7 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                dialog = AddPrismaticDialog(self.numSides, self.r, prevClass=className)
+                dialog = AddPrismaticDialog(self.numSides, self.r, prevJoint = self.chain.Joints[-1])
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.r)
 
@@ -1887,8 +1907,7 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                dialog = AddRevoluteDialog(self.numSides, self.r, prevClass=className)
+                dialog = AddRevoluteDialog(self.numSides, self.r, prevJoint = self.chain.Joints[-1])
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.r)
             
