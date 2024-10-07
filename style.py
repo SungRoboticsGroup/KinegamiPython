@@ -25,6 +25,17 @@ groundPlaneScaleDefault=10
 
 blockDefault=True
 
+gridColorDefault = (0,0,0,255)
+backgroundColorDefault = (255,255,255,255)
+successColorDefault = "green"
+errorColorDefault = "red"
+
+meshItemDefaultColor = (1., 1., 1., 1.)
+meshItemEdgeColor = (0.5, 0.5, 0.5, 1.0)
+
+ballDefaultColor = (0,0,0,0.5)
+cylinderColorList = (1, 0, 0, 1)
+
 # in AutoCAD Color Index 
 # https://ezdxf.readthedocs.io/en/stable/concepts/aci.html#aci
 mountainColorDefault=5 #174  #dark blue

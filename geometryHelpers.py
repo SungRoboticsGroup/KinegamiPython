@@ -23,10 +23,10 @@ class MeshItemWithID(gl.GLMeshItem):
     def __init__(self, id : int = -1, **kwds):
         self.opts = {
             'meshdata': None,
-            'color': (1., 1., 1., 1.),
+            'color': meshItemDefaultColor,
             'drawEdges': False,
             'drawFaces': True,
-            'edgeColor': (0.5, 0.5, 0.5, 1.0),
+            'edgeColor': meshItemEdgeColor,
             'shader': None,
             'smooth': True,
             'computeNormals': True,
@@ -325,7 +325,7 @@ class Ball:
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
         
-    def addToWidget(self, widget, color=(0,0,0,0.5), is_waypoint=False, id=-1):
+    def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False, id=-1):
         md = gl.MeshData.sphere(rows=20, cols=20)
         sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
         sphere.setGLOptions('translucent')
@@ -442,7 +442,7 @@ class Cylinder:
 
         return vertices, np.array(indices)
 
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=(1, 0, 0, 1), is_joint=False, id=-1):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False, id=-1):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
         meshitem = MeshItemWithID(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True, id=id)

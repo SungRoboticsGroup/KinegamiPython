@@ -20,6 +20,7 @@ from KinematicChain import *
 import re
 from scipy.spatial.transform import Rotation as R
 from testqtgraph import *
+from style import *
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -848,12 +849,12 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget = ClickableGLViewWidget()
         self.setCentralWidget(self.plot_widget)
-        self.plot_widget.setBackgroundColor(255,255,255,255)
+        self.plot_widget.setBackgroundColor(backgroundColorDefault)
 
         self.grid = gl.GLGridItem()
 
         self.plot_widget.addItem(self.grid)
-        self.grid.setColor((0,0,0,255))
+        self.grid.setColor(gridColorDefault)
         self.grid_on = True
 
         self.current_point = 0
@@ -985,7 +986,7 @@ class PointEditorWindow(QMainWindow):
         # slider_joints_widget = QWidget() 
         # mainLayout = QVBoxLayout(slider_joints_widget)  
 
-        self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
+        # self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
         self.rotationSlider = QSlider(Qt.Horizontal)
         self.rotationSlider.setMinimum(-360)
         self.rotationSlider.setMaximum(360)
@@ -993,26 +994,26 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        self.translate_label = QLabel('Translate N/A Axis: 0', self)
+        # self.translate_label = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
         self.translate_slider.setMinimum(-10*self.r)
         self.translate_slider.setMaximum(10*self.r)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
-        self.state_label = QLabel('Edit Joint N/A State: 0', self)
+        # self.state_label = QLabel('Edit Joint N/A State: 0', self)
         self.state_slider = QSlider(Qt.Horizontal, self)
         self.state_slider.setMinimum(-100)
         self.state_slider.setMaximum(100)
         self.state_slider.setValue(0)
         self.state_slider.valueChanged.connect(self.adjust_state)
 
-        self.radius_label = QLabel('Edit Joint Radius: 0', self)
-        self.radius_slider = QSlider(Qt.Horizontal, self)
-        self.radius_slider.setMinimum(1)
-        self.radius_slider.setMaximum(10)
-        self.radius_slider.setValue(1)
-        self.radius_slider.valueChanged.connect(self.adjust_radius)
+        # self.radius_label = QLabel('Edit Joint Radius: 0', self)
+        # self.radius_slider = QSlider(Qt.Horizontal, self)
+        # self.radius_slider.setMinimum(1)
+        # self.radius_slider.setMaximum(10)
+        # self.radius_slider.setValue(1)
+        # self.radius_slider.valueChanged.connect(self.adjust_radius)
 
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
@@ -1076,7 +1077,7 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True)
         self.translate_slider.setDisabled(True)
         self.state_slider.setDisabled(True)
-        self.radius_slider.setDisabled(True)
+        # self.radius_slider.setDisabled(True)
         self.rotationInput.setDisabled(True)
         self.translationInput.setDisabled(True)
         self.stateInput.setDisabled(True)
@@ -1277,12 +1278,12 @@ class PointEditorWindow(QMainWindow):
     # Success message method with timer
     def show_success(self, message):
         self.status_label.setText(message)
-        self.status_label.setStyleSheet("color: green")
+        self.status_label.setStyleSheet("color: " + successColorDefault)
 
     # Error message method with timer
     def show_error(self, message):
         self.status_label.setText(message)
-        self.status_label.setStyleSheet("color: red")
+        self.status_label.setStyleSheet("color: " + errorColorDefault)
 
     # Method to clear the message
     def clear_message(self):
@@ -1331,7 +1332,7 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
 
         self.grid = gl.GLGridItem()
-        self.grid.setColor((0,0,0,255))
+        self.grid.setColor(gridColorDefault)
 
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
@@ -1636,30 +1637,6 @@ class PointEditorWindow(QMainWindow):
             self.stateInput.blockSignals(False)
             self.stateInput.setDisabled(True)
 
-    def update_radius_slider(self):
-        if self.selected_joint != -1:
-            radius = int(self.chain.Joints[self.selected_joint].r)
-            self.oldRadiusVal = radius
-            self.radius_slider.blockSignals(True)
-            self.radius_label.setText(f"Edit Joint Radius: {radius}")
-            self.radius_slider.setValue(radius)
-            self.radius_slider.setDisabled(False)
-            self.radius_slider.blockSignals(False)
-            self.radiusInput.blockSignals(True)
-            self.radiusInput.setText(str(radius))
-            self.radiusInput.blockSignals(False)
-            self.radiusInput.setDisabled(False)
-        else:
-            self.radius_slider.blockSignals(True)
-            self.radius_label.setText(f"Edit Joint Radius: 0")
-            self.radius_slider.setValue(1)
-            self.radius_slider.setDisabled(True)
-            self.radius_slider.blockSignals(False)
-            self.radiusInput.blockSignals(True)
-            self.radiusInput.setText("")
-            self.radiusInput.blockSignals(False)
-            self.radiusInput.setDisabled(True)
-
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
         euler_angles = rot.as_euler('xyz', degrees=True)
@@ -1777,23 +1754,6 @@ class PointEditorWindow(QMainWindow):
                 self.state_label.setText(f"Edit Joint {self.selected_joint} State: {int(self.oldStateVal)}")
                 self.state_label.blockSignals(False)
 
-    def adjust_radius(self, value):
-        if not isinstance(value, float) and not isinstance(value, int):
-            value = value.strip()
-        value = float(value) if value else 0
-        self.radius_label.setText(f'Edit Joint Radius: {int(value)}')
-        if self.chain and self.selected_joint != -1:
-            if self.chain.changeRadius(value):
-                self.r = value
-                self.update_joint()
-                self.OldRadiusVal = value
-                self.update_radius_slider()
-            else:
-                self.radius_slider.blockSignals(True)
-                self.radius_slider.setValue(int(self.oldStateVal))
-                self.radius_label.setText(f"Edit Joint Radius: {int(self.oldRadiusVal)}")
-                self.radius_label.blockSignals(False)
-
     def delete_joint(self):
         # dialog = DeleteDialog(self)
         if not self.chain:
@@ -1820,7 +1780,7 @@ class PointEditorWindow(QMainWindow):
             self.select_joint_options.clear()
 
             self.grid = gl.GLGridItem()
-            self.grid.setColor((0,0,0,255))
+            self.grid.setColor(gridColorDefault)
 
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
@@ -1862,7 +1822,7 @@ class PointEditorWindow(QMainWindow):
         self.setCentralWidget(self.plot_widget)
 
         self.grid = gl.GLGridItem()
-        self.grid.setColor((0,0,0,255))
+        self.grid.setColor(gridColorDefault)
 
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
