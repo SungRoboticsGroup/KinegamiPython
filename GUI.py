@@ -179,21 +179,21 @@ class AddPrismaticDialog(AddJointDialog):
         layout = QVBoxLayout()
         
         length_layout = QHBoxLayout()
-        length_label = QLabel("Neutral Length (defaults to 3r):")
+        length_label = QLabel("Neutral Length (default: 3r):")
         self.length_input = QLineEdit()
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
 
         numLayers_layout = QHBoxLayout()
-        numLayers_label = QLabel("Number of Layers (defaults to 3):")
+        numLayers_label = QLabel("Number of Layers (default: 3):")
         self.numLayers_input = QLineEdit()
         numLayers_layout.addWidget(numLayers_label)
         numLayers_layout.addWidget(self.numLayers_input)
         layout.addLayout(numLayers_layout)
 
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Cone Angle (degrees, defaults to 60):")
+        angle_label = QLabel("Cone Angle (degrees, default: 60):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -279,7 +279,7 @@ class AddRevoluteDialog(AddJointDialog):
         layout = QVBoxLayout()
         
         angle_layout = QHBoxLayout()
-        angle_label = QLabel("Total Bending Angle (degrees, defaults to 180):")
+        angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
         self.angle_input = QLineEdit()
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
@@ -363,7 +363,7 @@ class AddRevoluteDialog(AddJointDialog):
 class AddTipDialog(AddJointDialog):
     isStart = True
 
-    def __init__(self, numSides, r, prevClass : str = None):
+    def __init__(self, numSides, r, prevJoint : Joint = None):
         super().__init__()
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
@@ -371,7 +371,8 @@ class AddTipDialog(AddJointDialog):
         self.numSides = numSides
         self.r = r
         self.isStart = True
-        self.prevClass = prevClass
+        #self.prevClass = prevClass
+        self.prevJoint = prevJoint
 
         layout = QVBoxLayout()
 
@@ -382,6 +383,7 @@ class AddTipDialog(AddJointDialog):
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
 
+        """
         radio_layout = QHBoxLayout()
         self.radio_start = QRadioButton('Start Tip')
         self.radio_end = QRadioButton('End Tip')
@@ -391,7 +393,9 @@ class AddTipDialog(AddJointDialog):
         radio_layout.addWidget(self.radio_start)
         radio_layout.addWidget(self.radio_end)
         layout.addLayout(radio_layout)
+        """
 
+        """
         radio_layout = QHBoxLayout()
         self.radio_x = QRadioButton('X Axis')
         self.radio_y = QRadioButton('Y Axis')
@@ -403,15 +407,18 @@ class AddTipDialog(AddJointDialog):
         self.radio_x.toggled.connect(self.updateAxis)
         self.radio_y.toggled.connect(self.updateAxis)
         self.radio_z.toggled.connect(self.updateAxis)
-        layout.addLayout(radio_layout)
-
+        layout.addLayout(radio_layout)  
+        """    
+        
+        """
         if (self.prevClass == None):
             self.pose = SE3()
         elif (self.prevClass == "RevoluteJoint"):
             self.pose = SE3(4 * self.r, 0,0)
         else: 
             self.pose = SE3(6 * self.r,0,0)
-        
+        """
+            
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -420,12 +427,15 @@ class AddTipDialog(AddJointDialog):
 
     def onApplyClicked(self):
         try:
-            neutralLength = float(self.length_input.text())
-
-            if (self.isStart):
-                self.jointToAdd = StartTip(self.numSides, self.r, self.pose, length=neutralLength)
+            length = float(self.length_input.text())
+            if self.prevJoint is None:
+                self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
             else:
-                self.jointToAdd = EndTip(self.numSides, self.r, self.pose, length=neutralLength)
+                distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
+                pose = SE3(0,0,distance)
+                if self.prevJoint.pathIndex() == 0:
+                    pose = SE3.Ry(np.pi/2) @ pose
+                self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
 
             self.accept()
         except ValueError:
@@ -433,6 +443,7 @@ class AddTipDialog(AddJointDialog):
             # error_dialog = ErrorDialog('Please enter valid integers.')
             # error_dialog.exec_()
 
+    """
     def updateAxis(self):
         if self.radio_x.isChecked():
             if (self.prevClass == None):
@@ -455,7 +466,8 @@ class AddTipDialog(AddJointDialog):
                 self.pose = SE3(0,0,4 * self.r)
             else: 
                 self.pose = SE3(0,0,6 * self.r)
-
+        """
+    
     def updateVariable(self):
         if self.radio_start.isChecked():
             self.isStart = True
@@ -531,7 +543,7 @@ class AddMeshWidget(QWidget):
         scale_layout = QHBoxLayout()
         scale_label = QLabel("Scale:")
         self.scale_input = QLineEdit()
-        self.scale_input.setPlaceholderText("Enter scale factor (defaults to 1)")
+        self.scale_input.setPlaceholderText("Enter scale factor (default: 1)")
         scale_layout.addWidget(scale_label)
         scale_layout.addWidget(self.scale_input)
         layout.addLayout(scale_layout)
@@ -977,8 +989,8 @@ class PointEditorWindow(QMainWindow):
 
         self.translate_label = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
-        self.translate_slider.setMinimum(-100)
-        self.translate_slider.setMaximum(100)
+        self.translate_slider.setMinimum(-10*self.r)
+        self.translate_slider.setMaximum(10*self.r)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
@@ -999,21 +1011,21 @@ class PointEditorWindow(QMainWindow):
         rotationLayout = QHBoxLayout()
         self.rotationInput = QLineEdit(self)
         self.rotationInput.setPlaceholderText("Enter angle in degrees")
-        main_layout.addWidget(self.rotationLabel)
+        #main_layout.addWidget(self.rotationLabel)
         rotationLayout.addWidget(self.rotationSlider)
         rotationLayout.addWidget(self.rotationInput)  
 
         translationLayout = QHBoxLayout()
         self.translationInput = QLineEdit(self)
         self.translationInput.setPlaceholderText("Enter distance")
-        main_layout.addWidget(self.translate_label)
+        #main_layout.addWidget(self.translate_label)
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
         stateLayout = QHBoxLayout()
         self.stateInput = QLineEdit(self)
         self.stateInput.setPlaceholderText("Enter state")
-        main_layout.addWidget(self.state_label)
+        #main_layout.addWidget(self.state_label)
         stateLayout.addWidget(self.state_slider)
         stateLayout.addWidget(self.stateInput) 
 
@@ -1109,7 +1121,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_dock)
 
         # ////////////////////////////////    SELECT JOINT AS FRAME    ///////////////////////////////////
-        self.frame_dock = QDockWidget("Control Options", self)
+        self.frame_dock = QDockWidget("Options", self)
         self.frame_widget = QWidget()
         self.frame_layout = QVBoxLayout()
 
@@ -1130,13 +1142,9 @@ class PointEditorWindow(QMainWindow):
         self.remove_frame.clicked.connect(self.remove_frame_button)
         #self.frame_layout.addWidget(self.remove_frame)
 
-        self.debug_btn = QPushButton("Debug")
-        self.debug_btn.clicked.connect(self.debug)
-        self.frame_layout.addWidget(self.debug_btn)
-
-        self.insert_btn = QPushButton("Insert Waypoint")
-        self.insert_btn.clicked.connect(self.insert_waypoint)
-        self.frame_layout.addWidget(self.insert_btn)
+        #self.debug_btn = QPushButton("Debug")
+        #self.debug_btn.clicked.connect(self.debug)
+        #self.frame_layout.addWidget(self.debug_btn)
 
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
@@ -1305,9 +1313,6 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.addItem(self.grid)
 
         self.show_success('Chain created!')
-
-    def insert_waypoint(self):
-        print("test")
 
     def debug(self):
         # print("link id", self.selected_link)
@@ -1571,6 +1576,7 @@ class PointEditorWindow(QMainWindow):
             self.translationInput.setDisabled(True)
 
     def update_state_slider(self):
+        # if self.chain.Joints[self.selected_joint]
         min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
         max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
         if self.selected_joint != -1 and min != 0 and max != 0:
@@ -1977,8 +1983,8 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                dialog = AddTipDialog(self.numSides, self.r, prevClass=className)
+                #className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
+                dialog = AddTipDialog(self.numSides, self.r, prevJoint=self.chain.Joints[-1])
             else:
                 dialog = AddTipDialog(self.numSides, self.r)
 
