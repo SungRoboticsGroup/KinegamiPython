@@ -695,6 +695,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     drag_change_position = qc.pyqtSignal(np.ndarray)
     drag_change_rotation = qc.pyqtSignal(float)
     key_pressed = qc.pyqtSignal(str)
+    done_transforming = qc.pyqtSignal(bool)
 
     selected_index = -1
     selected_arrow = None
@@ -777,7 +778,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
-        if not self.is_dragging:
+        if self.is_dragging and self.selected_arrow:
+            self.done_transforming.emit(True)
+            self.is_dragging = False
+        else:
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
             region = [lpos.x()-5, lpos.y()-5, 10, 10]
             dpr = self.devicePixelRatioF()
@@ -854,6 +858,7 @@ class PointEditorWindow(QMainWindow):
 
         self.current_point = 0
         self.chain = None
+        self.versions = []
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -877,6 +882,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.click_signal_link.connect(self.link_selection_changed)
         self.plot_widget.drag_change_position.connect(self.drag_translate)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
+        self.plot_widget.done_transforming.connect(self.done_transforming)
         self.plot_widget.key_pressed.connect(self.key_pressed)
 
         # //////////////////////////////////    ADD TOP DOCK    ///////////////////////////////////
@@ -1150,6 +1156,10 @@ class PointEditorWindow(QMainWindow):
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
         self.frame_layout.addWidget(self.toggle_grid)
         
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.clicked.connect(self.undo)
+        self.frame_layout.addWidget(self.undo_button)
+
         self.frame_widget.setLayout(self.frame_layout)
         self.frame_dock.setWidget(self.frame_widget)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.frame_dock)
@@ -1202,15 +1212,6 @@ class PointEditorWindow(QMainWindow):
 
         # self.random_btn_dock.setMaximumSize(300, 100)
 
-        """
-        testJoint = RevoluteJoint(self.numSides, self.r, math.radians(180), SE3())
-        self.chain = KinematicChain(testJoint)
-        self.chain.addJoint(0, testJoint)
-        self.chain.addJoint(1, testJoint)
-        self.chain_created = True
-        self.update_plot()
-        """
-
         # Create a layout specifically for success/error messages
         self.message_layout = QHBoxLayout()
 
@@ -1241,6 +1242,29 @@ class PointEditorWindow(QMainWindow):
         self.add_mesh_dock.setVisible(True) 
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
 
+    def log_version(self):
+        print("logging version")
+        log_capacity = 100
+        autosave_frequency = 10
+        if len(self.versions) % autosave_frequency == 0 and not self.chain is None:
+            self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
+        if len(self.versions) < log_capacity:
+            self.versions.append(copy.deepcopy(self.chain))
+        else:
+            self.versions.pop(0)
+            self.versions.append(copy.deepcopy(self.chain))
+
+    def undo(self):
+        #print("UNDO, current log length: " + str(len(self.versions)))
+        if len(self.versions) == 0:
+            self.chain = None
+        else:
+            self.chain = self.versions.pop()
+        self.reload_IDs()
+        self.update_joint()
+        self.update_plot()
+
+    
     def toggle_grid_func(self):
         if self.grid_on:
             self.plot_widget.removeItem(self.grid)
@@ -1444,10 +1468,13 @@ class PointEditorWindow(QMainWindow):
         else:
             crease_pattern.show()
 
-    def save_chain(self):
-        chain_name = self.crease_pattern_name_input.text()
-        if chain_name is None or chain_name == "":
-            chain_name = "chain"
+    def save_chain(self, autosave_id=None):
+        if autosave_id is None:
+            chain_name = self.crease_pattern_name_input.text()
+            if chain_name is None or chain_name == "":
+                chain_name = "chain"
+        else:
+            chain_name = "autosave/autosave_" + str(autosave_id)
         self.chain.save(chain_name)
     
     def load_chain(self):
@@ -1457,6 +1484,7 @@ class PointEditorWindow(QMainWindow):
         self.chain = loadKinematicChain(chain_name)
         self.chain_created = True
         self.update_plot()
+        self.log_version()
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
@@ -1506,6 +1534,10 @@ class PointEditorWindow(QMainWindow):
 
         self.update_rotation_slider()
         self.update_translate_slider()
+
+    def done_transforming(self, done):
+        if done:
+            self.log_version()
 
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
@@ -1838,10 +1870,11 @@ class PointEditorWindow(QMainWindow):
         if self.referenceMesh is not None:
             self.plot_widget.addItem(self.referenceMesh)
 
-        for index, joint in enumerate(self.chain.Joints):
-            joint.id = index
+        if not self.chain is None:
+            for index, joint in enumerate(self.chain.Joints):
+                joint.id = index
 
-        self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
+            self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
@@ -1877,6 +1910,7 @@ class PointEditorWindow(QMainWindow):
             
             self.selected_joint = len(self.chain.Joints)
             self.update_plot()
+            self.log_version()
 
     def chain_not_created(self):
         self.show_error('Please create a chain first.')
@@ -1941,6 +1975,7 @@ class PointEditorWindow(QMainWindow):
             self.chain.Parents[nextJoint.id] = waypoint.id
             self.chain.Children[waypoint.id].append(nextJoint.id)
             self.update_plot()
+            self.log_version()
 
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
@@ -1975,6 +2010,7 @@ class PointEditorWindow(QMainWindow):
                                     relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_plot()
+            self.log_version()
             self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
     def add_tip_func(self):
