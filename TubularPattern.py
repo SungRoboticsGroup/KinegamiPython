@@ -246,13 +246,13 @@ class TubularPattern():
         # add new entities to the modelspace
         msp = doc.modelspace()
         if directed:
-            doc.layers.add(name="MountainCW", color=5)
-            doc.layers.add(name="MountainCCW", color=4)
-            doc.layers.add(name="ValleyCW", color=1)
-            doc.layers.add(name="ValleyCCW", color=6)
+            doc.layers.add(name="MountainCW", color=mountainColorDefault)
+            doc.layers.add(name="MountainCCW", color=mountainCColorDefault)
+            doc.layers.add(name="ValleyCW", color=valleyColorDefault)
+            doc.layers.add(name="ValleyCCW", color=valleyCColorDefault)
         else:
-            doc.layers.add(name="Mountain", color=5)
-            doc.layers.add(name="Valley", color=1)
+            doc.layers.add(name="Mountain", color=mountainColorDefault)
+            doc.layers.add(name="Valley", color=valleyColorDefault)
 
         ymin = self.proximalMarker[0, 1]
         ymax = ymin + self.patternHeight
@@ -279,7 +279,7 @@ class TubularPattern():
             # get the modelspace properties
             msp_properties = LayoutProperties.from_layout(msp)
             # set light gray background color and black foreground color
-            msp_properties.set_colors("#eaeaea")
+            msp_properties.set_colors(rawPropertiesColor)
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
@@ -393,7 +393,7 @@ class TubularPattern():
             # get the modelspace properties
             msp_properties = LayoutProperties.from_layout(msp)
             # set light gray background color and black foreground color
-            msp_properties.set_colors("#ffffff") # light gray #eaeaea
+            msp_properties.set_colors(mapPropertiesColor) # light gray #eaeaea
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)

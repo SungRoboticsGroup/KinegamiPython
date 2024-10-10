@@ -13,6 +13,7 @@ import pyqtgraph.opengl as gl
 
 from TubularPattern import *
 from geometryHelpers import *
+from style import *
 
 class LineItemWithID(gl.GLLinePlotItem):
     def __init__(self, id : int = -1, **kwds):
@@ -182,7 +183,7 @@ class Joint(ABC):
             zhat = self.Pose.R[:, 2] 
             jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
                                 self.Pose.t + 10 * self.r * zhat])
-            line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=showAxisColor, width=2, antialias=True)  # Using a silver color
             widget.plot_widget.addItem(line_item)
 
         if showPoses:
@@ -319,7 +320,7 @@ class Joint(ABC):
 
             for line in extended_line_points:
                 md = gl.MeshData.sphere(rows=3, cols=2)
-                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=line)
+                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=line)
                 sphere.setObjectName("line_sphere")
                 sphere.setGLOptions('translucent')
                 sphere.scale(2.0, 2.0, 0.1)
@@ -342,13 +343,13 @@ class Joint(ABC):
             axes = [frame.R[:, i] for i in range(3)]
 
         rad = self.boundingBall().r
-        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
+        colors = rotateArrowColors
 
         if selectedArrow != -1:
-            colors[selectedArrow] = (1, 1, 1, 1)
+            colors[selectedArrow] = selectedArrowColor
 
         center = self.Pose.t
-        extended_circle_color = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]
+        extended_circle_color = extendedCircleColors
         num_points = 20
 
         R = self.Pose.R
@@ -361,7 +362,7 @@ class Joint(ABC):
 
             for i, point in enumerate(points[:num_points]):
                 md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=[0, 0, 0, 0], shader='shaded', smooth=True, position=point, rotation=angles[i])
+                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=point, rotation=angles[i])
                 sphere.setObjectName("rotate_sphere")
                 sphere.setGLOptions('translucent')
                 sphere.scale(0.1, 0.1, 0.1)

@@ -1738,7 +1738,6 @@ class PointEditorWindow(QMainWindow):
             value = value.strip()
         value = float(value) if value else 0
         actualVal = math.radians(value)
-        self.state_label.setText(f'Edit Joint {self.selected_joint} State: {int(value)}')
         if self.chain and self.selected_joint != -1:
             if self.chain.setJointState(self.selected_joint, actualVal):
                 self.update_joint()

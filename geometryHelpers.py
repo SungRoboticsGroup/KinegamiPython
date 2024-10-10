@@ -574,7 +574,7 @@ class Elbow:
 
         return vertices, faces
     
-    def addToWidget(self, widget, numSides : int = 16, color_list=(1, 1, 1, 1), 
+    def addToWidget(self, widget, numSides : int = 16, color_list=elbowColorList, 
                   alpha : float = 1.0, wireFrame : bool = True, 
                   showFrames : bool = False, debug : bool = False):
         
@@ -592,19 +592,19 @@ class Elbow:
 
             ax = plt.figure().add_subplot(projection='3d')
             addPosesToPlotQT(Poses, ax, widget.plot_widget,
-                                        axisLength=1, xColor='darkred', 
-                                        yColor='darkblue', zColor='darkgreen')
+                                        axisLength=1, xColor=xPoseColor, 
+                                        yColor=yPoseColor, zColor=zPoseColor)
 
             x,y,z = Fwd.t
             u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
-            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=(1, 0, 0, 1), width=5) 
+            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=lineColor, width=5) 
             widget.plot_widget.addItem(line)
 
         meshitem.setGLOptions('translucent')
         widget.plot_widget.addItem(meshitem)
 
 def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor=yColorDefault, 
-                     zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
+                     zColor=zColorDefault, oColors=oColor, makeAxisLimitsIncludeTips=True):
     if Poses.shape == (4,4): # so it can plot a single frame
         Poses = np.array([Poses])
 
@@ -619,7 +619,7 @@ def addPosesToPlotQT(Poses, ax, widget, axisLength, xColor=xColorDefault, yColor
     origins = [[ox[i], oy[i], oz[i]] for i in range(len(ox))]
 
     #plot origin points
-    originPlot = gl.GLScatterPlotItem(pos=origins, color=(1,1,1,1), size=10)
+    originPlot = gl.GLScatterPlotItem(pos=origins, color=originPointsColor, size=10)
     widget.addItem(originPlot)
 
     xPoints = np.column_stack((ox + ux, oy + vx, oz + wx))
@@ -680,7 +680,7 @@ class CompoundElbow:
 
         return vertices, faces
     
-    def addToWidget(self, widget, numSides : int = 32, color_list=(1, 1, 1, 0.5), 
+    def addToWidget(self, widget, numSides : int = 32, color_list=compoundElbowColorList, 
                   alpha : float = 1.0, wireFrame : bool = False, 
                   showFrames : bool = True, showBoundingBall : bool = False, debug : bool = False):
         allHandleSets = []
@@ -743,7 +743,7 @@ class Arc3D:
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
 # returns the plot handles for the xHats, yHats, zHats, origins
-def addPosesToPlot(Poses, ax, axisLength, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors='black', makeAxisLimitsIncludeTips=True):
+def addPosesToPlot(Poses, ax, axisLength, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors=oColor, makeAxisLimitsIncludeTips=True):
     if Poses.shape == (4,4): # so it can plot a single frame
         Poses = np.array([Poses])
     
@@ -769,7 +769,7 @@ def addPosesToPlot(Poses, ax, axisLength, xColor=xColorDefault, yColor=yColorDef
     
     return (xHats, yHats, zHats, origins)
 
-def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors='black', block=blockDefault, makeAxisLimitsIncludeTips=True):
+def showPoses(Poses, axisLength=1, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, oColors=oColor, block=blockDefault, makeAxisLimitsIncludeTips=True):
     if type(Poses) == list:
         Poses = np.array(Poses)
     if Poses.shape == (4,4): # so it can plot a single frame

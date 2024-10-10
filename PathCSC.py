@@ -28,6 +28,8 @@ import warnings
 
 from geometryHelpers import *
 
+from style import *
+
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,
 and the other Dubins path parameters, construct the PathCSC and return
@@ -214,7 +216,7 @@ class PathCSC:
     
     # add to existing GLViewWidget ax
     def add(self, widget, showCircles=True, showPoses=True, 
-                  startColor='r', endColor='b', pathColor=pathColorDefault,
+                  startColor=pathStartColor, endColor=pathEndColor, pathColor=pathColorDefault,
                   cscBoundaryMarker='*', showTunit=False):
         if showPoses:
             # start pose
@@ -260,17 +262,17 @@ class PathCSC:
         pathS = gl.GLLinePlotItem(pos=pathSPoints, color=pathColor, width=2)
         widget.addItem(pathS)
 
-        point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=(1,1,1,1), size=10)
+        point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=pathPointColor, size=10)
         widget.addItem(point1)
-        point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=(1,1,1,1), size=10)
+        point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=pathPointColor, size=10)
         widget.addItem(point2)
 
         if showTunit:
-            tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=(1,1,1,1), width=2) 
+            tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=tUnitColor, width=2) 
             widget.addItem(tUnit)
     
     def addToWidget(self, widget, showCircles=True, showPoses=True, 
-                  startColor='r', endColor='b', pathColor='g',
+                  startColor=pathStartColor, endColor=pathEndColor, pathColor=pathWidgetColor,
                   cscBoundaryMarker='*', showTunit=False, block=blockDefault):
 
         #make a new plot and then call add to plot, then display that plot

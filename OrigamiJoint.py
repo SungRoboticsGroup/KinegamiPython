@@ -283,7 +283,7 @@ class Waypoint(OrigamiJoint):
             zhat = self.Pose.R[:, 2] 
             jointAxis = np.array([self.Pose.t - axisScale * self.r * zhat,
                                 self.Pose.t + axisScale * self.r * zhat])
-            line_item = gl.GLLinePlotItem(pos=jointAxis, color=(0.75, 0.75, 0.75, 1), width=2, antialias=True)  # Using a silver color
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=showAxisColor, width=2, antialias=True)  # Using a silver color
             widget.plot_widget.addItem(line_item)
 
         if showPoses:

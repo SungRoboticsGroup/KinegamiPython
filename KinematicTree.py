@@ -23,6 +23,8 @@ from functools import partial
 from geometryHelpers import *
 from scipy.optimize import dual_annealing
 
+from style import *
+
 J = TypeVar("J", bound=Joint)
 
 class KinematicTree(Generic[J]):
@@ -249,7 +251,7 @@ class KinematicTree(Generic[J]):
             if index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
-                        sphereColor=(1.0, 1.0, 0.5, 0.5), showSphere=True,
+                        sphereColor=selectedJointColor, showSphere=True,
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
             else:
@@ -273,7 +275,7 @@ class KinematicTree(Generic[J]):
             else:
             """
             if index == selectedLink:
-                link.addToWidget(widget, color=(1.0, 1.0, 0.0, 0.5), 
+                link.addToWidget(widget, color=selectedLinkColor, 
                                 alpha=linkOpacityDefault,
                                 showPath=showLinkPath, 
                                 pathColor=pathColor,
