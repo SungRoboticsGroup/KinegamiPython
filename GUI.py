@@ -994,7 +994,7 @@ class PointEditorWindow(QMainWindow):
         self.rotationSlider.setDisabled(True) 
         self.rotationSlider.valueChanged.connect(self.adjust_rotation)
 
-        # self.translate_label = QLabel('Translate N/A Axis: 0', self)
+        # self. = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
         self.translate_slider.setMinimum(-10*self.r)
         self.translate_slider.setMaximum(10*self.r)
@@ -1025,7 +1025,7 @@ class PointEditorWindow(QMainWindow):
         translationLayout = QHBoxLayout()
         self.translationInput = QLineEdit(self)
         self.translationInput.setPlaceholderText("Enter distance")
-        #main_layout.addWidget(self.translate_label)
+        #main_layout.addWidget(self.)
         translationLayout.addWidget(self.translate_slider)
         translationLayout.addWidget(self.translationInput) 
 
@@ -1564,7 +1564,6 @@ class PointEditorWindow(QMainWindow):
             rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
             angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
             self.rotationSlider.blockSignals(True)
-            self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(angle_degrees)}°")
             self.rotationSlider.setValue(int(angle_degrees))
             self.oldRotVal = angle_degrees
             self.rotationSlider.setDisabled(False)
@@ -1575,7 +1574,6 @@ class PointEditorWindow(QMainWindow):
             self.rotationInput.setDisabled(False)
         else:
             self.rotationSlider.blockSignals(True)
-            self.rotationLabel.setText(f"Rotation {self.selected_axis_name} Axis: 0°")
             self.rotationSlider.setValue(0)
             self.rotationSlider.setDisabled(True)
             self.rotationSlider.blockSignals(False)
@@ -1588,7 +1586,6 @@ class PointEditorWindow(QMainWindow):
         if self.selected_arrow != -1:
             amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(amount * 10)}")
             self.translate_slider.setValue(int(amount * 10))
             self.oldTransVal = amount
             self.translate_slider.setDisabled(False)
@@ -1599,7 +1596,6 @@ class PointEditorWindow(QMainWindow):
             self.translationInput.setDisabled(False)
         else:
             self.translate_slider.blockSignals(True)
-            self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: 0")
             self.translate_slider.setValue(0)
             self.translate_slider.setDisabled(True)
             self.translate_slider.blockSignals(False)
@@ -1618,7 +1614,6 @@ class PointEditorWindow(QMainWindow):
             current = int(math.degrees(self.chain.Joints[self.selected_joint].state))
             self.oldStateVal = current
             self.state_slider.blockSignals(True)
-            self.state_label.setText(f"Edit Joint {self.selected_joint} State: {current}")
             self.state_slider.setValue(current)
             self.state_slider.setDisabled(False)
             self.state_slider.blockSignals(False)
@@ -1628,7 +1623,6 @@ class PointEditorWindow(QMainWindow):
             self.stateInput.setDisabled(False)
         else:
             self.state_slider.blockSignals(True)
-            self.state_label.setText(f"Edit Joint N/A State: 0")
             self.state_slider.setValue(0)
             self.state_slider.setDisabled(True)
             self.state_slider.blockSignals(False)
@@ -1686,7 +1680,6 @@ class PointEditorWindow(QMainWindow):
         #     value = value.strip()
         value = float(value) if len(str(value)) > 0 else 0
         angle_radians = math.radians(value - self.oldRotVal)
-        self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(value)}°")
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
                 transformation = SE3.Rx(angle_radians)
@@ -1703,7 +1696,6 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.rotationSlider.blockSignals(True)
                 self.rotationSlider.setValue(int(self.oldRotVal))
-                self.rotationLabel.setText(f"Rotate {self.selected_axis_name} Axis: {int(self.oldRotVal)}°")
                 self.rotationSlider.blockSignals(False)
 
     def adjust_translation(self, value):
@@ -1711,7 +1703,6 @@ class PointEditorWindow(QMainWindow):
             value = value.strip()
         value = float(value) if value else 0
         actualVal = value / 10
-        self.translate_label.setText(f'Translate {self.selected_axis_name} Axis: {int(value)}')
         amount = actualVal - self.oldTransVal
         if self.chain and self.selected_joint != -1:
             propogate = self.propogateSliderCheckbox.isChecked()
@@ -1730,8 +1721,6 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.translate_slider.blockSignals(True)
                 self.translate_slider.setValue(int(self.oldTransVal * 10))
-                self.translate_label.setText(f"Translate {self.selected_axis_name} Axis: {int(self.oldTransVal * 10)}")
-                self.translate_label.blockSignals(False)
 
     def adjust_state(self, value):
         if not isinstance(value, float) and not isinstance(value, int):
@@ -1750,8 +1739,6 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.state_slider.blockSignals(True)
                 self.state_slider.setValue(int(self.oldStateVal))
-                self.state_label.setText(f"Edit Joint {self.selected_joint} State: {int(self.oldStateVal)}")
-                self.state_label.blockSignals(False)
 
     def delete_joint(self):
         # dialog = DeleteDialog(self)
