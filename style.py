@@ -1,5 +1,26 @@
 import ezdxf
 
+################# Main colors for the GUI ####################
+surfaceOpacityDefault = 1.0
+linkOpacityDefault = 0.5
+linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # gray
+jointColorDefault = (1.0, 0.0, 1.0, surfaceOpacityDefault)  # magenta 
+jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue 
+referenceMeshColor = (0, 1, 0, 1)  # green
+
+############## Colors for the crease pattern dxf #####################
+# In AutoCAD Color Index 
+# https://ezdxf.readthedocs.io/en/stable/concepts/aci.html#aci
+mountainColorDefault = 5  # blue
+valleyColorDefault = 1  # red 
+mountainCColorDefault = 4  # cyan
+valleyCColorDefault = 6  # magenta 
+boundaryColorDefault = 2  # yellow
+cutColorDefault = 3  # green
+rawPropertiesColor = "#eaeaea" # light grey
+mapPropertiesColor = "#ffffff" # white
+
+############### Other colors, not all used in the GUI ###################
 # Chosen to be mutually distinguishable in grayscale
 xColorDefault = (1.0, 0.27, 0.0, 1.0)  # orangered
 yColorDefault = (0.56, 0.93, 0.56, 1.0)  # lightgreen
@@ -11,11 +32,6 @@ distalColorDefault = (1.0, 1.0, 0.0, 1.0)  # yellow
 pathColorDefault = (0.0, 0.0, 0.0, 1.0)  # black
 sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
 
-surfaceOpacityDefault = 1.0
-linkOpacityDefault = 0.5
-linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # gray
-jointColorDefault = (1.0, 0.0, 1.0, surfaceOpacityDefault)  # magenta 
-jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue 
 groundPlaneColorDefault = (0.0, 0.0, 0.0, 1.0)  # black 
 
 jointAxisScaleDefault = 10
@@ -62,13 +78,3 @@ pathWidgetColor = 'g'  # green
 pathPointColor = (1, 1, 1, 1)  # white 
 tUnitColor = (1, 1, 1, 1)  # white
 
-# In AutoCAD Color Index 
-# https://ezdxf.readthedocs.io/en/stable/concepts/aci.html#aci
-mountainColorDefault = 5  # blue
-valleyColorDefault = 1  # red 
-mountainCColorDefault = 4  # cyan
-valleyCColorDefault = 6  # magenta 
-boundaryColorDefault = 2  # yellow
-cutColorDefault = 3  # green
-rawPropertiesColor = "#eaeaea" # light grey
-mapPropertiesColor = "#ffffff" # white
