@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QColor
 from KinematicTree import *
 from spatialmath import SE3
+from style import *
 
 def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     assert(tree != None)
@@ -97,7 +98,7 @@ def plotSTL(view, filepath : str, pose, color = (0.5,0.5,0.5,1), scale=1.0):
     mesh.setGLOptions('opaque')
     view.addItem(mesh)
 
-def stlToMeshItem(filepath : str, pose : SE3 = SE3(), scale=1.0, color=(0.5,0.5,0.5,1)):
+def stlToMeshItem(filepath : str, pose : SE3 = SE3(), scale=1.0, color=referenceMeshColor):
     # Load the STL file
     stl_mesh = Mesh.from_file(filepath)
 
