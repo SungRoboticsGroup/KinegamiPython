@@ -886,7 +886,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.done_transforming.connect(self.done_transforming)
         self.plot_widget.key_pressed.connect(self.key_pressed)
 
-        # //////////////////////////////////    Control Options    ///////////////////////////////////
+        # //////////////////////////////////    Keyboard Options    ///////////////////////////////////
         top_dock_widget = QDockWidget("Keyboard Controls", self)
         top_dock_widget.setAllowedAreas(Qt.TopDockWidgetArea)
 
@@ -902,6 +902,24 @@ class PointEditorWindow(QMainWindow):
         self.add_mesh_dock = QDockWidget("Import Mesh", self)
         self.add_mesh_dock.setWidget(self.add_mesh_widget)
         self.add_mesh_dock.setVisible(True) 
+
+        
+
+
+        # //////////////////////////////////    MESSAGE DISPLAY    ///////////////////////////////////
+        message_display_widget = QDockWidget("Messages", self)
+        #message_display_widget.setAllowedAreas(Qt.BottomDockWidgetArea)
+
+        # Create a layout specifically for success/error messages
+        #self.message_layout = QHBoxLayout()
+
+        # Create a label to display success/error messages
+        self.status_label = QLabel('')
+        message_display_widget.setWidget(self.status_label)
+
+        # Add the message layout to the main layout
+        #message_display_widget.setLayout(self.message_layout)
+
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -1156,18 +1174,7 @@ class PointEditorWindow(QMainWindow):
 
         # self.random_btn_dock.setMaximumSize(300, 100)
 
-        # Create a layout specifically for success/error messages
-        self.message_layout = QHBoxLayout()
-
-        # Create a label to display success/error messages
-        self.status_label = QLabel('')
-        self.message_layout.addWidget(self.status_label)
-
-        # Add the message layout to the main layout
-        self.options_layout.addLayout(self.message_layout)
         self.delete_joint_widget = DeleteWidget(self)
-
-        # Create dock for the delete widget
         self.delete_joint_dock = QDockWidget("Confirm Delete", self)
         self.delete_joint_dock.setWidget(self.delete_joint_widget)
         self.delete_joint_dock.setVisible(False)
@@ -1179,8 +1186,7 @@ class PointEditorWindow(QMainWindow):
         self.add_chain_popup_dock.setVisible(False)  # Initially hidden
         
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
-
-        
+        self.addDockWidget(Qt.TopDockWidgetArea, message_display_widget)
 
         self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
