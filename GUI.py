@@ -990,18 +990,21 @@ class PointEditorWindow(QMainWindow):
         self.editing_widget.setLayout(self.joint_editing_layout)
 
         self.select_joint_options = QComboBox()
+        self.select_link_options = QComboBox()
         self.delete_joint_button = QPushButton("Delete Joint")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         #joint_layout = QVBoxLayout()
         self.joint_editing_layout.addWidget(self.select_joint_options)
         self.joint_editing_layout.addWidget(self.delete_joint_button)
+        self.joint_editing_layout.addWidget(self.select_link_options)
         edit_joints_dock = QDockWidget("Edit Joints", self)
         #self.joint_editing_layout.addWidget(button_widget)
         edit_joints_dock.setWidget(self.editing_widget)
 
         self.delete_joint_button.clicked.connect(self.delete_joint)
         self.select_joint_options.currentIndexChanged.connect(self.joint_selection_changed)
+        self.select_link_options.currentIndexChanged.connect(self.link_selection_changed)
 
         # self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
         self.rotationSlider = QSlider(Qt.Horizontal)
@@ -1221,7 +1224,6 @@ class PointEditorWindow(QMainWindow):
         self.reload_IDs()
         self.update_joint()
         self.update_plot()
-
     
     def toggle_grid_func(self):
         if self.grid_on:
@@ -1476,8 +1478,20 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def link_selection_changed(self, index):
-        self.selected_link = index
-        self.update_joint()
+        self.select_link_options.setCurrentIndex(self.selected_link)
+        if index != self.selected_link:
+            self.selected_link = index
+            self.selected_arrow = -1
+            self.selected_axis_name = 'N/A'
+            self.update_joint()
+            self.update_rotation_slider()
+            self.update_translate_slider()
+            min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+            max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
+            current = math.degrees(self.chain.Joints[self.selected_joint].state)
+            self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
+            self.update_state_slider()
+            #self.update_radius_slider()
 
     @QtCore.pyqtSlot(np.ndarray)
     def drag_translate(self, new_position):
@@ -1604,6 +1618,16 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
 
+        self.select_link_options.blockSignals(True)
+        self.select_link_options.clear()
+
+        for link in self.chain.Links: 
+            self.select_link_options.addItem("Link " + str(link.id) + " - " + link.__class__.__name__)
+        
+        self.select_link_options.blockSignals(False)
+        self.select_link_options.setCurrentIndex(self.selected_link)
+
+
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
         if not self.chain:
@@ -1717,10 +1741,12 @@ class PointEditorWindow(QMainWindow):
 
     def update_joint(self):
         self.select_joint_options.blockSignals(True)
+        self.select_link_options.blockSignals(True)
 
         if (not self.stl_generated):
             self.plot_widget.clear()
             self.select_joint_options.clear()
+            self.select_link_options.clear()
 
             self.grid = gl.GLGridItem()
             self.grid.setColor(gridColorDefault)
@@ -1735,6 +1761,7 @@ class PointEditorWindow(QMainWindow):
                 self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
 
                 self.select_joint_options.blockSignals(False)
+                self.select_link_options.blockSignals(False)
 
                 if (self.control_type == "Translate"):
                     for joint in self.chain.Joints:
