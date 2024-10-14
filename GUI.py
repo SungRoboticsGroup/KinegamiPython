@@ -1429,7 +1429,7 @@ class PointEditorWindow(QMainWindow):
             crease_pattern.show()
 
     def save_chain(self, autosave_id=None):
-        if autosave_id is None:
+        if not autosave_id is None:
             chain_name = self.crease_pattern_name_input.text()
             if chain_name is None or chain_name == "":
                 chain_name = "chain"
@@ -1442,6 +1442,8 @@ class PointEditorWindow(QMainWindow):
         if chain_name is None or chain_name == "":
             chain_name = "chain"
         self.chain = loadKinematicChain(chain_name)
+        self.numSides = self.chain.numSides
+        self.r = self.chain.r
         self.chain_created = True
         self.update_plot()
         self.log_version()
