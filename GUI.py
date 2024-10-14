@@ -581,6 +581,7 @@ class AddMeshWidget(QWidget):
 
     def toggle_visibility(self):
         self.window().mesh_visible = self.visible_toggle.isChecked()
+        print("Mesh visibility toggled:", "Visible" if self.window().mesh_visible else "Hidden")
         self.window().update_plot()
 
     def onUpdateScale(self, value):
@@ -1816,7 +1817,7 @@ class PointEditorWindow(QMainWindow):
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
         
-            if self.referenceMesh is not None:
+            if self.mesh_visible and self.referenceMesh is not None:
                 self.plot_widget.addItem(self.referenceMesh.mesh)
             
             if self.mesh_selected:
@@ -1865,7 +1866,7 @@ class PointEditorWindow(QMainWindow):
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
 
-        if (self.referenceMesh is not None and self.mesh_visible):
+        if self.mesh_visible and not self.referenceMesh is None:
             self.plot_widget.addItem(self.referenceMesh.mesh)
 
         if not self.chain is None:
