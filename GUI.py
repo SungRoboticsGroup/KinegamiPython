@@ -842,6 +842,19 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             if (len(mesh) == 0):
                 self.mesh_selected = False
+                if (len(arrows) > 0 and self.selected_index != -1):
+                    arrow_index = arrows[0].id
+                    print("arrows selected")
+                else:
+                    if(len(joints) > 0):
+                        self.selected_index = joints[0].id
+                    else:
+                        self.selected_index = -1
+
+                    if(len(links) > 0 and self.selected_index == -1):
+                        self.selected_link_index = links[0].id
+                    else:
+                        self.selected_link_index = -1
             else:
                 self.mesh_selected = True
                 if (len(arrows) > 0 and self.selected_index != -1):
