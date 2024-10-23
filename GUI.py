@@ -1429,7 +1429,7 @@ class PointEditorWindow(QMainWindow):
             crease_pattern.show()
 
     def save_chain(self, autosave_id=None):
-        if not autosave_id is None:
+        if autosave_id is None:
             chain_name = self.crease_pattern_name_input.text()
             if chain_name is None or chain_name == "":
                 chain_name = "chain"
@@ -1442,8 +1442,6 @@ class PointEditorWindow(QMainWindow):
         if chain_name is None or chain_name == "":
             chain_name = "chain"
         self.chain = loadKinematicChain(chain_name)
-        self.numSides = self.chain.numSides
-        self.r = self.chain.r
         self.chain_created = True
         self.update_plot()
         self.log_version()
@@ -1899,8 +1897,8 @@ class PointEditorWindow(QMainWindow):
             waypoint = Waypoint(self.numSides, self.r, newPos)
             waypoint.id = len(self.chain.Joints)
             
-            self.chain.append(newJoint = waypoint, relative=False, 
-                              fixedPosition=True, fixedOrientation=False, safe=False)
+            self.chain.addJoint(parentIndex = lastJoint.id, newJoint = waypoint, 
+                                relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
             self.chain.Links[nextJoint.id] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
                                             nextJoint.ProximalDubinsFrame(),
                                             self.chain.maxAnglePerElbow, lastJoint=waypoint, nextJoint=nextJoint)
@@ -1935,11 +1933,11 @@ class PointEditorWindow(QMainWindow):
                 waypoint = Waypoint(self.numSides, self.r, SE3())
                 self.chain = KinematicChain(waypoint)
             elif waypoint.id != 0:
-                self.chain.append(newJoint = waypoint, relative=True, 
-                                  fixedPosition=True, fixedOrientation=False, safe=False)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                                    relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             else:
-                self.chain.append(newJoint = waypoint, relative=True, 
-                                  fixedPosition=False, fixedOrientation=False, safe=False)
+                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                                    relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_plot()
             self.log_version()
