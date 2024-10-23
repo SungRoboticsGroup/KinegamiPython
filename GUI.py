@@ -1,10 +1,12 @@
 """
-@author: Raymond Feng and Andy Wang
+@author: Raymond Feng, Andy Wang, Daniel Feshbach
 """
 
 import sys
 import numpy as np
 import pyqtgraph.opengl as gl
+import PyQt5
+from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -24,6 +26,13 @@ from style import *
 
 import warnings
 warnings.filterwarnings("ignore")
+
+# To scale the GUI on high resolution screens, per https://stackoverflow.com/questions/39247342/pyqt-gui-size-on-high-resolution-screens
+if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
+    PyQt5.QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+
+if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
+    PyQt5.QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
 
 class EditJointStateDialog(QDialog):
     def __init__(self, parent=None):
@@ -1109,7 +1118,7 @@ class PointEditorWindow(QMainWindow):
 
         self.options_widget.setLayout(self.options_layout)
         self.options_dock.setWidget(self.options_widget)
-        self.options_dock.setMaximumSize(300, 150)
+        #self.options_dock.setMaximumSize(300, 150)
 
 
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
@@ -1130,7 +1139,7 @@ class PointEditorWindow(QMainWindow):
         self.camera_options_widget.setLayout(self.camera_layout)
         self.camera_controls_dock.setWidget(self.camera_options_widget)
         
-        self.camera_controls_dock.setMaximumSize(300, 150)
+        #self.camera_controls_dock.setMaximumSize(300, 150)
 
         # ////////////////////////////////    FILE   ///////////////////////////////////
         file_dock = QDockWidget("File", self)
