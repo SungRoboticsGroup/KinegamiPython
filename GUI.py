@@ -10,7 +10,7 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4
+from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -23,7 +23,6 @@ import re
 from scipy.spatial.transform import Rotation as R
 from testqtgraph import *
 from style import *
-from ReferenceMesh import *
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -551,18 +550,6 @@ class AddMeshWidget(QWidget):
         layout.addLayout(file_layout)
 
         # Scale input
-        # scale_layout = QHBoxLayout()
-        # scale_label = QLabel("Scale:")
-        # self.scale_slider = QSlider(Qt.Horizontal, self)
-        # self.scale_slider.setMinimum(0)  # Minimum value
-        # self.scale_slider.setMaximum(100)  # Maximum value
-        # self.scale_slider.setValue(40)  # Initial value
-        # self.scale_slider.setEnabled(False)
-        # self.scale_slider.valueChanged.connect(self.onUpdateScale)
-        # scale_layout.addWidget(scale_label)
-        # scale_layout.addWidget(self.scale_slider)
-        # layout.addLayout(scale_layout)
-
         scale_layout = QHBoxLayout()
         scale_label = QLabel("Scale:")
         self.scale_input = QLineEdit()
@@ -580,23 +567,8 @@ class AddMeshWidget(QWidget):
         self.clear_button = QPushButton('Clear Mesh', self)
         self.clear_button.clicked.connect(self.onClearClicked)
         layout.addWidget(self.clear_button)
-
-        self.visible_toggle = QCheckBox('Mesh Visibility')
-        self.visible_toggle.setChecked(True)
-        self.visible_toggle.toggled.connect(self.toggle_visibility)  
-        layout.addWidget(self.visible_toggle)
         
         self.setLayout(layout)
-
-    def toggle_visibility(self):
-        self.window().mesh_visible = self.visible_toggle.isChecked()
-        self.window().update_plot()
-
-    def onUpdateScale(self, value):
-        if (self.window().referenceMesh is not None):
-            scale = value / 40.0
-            self.window().referenceMesh.mesh.resetTransform() 
-            self.window().referenceMesh.updateScale(scale)
 
     def onAddClicked(self):
         try:
@@ -610,9 +582,7 @@ class AddMeshWidget(QWidget):
             if (scale_factor <= 0):
                 raise ValueError
             mesh = stlToMeshItem(file_path, scale=scale_factor)
-            mesh.setObjectName("Mesh")
-            self.window().referenceMesh = ReferenceMesh(mesh=mesh)
-            # self.scale_slider.setEnabled(True)
+            self.window().referenceMesh = mesh
             self.window().update_plot()
             #plotSTL(self.window().plot_widget, file_path, SE3(), scale=scale_factor)
             #self.window().add_mesh_dock.setVisible(False)
@@ -621,11 +591,12 @@ class AddMeshWidget(QWidget):
 
     def onClearClicked(self):
         self.window().referenceMesh = None
-        #self.scale_slider.setEnabled(False)
         self.window().update_plot()
 
     def show_error(self, message):
         QMessageBox.warning(self, "Invalid Input", message)
+
+
 
 class AddChainWidget(QWidget):
     def __init__(self, parent=None):
@@ -731,7 +702,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     click_signal = qc.pyqtSignal(int)
     click_signal_arrow = qc.pyqtSignal(int)
     click_signal_link = qc.pyqtSignal(int)
-    click_signal_mesh = qc.pyqtSignal(bool)
     drag_change_position = qc.pyqtSignal(np.ndarray)
     drag_change_rotation = qc.pyqtSignal(float)
     key_pressed = qc.pyqtSignal(str)
@@ -740,7 +710,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     selected_index = -1
     selected_arrow = None
     selected_link_index = -1
-    mesh_selected = False
 
     camera_type = "Rotate"
 
@@ -833,7 +802,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             joints = []
             arrows = []
             links = []
-            mesh = []
 
             for item in self.itemsAt(region):
                 if (item.objectName() == "Arrow"):
@@ -845,34 +813,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (item.objectName() == "Link"):
                     links.append(item)
 
-                if (item.objectName() == "Mesh"):
-                    mesh.append(item)
-
-            if (len(mesh) == 0):
-                self.mesh_selected = False
+            if (len(arrows) > 0 and self.selected_index != -1):
+                arrow_index = arrows[0].id
             else:
-                self.mesh_selected = True
-                if (len(arrows) > 0 and self.selected_index != -1):
-                    arrow_index = arrows[0].id
-                    print("arrows selected")
-                    self.mesh_selected = False
+                if(len(joints) > 0):
+                    self.selected_index = joints[0].id
                 else:
-                    if(len(joints) > 0):
-                        self.selected_index = joints[0].id
-                        self.mesh_selected = False
-                    else:
-                        self.selected_index = -1
+                    self.selected_index = -1
 
-                    if(len(links) > 0 and self.selected_index == -1):
-                        self.selected_link_index = links[0].id
-                        self.mesh_selected = False
-                    else:
-                        self.selected_link_index = -1
+                if(len(links) > 0 and self.selected_index == -1):
+                    self.selected_link_index = links[0].id
+                else:
+                    self.selected_link_index = -1
             
             self.click_signal.emit(self.selected_index)
             self.click_signal_arrow.emit(arrow_index)
             self.click_signal_link.emit(self.selected_link_index)
-            self.click_signal_mesh.emit(self.mesh_selected)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
@@ -930,13 +886,10 @@ class PointEditorWindow(QMainWindow):
         self.selected_axis_name = 'N/A'
         self.last_joint = -1
         self.selected_frame = -1
-        self.mesh_selected = False
-        self.mesh_visible = True
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.click_signal_link.connect(self.link_selection_changed)
-        self.plot_widget.click_signal_mesh.connect(self.mesh_selected_slot)
         self.plot_widget.drag_change_position.connect(self.drag_translate)
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
         self.plot_widget.done_transforming.connect(self.done_transforming)
@@ -953,10 +906,14 @@ class PointEditorWindow(QMainWindow):
 
         top_dock_widget.setWidget(self.key_bar)
         
+
         self.add_mesh_widget = AddMeshWidget(self)
         self.add_mesh_dock = QDockWidget("Import Mesh", self)
         self.add_mesh_dock.setWidget(self.add_mesh_widget)
         self.add_mesh_dock.setVisible(True) 
+
+        
+
 
         # //////////////////////////////////    MESSAGE DISPLAY    ///////////////////////////////////
         message_display_widget = QDockWidget("Messages", self)
@@ -972,6 +929,7 @@ class PointEditorWindow(QMainWindow):
         # Add the message layout to the main layout
         #message_display_widget.setLayout(self.message_layout)
 
+
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
         self.add_revolute = QPushButton("Add Revolute Joint")
@@ -979,8 +937,12 @@ class PointEditorWindow(QMainWindow):
         self.create_new_chain = QPushButton("Create New Chain")
 
         add_waypoints_layout = QVBoxLayout()
-        self.add_waypoint = QPushButton("Add Waypoint")
-        add_waypoints_layout.addWidget(self.add_waypoint)
+        self.add_waypoint_x = QPushButton("Add Waypoint X")
+        self.add_waypoint_y = QPushButton("Add Waypoint Y")
+        self.add_waypoint_z = QPushButton("Add Waypoint Z")
+        add_waypoints_layout.addWidget(self.add_waypoint_x)
+        add_waypoints_layout.addWidget(self.add_waypoint_y)
+        add_waypoints_layout.addWidget(self.add_waypoint_z)
 
         add_joints_layout = QVBoxLayout()
         add_chain_layout = QVBoxLayout()
@@ -992,7 +954,9 @@ class PointEditorWindow(QMainWindow):
 
         self.add_prismatic.clicked.connect(self.add_prismatic_func)
         self.add_revolute.clicked.connect(self.add_revolute_func)
-        self.add_waypoint.clicked.connect(self.add_waypoint_func)
+        self.add_waypoint_x.clicked.connect(self.add_waypoint_func)
+        self.add_waypoint_y.clicked.connect(self.add_waypoint_func)
+        self.add_waypoint_z.clicked.connect(self.add_waypoint_func)
         self.add_tip.clicked.connect(self.add_tip_func)
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
 
@@ -1018,7 +982,8 @@ class PointEditorWindow(QMainWindow):
         axis_key_layout.addWidget(self.x_axis_widget)
         axis_key_layout.addWidget(self.y_axis_widget)
         axis_key_layout.addWidget(self.z_axis_widget)
-   
+
+        
         # ////////////////////////////////    EDIT JOINTS    ///////////////////////////////////
         self.editing_widget = QWidget()
         self.joint_editing_layout = QVBoxLayout()
@@ -1133,6 +1098,7 @@ class PointEditorWindow(QMainWindow):
         self.translationInput.setDisabled(True)
         self.stateInput.setDisabled(True)
 
+
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
         self.options_dock = QDockWidget("Options", self)
         self.options_widget = QWidget()
@@ -1153,6 +1119,7 @@ class PointEditorWindow(QMainWindow):
         self.options_widget.setLayout(self.options_layout)
         self.options_dock.setWidget(self.options_widget)
         #self.options_dock.setMaximumSize(300, 150)
+
 
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
         self.camera_controls_dock = QDockWidget("Camera Controls", self)
@@ -1193,6 +1160,7 @@ class PointEditorWindow(QMainWindow):
         self.load_chain_button.clicked.connect(self.load_chain)
         file_dock_layout.addWidget(self.load_chain_button)
 
+
         self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         file_dock_layout.addWidget(self.save_crease_pattern_button)  
@@ -1204,7 +1172,8 @@ class PointEditorWindow(QMainWindow):
         # self.random_btn_dock = QDockWidget("Export Options", self)
         # self.random_btn_widget = QWidget()
         # self.random_btn_layout = QVBoxLayout()
-   
+
+        
         # self.random_btn = QPushButton("Generate STL")
         # self.random_btn.clicked.connect(self.generate_stl)
         # file_dock_layout.addWidget(self.random_btn)
@@ -1222,6 +1191,7 @@ class PointEditorWindow(QMainWindow):
         self.delete_joint_dock.setWidget(self.delete_joint_widget)
         self.delete_joint_dock.setVisible(False)
         
+
         self.add_chain_button_widget = AddChainWidget(self)
         self.add_chain_popup_dock = QDockWidget("Create New Chain", self)
         self.add_chain_popup_dock.setWidget(self.add_chain_button_widget)
@@ -1240,6 +1210,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+
 
     def log_version(self):
         #print("logging version")
@@ -1486,11 +1457,6 @@ class PointEditorWindow(QMainWindow):
         self.update_plot()
         self.log_version()
 
-    @QtCore.pyqtSlot(bool)
-    def mesh_selected_slot(self, is_selected):
-        self.mesh_selected = is_selected
-        self.update_joint()
-
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
         if index != self.selected_joint:
@@ -1509,7 +1475,7 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
-        if index != self.selected_arrow and (self.selected_joint != -1 or self.mesh_selected):
+        if index != self.selected_arrow and self.selected_joint != -1:
             self.selected_arrow = index
                         
             if (index == 0): self.selected_axis_name = 'X'
@@ -1518,10 +1484,8 @@ class PointEditorWindow(QMainWindow):
             else: self.selected_axis_name = 'N/A'
 
             self.update_joint()
-
-            if (self.selected_joint != -1):
-                self.update_rotation_slider()
-                self.update_translate_slider()
+            self.update_rotation_slider()
+            self.update_translate_slider()
 
     @QtCore.pyqtSlot(int)
     def link_selection_changed(self, index):
@@ -1543,31 +1507,16 @@ class PointEditorWindow(QMainWindow):
     @QtCore.pyqtSlot(np.ndarray)
     def drag_translate(self, new_position):
         propogate = self.propogateSliderCheckbox.isChecked()
+        #relative = self.relativeSliderCheckbox.isChecked()
+        old_position = self.chain.Joints[self.selected_joint].Pose.t
+        trans = new_position - old_position
+        transformation = SE3.Trans(trans[0], trans[1], trans[2])
 
-        if (self.mesh_selected):
-            old_position = self.referenceMesh.Pose.t
-            trans = new_position - old_position
-            transformation = SE3.Trans(trans[0], trans[1], trans[2])
-            self.referenceMesh.Pose = transformation * self.referenceMesh.Pose
-
-            transform_matrix = QMatrix4x4()
-            matrix = self.referenceMesh.Pose.A
-            for row in range(4):
-                for col in range(4):
-                    transform_matrix[row, col] = matrix[row, col]
-            self.referenceMesh.mesh.setTransform(transform_matrix)
-
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=False):
             self.update_joint()
-        else:
-            old_position = self.chain.Joints[self.selected_joint].Pose.t
-            trans = new_position - old_position
-            transformation = SE3.Trans(trans[0], trans[1], trans[2])
 
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=False):
-                self.update_joint()
-
-            self.update_rotation_slider()
-            self.update_translate_slider()
+        self.update_rotation_slider()
+        self.update_translate_slider()
 
     def done_transforming(self, done):
         if done:
@@ -1577,30 +1526,18 @@ class PointEditorWindow(QMainWindow):
     def drag_rotate(self, new_rotation):
         transformation = SE3()
         propogate = self.propogateSliderCheckbox.isChecked()
-
+        #relative = self.relativeSliderCheckbox.isChecked()
         if (self.selected_axis_name == 'X'):
             transformation = SE3.Rx(new_rotation)
         elif (self.selected_axis_name == 'Y'):
             transformation = SE3.Ry(new_rotation)
         elif (self.selected_axis_name == 'Z'):
             transformation = SE3.Rz(new_rotation)
-        
-        if (self.mesh_selected):
-            self.referenceMesh.Pose = self.referenceMesh.Pose * transformation
 
-            transform_matrix = QMatrix4x4()
-            matrix = self.referenceMesh.Pose.A
-            for row in range(4):
-                for col in range(4):
-                    transform_matrix[row, col] = matrix[row, col]
-            self.referenceMesh.mesh.setTransform(transform_matrix)
-
+        if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
             self.update_joint()
-        else: 
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
-                self.update_joint()
-                self.update_rotation_slider()
-                self.update_translate_slider()
+            self.update_rotation_slider()
+            self.update_translate_slider()
 
     def update_rotation_slider(self):
         self.rotationSlider.setMinimum(-360)
@@ -1700,6 +1637,7 @@ class PointEditorWindow(QMainWindow):
         
         self.select_link_options.blockSignals(False)
         self.select_link_options.setCurrentIndex(self.selected_link)
+
 
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
@@ -1828,13 +1766,7 @@ class PointEditorWindow(QMainWindow):
                 self.plot_widget.addItem(self.grid)
         
             if self.referenceMesh is not None:
-                self.plot_widget.addItem(self.referenceMesh.mesh)
-            
-            if self.mesh_selected:
-                if (self.control_type == "Translate"):
-                    self.referenceMesh.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                elif (self.control_type == "Rotate"):
-                    self.referenceMesh.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
+                self.plot_widget.addItem(self.referenceMesh)
             
             if self.chain is not None:
                 self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
@@ -1876,8 +1808,8 @@ class PointEditorWindow(QMainWindow):
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
 
-        if (self.referenceMesh is not None and self.mesh_visible):
-            self.plot_widget.addItem(self.referenceMesh.mesh)
+        if self.referenceMesh is not None:
+            self.plot_widget.addItem(self.referenceMesh)
 
         if not self.chain is None:
             for index, joint in enumerate(self.chain.Joints):
@@ -1962,9 +1894,8 @@ class PointEditorWindow(QMainWindow):
         if (not self.chain_created):
             self.chain_not_created()
         elif (self.selected_link != -1):
-            link = self.chain.Links[self.selected_link]
-            lastJoint = link.lastJoint
-            nextJoint = link.nextJoint
+            lastJoint = self.chain.Links[self.selected_link].lastJoint
+            nextJoint = self.chain.Links[self.selected_link].nextJoint
 
             lastPose = np.array(lastJoint.Pose.t.tolist())
             nextPose = np.array(nextJoint.Pose.t.tolist())
@@ -1973,10 +1904,8 @@ class PointEditorWindow(QMainWindow):
             pos = average.tolist()
 
             newPos = SE3().Trans(x=pos[0], y=pos[1], z=pos[2])
-            rot = link.cylinder.orientation()
-            newRot = SE3(rot)
 
-            waypoint = Waypoint(self.numSides, self.r, newPos * newRot)
+            waypoint = Waypoint(self.numSides, self.r, newPos)
             waypoint.id = len(self.chain.Joints)
             
             self.chain.append(newJoint = waypoint, relative=False, 
@@ -1989,13 +1918,19 @@ class PointEditorWindow(QMainWindow):
             self.update_plot()
             self.log_version()
 
-        else: 
+        else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
                 button = self.sender()  
                 button_name = button.text()  
-                transformation = SE3(0, 0, 4 * self.r)
+                print(button_name)
+                if (button_name == "Add Waypoint X"):
+                    transformation = SE3(4 * self.r, 0, 0)
+                elif (button_name == "Add Waypoint Y"):
+                    transformation = SE3(0, 4 * self.r, 0)
+                elif (button_name == "Add Waypoint Z"):
+                    transformation = SE3(0, 0, 4 * self.r)
 
                 waypoint = Waypoint(self.numSides, self.r, transformation)
             
