@@ -1968,14 +1968,10 @@ class PointEditorWindow(QMainWindow):
             link = self.chain.Links[self.selected_link]
             lastJoint = link.lastJoint
             nextJoint = link.nextJoint
-
-            lastPose = np.array(lastJoint.Pose.t.tolist())
-            nextPose = np.array(nextJoint.Pose.t.tolist())
             
-            average = (lastPose + nextPose) / 2
-            pos = average.tolist()
-
+            pos = link.cylinder.start + 0.5 * link.cylinder.length * link.cylinder.direction
             newPos = SE3().Trans(x=pos[0], y=pos[1], z=pos[2])
+
             rot = link.cylinder.orientation()
             newRot = SE3(rot)
 
@@ -1994,13 +1990,17 @@ class PointEditorWindow(QMainWindow):
 
         else: 
             if (self.chain and len(self.chain.Joints) > 0):
-                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                button = self.sender()  
-                button_name = button.text()  
-                transformation = SE3(0, 0, 4 * self.r)
+                prevJoint = self.chain.Joints[len(self.chain.Joints)-1]
 
-                waypoint = Waypoint(self.numSides, self.r, transformation)
+                if (prevJoint is None):
+                    pose = SE3()
+                else:
+                    distance = 4 * self.r + norm(prevJoint.distalPosition()-prevJoint.Pose.t)
+                    pose = SE3(0,0,distance)
+                    if prevJoint.pathIndex() == 0:
+                        pose = SE3.Ry(np.pi/2) @ pose
+
+                waypoint = Waypoint(self.numSides, self.r, pose)
             
             if (self.chain == None):
                 waypoint = Waypoint(self.numSides, self.r, SE3())
