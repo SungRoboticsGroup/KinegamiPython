@@ -1986,7 +1986,7 @@ class PointEditorWindow(QMainWindow):
             waypoint = Waypoint(self.numSides, self.r, newPos * newRot)
             waypoint.id = len(self.chain.Joints)
             
-            self.chain.addJoint(parentIndex = lastJoint.id, newJoint = waypoint, 
+            self.chain.append(newJoint = waypoint, 
                                 relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
             self.chain.Links[nextJoint.id] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
                                             nextJoint.ProximalDubinsFrame(),
@@ -2020,10 +2020,10 @@ class PointEditorWindow(QMainWindow):
                 waypoint = Waypoint(self.numSides, self.r, SE3())
                 self.chain = KinematicChain(waypoint)
             elif waypoint.id != 0:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                self.chain.append(newJoint = waypoint, 
                                     relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             else:
-                self.chain.addJoint(parentIndex = self.selected_joint, newJoint = waypoint, 
+                self.chain.append(newJoint = waypoint, 
                                     relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_plot()
