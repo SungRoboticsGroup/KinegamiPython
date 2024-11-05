@@ -55,10 +55,10 @@ hexapod = makeTubularKinematicTree(tree, plotSteps=False)
 
 #hexapod.show()
 
-optimizedHexapod = hexapod.squaredOptimize(showSteps=False, childParentRatio = 0, streamline=True, guarantee=False)
+optimizedHexapod = hexapod.squaredOptimize(showSteps=True, childParentRatio = 0, streamline=True, guarantee=False)
 
 optimizedHexapod.show()
 
-optimizedHexapod.save("optimizedHexapod10")
+optimizedHexapod.save("optimizedHexapodShowSteps")
 
 print(optimizedHexapod.detectCollisions(plot=True, includeEnds=False, debug=True))

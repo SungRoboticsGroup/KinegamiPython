@@ -16,6 +16,10 @@ tree.show()
 tree = loadKinematicTree("optimizedHexapod9")
 
 tree.show()
+
+tree = loadKinematicTree("manualHexapod")
+
+tree.show()
 # #tree.show()
 # #tree.show(showSpecificCapsules=([(23, 0)],[(27, 5)]))
 

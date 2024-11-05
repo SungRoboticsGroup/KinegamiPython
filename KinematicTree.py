@@ -812,6 +812,26 @@ class KinematicTree(Generic[J]):
                                     showPathCircles, sphereColor,
                                     showSpheres, showGlobalFrame, globalAxisScale, showCollisionBoxes=showCollisionBoxes, showSpecificCapsules=showSpecificCapsules, plotPoint=plotPoint, addCapsules=addCapsules)
         
+        
+        # Get the current limits of the axes
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        zlim = ax.get_zlim()
+
+        # Define the scale bar length
+        scale_bar_length = 10
+
+        scale_bar_x = [xlim[1] - scale_bar_length - 0.05 * (xlim[1] - xlim[0]), xlim[1] - 0.05 * (xlim[1] - xlim[0])]
+        scale_bar_y = [ylim[0] + 0.05 * (ylim[1] - ylim[0]), ylim[0] + 0.05 * (ylim[1] - ylim[0])]
+        scale_bar_z = [zlim[0] + 0.05 * (zlim[1] - zlim[0]), zlim[0] + 0.05 * (zlim[1] - zlim[0])]
+
+        # Plot the scale bar
+        ax.plot(scale_bar_x, scale_bar_y, scale_bar_z, color='black', linewidth=2)
+
+        # Label the scale bar
+        ax.text(scale_bar_x[0] + scale_bar_length / 2, scale_bar_y[0], scale_bar_z[0], 
+                f'{scale_bar_length} units', color='black', fontsize=10)
+
         handleGroups = []
         labels = []
         if showJointPoses or showGlobalFrame:
@@ -833,6 +853,8 @@ class KinematicTree(Generic[J]):
         ax.set_aspect('equal')
         if not showAxisGrids:
             plt.axis('off')
+
+        plt.savefig('img_output.png', dpi=800)
         plt.show(block=block)
 
 
@@ -1096,7 +1118,7 @@ class KinematicTree(Generic[J]):
         init_pos[1] = np.array([0,0])
         #add random noise
         noise = np.zeros_like(init_pos[2:])
-        noise[:, 0] = np.linspace(-dist*2,dist*2, num=n_particles - 2)
+        noise[:, 0] = np.random.uniform(-dist*2,dist*2, n_particles - 2)
         noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
         init_pos[2:] += noise
         init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist*2, dist*2)
@@ -1236,7 +1258,7 @@ class KinematicTree(Generic[J]):
         #add random noise
         noise = np.zeros_like(init_pos[2:])
         for i in range(0,3):
-            noise[:, i] = np.linspace(-dist*2,dist*2, num=n_particles - 2)
+            noise[:, i] = np.random.uniform(-dist*2,dist*2, n_particles - 2)
         for i in range(3, 6):
             noise[:, i] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
         init_pos[2:] += noise
@@ -1401,6 +1423,9 @@ class KinematicTree(Generic[J]):
             print("CURRENT COLLISIONS")
             if tree.detectCollisions(debug=True) == 0:
                 print("NONE")
+
+            if showSteps:
+                tree.show()
 
             print(f"Optimized chain ending at {i} in {time.time() - start2}s \n")
 
