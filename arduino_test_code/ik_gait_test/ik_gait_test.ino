@@ -10,13 +10,15 @@ float servoOffsets[14] = {0, 90, 0, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 float servoSigns[14] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 
 bool highFreq[6] = {true,true,true,true,true,true};
-int counts[6] = {0,0,0,0,0,0};
+int counts[6] = {1,1,1,1,1,1};
+float offset = PI;
 
 float L1 = 8.5; //cm
 float L2 = 8.5;
 float radius = 4; 
 
 float timer;
+
 
 float theta1(float x, float y) {
   float beta = atan(y/x);
@@ -30,6 +32,7 @@ float theta2(float x, float y) {
 }
 
 void moveServos(float t) {
+  //order of legs motion goes 1,6,5,4,3,2 (in terms of order of servo indices)
   for (int i = 0; i < 6; i++) {
     int hipIndex = i*2;
     int kneeIndex = i*2 + 1;
@@ -37,24 +40,24 @@ void moveServos(float t) {
 
     if (highFreq[i]) {
       //semicircle part of motion
-      x = radius*cos(frequency*t + i*PI/6.f);
-      y = radius*sin(frequency*t + i*PI/6.f);
+      x = radius*cos(frequency*t + i*offset);
+      y = radius*sin(frequency*t + i*offset);
     } else {
       //dragging along the floor (five times as long)
-      x = radius*cos(frequency*t / 5.f + i*PI/30.f - 6*PI/5.f * counts[i]);
-      y = radius*sin(frequency*t / 5.f + i*PI/30.f - 6*PI/5.f * counts[i]);
+      x = radius*cos(frequency*t / 5.f + i*offset/5.f - 6*PI/5.f * counts[i]);
+      y = radius*sin(frequency*t / 5.f + i*offset/5.f - 6*PI/5.f * counts[i]);
     }
 
     //switch between phases of motion
     if (highFreq[i] && (y < 0)) {
       highFreq[i] = false;
-      counts[i] = (counts[i] + 1) % 6;
-      x = radius*cos(frequency*t / 5.f + i*PI/30.f - 6*PI/5.f * counts[i]);
-      y = radius*sin(frequency*t / 5.f + i*PI/30.f - 6*PI/5.f * counts[i]);
+      x = radius*cos(frequency*t / 5.f + i*offset/5.f - 6*PI/5.f * counts[i]);
+      y = radius*sin(frequency*t / 5.f + i*offset/5.f - 6*PI/5.f * counts[i]);
     } else if (!highFreq[i] && (y > 0)) {
       highFreq[i] = true;
-      x = radius*cos(frequency*t + i*PI/6);
-      y = radius*sin(frequency*t + i*PI/6);
+      counts[i] = (counts[i] % 6) + 1;
+      x = radius*cos(frequency*t + i*offset);
+      y = radius*sin(frequency*t + i*offset);
     }
 
     if (y < 0) {
