@@ -3,6 +3,7 @@ from spatialmath import SE3
 import numpy as np
 from style import *
 from Joint import LineItemWithID, LineSphere
+from pyqtgraph import Transform3D
 
 class ReferenceMesh():
 
@@ -13,7 +14,12 @@ class ReferenceMesh():
 
     def updateScale(self, scale):
         self.mesh.scale(scale, scale, scale)
-        self.scale = scale
+        prev = self.mesh.transform().matrix()
+        prev[0][0] = scale
+        prev[1][1] = scale
+        prev[2][2] = scale
+        new_mat = Transform3D(prev)
+        self.mesh.setTransform(new_mat)
 
     def generate_extended_line_points(self, point1, point2, gap):
         point1 = np.array(point1)

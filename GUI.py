@@ -549,26 +549,18 @@ class AddMeshWidget(QWidget):
         file_layout.addWidget(self.file_input)
         layout.addLayout(file_layout)
 
-        # Scale input
-        # scale_layout = QHBoxLayout()
-        # scale_label = QLabel("Scale:")
-        # self.scale_slider = QSlider(Qt.Horizontal, self)
-        # self.scale_slider.setMinimum(0)  # Minimum value
-        # self.scale_slider.setMaximum(100)  # Maximum value
-        # self.scale_slider.setValue(40)  # Initial value
-        # self.scale_slider.setEnabled(False)
-        # self.scale_slider.valueChanged.connect(self.onUpdateScale)
-        # scale_layout.addWidget(scale_label)
-        # scale_layout.addWidget(self.scale_slider)
-        # layout.addLayout(scale_layout)
-
         scale_layout = QHBoxLayout()
         scale_label = QLabel("Scale:")
-        self.scale_input = QLineEdit()
-        self.scale_input.setPlaceholderText("Enter scale factor (default: 1)")
+        self.scale_slider = QSlider(Qt.Horizontal, self)
+        self.scale_slider.setMinimum(0)  # Minimum value
+        self.scale_slider.setMaximum(100)  # Maximum value
+        self.scale_slider.setValue(50)  # Initial value
+        self.scale_slider.setEnabled(False)
+        self.scale_slider.valueChanged.connect(self.onUpdateScale)
         scale_layout.addWidget(scale_label)
-        scale_layout.addWidget(self.scale_input)
+        scale_layout.addWidget(self.scale_slider)
         layout.addLayout(scale_layout)
+
 
         # Apply button to add the mesh
         self.add_button = QPushButton('Add Mesh', self)
@@ -594,15 +586,14 @@ class AddMeshWidget(QWidget):
 
     def onUpdateScale(self, value):
         if (self.window().referenceMesh is not None):
-            scale = value / 40.0
-            self.window().referenceMesh.mesh.resetTransform() 
+            scale = value / 50.0
             self.window().referenceMesh.updateScale(scale)
 
     def onAddClicked(self):
         try:
             # Get the file path and call a function in the main window to add the mesh
             file_path = self.file_input.text()
-            scale_factor_string = self.scale_input.text()
+            scale_factor_string = None
             if scale_factor_string is None or scale_factor_string == "":
                 scale_factor = 1
             else:
@@ -612,7 +603,7 @@ class AddMeshWidget(QWidget):
             mesh = stlToMeshItem(file_path, scale=scale_factor)
             mesh.setObjectName("Mesh")
             self.window().referenceMesh = ReferenceMesh(mesh=mesh)
-            # self.scale_slider.setEnabled(True)
+            self.scale_slider.setEnabled(True)
             self.window().update_plot()
             #plotSTL(self.window().plot_widget, file_path, SE3(), scale=scale_factor)
             #self.window().add_mesh_dock.setVisible(False)
@@ -674,6 +665,7 @@ class AddChainWidget(QWidget):
             self.window().create_new_chains(numSides, radius)            
             # Optionally hide the widget after successful creation
             self.window().add_chain_dock.setVisible(False)
+            self.window().radius_slider.setEnabled(True)
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -931,7 +923,7 @@ class PointEditorWindow(QMainWindow):
         self.referenceMesh = None
 
         self.numSides = 4
-        self.r = 1
+        self.radius = 1
         self.plot_widget.radius = 1
 
         self.control_type = "Translate"
@@ -994,6 +986,17 @@ class PointEditorWindow(QMainWindow):
         add_waypoints_layout = QVBoxLayout()
         self.add_waypoint = QPushButton("Add Waypoint")
         add_waypoints_layout.addWidget(self.add_waypoint)
+
+        radius_layout = QHBoxLayout()
+        radius_label = QLabel("Chain Radius:")
+        self.radius_slider = QSlider(Qt.Horizontal, self)
+        self.radius_slider.setMinimum(0)  # Minimum value
+        self.radius_slider.setMaximum(100)  # Maximum value
+        self.radius_slider.setValue(10)  # Initial value
+        self.radius_slider.setEnabled(False)
+        self.radius_slider.valueChanged.connect(self.onUpdateRadius)
+        radius_layout.addWidget(radius_label)
+        radius_layout.addWidget(self.radius_slider)
 
         add_joints_layout = QVBoxLayout()
         add_chain_layout = QVBoxLayout()
@@ -1073,8 +1076,8 @@ class PointEditorWindow(QMainWindow):
 
         # self. = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
-        self.translate_slider.setMinimum(-10*self.r)
-        self.translate_slider.setMaximum(10*self.r)
+        self.translate_slider.setMinimum(-10*self.radius)
+        self.translate_slider.setMaximum(10*self.radius)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
@@ -1134,6 +1137,7 @@ class PointEditorWindow(QMainWindow):
         self.joint_editing_layout.addLayout(checkboxLayout)
         self.joint_editing_layout.addLayout(rotationLayout)
         self.joint_editing_layout.addLayout(translationLayout)
+        self.joint_editing_layout.addLayout(radius_layout)
 
         self.oldRotVal = 0
         self.oldTransVal = 0
@@ -1254,6 +1258,14 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
 
+    def onUpdateRadius(self, value):
+        value = value / 10.0
+        self.r = value
+        self.plot_widget.radius = value
+        self.chain.changeRadius(value)
+        self.update_plot()
+        self.update_joint()
+
     def log_version(self):
         #print("logging version")
         log_capacity = 100
@@ -1309,7 +1321,7 @@ class PointEditorWindow(QMainWindow):
             self.chain = None
             self.chain_created = False
             self.plot_widget.clear()
-            self.plot_widget.radius = 1
+            self.plot_widget.radius = self.radius
             self.setCentralWidget(self.plot_widget)
             self.show_success('Joint successfully deleted!')
             self.last_joint = -1
@@ -1346,6 +1358,9 @@ class PointEditorWindow(QMainWindow):
 
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
+
+        if self.referenceMesh is not None:
+            self.plot_widget.addItem(self.referenceMesh.mesh)
 
         self.show_success('Chain created!')
 
