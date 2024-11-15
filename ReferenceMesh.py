@@ -9,11 +9,9 @@ class ReferenceMesh():
 
     def __init__(self, mesh : gl.GLMeshItem):
         self.mesh = mesh
-        self.scale = 1
         self.Pose = SE3()
 
     def updateScale(self, scale):
-        self.mesh.scale(scale, scale, scale)
         prev = self.mesh.transform().matrix()
         prev[0][0] = scale
         prev[1][1] = scale

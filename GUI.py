@@ -666,6 +666,7 @@ class AddChainWidget(QWidget):
             # Optionally hide the widget after successful creation
             self.window().add_chain_dock.setVisible(False)
             self.window().radius_slider.setEnabled(True)
+            self.window().joint_range_slider.setEnabled(True)
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -1131,13 +1132,25 @@ class PointEditorWindow(QMainWindow):
         self.relativeSliderCheckbox.setChecked(True)
         self.relativeSliderCheckbox.stateChanged.connect(self.relative_clicked)
         checkboxLayout.addWidget(self.propogateSliderCheckbox)
-        checkboxLayout.addWidget(self.relativeSliderCheckbox)        
+        checkboxLayout.addWidget(self.relativeSliderCheckbox)
+
+        joint_range_layout = QHBoxLayout()
+        joint_range_label = QLabel("Joint Range of Motion:")
+        self.joint_range_slider = QSlider(Qt.Horizontal, self)
+        self.joint_range_slider.setMinimum(0)  # Minimum value
+        self.joint_range_slider.setMaximum(180)  # Maximum value
+        self.joint_range_slider.setValue(90)  # Initial value
+        self.joint_range_slider.setEnabled(False)
+        self.joint_range_slider.valueChanged.connect(self.onUpdateJointState)
+        joint_range_layout.addWidget(joint_range_label)
+        joint_range_layout.addWidget(self.joint_range_slider)
 
         self.joint_editing_layout.addLayout(stateLayout)
         self.joint_editing_layout.addLayout(checkboxLayout)
         self.joint_editing_layout.addLayout(rotationLayout)
         self.joint_editing_layout.addLayout(translationLayout)
         self.joint_editing_layout.addLayout(radius_layout)
+        self.joint_editing_layout.addLayout(joint_range_layout)
 
         self.oldRotVal = 0
         self.oldTransVal = 0
@@ -1257,6 +1270,11 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+
+    def onUpdateJointState(self, value):
+        self.chain.Joints[self.selected_joint].changeTotalBendingAngle(value)
+        self.update_plot()
+        self.update_joint()
 
     def onUpdateRadius(self, value):
         value = value / 10.0
