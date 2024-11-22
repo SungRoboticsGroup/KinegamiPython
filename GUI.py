@@ -822,8 +822,8 @@ class PointEditorWindow(QMainWindow):
 
         # self. = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
-        self.translate_slider.setMinimum(-10*self.radius)
-        self.translate_slider.setMaximum(10*self.radius)
+        self.translate_slider.setMinimum(-100)
+        self.translate_slider.setMaximum(100)
         self.translate_slider.setValue(0)
         self.translate_slider.valueChanged.connect(self.adjust_translation)
 
