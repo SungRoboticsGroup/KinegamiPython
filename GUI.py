@@ -69,30 +69,6 @@ class EditJointStateDialog(QDialog):
             # QMessageBox.warning(self, "Invalid Input", "Please enter a valid join state.")
             self.exec_() 
             return None
- 
-"""
-class DeleteDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Confirm Delete')
-        self.setGeometry(100, 100, 200, 100)
-
-        layout = QVBoxLayout()
-        layout.addWidget(QLabel('Are you sure you want to delete the joint?'))
-
-        apply_button = QPushButton('Delete')
-        apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(apply_button)
-
-        cancel_button = QPushButton('Cancel')
-        cancel_button.clicked.connect(self.reject)
-        layout.addWidget(cancel_button)
-
-        self.setLayout(layout)
-
-    def onApplyClicked(self):
-        self.accept()
-"""
 
 class DeleteWidget(QWidget):
     def __init__(self, parent=None):
@@ -117,44 +93,6 @@ class DeleteWidget(QWidget):
 
     def onCancelClicked(self):
         self.window().delete_joint_dock.setVisible(False)
-
-'''
-class SuccessDialog(QDialog):
-    def __init__(self, message, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Success')
-        self.setGeometry(100, 100, 200, 100)
-
-        layout = QVBoxLayout()
-        
-        self.message_label = QLabel(message)
-        self.message_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.message_label)
-        
-        close_button = QPushButton('Close')
-        close_button.clicked.connect(self.close)
-        layout.addWidget(close_button)
-
-        self.setLayout(layout)
-
-class ErrorDialog(QDialog):
-    def __init__(self, message, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Error')
-        self.setGeometry(100, 100, 200, 100)
-
-        layout = QVBoxLayout()
-        
-        self.message_label = QLabel(message)
-        self.message_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.message_label)
-        
-        close_button = QPushButton('Close')
-        close_button.clicked.connect(self.close)
-        layout.addWidget(close_button)
-
-        self.setLayout(layout)
-'''
 
 class AddJointDialog(QDialog):
     jointToAdd = None
@@ -209,21 +147,6 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        """
-        radio_layout = QHBoxLayout()
-        self.radio_x = QRadioButton('X Axis')
-        self.radio_y = QRadioButton('Y Axis')
-        self.radio_z = QRadioButton('Z Axis')
-        self.radio_x.setChecked(True)
-        radio_layout.addWidget(self.radio_x)
-        radio_layout.addWidget(self.radio_y)
-        radio_layout.addWidget(self.radio_z)
-        self.radio_x.toggled.connect(self.updateAxis)
-        self.radio_y.toggled.connect(self.updateAxis)
-        self.radio_z.toggled.connect(self.updateAxis)
-        layout.addLayout(radio_layout)
-        """
-
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -233,31 +156,6 @@ class AddPrismaticDialog(AddJointDialog):
         self.numSides = numSides
         self.r = r
         self.prevJoint = prevJoint
-
-    """
-    def updateAxis(self):
-        if self.radio_x.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(4 * self.r, 0,0)
-            else: 
-                self.pose = SE3(4 * self.r, 0,0)
-        elif self.radio_y.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,4 * self.r,0)
-            else: 
-                self.pose = SE3(0,4 * self.r,0)
-        elif self.radio_z.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,0,4 * self.r)
-            else: 
-                self.pose = SE3(0,0,4 * self.r)
-    """
                 
     def onApplyClicked(self):
         try:            
@@ -295,21 +193,6 @@ class AddRevoluteDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        """
-        radio_layout = QHBoxLayout()
-        self.radio_x = QRadioButton('X Axis')
-        self.radio_y = QRadioButton('Y Axis')
-        self.radio_z = QRadioButton('Z Axis')
-        self.radio_x.setChecked(True)
-        radio_layout.addWidget(self.radio_x)
-        radio_layout.addWidget(self.radio_y)
-        radio_layout.addWidget(self.radio_z)
-        self.radio_x.toggled.connect(self.updateAxis)
-        self.radio_y.toggled.connect(self.updateAxis)
-        self.radio_z.toggled.connect(self.updateAxis)
-        layout.addLayout(radio_layout) 
-        """
-
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
@@ -321,15 +204,6 @@ class AddRevoluteDialog(AddJointDialog):
         self.prevJoint = prevJoint
         #self.prevClass = prevClass
         
-        """
-        if (self.prevClass == None):
-            self.pose = SE3()
-        elif (self.prevClass == "RevoluteJoint"):
-            self.pose = SE3(4 * self.r, 0,0)
-        else: 
-            self.pose = SE3(6 * self.r,0,0)
-        """
-
     def onApplyClicked(self):
         bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
         
@@ -344,31 +218,6 @@ class AddRevoluteDialog(AddJointDialog):
             self.jointToAdd.Pose = pose
     
         self.accept()
-
-    """
-    def updateAxis(self):
-        if self.radio_x.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(4 * self.r, 0,0)
-            else: 
-                self.pose = SE3(6 * self.r,0,0)
-        elif self.radio_y.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,4 * self.r,0)
-            else: 
-                self.pose = SE3(0,6 * self.r,0)
-        elif self.radio_z.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,0,4 * self.r)
-            else: 
-                self.pose = SE3(0,0,6 * self.r)
-    """
 
 class AddTipDialog(AddJointDialog):
     isStart = True
@@ -392,42 +241,6 @@ class AddTipDialog(AddJointDialog):
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
-
-        """
-        radio_layout = QHBoxLayout()
-        self.radio_start = QRadioButton('Start Tip')
-        self.radio_end = QRadioButton('End Tip')
-        self.radio_start.setChecked(True)
-        self.radio_start.toggled.connect(self.updateVariable)
-        self.radio_end.toggled.connect(self.updateVariable)
-        radio_layout.addWidget(self.radio_start)
-        radio_layout.addWidget(self.radio_end)
-        layout.addLayout(radio_layout)
-        """
-
-        """
-        radio_layout = QHBoxLayout()
-        self.radio_x = QRadioButton('X Axis')
-        self.radio_y = QRadioButton('Y Axis')
-        self.radio_z = QRadioButton('Z Axis')
-        self.radio_x.setChecked(True)
-        radio_layout.addWidget(self.radio_x)
-        radio_layout.addWidget(self.radio_y)
-        radio_layout.addWidget(self.radio_z)
-        self.radio_x.toggled.connect(self.updateAxis)
-        self.radio_y.toggled.connect(self.updateAxis)
-        self.radio_z.toggled.connect(self.updateAxis)
-        layout.addLayout(radio_layout)  
-        """    
-        
-        """
-        if (self.prevClass == None):
-            self.pose = SE3()
-        elif (self.prevClass == "RevoluteJoint"):
-            self.pose = SE3(4 * self.r, 0,0)
-        else: 
-            self.pose = SE3(6 * self.r,0,0)
-        """
             
         apply_button = QPushButton('Add')
         apply_button.clicked.connect(self.onApplyClicked)
@@ -452,31 +265,6 @@ class AddTipDialog(AddJointDialog):
             self.show_error('Please enter valid integers.')
             # error_dialog = ErrorDialog('Please enter valid integers.')
             # error_dialog.exec_()
-
-    """
-    def updateAxis(self):
-        if self.radio_x.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(4 * self.r, 0,0)
-            else: 
-                self.pose = SE3(6 * self.r,0,0)
-        elif self.radio_y.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,4 * self.r,0)
-            else: 
-                self.pose = SE3(0,6 * self.r,0)
-        elif self.radio_z.isChecked():
-            if (self.prevClass == None):
-                self.pose = SE3()
-            elif (self.prevClass == "RevoluteJoint"):
-                self.pose = SE3(0,0,4 * self.r)
-            else: 
-                self.pose = SE3(0,0,6 * self.r)
-        """
     
     def updateVariable(self):
         if self.radio_start.isChecked():
@@ -484,61 +272,13 @@ class AddTipDialog(AddJointDialog):
         elif self.radio_end.isChecked():
             self.isStart = False
 
-"""
-class CreateNewChainDialog(QDialog):
-    numSides = 4
-    r = 1
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle('Create new chain')
-        self.setGeometry(100, 100, 300, 100)
-
-        layout = QVBoxLayout()
-
-        numSides_layout = QHBoxLayout()
-        numSides_label = QLabel("Number of Sides:")
-        self.numSides_input = QLineEdit()
-        numSides_layout.addWidget(numSides_label)
-        numSides_layout.addWidget(self.numSides_input)
-        layout.addLayout(numSides_layout)
-
-        r_layout = QHBoxLayout()
-        r_label = QLabel("Radius:")
-        self.r_input = QLineEdit()
-        r_layout.addWidget(r_label)
-        r_layout.addWidget(self.r_input)
-        layout.addLayout(r_layout)
-        
-        create_button = QPushButton('Create')
-        create_button.clicked.connect(self.onCreateClicked)
-        layout.addWidget(create_button)
-
-        self.setLayout(layout)
-
-    def onCreateClicked(self):
-        try:
-            self.numSides = int(self.numSides_input.text())
-            self.r = int(self.r_input.text())
-            self.accept()
-        except ValueError:
-            self.show_error('Please enter valid integers.')
-            # error_dialog = ErrorDialog('Please enter valid integers.')
-            # error_dialog.exec_()
-
-    def getNumSides(self):
-        return self.numSides
-    
-    def getR(self):
-        return self.r
-"""
-
 # Widget to add a new mesh to the scene, imported from a file
 class AddMeshWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Reference Mesh')
         layout = QVBoxLayout()
+        self.scale = 1.0
 
         # Input for the file path
         file_layout = QHBoxLayout()
@@ -561,7 +301,6 @@ class AddMeshWidget(QWidget):
         scale_layout.addWidget(self.scale_slider)
         layout.addLayout(scale_layout)
 
-
         # Apply button to add the mesh
         self.add_button = QPushButton('Add Mesh', self)
         self.add_button.clicked.connect(self.onAddClicked)
@@ -579,6 +318,8 @@ class AddMeshWidget(QWidget):
         
         self.setLayout(layout)
 
+    change_scale = qc.pyqtSignal(float)
+
     def toggle_visibility(self):
         self.window().mesh_visible = self.visible_toggle.isChecked()
         print("Mesh visibility toggled:", "Visible" if self.window().mesh_visible else "Hidden")
@@ -586,8 +327,9 @@ class AddMeshWidget(QWidget):
 
     def onUpdateScale(self, value):
         if (self.window().referenceMesh is not None):
-            scale = value / 50.0
-            self.window().referenceMesh.updateScale(scale)
+            self.scale = value / 50.0
+            self.window().referenceMesh.updateScale(self.scale)
+            self.change_scale.emit(self.scale)
 
     def onAddClicked(self):
         try:
@@ -938,6 +680,7 @@ class PointEditorWindow(QMainWindow):
         self.selected_frame = -1
         self.mesh_selected = False
         self.mesh_visible = True
+        self.mesh_scale = 1.0
 
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -947,7 +690,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.drag_change_rotation.connect(self.drag_rotate)
         self.plot_widget.done_transforming.connect(self.done_transforming)
         self.plot_widget.key_pressed.connect(self.key_pressed)
-
+        
         # //////////////////////////////////    Keyboard Options    ///////////////////////////////////
         top_dock_widget = QDockWidget("Keyboard Controls", self)
         top_dock_widget.setAllowedAreas(Qt.TopDockWidgetArea)
@@ -962,7 +705,9 @@ class PointEditorWindow(QMainWindow):
         self.add_mesh_widget = AddMeshWidget(self)
         self.add_mesh_dock = QDockWidget("Import Mesh", self)
         self.add_mesh_dock.setWidget(self.add_mesh_widget)
-        self.add_mesh_dock.setVisible(True) 
+        self.add_mesh_dock.setVisible(True)
+        self.mesh_scale = 1.0
+        self.add_mesh_widget.change_scale.connect(self.change_mesh_scale)
 
         # //////////////////////////////////    MESSAGE DISPLAY    ///////////////////////////////////
         message_display_widget = QDockWidget("Messages", self)
@@ -1272,7 +1017,7 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
 
     def onUpdateJointState(self, value):
-        self.chain.Joints[self.selected_joint].changeTotalBendingAngle(value)
+        # regenerate joint
         self.update_plot()
         self.update_joint()
 
@@ -1283,6 +1028,10 @@ class PointEditorWindow(QMainWindow):
         self.chain.changeRadius(value)
         self.update_plot()
         self.update_joint()
+
+    @QtCore.pyqtSlot(float)
+    def change_mesh_scale(self, scale):
+        self.mesh_scale = scale
 
     def log_version(self):
         #print("logging version")
@@ -1599,6 +1348,10 @@ class PointEditorWindow(QMainWindow):
             for row in range(4):
                 for col in range(4):
                     transform_matrix[row, col] = matrix[row, col]
+
+            transform_matrix[0, 0] = self.mesh_scale
+            transform_matrix[1, 1] = self.mesh_scale
+            transform_matrix[2, 2] = self.mesh_scale
             self.referenceMesh.mesh.setTransform(transform_matrix)
 
             self.update_joint()
