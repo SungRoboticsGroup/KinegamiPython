@@ -50,11 +50,11 @@ bottomLeftInAxis = tree.addJoint(spine2, PrismaticJoint(numSides, r, twistJointL
 bottomLeftOrthogonal = tree.addJoint(bottomLeftInAxis, RevoluteJoint(numSides, r, np.pi, SE3.Rz(np.pi/2) @ SE3.Trans([jointLength,0,jointLength])))
 bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, EndTip(numSides, r, SE3.Trans([jointLength,0,0]), 0.5, pathIndex=0))
 
-hexapod = makeTubularKinematicTree(tree, plotSteps=False, optimize=False)
+hexapod = makeTubularKinematicTree(tree, plotSteps=False)
 
 printedTree = origamiToPrinted(hexapod, 0.01)
 
-optimizedHexapod = printedTree.squaredOptimize(showSteps=False)
+optimizedHexapod = printedTree.squaredOptimize(showSteps=False, parallelize=False)
 
 plotPrintedTree(optimizedHexapod, "test")
 
