@@ -94,7 +94,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         self.bottomLength = self.printParameters.holeMargin*4 + self.screwRadius*4 + maxTurnDist + self.printParameters.attachThickness + self.printParameters.holeGridMargin
         self.topLength = self.printParameters.holeMargin*3 + self.printParameters.gridHoleRadius*4 + maxTurnDist
 
-    def export3DFile(self, index: int, folder = "", fileFormat = "stl"):
+    def export3DFile(self, index: int, folder = "", fileFormat = "stl", manifold=False):
         name = f"orthogonal_revolute_{index}." + fileFormat
 
         defs = [f"tolerance={self.printParameters.tolerance};\n",f"hole_radius={self.screwRadius};\n",
@@ -114,9 +114,12 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
 
-    def renderPose(self, folder):
+    def renderPose(self, folder, manifold=False):
         rot = SE3.Ry(np.pi/2)
         name = f"orthogonal_revolute_"
 
@@ -148,7 +151,10 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
 
-        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
 
         with open("scad/poses/orthogonal_revolute_pose2.scad", "r") as file:
             lines2 = file.readlines()
@@ -158,7 +164,10 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
             defs2.extend(truncated2)
             file.writelines(defs2)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
 
         return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
     
@@ -315,7 +324,7 @@ class PrintedPrismaticJoint(PrintedJoint):
         self.neutralLength += amount
         self.maxLength += amount
 
-    def export3DFile(self, index: int, folder : str, fileFormat = "stl"):
+    def export3DFile(self, index: int, folder : str, fileFormat = "stl", manifold=False):
         name = f"prismatic_{index}." + fileFormat
 
         if os.path.isfile(f"3d_output/{folder}/{name}"):
@@ -336,9 +345,12 @@ class PrintedPrismaticJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
     
-    def renderPose(self, folder):
+    def renderPose(self, folder, manifold=False):
         rot = SE3.Ry(np.pi/2)
         name = f"prismatic_"
 
@@ -365,7 +377,10 @@ class PrintedPrismaticJoint(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
 
-        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}1.stl scad_output/{folder}/poses/{name}1.scad")
 
         with open("scad/poses/prismatic_pose2.scad", "r") as file:
             lines2 = file.readlines()
@@ -375,7 +390,10 @@ class PrintedPrismaticJoint(PrintedJoint):
             defs2.extend(truncated2)
             file.writelines(defs2)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/poses/{name}2.stl scad_output/{folder}/poses/{name}2.scad")
 
         return f"3d_output/{folder}/poses/{name}1.stl", rot, f"3d_output/{folder}/poses/{name}2.stl", rot
     
@@ -442,7 +460,7 @@ class PrintedTip(PrintedJoint):
 
         super().__init__(r, neutralLength, Pose, screwRadius, printParameters)
 
-    def export3DFile(self, index: float, folder = "", fileFormat = "stl"):
+    def export3DFile(self, index: float, folder = "", fileFormat = "stl", manifold=False):
         name = f"tip_{index}." + fileFormat
 
         defs = [f"eps={self.printParameters.tolerance/100};\n",f"hole_attach_height={self.printParameters.holeMargin};\n",
@@ -457,9 +475,12 @@ class PrintedTip(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
     
-    def renderPose(self, folder):
+    def renderPose(self, folder, manifold=False):
         rot1 = SE3.Ry(np.pi/2)
 
         name = f"tip_"
@@ -486,7 +507,10 @@ class PrintedTip(PrintedJoint):
             defs.extend(truncated)
             file.writelines(defs)
         
-        os.system(f"openscad -q -o {filepath} scad_output/{folder}/poses/{name}.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o {filepath} scad_output/{folder}/poses/{name}.scad")
+        else:
+            os.system(f"openscad -q -o {filepath} scad_output/{folder}/poses/{name}.scad")
 
         return filepath, rot1, None, None 
 

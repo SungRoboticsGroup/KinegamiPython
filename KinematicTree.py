@@ -653,7 +653,7 @@ class KinematicTree(Generic[J]):
         linksToChildren = [self.Links[childIndex] for childIndex in self.Children[parentIndex]]
         return [link.branchingParameters() for link in linksToChildren]
     
-    def exportLink3DFile(self, parentIndex : int, folder : str, fileFormat = "stl", pose=False):
+    def exportLink3DFile(self, parentIndex : int, folder : str, fileFormat = "stl", pose=False, manifold=False):
 
         name = f"linkfrom_{parentIndex}_to_"
         for endpointIndex in self.Children[parentIndex]:
@@ -733,11 +733,14 @@ class KinematicTree(Generic[J]):
                 defs.extend(truncated)
                 file.writelines(defs)
 
-        os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
+        if manifold:
+            os.system(f"openscad --backend Manifold -q -o 3d_output/{folder}/{name} -m scad_output/{folder}/{name}.scad")
+        else:
+            os.system(f"openscad -q -o 3d_output/{folder}/{name} scad_output/{folder}/{name}.scad")
 
         return f"3d_output/{folder}/{name}"
 
-    def export3DKinematicTree(self, folder = "", fileFormat = "stl"):
+    def export3DKinematicTree(self, folder = "", fileFormat = "stl", manifold=False):
         if (folder != ""):
             os.makedirs(f"scad_output/{folder}", exist_ok=True)
             os.makedirs(f"3d_output/{folder}", exist_ok=True)
@@ -771,14 +774,14 @@ class KinematicTree(Generic[J]):
         for i in range(0,len(tree.Children)):
             start = time.time()
             if len(tree.Children[i]) > 0:
-                tree.exportLink3DFile(i,folder,fileFormat)
+                tree.exportLink3DFile(i,folder,fileFormat,manifold=manifold)
             print(f"Finished link {i}/{len(tree.Children) - 1}, Time: {time.time() - start} \r")
         
         #export all the joints
         for i in range(0,len(tree.Joints)):
             start = time.time()
             if not isinstance(tree.Joints[i],PrintedWaypoint):
-                tree.Joints[i].export3DFile(i,folder,fileFormat)
+                tree.Joints[i].export3DFile(i,folder,fileFormat,manifold=manifold)
             print(f"Finished joint {i}/{len(tree.Joints) - 1}, Time: {time.time() - start} \r")
         
 
@@ -792,7 +795,9 @@ class KinematicTree(Generic[J]):
              showSpheres=False, block=blockDefault, showAxisGrids=False, 
              showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault,
              showGroundPlane=False, groundPlaneScale=groundPlaneScaleDefault,
-             groundPlaneColor=groundPlaneColorDefault, showCollisionBoxes=([],[]), showSpecificCapsules=([],[]), plotPoint = None, addCapsules=[]):
+             groundPlaneColor=groundPlaneColorDefault, showCollisionBoxes=([],[]), 
+             showSpecificCapsules=([],[]), plotPoint = None, addCapsules=[],
+             showScaleBar=True):
         ax = plt.figure().add_subplot(projection='3d')
         if showGroundPlane: #https://stackoverflow.com/questions/36060933/plot-a-plane-and-points-in-3d-simultaneously
             xx, yy = np.meshgrid(range(groundPlaneScale), range(groundPlaneScale))
@@ -824,12 +829,13 @@ class KinematicTree(Generic[J]):
         scale_bar_y = [ylim[0] + 0.05 * (ylim[1] - ylim[0]), ylim[0] + 0.05 * (ylim[1] - ylim[0])]
         scale_bar_z = [zlim[0] + 0.05 * (zlim[1] - zlim[0]), zlim[0] + 0.05 * (zlim[1] - zlim[0])]
 
-        # Plot the scale bar
-        ax.plot(scale_bar_x, scale_bar_y, scale_bar_z, color='black', linewidth=2)
+        if showScaleBar:
+            # Plot the scale bar
+            ax.plot(scale_bar_x, scale_bar_y, scale_bar_z, color='black', linewidth=2)
 
-        # Label the scale bar
-        ax.text(scale_bar_x[0] + scale_bar_length / 2, scale_bar_y[0], scale_bar_z[0], 
-                f'{scale_bar_length} units', color='black', fontsize=10)
+            # Label the scale bar
+            ax.text(scale_bar_x[0] + scale_bar_length / 2, scale_bar_y[0], scale_bar_z[0], 
+                    f'{scale_bar_length} units', color='black', fontsize=10)
 
         handleGroups = []
         labels = []

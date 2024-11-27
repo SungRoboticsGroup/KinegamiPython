@@ -1,2 +1,2 @@
 @echo off
-"C:\Program Files\OpenSCAD\openscad.com" %*
+"C:\Program Files\OpenSCAD (Nightly)\openscad.com" %*

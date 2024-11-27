@@ -51,8 +51,8 @@ bottomLeftOrthogonal = tree.addJoint(bottomLeftInAxis, RevoluteJoint(numSides, r
 bottomLeftFoot = tree.addJoint(bottomLeftOrthogonal, EndTip(numSides, r, SE3.Trans([jointLength,0,0]) @ SE3.Ry(np.pi/2), 0.5), fixedOrientation=True, fixedPosition=True, safe=False)
 
 tree.save("manualHexapod")
-tree.show()
+tree.show(showJointPoses=False, showLinkPath=False, jointAxisScale=0, showScaleBar=False)
 
 printedTree = origamiToPrinted(tree, 1.5/scale)
 
-plotPrintedTree(printedTree, "manualHexapod")
+plotPrintedTree(printedTree, "manualHexapod", showGrid=False)

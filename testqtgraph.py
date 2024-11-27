@@ -7,7 +7,7 @@ from PyQt5.QtGui import QColor
 from KinematicTree import *
 from spatialmath import SE3
 
-def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
+def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str, showGrid : bool = True):
     assert(tree != None)
     
     if (folder != ""):
@@ -65,9 +65,10 @@ def plotPrintedTree(tree : KinematicTree[PrintedJoint], folder : str):
     
     print(f"TOTAL GENERATION TIME: {time.time() - real_start}s")
     #show axes
-    grid = gl.GLGridItem()
-    grid.setColor((255,255,255,255))
-    view3d.addItem(grid)
+    if showGrid:
+        grid = gl.GLGridItem()
+        grid.setColor((255,255,255,255))
+        view3d.addItem(grid)
 
     # Show the plot
     view.show()
