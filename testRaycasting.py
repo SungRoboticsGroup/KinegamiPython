@@ -34,6 +34,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         dist = self.opts['distance']
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
+        self.parent_window = parent
 
     key_pressed = qc.pyqtSignal(str)
     
@@ -57,55 +58,71 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         return near_point, direction
     
-    def compute_intersection(self, org, dir, cen, rad):
-        # does a ray-sphere intersection
-
+    def compute_sphere_intersection(self, org, dir, cen, rad):
         a = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]
         b = 2 * (dir[0] * (org[0] - cen[0]) + dir[1] * (org[1] - cen[1]) + dir[2] * (org[2] - cen[2]))
         c = (org[0] - cen[0]) ** 2 +  (org[1] - cen[1]) ** 2 + (org[2] - cen[2]) ** 2 - rad * rad
 
         discrim = b*b - 4*a*c
 
-        if (discrim < 0) :
-            print("miss")
+        if (discrim < -0.00001) :
+            return 2000
         else: 
-            print("hit")
+            t0 = (-b - math.sqrt(discrim)) / (2*a)
 
-        # t0 = (-b - math.sqrt(b*b - 4*a*c)) / (2*a)
-        # t1 = (-b + math.sqrt(b*b - 4*a*c)) / (2*a)
+            if (t0 > 0):
+                return t0
+            else:
+                return (-b + math.sqrt(discrim)) / (2*a)
+            
+    def compute_cylinder_intersection(self, org: QVector3D, dir: QVector3D, start: QVector3D, axis: QVector3D, rad, len): 
+        n = dir.normalized()
+        a = axis.normalized()
+        b = start - org
+
+        n_cross_a = QVector3D.crossProduct(n, a)
+
+        discrim = QVector3D.dotProduct(n_cross_a, n_cross_a) * rad * rad - QVector3D.dotProduct(a, a) * (QVector3D.dotProduct(b, n_cross_a) ** 2)
+
+        if (discrim < -0.00001):
+            return 2000
+        else:
+            d = (QVector3D.dotProduct(n_cross_a, QVector3D.crossProduct(b, a)) - math.sqrt(discrim)) / QVector3D.dotProduct(n_cross_a, n_cross_a)
+            
+            if (d < 0):
+                d = (QVector3D.dotProduct(n_cross_a, QVector3D.crossProduct(b, a)) + math.sqrt(discrim)) / QVector3D.dotProduct(n_cross_a, n_cross_a)
+
+            t = QVector3D.dotProduct(a, (n * d - b))
+            if (t > 0 and t < len):
+                return d
+            else:
+                return 2000
     
     def mousePressEvent(self, event):
-        self.selected_axis = (1, 0, 0)
-
         origin, direction = self.get_world_coordinates(event)
-        self.start_pos_3D = self.compute_intersection(origin, direction, QVector3D(3,0,0), 1)
-        event.setAccepted(True)
 
-    def mouseMoveEvent(self, event):
-        pass
+        closest = 1000
+        closest_sphere = None
+
+        for sphere in self.parent_window.spheres: 
+            trans = sphere.transform().column(3)
+            center = QVector3D(trans[0], trans[1], trans[2])
+            hit_location = self.compute_sphere_intersection(origin, direction, center, self.parent_window.radius)
+            if (hit_location < closest):
+                closest = hit_location
+                closest_sphere = sphere
+
+        hit_location = self.compute_cylinder_intersection(origin, direction, QVector3D(0,0,0), QVector3D(0,-1,0), 0.1, 4)
+        if (hit_location < 1000):
+            print("hit cylinder")
+
+        if closest_sphere:
+            print(closest_sphere.objectName())
+
+        event.setAccepted(True)
 
     def mouseReleaseEvent(self, event):
         pass
-
-    def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_T:
-            print("test")
-        elif event.key() == Qt.Key_R:
-            self.key_pressed.emit("Rotate")
-        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            self.key_pressed.emit("Enter")
-        elif event.key() == Qt.Key_Escape:
-            self.key_pressed.emit("Escape")
-        elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
-            self.key_pressed.emit("Delete")
-        elif event.key() == Qt.Key_X:
-            self.key_pressed.emit("X")
-        elif event.key() == Qt.Key_Y:
-            self.key_pressed.emit("Y")
-        elif event.key() == Qt.Key_Z:
-            self.key_pressed.emit("Z")
-        elif event.key() == Qt.Key_G:
-            self.key_pressed.emit("G")
  
 class PointEditorWindow(QMainWindow):
     def __init__(self):
@@ -113,45 +130,53 @@ class PointEditorWindow(QMainWindow):
         self.setWindowTitle("Point Editor")
         self.setGeometry(100, 100, 800, 600)
 
-        self.plot_widget = ClickableGLViewWidget()
+        self.plot_widget = ClickableGLViewWidget(self)
         self.setCentralWidget(self.plot_widget)
         self.plot_widget.setBackgroundColor(backgroundColorDefault)
 
         self.grid = gl.GLGridItem()
-
         self.plot_widget.addItem(self.grid)
         self.grid.setColor(gridColorDefault)
 
-        md = gl.MeshData.sphere(rows=20, cols=20)
-        sphere = gl.GLMeshItem(meshdata=md, color=tuple((0, 0, 0, 0.5)), shader='shaded', smooth=True, id=id)
+        sphere_md = gl.MeshData.sphere(rows=20, cols=20)
+        cylinder_md = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1, 0.1], length=1)
 
-        transform = QMatrix4x4()
-        transform.translate(3, 0, 0)
+        sphere_red = gl.GLMeshItem(meshdata=sphere_md, color=tuple((1, 0, 0, 0.5)), shader='shaded', glOptions='translucent', smooth=True)
+        sphere_red.translate(3, 0, 0)
+        sphere_red.setObjectName("Red Sphere")
+        self.plot_widget.addItem(sphere_red)
 
-        # Apply the transformation to the sphere
-        sphere.setTransform(transform)
+        sphere_green = gl.GLMeshItem(meshdata=sphere_md, color=tuple((0, 1, 0, 0.5)), shader='shaded', glOptions='translucent', smooth=True)
+        sphere_green.translate(0, 3, 0)
+        sphere_green.setObjectName("Green Sphere")
+        self.plot_widget.addItem(sphere_green)
 
-        self.plot_widget.addItem(sphere)
-    
-    @QtCore.pyqtSlot(str)
-    def key_pressed(self, key):
-        if key == "Translate":
-            self.control_type = key
-            print("test")
-        elif key == "Rotate":
-            self.control_type = key
-            self.rotateJointRadioButton.setChecked(True)
-        elif key == "Delete":
-            if self.chain and self.selected_joint != -1:
-                self.delete_selected_joint()
-        elif key == "X":
-            self.arrow_selection_changed(0)
-        elif key == "Y":
-            self.arrow_selection_changed(1)
-        elif key == "Z":
-            self.arrow_selection_changed(2)
-        elif key == "G":
-            self.toggle_grid_func()
+        self.spheres = [sphere_red, sphere_green]
+
+        axis_x = gl.GLMeshItem(meshdata=cylinder_md, color=tuple((1, 0, 0, 1)), shader='shaded', smooth=True)
+        axis_x.rotate(90, 0, 1, 0)
+        axis_x.translate(1, 3, 0)
+        axis_x.setObjectName("X axis")
+        # self.plot_widget.addItem(axis_x)
+
+        axis_y = gl.GLMeshItem(meshdata=cylinder_md, color=tuple((0, 1, 0, 1)), shader='shaded', smooth=True)
+        axis_y.rotate(90, 1, 0, 0)
+        axis_y.translate(0, 5, 0)
+        axis_y.setObjectName("Y axis")
+        # self.plot_widget.addItem(axis_y)
+
+        axis_z = gl.GLMeshItem(meshdata=cylinder_md, color=tuple((0, 0, 1, 1)), shader='shaded', smooth=True)
+        axis_z.translate(0, 3, 1)
+        axis_z.setObjectName("Z axis")
+        # self.plot_widget.addItem(axis_z)
+
+        cylinder_test = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1, 0.1], length=4)
+        cylinder = gl.GLMeshItem(meshdata=cylinder_test, color=tuple((0, 0, 1, 1)), shader='shaded', smooth=True)
+        cylinder.rotate(90, 1, 0, 0)
+        cylinder.setObjectName("Cylinder")
+        self.plot_widget.addItem(cylinder)
+
+        self.radius = 1
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
