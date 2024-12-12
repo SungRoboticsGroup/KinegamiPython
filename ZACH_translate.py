@@ -60,6 +60,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         return near_point, direction
     
     def compute_axis_intersection(self, org, dir, center, axis):
+        threshold = 0.001
         # Normalize direction vectors
         direction1 = dir.normalized()
         direction2 = axis.normalized()
@@ -69,7 +70,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         cross_directions_norm = cross_directions.length()
         
         # If the cross product is zero, the lines are parallel
-        if cross_directions_norm == 0:
+        if cross_directions_norm < threshold:
             raise ValueError("The lines are parallel and do not intersect.")
         
         # Compute the vector between the origins
