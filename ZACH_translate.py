@@ -59,7 +59,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         return near_point, direction
     
-    def compute_axis_intersection(self, org, dir, center, axis):
+    def compute_closest_point_on_axis(self, org, dir, center, axis):
         threshold = 0.001
         # Normalize direction vectors
         direction1 = dir.normalized()
@@ -90,13 +90,13 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         
         return point2
     
-    def get_axis_intersection(self, event):
+    def get_closest_point(self, event):
         if self.is_dragging and self.axis:
             origin, dir = self.get_world_coordinates(event)
             center = self.sphere_start_pos
             qcenter = QVector3D(center[0], center[1], center[2])
             axis = self.axis
-            new_pos_3D = self.compute_axis_intersection(origin, dir, qcenter, axis)
+            new_pos_3D = self.compute_closest_point_on_axis(origin, dir, qcenter, axis)
 
             return new_pos_3D
     
@@ -180,14 +180,14 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.axis = closest_axis
             self.is_dragging = True
 
-            self.drag_start_pos = self.get_axis_intersection(event)
+            self.drag_start_pos = self.get_closest_point(event)
             self.parent_window.draw_axis_line(self.drag_start_pos, self.axis)
 
         event.setAccepted(True)
 
     def mouseMoveEvent(self, event):
         if self.is_dragging and self.axis:
-            new_pos_3D = self.get_axis_intersection(event)
+            new_pos_3D = self.get_closest_point(event)
             qsphere_start = QVector3D(self.sphere_start_pos[0], self.sphere_start_pos[1], self.sphere_start_pos[2])
             new_pos_3D = qsphere_start + new_pos_3D - self.drag_start_pos
             # print(new_pos_3D)

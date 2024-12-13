@@ -79,7 +79,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.axis = None 
         self.is_dragging = False
         self.cube_start_pos = None
-        self.drag_prev_angle = 0
+        self.drag_prev_vector = 0
 
         self.bounding_balls = []
         self.radius = 1
@@ -130,6 +130,23 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         t = QVector3D.dotProduct(n, b) / a
 
         return org + t * direction
+    
+    def get_normalized_plane_vectors(self, event):
+        if self.is_dragging and self.axis:
+            origin, dir = self.get_world_coordinates(event)
+            center = self.cube_start_pos
+            qcenter = QVector3D(center[0], center[1], center[2])
+            qaxis = self.axes[self.axis]
+            npos = self.compute_plane_intersection(origin, dir, qaxis, qcenter)
+
+            plane_vector = npos - qcenter
+            plane_vector.normalize()
+
+            normal = QVector3D.dotProduct(dir, qaxis) * qaxis
+            normal.normalize()
+
+            return plane_vector, normal
+        
 
     def get_axis_angle_delta(self, event):
         if self.is_dragging and self.axis:
@@ -137,23 +154,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             center = self.cube_start_pos
             qcenter = QVector3D(center[0], center[1], center[2])
             qaxis = self.axes[self.axis]
-            npos = self.compute_plane_intersection(origin, dir, qaxis, qcenter)
-            npos.normalize()
-
-            a = npos
-            b = self.drag_prev_angle.normalized()
-
-            d = QVector3D.dotProduct(a, b)
-            angle = math.acos(d / (a.length() * b.length()))
-
-            cross_product = QVector3D.crossProduct(b, a)
-            v = QVector3D.dotProduct(dir, qaxis) * qaxis
-            v.normalize()
             
-            if QVector3D.dotProduct(cross_product, qaxis) < 0:
+            plane_vector, normal = self.get_normalized_plane_vectors(event)
+
+            prev_vector = self.drag_prev_vector
+
+            d = QVector3D.dotProduct(plane_vector, prev_vector)
+            angle = math.acos(d / (plane_vector.length() * prev_vector.length()))
+
+            cross_product = QVector3D.crossProduct(prev_vector, plane_vector)
+            
+            if QVector3D.dotProduct(cross_product, normal) < 0:
                 angle *= -1
 
-            return angle, npos
+            self.drag_prev_vector = plane_vector
+
+            return math.degrees(angle), normal
     
     def get_zero_axis(self, axis: str):
         match axis:
@@ -312,21 +328,18 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.axis = closest_axis
             self.is_dragging = True
 
-            self.drag_prev_angle = self.get_zero_axis(self.axis)
+            self.drag_prev_vector, _ = self.get_normalized_plane_vectors(event)
 
-            _, self.drag_prev_angle = self.get_axis_angle_delta(event)
+            self.parent_window.update_visibility(self.axis)
             # self.parent_window.draw_axis_line(self.cube_start_pos, self.axis)
 
         event.setAccepted(True)
 
     def mouseMoveEvent(self, event):
         if self.is_dragging and self.axis:
-            d_angle, npos = self.get_axis_angle_delta(event)
-            self.drag_prev_angle = npos
+            da, normal = self.get_axis_angle_delta(event)
 
-            angle = math.degrees(d_angle)
-
-            self.parent_window.update_mesh(angle, self.axes[self.axis])
+            self.parent_window.update_mesh(da, normal)
         else:
             super().mouseMoveEvent(event)
 
@@ -334,7 +347,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.axis = None
         self.is_dragging = False
         self.cube_start_pos = None
-        self.drag_prev_angle = None
+        self.drag_prev_vector = None
 
         # set axes
         obj = self.parent_window.cube
@@ -348,6 +361,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.axes['z'] = rot * QVector3D(0, 0, 1)
 
         print(self.axes)
+
+        self.parent_window.update_visibility(None)
         
  
 class PointEditorWindow(QMainWindow):
@@ -432,11 +447,38 @@ class PointEditorWindow(QMainWindow):
         obj.translate(cnt[0], cnt[1], cnt[2])
 
         for i, a in enumerate(self.axes):
-            if a == axis:
-                continue
             a.translate(-cnt[0], -cnt[1], -cnt[2])
             a.rotate(angle, axis[0], axis[1], axis[2], local=False)
             a.translate(cnt[0], cnt[1], cnt[2])
+
+    def update_visibility(self, axis):
+        if axis == 'x':
+            c = self.axes[0].opts['color']
+            new_color = (c[0], c[1], c[2], 1)
+            self.axes[0].setColor(new_color)
+
+            self.axes[1].setVisible(False)
+            self.axes[2].setVisible(False)
+        elif axis == 'y':
+            c = self.axes[1].opts['color']
+            new_color = (c[0], c[1], c[2], 1)
+            self.axes[1].setColor(new_color)
+
+            self.axes[0].setVisible(False)
+            self.axes[2].setVisible(False)
+        elif axis == 'z':
+            c = self.axes[2].opts['color']
+            new_color = (c[0], c[1], c[2], 1)
+            self.axes[2].setColor(new_color)
+
+            self.axes[0].setVisible(False)
+            self.axes[1].setVisible(False)
+        else:
+            for a in self.axes:
+                c = a.opts['color']
+                new_color = (c[0], c[1], c[2], 0.5)
+                a.setColor(new_color)
+                a.setVisible(True)
 
     def draw_point(self, point):
         if not point:
