@@ -181,6 +181,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.is_dragging = True
 
             self.drag_start_pos = self.get_axis_intersection(event)
+            self.parent_window.draw_axis_line(self.drag_start_pos, self.axis)
 
         event.setAccepted(True)
 
@@ -202,6 +203,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.axis = None
         self.is_dragging = False
         self.sphere_start_pos = None
+        self.parent_window.draw_axis_line(None, None)
         
  
 class PointEditorWindow(QMainWindow):
@@ -261,6 +263,8 @@ class PointEditorWindow(QMainWindow):
 
         self.axes = [axis_x, axis_y, axis_z]
 
+        self.axis_line = None
+
         # cylinder_test = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1, 0.1], length=4)
         # cylinder = gl.GLMeshItem(meshdata=cylinder_test, color=tuple((0, 0, 1, 1)), shader='shaded', smooth=True)
         # cylinder.rotate(90, 1, 0, 0)
@@ -298,6 +302,27 @@ class PointEditorWindow(QMainWindow):
         sphere = gl.GLMeshItem(meshdata=sphere_md, color=tuple((0.1, 0.1, 0.1, 0.5)), shader='shaded', glOptions='translucent', smooth=True)
         sphere.translate(point[0], point[1], point[2])
         self.plot_widget.addItem(sphere)
+
+    def draw_axis_line(self, origin, axis):
+        if self.axis_line:
+            self.plot_widget.removeItem(self.axis_line)
+            self.axis_line = None
+        if axis:
+            length = 1000
+            qstart_pt = origin + axis * length
+            qend_pt = origin - axis * length
+            start_pt = [qstart_pt[0], qstart_pt[1], qstart_pt[2]]
+            end_pt = [qend_pt[0], qend_pt[1], qend_pt[2]]
+
+            axis_line = np.array([start_pt, end_pt])
+            line = gl.GLLinePlotItem(pos=axis_line, color=(axis[0], axis[1], axis[2], 1), width=3, antialias=True)
+            self.axis_line = line
+            self.plot_widget.addItem(line)
+        
+
+        
+        
+        
 
 
 if __name__ == "__main__":
