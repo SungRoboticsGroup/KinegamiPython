@@ -147,8 +147,11 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             angle = math.acos(d / (a.length() * b.length()))
 
             cross_product = QVector3D.crossProduct(b, a)
+            v = QVector3D.dotProduct(dir, qaxis) * qaxis
+            v.normalize()
+            
             if QVector3D.dotProduct(cross_product, qaxis) < 0:
-                angle = -angle
+                angle *= -1
 
             return angle, npos
     
