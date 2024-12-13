@@ -327,6 +327,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             angle = math.degrees(d_angle)
 
             self.parent_window.update_mesh(angle, self.axes[self.axis])
+        else:
+            super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         self.axis = None

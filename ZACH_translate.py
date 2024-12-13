@@ -198,6 +198,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             # move the sphere
             self.parent_window.sphere_center = [new_pos_3D.x(), new_pos_3D.y(), new_pos_3D.z()]
             self.parent_window.update_mesh()
+        else:
+            super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         self.axis = None
