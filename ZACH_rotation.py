@@ -331,7 +331,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.drag_prev_vector, _ = self.get_normalized_plane_vectors(event)
 
             self.parent_window.update_visibility(self.axis)
-            # self.parent_window.draw_axis_line(self.cube_start_pos, self.axis)
+            center = QVector3D(self.cube_start_pos[0], self.cube_start_pos[1], self.cube_start_pos[2])
+            self.parent_window.draw_axis_line(center, self.axes[self.axis], self.axis)
 
         event.setAccepted(True)
 
@@ -363,6 +364,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         print(self.axes)
 
         self.parent_window.update_visibility(None)
+        self.parent_window.draw_axis_line(None, None, None)
         
  
 class PointEditorWindow(QMainWindow):
@@ -488,7 +490,7 @@ class PointEditorWindow(QMainWindow):
         sphere.translate(point[0], point[1], point[2])
         self.plot_widget.addItem(sphere)
 
-    def draw_axis_line(self, origin, axis):
+    def draw_axis_line(self, origin, axis, axis_name):
         if self.axis_line:
             self.plot_widget.removeItem(self.axis_line)
             self.axis_line = None
@@ -500,7 +502,13 @@ class PointEditorWindow(QMainWindow):
             end_pt = [qend_pt[0], qend_pt[1], qend_pt[2]]
 
             axis_line = np.array([start_pt, end_pt])
-            line = gl.GLLinePlotItem(pos=axis_line, color=(axis[0], axis[1], axis[2], 1), width=3, antialias=True)
+            if axis_name == 'x':
+                color = (1, 0, 0, 0.75)
+            elif axis_name == 'y':
+                color = (0, 1, 0, 0.75)
+            else:
+                color = (0, 0, 1, 0.75)
+            line = gl.GLLinePlotItem(pos=axis_line, color=color, width=5, antialias=True)
             self.axis_line = line
             self.plot_widget.addItem(line)
         
