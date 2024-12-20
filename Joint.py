@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import pyqtgraph.opengl as gl
+from PyQt5.QtGui import QMatrix4x4, QVector4D
 
 from TubularPattern import *
 from geometryHelpers import *
@@ -293,6 +294,18 @@ class Joint(ABC):
         rotated_vector = np.dot(rotation_matrix, vector)
         return rotated_vector
 
+    def se3_to_qmatrix(self, se3_matrix: SE3):
+        
+        qmatrix = QMatrix4x4()
+        elements = se3_matrix.A
+        
+        qmatrix.setRow(0, QVector4D(elements[0][0], elements[0][1], elements[0][2], elements[0][3]))
+        qmatrix.setRow(1, QVector4D(elements[1][0], elements[1][1], elements[1][2], elements[1][3]))
+        qmatrix.setRow(2, QVector4D(elements[2][0], elements[2][1], elements[2][2], elements[2][3]))
+        qmatrix.setRow(3, QVector4D(elements[3][0], elements[3][1], elements[3][2], elements[3][3]))
+
+        return qmatrix
+
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         rad = self.boundingBall().r
         colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
@@ -300,8 +313,8 @@ class Joint(ABC):
         if selectedArrow != -1:
             colors[selectedArrow] = (1, 1, 1, 1)
 
-        extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
-        point1 = self.Pose.t
+        extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
+        center = self.Pose.t
 
         if local:
             axes = [self.Pose.R[:, i] for i in range(3)]
@@ -311,27 +324,28 @@ class Joint(ABC):
         if frame:
             axes = [frame.R[:, i] for i in range(3)]
 
+        cylinder_md = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad)
+
+        axis_x = gl.GLMeshItem(meshdata=cylinder_md, color=colors[0], shader='shaded', smooth=True)
+        axis_x.translate(center[0] + 1, center[1], center[2])
+        axis_x.rotate(90, 0, 1, 0, True)
+        widget.plot_widget.addItem(axis_x)
+
+        axis_y = gl.GLMeshItem(meshdata=cylinder_md, color=colors[1], shader='shaded', smooth=True)
+        axis_y.translate(center[0], center[1] + 1, center[2])
+        axis_y.rotate(-90, 1, 0, 0, True)
+        widget.plot_widget.addItem(axis_y)
+
+        axis_z = gl.GLMeshItem(meshdata=cylinder_md, color=colors[2], shader='shaded', smooth=True)
+        axis_z.translate(center[0], center[1], center[2] + 1)
+        widget.plot_widget.addItem(axis_z)
+
         if selectedArrow != -1:
-            point2 = point1 + rad * self.r * axes[selectedArrow]
-            extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
-            extended_axis = self.generate_extended_axis(point1, point2, 20)
-            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
+            # generate the line here
+            dir = center + rad * self.r * axes[selectedArrow]
+            extended_axis = self.generate_extended_axis(center, dir, 1000)
+            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=3, antialias=True)
             widget.plot_widget.addItem(extended_axis_line)
-
-            for line in extended_line_points:
-                md = gl.MeshData.sphere(rows=3, cols=2)
-                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=line)
-                sphere.setObjectName("line_sphere")
-                sphere.setGLOptions('translucent')
-                sphere.scale(2.0, 2.0, 0.1)
-                sphere.translate(*line)
-                widget.plot_widget.addItem(sphere)
-
-        for i, axis in enumerate(axes):
-            pos = np.array([point1, point1 + rad * self.r * axis])
-            line = LineItemWithID(pos=pos, color=colors[i], width=10, antialias=True, id=i)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
     
     def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         if local:
@@ -359,15 +373,6 @@ class Joint(ABC):
         if selectedArrow != -1:
             points = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
             angles = self.generate_angles(num_points)
-
-            for i, point in enumerate(points[:num_points]):
-                md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=point, rotation=angles[i])
-                sphere.setObjectName("rotate_sphere")
-                sphere.setGLOptions('translucent')
-                sphere.scale(0.1, 0.1, 0.1)
-                sphere.translate(*point)
-                widget.plot_widget.addItem(sphere)
 
         #swap the axes so that the selected axis gets rendered last -> appears above the other axes
         numbered_axes = [[0, axes[0]], [1, axes[1]], [2, axes[2]]]

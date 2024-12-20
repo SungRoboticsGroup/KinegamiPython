@@ -136,15 +136,6 @@ class ReferenceMesh():
             extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
             widget.plot_widget.addItem(extended_axis_line)
 
-            for line in extended_line_points:
-                md = gl.MeshData.sphere(rows=3, cols=2)
-                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=line)
-                sphere.setObjectName("line_sphere")
-                sphere.setGLOptions('translucent')
-                sphere.scale(2.0, 2.0, 0.1)
-                sphere.translate(*line)
-                widget.plot_widget.addItem(sphere)
-
         for i, axis in enumerate(axes):
             pos = np.array([point1, point1 + rad * 1 * axis])
             line = LineItemWithID(pos=pos, color=colors[i], width=10, antialias=True, id=i)

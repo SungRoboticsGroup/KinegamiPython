@@ -76,6 +76,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 return (-b + math.sqrt(discrim)) / (2*a)
             
     def compute_cylinder_intersection(self, org: QVector3D, dir: QVector3D, start: QVector3D, axis: QVector3D, rad, len): 
+        # not bothering with computing endcaps because they're too small to matter anyway
+
         n = dir.normalized()
         a = axis.normalized()
         b = start - org
