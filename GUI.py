@@ -388,9 +388,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 joint_center = selected_joint.Pose.t
                 joint_center = QVector3D(joint_center[0], joint_center[1], joint_center[2])
 
-                hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(1,0,0), QVector3D(1,0,0), 0.1, selected_joint.boundingBall().r)
-                hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.1, selected_joint.boundingBall().r)
-                hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.1, selected_joint.boundingBall().r)
+                hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(1,0,0), QVector3D(1,0,0), 0.2, selected_joint.boundingBall().r)
+                hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.2, selected_joint.boundingBall().r)
+                hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.2, selected_joint.boundingBall().r)
                 
                 self.hit_cylinder = False
                 if (hit_location_x < 1000):
