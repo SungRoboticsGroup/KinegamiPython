@@ -383,7 +383,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             origin, direction = self.get_world_coordinates(event)
 
             # check to see if a cylinder is clicked
-            if (self.parent_window.selected_joint != 1):
+            if (self.parent_window.selected_joint != -1):
                 selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
                 joint_center = selected_joint.Pose.t
                 joint_center = QVector3D(joint_center[0], joint_center[1], joint_center[2])
@@ -392,23 +392,26 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.1, selected_joint.boundingBall().r)
                 hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.1, selected_joint.boundingBall().r)
                 
-                hit_cylinder = False
+                self.hit_cylinder = False
                 if (hit_location_x < 1000):
                     self.click_signal_arrow.emit(0)
                     self.selected_axis = QVector3D(1,0,0)
-                    hit_cylinder = True
+                    self.hit_cylinder = True
                 if (hit_location_y < 1000):
                     self.click_signal_arrow.emit(1)
                     self.selected_axis = QVector3D(0,1,0)
-                    hit_cylinder = True
+                    self.hit_cylinder = True
                 if (hit_location_z < 1000):
                     self.click_signal_arrow.emit(2)
                     self.selected_axis = QVector3D(0,0,1)
-                    hit_cylinder = True
+                    self.hit_cylinder = True
                 
-                if (hit_cylinder):
+                if (self.hit_cylinder):
                     self.is_dragging = True
                     self.cylinder_drag_start_pos = self.get_closest_point(event)
+                else:
+                    self.is_dragging = False
+                    self.selected_axis = None
 
             # check to see if a joint is clicked
             closest_joint_dist = 1000
@@ -424,6 +427,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             
             if (closest_joint != None):
                 self.click_signal.emit(closest_joint.id)
+            elif (closest_joint == None and not self.is_dragging and not self.hit_cylinder): 
+                self.click_signal.emit(-1)
 
     def mouseMoveEvent(self, event):
         if (event.buttons() and (Qt.LeftButton or Qt.MiddleButton)) and (event.pos() - self.drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
