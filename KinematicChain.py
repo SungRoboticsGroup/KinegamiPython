@@ -90,8 +90,8 @@ class KinematicChain(KinematicTree):
                 self.Parents.append(i-1)
             return True
     
-    def save(self, filename: str):
-        with open(f"save/{filename}.chain", "w") as f:
+    def save(self, file_path: str):
+        with open(file_path, "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
             for i in range(0, len(self.Joints)):
                 joint = self.Joints[i]
@@ -116,7 +116,7 @@ class KinematicChain(KinematicTree):
             f.close()
     
     
-def loadKinematicChain(filename : str):
+def loadKinematicChain(filepath : str):
     def getJoint(line):
         first = line.split(' ')
         pose = SE3(np.array([float(x) for x in line.split('[')[1].split(",")[:-1]]).reshape(4,4))
@@ -159,7 +159,7 @@ def loadKinematicChain(filename : str):
         raise Exception(f"{first[1]} not implemented in save")
         
     try:
-        with open(f"save/{filename}.chain") as f:
+        with open(filepath) as f:
             lines = f.readlines()
             chain = KinematicChain(getJoint(lines[1]), float(lines[0]))
             for i in range(2, len(lines)):
@@ -168,8 +168,7 @@ def loadKinematicChain(filename : str):
             
             return chain
     except Exception as e:
-        print(e)
-        raise Exception(f"file save/{filename}.chain does not exist")
+        raise Exception(f"Error loading file: {e}")
 
 
 def chainWithJointDeleted(chain : KinematicChain, jointIndex : int) -> KinematicChain:

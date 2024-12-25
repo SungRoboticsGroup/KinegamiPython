@@ -8,7 +8,7 @@ import pyqtgraph.opengl as gl
 import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D
 from pyqtgraph.Qt import QtCore
@@ -829,10 +829,6 @@ class PointEditorWindow(QMainWindow):
         file_dock_widget = QWidget()
         file_dock_layout = QVBoxLayout(file_dock_widget)
 
-        self.crease_pattern_name_input = QLineEdit()
-        self.crease_pattern_name_input.setPlaceholderText('Name')
-        file_dock_layout.addWidget(self.crease_pattern_name_input)
-
         self.save_chain_button = QPushButton('Save Chain')
         self.save_chain_button.clicked.connect(self.save_chain)
         file_dock_layout.addWidget(self.save_chain_button)
@@ -1119,22 +1115,32 @@ class PointEditorWindow(QMainWindow):
             crease_pattern.show()
 
     def save_chain(self, autosave_id=None):
-        if autosave_id is None:
-            chain_name = self.crease_pattern_name_input.text()
-            if chain_name is None or chain_name == "":
-                chain_name = "chain"
-        else:
-            chain_name = "autosave/autosave_" + str(autosave_id)
-        self.chain.save(chain_name)
-    
+        # confusing why autosave_id is sometimes False
+        if autosave_id is False:
+            autosave_id = None
+        if self.chain:
+            if autosave_id is None:
+                print("save dialog")
+                options = QFileDialog.Options()
+                file_path, _ = QFileDialog.getSaveFileName(
+                    self, "Save File", "save/", "Chain Files (*.chain)", options=options
+                )
+            else:
+                file_path = f"save/autosave/autosave_{autosave_id}.chain"
+
+            if file_path:
+                self.chain.save(file_path)
+        
     def load_chain(self):
-        chain_name = self.crease_pattern_name_input.text()
-        if chain_name is None or chain_name == "":
-            chain_name = "chain"
-        self.chain = loadKinematicChain(chain_name)
-        self.chain_created = True
-        self.update_joint()
-        self.log_version()
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open File", "save/", "Chain Files (*.chain)", options=options
+        )
+        if file_path:
+            self.chain = loadKinematicChain(file_path)
+            self.chain_created = True
+            self.update_joint()
+            self.log_version()
 
     @QtCore.pyqtSlot(bool)
     def mesh_selected_slot(self, is_selected):
