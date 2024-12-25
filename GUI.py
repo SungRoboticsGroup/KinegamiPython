@@ -241,6 +241,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.mesh = None 
         self.is_dragging = False
         self.drag_start_pos = None
+        self.last_drag_pos = None
         self.parent_window = parent_window
 
         dist = self.opts['distance']
@@ -376,6 +377,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             return new_pos_3D
 
     def mousePressEvent(self, event):
+        self.last_drag_pos = event.pos()
         if (event.buttons() and Qt.LeftButton and event.buttons() != QtCore.Qt.MouseButton.MiddleButton):
             self.is_dragging = False
             self.drag_start_pos = event.pos()
@@ -450,11 +452,18 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 self.parent_window.update_joint()
 
         elif (self.is_dragging):
-            lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            if not hasattr(self, 'mousePos'):
-                self.mousePos = lpos
-            diff = lpos - self.mousePos
-            self.mousePos = lpos
+            # lpos = event.position() if hasattr(event, 'position') else event.localPos()
+            # if not hasattr(self, 'mousePos'):
+            #     self.mousePos = lpos
+            # diff = lpos - self.mousePos
+            # self.mousePos = lpos
+
+            # new diff code
+
+            curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
+
+            diff = curr_pos - self.last_drag_pos
+            self.last_drag_pos = curr_pos
 
             if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
                 self.pan(diff.x(), diff.y(), 0, relative='view')
@@ -1162,6 +1171,15 @@ class PointEditorWindow(QMainWindow):
             self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
             self.update_state_slider()
             #self.update_radius_slider()
+
+            # Check if a valid joint is selected
+            # if self.selected_joint != -1:
+            #     # Get the world coordinates of the joint's center
+            #     joint_center = self.chain.Joints[self.selected_joint].Pose.t
+            #     self.plot_widget.opts["center"] = QVector3D(joint_center[0], joint_center[1], joint_center[2])
+            # else:
+            #     # Set the center to the origin
+            #     self.plot_widget.opts["center"] = QVector3D(0, 0, 0)
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
