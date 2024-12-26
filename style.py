@@ -4,7 +4,7 @@ import ezdxf
 surfaceOpacityDefault = 1.0
 linkOpacityDefault = 0.5
 linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # gray
-jointColorDefault = (1.0, 0.0, 1.0, surfaceOpacityDefault)  # magenta 
+jointColorDefault = (0.0, 0.0, 1.0, surfaceOpacityDefault)  # blue 
 jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue 
 referenceMeshColor = (0, 1, 0, 1)  # green
 

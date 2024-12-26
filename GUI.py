@@ -1116,12 +1116,16 @@ class PointEditorWindow(QMainWindow):
         self.update_joint()
 
     def save_crease_pattern(self):
-        crease_pattern_name = self.crease_pattern_name_input.text()
-        crease_pattern = self.chain.creasePattern()
-        if len(crease_pattern_name) > 0:
-            crease_pattern.show(dxfName="save/"+crease_pattern_name)
-        else:
-            crease_pattern.show()
+        if self.chain:
+            options = QFileDialog.Options()
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Save File", "save/", "DXF Files (*.dxf)", options=options
+            )
+            crease_pattern = self.chain.creasePattern()
+            if file_path:
+                crease_pattern.show(dxfName=file_path)
+            else:
+                crease_pattern.show()
 
     def save_chain(self, autosave_id=None):
         # confusing why autosave_id is sometimes False
