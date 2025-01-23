@@ -326,7 +326,7 @@ class Ball:
         return norm(self.c - point) <= self.r
         
     def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False, id=-1):
-        md = gl.MeshData.sphere(rows=20, cols=20)
+        md = gl.MeshData.sphere(rows=10, cols=10)
         sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
         sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)

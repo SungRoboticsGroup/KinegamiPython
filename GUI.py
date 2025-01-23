@@ -10,7 +10,7 @@ from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D
+from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -247,6 +247,18 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         dist = self.opts['distance']
         self.near_clip = dist * 0.001
         self.far_clip = dist * 1000.
+        
+        self.hit_cylinder = False
+        self.selected_axis = None
+        self.selected_axis_name = None
+        self.selected_torus = None
+        self.drag_prev_vector = 0
+
+        self.selected_joint_axes = {
+            'x': {1, 0, 0},
+            'y': {0, 1, 0},
+            'z': {0, 0, 1}
+        }
     
     lock_status_changed = pyqtSignal(bool)
     click_signal = qc.pyqtSignal(int)
@@ -259,7 +271,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     done_transforming = qc.pyqtSignal(bool)
 
     selected_index = -1
-    selected_axis = None
     selected_link_index = -1
     mesh_selected = False
 
@@ -365,6 +376,90 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         
         return point2
     
+    def compute_plane_intersection(self, org, dir, normal, point):
+        threshold = 0.001
+        direction = dir.normalized()
+        n = normal.normalized()
+        a = QVector3D.dotProduct(n, direction)
+
+        if (abs(a) < threshold):
+            return None
+        
+        b = point - org
+        t = QVector3D.dotProduct(n, b) / a
+
+        return org + t * direction
+    
+    def get_normalized_plane_vectors(self, event):
+        if self.is_dragging and self.selected_torus:
+            origin, dir = self.get_world_coordinates(event)
+            selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+            center = selected_joint.Pose.t
+            qcenter = QVector3D(center[0], center[1], center[2])
+            qaxis = self.selected_torus
+            npos = self.compute_plane_intersection(origin, dir, qaxis, qcenter)
+
+            plane_vector = npos - qcenter
+            plane_vector.normalize()
+
+            normal = QVector3D.dotProduct(dir, qaxis) * qaxis
+            normal.normalize()
+
+            return plane_vector, normal
+    
+    def get_axis_angle_delta(self, event):
+        if self.is_dragging and self.selected_torus:
+            origin, dir = self.get_world_coordinates(event)
+            selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+            center = selected_joint.Pose.t
+            qcenter = QVector3D(center[0], center[1], center[2])
+            qaxis = self.selected_torus
+            
+            plane_vector, normal = self.get_normalized_plane_vectors(event)
+
+            prev_vector = self.drag_prev_vector
+
+            d = QVector3D.dotProduct(plane_vector, prev_vector)
+            angle = math.acos(d / (plane_vector.length() * prev_vector.length()))
+
+            cross_product = QVector3D.crossProduct(prev_vector, plane_vector)
+            
+            if QVector3D.dotProduct(cross_product, normal) < 0:
+                angle *= -1
+
+            self.drag_prev_vector = plane_vector
+
+            return math.degrees(angle), normal
+    
+    def compute_torus_intersection(self, org: QVector3D, dir: QVector3D, center: QVector3D, normal: QVector3D, major_radius: float, minor_radius: float):
+        n = dir.normalized()
+        o = org - center
+        n_dot_n = QVector3D.dotProduct(n, n)
+        o_dot_n = QVector3D.dotProduct(o, n)
+        o_dot_o = QVector3D.dotProduct(o, o)
+        n_dot_o = QVector3D.dotProduct(n, o)
+        n_dot_normal = QVector3D.dotProduct(n, normal)
+        o_dot_normal = QVector3D.dotProduct(o, normal)
+        
+        R = major_radius
+        r = minor_radius
+        
+        A = n_dot_n * n_dot_n
+        B = 4 * n_dot_n * n_dot_o
+        C = 2 * n_dot_n * (o_dot_o - R * R - r * r) + 4 * n_dot_o * n_dot_o + 4 * R * R * n_dot_normal * n_dot_normal
+        D = 4 * (o_dot_o - R * R - r * r) * n_dot_o + 8 * R * R * o_dot_normal * n_dot_normal
+        E = (o_dot_o - R * R - r * r) * (o_dot_o - R * R - r * r) - 4 * R * R * (r * r - o_dot_normal * o_dot_normal)
+        
+        coeffs = [A, B, C, D, E]
+        roots = np.roots(coeffs)
+        
+        real_roots = [root.real for root in roots if np.isreal(root) and root.real > 0]
+        
+        if not real_roots:
+            return 2000
+        
+        return min(real_roots)
+    
     def get_closest_point(self, event):
         if self.is_dragging and self.selected_axis:
             origin, dir = self.get_world_coordinates(event)
@@ -386,46 +481,98 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             # check to see if a cylinder is clicked
             if (self.parent_window.selected_joint != -1):
+                self.selected_axis = None
+                self.selected_torus = None
                 selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
                 joint_center = selected_joint.Pose.t
                 joint_center = QVector3D(joint_center[0], joint_center[1], joint_center[2])
 
-                hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(1,0,0), QVector3D(1,0,0), 0.2, selected_joint.boundingBall().r)
-                hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.2, selected_joint.boundingBall().r)
-                hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.2, selected_joint.boundingBall().r)
-                
-                self.hit_cylinder = False
-                if (hit_location_x < 1000):
-                    self.click_signal_arrow.emit(0)
-                    self.selected_axis = QVector3D(1,0,0)
-                    self.hit_cylinder = True
-                if (hit_location_y < 1000):
-                    self.click_signal_arrow.emit(1)
-                    self.selected_axis = QVector3D(0,1,0)
-                    self.hit_cylinder = True
-                if (hit_location_z < 1000):
-                    self.click_signal_arrow.emit(2)
-                    self.selected_axis = QVector3D(0,0,1)
-                    self.hit_cylinder = True
-                
-                if (self.hit_cylinder):
-                    self.is_dragging = True
-                    self.cylinder_drag_start_pos = self.get_closest_point(event)
-                else:
-                    self.is_dragging = False
-                    self.selected_axis = None
+                rot = selected_joint.Pose.R
+
+                self.selected_joint_axes['x'] = rot[:, 0]
+                self.selected_joint_axes['y'] = rot[:, 1]
+                self.selected_joint_axes['z'] = rot[:, 2]
+
+                if (self.parent_window.control_type == "Translate"):
+                    hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(1,0,0), QVector3D(1,0,0), 0.2, selected_joint.boundingBall().r)
+                    hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.2, selected_joint.boundingBall().r)
+                    hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.2, selected_joint.boundingBall().r)
+                    
+                    if (hit_location_x < 1000):
+                        self.click_signal_arrow.emit(0)
+                        self.selected_axis = QVector3D(1,0,0)
+                        self.hit_cylinder = True
+                    if (hit_location_y < 1000):
+                        self.click_signal_arrow.emit(1)
+                        self.selected_axis = QVector3D(0,1,0)
+                        self.hit_cylinder = True
+                    if (hit_location_z < 1000):
+                        self.click_signal_arrow.emit(2)
+                        self.selected_axis = QVector3D(0,0,1)
+                        self.hit_cylinder = True
+                    
+                    if (self.hit_cylinder):
+                        self.is_dragging = True
+                        self.cylinder_drag_start_pos = self.get_closest_point(event)
+                    else:
+                        self.is_dragging = False
+                        self.selected_axis = None
+                elif (self.parent_window.control_type == "Rotate"):
+                    closest = 1000
+                    closest_torus = None
+                    closest_index = -1
+
+                    for i in range(3):
+                        if i == 0:
+                            axis = 'x'
+                            axis_orig = QVector3D(1,0,0)
+                        elif i == 1:
+                            axis = 'y'
+                            axis_orig = QVector3D(0,1,0)
+                        else:
+                            axis = 'z'
+                            axis_orig = QVector3D(0,0,1)
+
+                        center = joint_center
+
+                        tor_rad = selected_joint.r
+
+                        cyl = self.selected_joint_axes[axis]
+                        axis2 = QVector3D(cyl[0], cyl[1], cyl[2])
+
+                        hit_location = self.compute_torus_intersection(origin, direction, center, axis2, major_radius=tor_rad + 0.2, minor_radius=0.2)
+                        if (hit_location < closest):
+                            closest = hit_location
+                            closest_torus = axis2
+                            self.selected_torus = closest_torus
+                            closest_index = i
+                            self.selected_axis_orig = axis_orig
+                            
+                    self.click_signal_arrow.emit(closest_index)
+
+            if self.selected_torus:
+                #print(closest_cylinder.objectName())
+                #axis = closest_axis
+                self.is_dragging = True
+
+                self.drag_prev_vector, _ = self.get_normalized_plane_vectors(event)
+
+                #self.parent_window.update_visibility(self.axis)
+                #center = QVector3D(self.cube_start_pos[0], self.cube_start_pos[1], self.cube_start_pos[2])
+                #self.parent_window.draw_axis_line(center, self.axes[self.axis], self.axis)
 
             # check to see if a joint is clicked
             closest_joint_dist = 1000
             closest_joint = None
 
-            for joint in self.parent_window.chain.Joints:
-                center = joint.Pose.t
-                radius = self.parent_window.radius
-                hit_location = self.compute_sphere_intersection(origin, direction, center, radius)
-                if (hit_location < closest_joint_dist):
-                    closest_joint_dist = hit_location
-                    closest_joint = joint
+            if (self.parent_window.chain):
+                for joint in self.parent_window.chain.Joints:
+                    center = joint.Pose.t
+                    radius = self.parent_window.radius
+                    hit_location = self.compute_sphere_intersection(origin, direction, center, radius + .2)
+                    if (hit_location < closest_joint_dist):
+                        closest_joint_dist = hit_location
+                        closest_joint = joint
             
             if (closest_joint != None):
                 self.click_signal.emit(closest_joint.id)
@@ -448,18 +595,15 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             propogate = self.parent_window.propogateSliderCheckbox.isChecked()
 
-            if self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False):
-                self.parent_window.update_joint()
+            self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+            self.parent_window.update_joint()
+
+        elif (self.selected_torus and self.is_dragging and self.parent_window.control_type == "Rotate"):
+            da, normal = self.get_axis_angle_delta(event)
+            self.parent_window.rotate_joint(-da, self.selected_axis_orig)
+            self.parent_window.update_joint()
 
         elif (self.is_dragging):
-            # lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            # if not hasattr(self, 'mousePos'):
-            #     self.mousePos = lpos
-            # diff = lpos - self.mousePos
-            # self.mousePos = lpos
-
-            # new diff code
-
             curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
 
             diff = curr_pos - self.last_drag_pos
@@ -474,10 +618,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
-        if self.is_dragging and self.selected_axis:
+        if self.is_dragging and (self.selected_axis or self.selected_torus):
             self.done_transforming.emit(True)
             self.is_dragging = False
+            self.drag_prev_vector = None
         else:
+            self.drag_prev_vector = None
 
             # check to see if link or mesh is selected 
             lpos = event.position() if hasattr(event, 'position') else event.localPos()
@@ -526,6 +672,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.key_pressed.emit("G")
  
 class PointEditorWindow(QMainWindow):
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Point Editor")
@@ -1253,7 +1400,8 @@ class PointEditorWindow(QMainWindow):
 
     def done_transforming(self, done):
         if done:
-            self.log_version()
+            pass
+            #self.log_version()
 
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
@@ -1493,6 +1641,41 @@ class PointEditorWindow(QMainWindow):
         if self.chain is not None:
             for index, joint in enumerate(self.chain.Joints):
                 joint.id = index
+
+    def rotation_matrix(self, axis, theta):
+        # rodrigues rotation formula
+        axis = np.asarray(axis)
+        axis = axis / np.linalg.norm(axis)
+        a = np.cos(theta / 2.0)
+        b, c, d = -axis * np.sin(theta / 2.0)
+        aa, bb, cc, dd = a*a, b*b, c*c, d*d
+        bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
+        return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
+                        [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
+                        [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
+
+    def rotate_joint(self, angle, axis):
+        # Update the position of the spheres
+        joint = self.selected_joint
+
+        propogate = self.propogateSliderCheckbox.isChecked()
+        relative = self.relativeSliderCheckbox.isChecked()
+
+        transformation = SE3.AngleAxis(angle, [axis[0], axis[1], axis[2]], unit='deg')
+        # transformation = SE3.Trans(0, 1, 0)
+
+        # print(transformation)
+
+        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, safe=False)
+
+        # self.selected_joint.translate(-cnt[0], -cnt[1], -cnt[2])
+        # self.selected_joint.rotate(angle, axis[0], axis[1], axis[2], local=False)
+        # self.selected_joint.translate(cnt[0], cnt[1], cnt[2])
+
+        # for i, a in enumerate(self.axes):
+        #     a.translate(-cnt[0], -cnt[1], -cnt[2])
+        #     a.rotate(angle, axis[0], axis[1], axis[2], local=False)
+        #     a.translate(cnt[0], cnt[1], cnt[2])
 
     def update_joint(self):
         self.select_joint_options.blockSignals(True)

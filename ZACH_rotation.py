@@ -442,7 +442,7 @@ class PointEditorWindow(QMainWindow):
         # Update the position of the spheres
         obj = self.cube
         cnt = self.cube_center
-
+        print("transform")
 
         obj.translate(-cnt[0], -cnt[1], -cnt[2])
         obj.rotate(angle, axis[0], axis[1], axis[2], local=False)

@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
 import pyqtgraph.opengl as gl
-from PyQt5.QtGui import QMatrix4x4, QVector4D
+from pyqtgraph import Transform3D
+from PyQt5.QtGui import QMatrix4x4, QVector4D, QVector3D
 
 from TubularPattern import *
 from geometryHelpers import *
@@ -202,24 +203,6 @@ class Joint(ABC):
         if showSphere:
             self.boundingBall().addToWidget(widget, sphereColor)
 
-    def generate_extended_line_points(self, point1, point2, gap):
-        point1 = np.array(point1)
-        point2 = np.array(point2)
-        
-        direction = point2 - point1
-        distance = np.linalg.norm(direction)
-        direction = direction / distance
-
-        point1 = point2 - direction * distance * 4
-        
-        extended_length = 8 * distance
-        num_points = int(extended_length / gap) + 1
-        start_point = point1 - direction * distance
-
-        points = [start_point + i * gap * direction for i in range(num_points)]
-    
-        return np.array(points)
-
     def generate_extended_axis(self, point1, point2, length):
         direction_vector = point2 - point1
     
@@ -230,81 +213,22 @@ class Joint(ABC):
 
         return np.array([p1, p2])
     
-    def rotation_matrix(self, axis, theta):
-        # rodrigues rotation formula
-        axis = np.asarray(axis)
-        axis = axis / np.linalg.norm(axis)
-        a = np.cos(theta / 2.0)
-        b, c, d = -axis * np.sin(theta / 2.0)
-        aa, bb, cc, dd = a*a, b*b, c*c, d*d
-        bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
-        return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
-                        [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
-                        [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
-    
-    def generate_circle_points(self, axis, center, rad=1.0, num_points=10, rotation=0.0):
-        #angles where the points are placed
-        angles = self.generate_angles(num_points)
+    def get_transform3D(self, translate=False):
+        m = self.Pose.R
+        t = self.Pose.t
 
-        axis = np.array(axis)
-        axis = axis / np.linalg.norm(axis)
+        trans = [0, 0, 0]
+        if (translate):
+            trans = t
+
+        transform = Transform3D()
+        transform.setRow(0, QVector4D(m[0][0], m[0][1], m[0][2], trans[0]))
+        transform.setRow(1, QVector4D(m[1][0], m[1][1], m[1][2], trans[1]))
+        transform.setRow(2, QVector4D(m[2][0], m[2][1], m[2][2], trans[2]))
         
-        #vector not parallel to the axis
-        if (axis == [1, 0, 0]).all() or (axis == [-1, 0, 0]).all():
-            not_parallel = np.array([0, 1, 0])
-        else:
-            not_parallel = np.array([1, 0, 0])
+        transform.setRow(3, QVector4D(0, 0, 0, 1))
 
-        v1 = np.cross(axis, not_parallel)
-        v1 = v1 / np.linalg.norm(v1)
-        v1 = v1 * rad
-
-        points = []
-
-        for angle in angles:
-            R = self.rotation_matrix(axis, angle + rotation)
-
-            point = center + v1
-
-            line_point = np.array(point.tolist()) - center
-
-            rotated_point = np.dot(R, line_point) + center
-            points.append(rotated_point)
-        
-        return points
-
-    def generate_angles(self, num_points=10):
-        angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-        return angles
-    
-    def rotate_vector(self, vector, axis='x'):
-        if axis == 'x':
-            rotation_matrix = np.array([
-                [1, 0, 0],
-                [0, 0, -1],
-                [0, 1, 0]
-            ])
-        elif axis == 'y':
-            rotation_matrix = np.array([
-                [0, 0, 1],
-                [0, 1, 0],
-                [-1, 0, 0]
-            ])
-
-        rotated_vector = np.dot(rotation_matrix, vector)
-        return rotated_vector
-
-    def se3_to_qmatrix(self, se3_matrix: SE3):
-        
-        qmatrix = QMatrix4x4()
-        elements = se3_matrix.A
-        
-        qmatrix.setRow(0, QVector4D(elements[0][0], elements[0][1], elements[0][2], elements[0][3]))
-        qmatrix.setRow(1, QVector4D(elements[1][0], elements[1][1], elements[1][2], elements[1][3]))
-        qmatrix.setRow(2, QVector4D(elements[2][0], elements[2][1], elements[2][2], elements[2][3]))
-        qmatrix.setRow(3, QVector4D(elements[3][0], elements[3][1], elements[3][2], elements[3][3]))
-
-        return qmatrix
+        return transform
 
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         rad = self.boundingBall().r
@@ -327,18 +251,26 @@ class Joint(ABC):
         cylinder_md = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad)
 
         axis_x = gl.GLMeshItem(meshdata=cylinder_md, color=colors[0], shader='shaded', smooth=True)
-        axis_x.translate(center[0] + 1, center[1], center[2])
         axis_x.rotate(90, 0, 1, 0, True)
         widget.plot_widget.addItem(axis_x)
 
         axis_y = gl.GLMeshItem(meshdata=cylinder_md, color=colors[1], shader='shaded', smooth=True)
-        axis_y.translate(center[0], center[1] + 1, center[2])
         axis_y.rotate(-90, 1, 0, 0, True)
         widget.plot_widget.addItem(axis_y)
 
         axis_z = gl.GLMeshItem(meshdata=cylinder_md, color=colors[2], shader='shaded', smooth=True)
-        axis_z.translate(center[0], center[1], center[2] + 1)
         widget.plot_widget.addItem(axis_z)
+
+        transform = self.get_transform3D(False)
+
+        axis_x.translate(center[0] + 1, center[1], center[2])
+        axis_y.translate(center[0], center[1] + 1, center[2])
+        axis_z.translate(center[0], center[1], center[2] + 1)
+
+        if (local):
+            axis_x.applyTransform(transform, False)
+            axis_y.applyTransform(transform, False)
+            axis_z.applyTransform(transform, False)
 
         if selectedArrow != -1:
             # generate the line here
@@ -346,6 +278,34 @@ class Joint(ABC):
             extended_axis = self.generate_extended_axis(center, dir, 1000)
             extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=3, antialias=True)
             widget.plot_widget.addItem(extended_axis_line)
+
+    def create_torus_mesh(self, radius, tube_radius, radial_segments, tubular_segments):
+        theta = np.linspace(0, 2 * np.pi, radial_segments)
+        phi = np.linspace(0, 2 * np.pi, tubular_segments)
+        theta, phi = np.meshgrid(theta, phi)
+        theta, phi = theta.flatten(), phi.flatten()
+
+        x = (radius + tube_radius * np.cos(phi)) * np.cos(theta)
+        y = (radius + tube_radius * np.cos(phi)) * np.sin(theta)
+        z = tube_radius * np.sin(phi)
+
+        vertices = np.vstack([x, y, z]).T
+        faces = []
+
+        for i in range(radial_segments):
+            for j in range(tubular_segments):
+                next_i = (i + 1) % radial_segments
+                next_j = (j + 1) % tubular_segments
+
+                faces.append([i * tubular_segments + j,
+                            next_i * tubular_segments + j,
+                            i * tubular_segments + next_j])
+                faces.append([next_i * tubular_segments + j,
+                            next_i * tubular_segments + next_j,
+                            i * tubular_segments + next_j])
+
+        faces = np.array(faces)
+        return gl.MeshData(vertexes=vertices, faces=faces)
     
     def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         if local:
@@ -358,21 +318,15 @@ class Joint(ABC):
 
         rad = self.boundingBall().r
         colors = rotateArrowColors
+        opacity = [0.9, 0.9, 0.9]
 
         if selectedArrow != -1:
             colors[selectedArrow] = selectedArrowColor
+            opacity = [0.3, 0.3, 0.3]
+            opacity[selectedArrow] = 0.9
 
+        extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
         center = self.Pose.t
-        extended_circle_color = extendedCircleColors
-        num_points = 20
-
-        R = self.Pose.R
-        theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[0, 0]), np.arctan2(R[1, 0], R[1, 1])]
-
-        # generate the marker points around the arrows
-        if selectedArrow != -1:
-            points = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
-            angles = self.generate_angles(num_points)
 
         #swap the axes so that the selected axis gets rendered last -> appears above the other axes
         numbered_axes = [[0, axes[0]], [1, axes[1]], [2, axes[2]]]
@@ -381,22 +335,38 @@ class Joint(ABC):
             numbered_axes[selectedArrow], numbered_axes[2] = numbered_axes[2], numbered_axes[selectedArrow]
 
         for tul in numbered_axes:    
-            i = tul[0]
-            axis = tul[1]
+            pass
 
-            points = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
-            points.append(points[0])
+        transform = self.get_transform3D()
 
-            #generate the lighter circles
-            circle = LineItemWithID(pos=points, color=extended_circle_color[i], width=5, antialias=True, id=i)
-            circle.setObjectName("circle")
-            widget.plot_widget.addItem(circle)
+        self.tube_rad=0.1
+        self.tor_rad=rad + 0.2
+        torus_md = self.create_torus_mesh(radius=self.tor_rad, tube_radius=self.tube_rad, radial_segments=20, tubular_segments=20)
 
-            arrow = np.array(points[-num_points//4:])
-            arrow2 = np.array(points[:num_points//4])
-            arrows = np.append(arrow, arrow2, axis=0)
+        axis_x = gl.GLMeshItem(meshdata=torus_md, color=tuple((1, 0, 0, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        axis_x.rotate(90, 0, 1, 0, True)
+        axis_x.applyTransform(transform, False)
+        axis_x.translate(center[0], center[1], center[2])
+        axis_x.setObjectName("X axis")
+        widget.plot_widget.addItem(axis_x)
 
-            # generate the arrows
-            line = LineItemWithID(pos=arrows, color=colors[i], width=15, antialias=True, id=i)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
+        axis_y = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 1, 0, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        y_trans = center
+        axis_y.rotate(90, 1, 0, 0, True)
+        axis_y.applyTransform(transform, False)
+        axis_y.translate(center[0], center[1], center[2])
+        axis_y.setObjectName("Y axis")
+        widget.plot_widget.addItem(axis_y)
+
+        axis_z = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 0, 1, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        z_trans = center
+        axis_z.applyTransform(transform, False)
+        axis_z.translate(center[0], center[1], center[2])
+        axis_z.setObjectName("Z axis")
+        widget.plot_widget.addItem(axis_z)
+
+        if selectedArrow != -1:
+            dir = center + rad * self.r * axes[selectedArrow]
+            extended_axis = self.generate_extended_axis(center, dir, 1000)
+            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=3, antialias=True)
+            widget.plot_widget.addItem(extended_axis_line)
