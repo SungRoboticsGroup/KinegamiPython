@@ -253,6 +253,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.selected_axis_name = None
         self.selected_torus = None
         self.drag_prev_vector = 0
+        self.facing_same_dir = False
 
         self.selected_joint_axes = {
             'x': {1, 0, 0},
@@ -493,22 +494,28 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 self.selected_joint_axes['y'] = rot[:, 1]
                 self.selected_joint_axes['z'] = rot[:, 2]
 
+                axes = [selected_joint.Pose.R[:, i] for i in range(3)]
+                axis_x = QVector3D(axes[0][0], axes[0][1], axes[0][2])
+                axis_y = QVector3D(axes[1][0], axes[1][1], axes[1][2])
+                axis_z = QVector3D(axes[2][0], axes[2][1], axes[2][2])
+
                 if (self.parent_window.control_type == "Translate"):
-                    hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(1,0,0), QVector3D(1,0,0), 0.2, selected_joint.boundingBall().r)
-                    hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,1,0), QVector3D(0,1,0), 0.2, selected_joint.boundingBall().r)
-                    hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center + QVector3D(0,0,1), QVector3D(0,0,1), 0.2, selected_joint.boundingBall().r)
+
+                    hit_location_x = self.compute_cylinder_intersection(origin, direction, joint_center, axis_x, 0.2, selected_joint.boundingBall().r+1)
+                    hit_location_y = self.compute_cylinder_intersection(origin, direction, joint_center, axis_y, 0.2, selected_joint.boundingBall().r+1)
+                    hit_location_z = self.compute_cylinder_intersection(origin, direction, joint_center, axis_z, 0.2, selected_joint.boundingBall().r+1)
                     
                     if (hit_location_x < 1000):
                         self.click_signal_arrow.emit(0)
-                        self.selected_axis = QVector3D(1,0,0)
+                        self.selected_axis = axis_x
                         self.hit_cylinder = True
                     if (hit_location_y < 1000):
                         self.click_signal_arrow.emit(1)
-                        self.selected_axis = QVector3D(0,1,0)
+                        self.selected_axis = axis_y
                         self.hit_cylinder = True
                     if (hit_location_z < 1000):
                         self.click_signal_arrow.emit(2)
-                        self.selected_axis = QVector3D(0,0,1)
+                        self.selected_axis = axis_z
                         self.hit_cylinder = True
                     
                     if (self.hit_cylinder):
@@ -547,6 +554,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                             self.selected_torus = closest_torus
                             closest_index = i
                             self.selected_axis_orig = axis_orig
+                            dot = QVector3D.dotProduct(direction, axis2)
+                            self.facing_same_dir = dot > 0
                             
                     self.click_signal_arrow.emit(closest_index)
 
@@ -600,7 +609,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         elif (self.selected_torus and self.is_dragging and self.parent_window.control_type == "Rotate"):
             da, normal = self.get_axis_angle_delta(event)
-            self.parent_window.rotate_joint(-da, self.selected_axis_orig)
+            if (not self.facing_same_dir):
+                da = -da
+            self.parent_window.rotate_joint(da, self.selected_axis_orig)
             self.parent_window.update_joint()
 
         elif (self.is_dragging):

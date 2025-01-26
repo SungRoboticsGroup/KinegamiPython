@@ -225,7 +225,6 @@ class Joint(ABC):
         transform.setRow(0, QVector4D(m[0][0], m[0][1], m[0][2], trans[0]))
         transform.setRow(1, QVector4D(m[1][0], m[1][1], m[1][2], trans[1]))
         transform.setRow(2, QVector4D(m[2][0], m[2][1], m[2][2], trans[2]))
-        
         transform.setRow(3, QVector4D(0, 0, 0, 1))
 
         return transform
@@ -248,7 +247,7 @@ class Joint(ABC):
         if frame:
             axes = [frame.R[:, i] for i in range(3)]
 
-        cylinder_md = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad)
+        cylinder_md = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad+1)
 
         axis_x = gl.GLMeshItem(meshdata=cylinder_md, color=colors[0], shader='shaded', smooth=True)
         axis_x.rotate(90, 0, 1, 0, True)
@@ -263,14 +262,14 @@ class Joint(ABC):
 
         transform = self.get_transform3D(False)
 
-        axis_x.translate(center[0] + 1, center[1], center[2])
-        axis_y.translate(center[0], center[1] + 1, center[2])
-        axis_z.translate(center[0], center[1], center[2] + 1)
-
         if (local):
             axis_x.applyTransform(transform, False)
             axis_y.applyTransform(transform, False)
             axis_z.applyTransform(transform, False)
+
+        axis_x.translate(center[0], center[1], center[2])
+        axis_y.translate(center[0], center[1], center[2])
+        axis_z.translate(center[0], center[1], center[2])
 
         if selectedArrow != -1:
             # generate the line here
@@ -318,12 +317,12 @@ class Joint(ABC):
 
         rad = self.boundingBall().r
         colors = rotateArrowColors
-        opacity = [0.9, 0.9, 0.9]
+        opacity = [0.8, 0.8, 0.8]
 
         if selectedArrow != -1:
             colors[selectedArrow] = selectedArrowColor
-            opacity = [0.3, 0.3, 0.3]
-            opacity[selectedArrow] = 0.9
+            opacity = [0.1, 0.1, 0.1]
+            opacity[selectedArrow] = 0.8
 
         extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
         center = self.Pose.t
@@ -343,14 +342,14 @@ class Joint(ABC):
         self.tor_rad=rad + 0.2
         torus_md = self.create_torus_mesh(radius=self.tor_rad, tube_radius=self.tube_rad, radial_segments=20, tubular_segments=20)
 
-        axis_x = gl.GLMeshItem(meshdata=torus_md, color=tuple((1, 0, 0, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        axis_x = gl.GLMeshItem(meshdata=torus_md, color=tuple((1, 0, 0, opacity[0])), shader='shaded', glOptions='translucent', smooth=True)
         axis_x.rotate(90, 0, 1, 0, True)
         axis_x.applyTransform(transform, False)
         axis_x.translate(center[0], center[1], center[2])
         axis_x.setObjectName("X axis")
         widget.plot_widget.addItem(axis_x)
 
-        axis_y = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 1, 0, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        axis_y = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 1, 0, opacity[1])), shader='shaded', glOptions='translucent', smooth=True)
         y_trans = center
         axis_y.rotate(90, 1, 0, 0, True)
         axis_y.applyTransform(transform, False)
@@ -358,7 +357,7 @@ class Joint(ABC):
         axis_y.setObjectName("Y axis")
         widget.plot_widget.addItem(axis_y)
 
-        axis_z = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 0, 1, .5)), shader='shaded', glOptions='translucent', smooth=True)
+        axis_z = gl.GLMeshItem(meshdata=torus_md, color=tuple((0, 0, 1, opacity[2])), shader='shaded', glOptions='translucent', smooth=True)
         z_trans = center
         axis_z.applyTransform(transform, False)
         axis_z.translate(center[0], center[1], center[2])
