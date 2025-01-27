@@ -85,7 +85,7 @@ foot2rightIndex = treeSpec.addJoint(knee2rightIndex, foot2rightJoint, relative=F
 treeFromAlgorithm = makeTubularKinematicTree(treeSpec, plotSteps=False)
 #treeFromAlgorithm.show(showScaleBar=False)
 
-optimizedTree = treeFromAlgorithm.squaredOptimize(showSteps=False, childParentRatio = 0, streamline=True, guarantee=False)
+optimizedTree = treeFromAlgorithm.squaredOptimize(showSteps=False, childParentRatio = 0, streamline=True, guarantee=True, parallelize=True)
 optimizedTree.show(showScaleBar=False)
 
 

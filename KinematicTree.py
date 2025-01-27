@@ -1018,7 +1018,7 @@ class KinematicTree(Generic[J]):
             #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
             d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
             childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childParentRatio
-            return t.Links[index].path.length ** 2 + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d * t.r + childrenLength
+            return t.Links[index].path.length ** 2 + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
         def objective(params, returnWhich = False):
             tree = self.copyAbbreviatedSelf(ignoreLater, index)
 
@@ -1106,11 +1106,7 @@ class KinematicTree(Generic[J]):
         initialLoss = objective([0,0])
 
         #calculate dist
-        current = index
-        dist = 0
-        while current != 0:
-            dist += self.Links[current].path.length
-            current = self.Parents[current]
+        dist = self.Links[index].path.length
         bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
 
         #initial swarm
@@ -1176,12 +1172,6 @@ class KinematicTree(Generic[J]):
             return tree, loss
 
     def optimizeWaypointPlacement(self, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater=False, parallelize=False):
-        current = index
-        dist = 0
-        while current != 0:
-            dist += self.Links[current].path.length
-            current = self.Parents[current]
-        bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
 
         #make initial guess as close as possible to previous
         start = time.time()
@@ -1202,7 +1192,7 @@ class KinematicTree(Generic[J]):
         def linkLoss(t, link, curveLossFactor = np.pi):
             d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
             childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childParentRatio
-            return t.Links[index].path.length ** 2  + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + d * t.r + childrenLength
+            return t.Links[index].path.length ** 2  + t.detectCollisionsWithCapsules(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
         def objective(params):
             tree = self.copyAbbreviatedSelf(ignoreLater, index)
@@ -1225,33 +1215,37 @@ class KinematicTree(Generic[J]):
 
             #initialTree.detectCollisions(debug=True)
         except Exception as e:
-            try:
-                success = False
-                for i in range(0, len(self.Children[index])):
-                    if success:
-                        break
-                    initialTree = self.copyAbbreviatedSelf(ignoreLater, index)
-                    rots = SE3.Rt(initialTree.Joints[self.Children[index][i]].ProximalDubinsFrame().R, np.zeros(3)).eul()
-                    frame1 = SE3.Trans(initialTree.Joints[self.Parents[index]].DistalDubinsFrame().t) @ SE3.Rz(rots[0]) @ SE3.Ry(rots[1]) @ SE3.Rz(rots[2])
-                    transform2 = frame1 * initialTree.Joints[index].ProximalDubinsFrame().inv()
-                    initialGuess[0:3] = transform2.t
-                    initialGuess[3:6] = SE3.Rt(transform2.R, np.zeros(3)).eul()
-                    try:
-                        if initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=False, relative=False, recomputeBoundingBall=False):
-                            #print(initialTree.Joints[index].ProximalDubinsFrame().t, initialTree.Joints[initialTree.Parents[index]].DistalDubinsFrame().t)
-                            success = True
-                    except:
-                        pass
+            initialGuess = [0]*6
+            # try:
+            #     success = False
+            #     for i in range(0, len(self.Children[index])):
+            #         if success:
+            #             break
+            #         initialTree = self.copyAbbreviatedSelf(ignoreLater, index)
+            #         rots = SE3.Rt(initialTree.Joints[self.Children[index][i]].ProximalDubinsFrame().R, np.zeros(3)).eul()
+            #         frame1 = SE3.Trans(initialTree.Joints[self.Parents[index]].DistalDubinsFrame().t) @ SE3.Rz(rots[0]) @ SE3.Ry(rots[1]) @ SE3.Rz(rots[2])
+            #         transform2 = frame1 * initialTree.Joints[index].ProximalDubinsFrame().inv()
+            #         initialGuess[0:3] = transform2.t
+            #         initialGuess[3:6] = SE3.Rt(transform2.R, np.zeros(3)).eul()
+            #         try:
+            #             if initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=False, relative=False, recomputeBoundingBall=False):
+            #                 #print(initialTree.Joints[index].ProximalDubinsFrame().t, initialTree.Joints[initialTree.Parents[index]].DistalDubinsFrame().t)
+            #                 success = True
+            #         except:
+            #             pass
 
-                if not success:
-                    raise Exception("failed")
+            #     if not success:
+            #         raise Exception("failed")
 
-                #print(f"NVM: {e}, INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
-            except Exception as e:
-                #print(f"INITIAL WAYPOINT GUESS NOT POSSIBLE : {e}")
-                initialGuess = [0]*6
+            #     #print(f"NVM: {e}, INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
+            # except Exception as e:
+            #     #print(f"INITIAL WAYPOINT GUESS NOT POSSIBLE : {e}")
+            #     initialGuess = [0]*6
             
         initialLoss = objective([0]*6)
+
+        dist = self.Links[index].path.length + np.max(initialGuess)
+        bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
 
         global waypoint_batch_objective_function
         def waypoint_batch_objective_function(X):
@@ -1260,7 +1254,7 @@ class KinematicTree(Generic[J]):
         n_particles = 24
 
         init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
-        init_pos[1] = np.array([0]*6)
+        init_pos[1] = [0]*6
         #add random noise
         noise = np.zeros_like(init_pos[2:])
         for i in range(0,3):
@@ -1282,162 +1276,177 @@ class KinematicTree(Generic[J]):
         else:
             raise Exception("Optimization failed dramatically")
 
-    def squaredOptimize(self, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False):
-        for i in range(0, len(self.Joints)):
-            self.Joints[i].recomputeCollisionCapsules()
+        def squaredOptimize(self, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False):
+            times = []
+            losses = []
 
-        if self.detectCollisions(debug=True) > 0:
-            print("Warning: Initial tree contains collisions.")
-        if showSteps and isinstance(self.Joints[0], OrigamiJoint):
-            self.show()
+            for i in range(0, len(self.Joints)):
+                self.Joints[i].recomputeCollisionCapsules()
 
-        collisionError = 0
-        for i in range(0, len(self.Joints)):
-            if len(self.Children[i]) > 0:
-                continue
-            j = i
-            length = 0
-            while j != 0:
-                length += self.Links[j].path.length ** 2
-                j = self.Parents[j]
-            if length > collisionError:
-                collisionError = length
+            if self.detectCollisions(debug=True) > 0:
+                print("Warning: Initial tree contains collisions.")
+            if showSteps and isinstance(self.Joints[0], OrigamiJoint):
+                self.show()
 
-        print(f"Collision error is {collisionError}")
+            collisionError = 0
+            for i in range(0, len(self.Joints)):
+                if len(self.Children[i]) > 0:
+                    continue
+                j = i
+                length = 0
+                while j != 0:
+                    length += self.Links[j].path.length ** 2
+                    j = self.Parents[j]
+                if length > collisionError:
+                    collisionError = length
 
-        start = time.time()
+            print(f"Collision error is {collisionError}")
 
-        tree = self.copyAbbreviatedSelf()
-        isOptimized = [True] + [False] * (len(self.Joints) - 1) #isOptimized[i] is True if joint i is optimized
-        numOptimized = 1
+            start = time.time()
 
-        def optimizeFromIndex(index):       
-            nonlocal tree
-            nonlocal numOptimized
+            tree = self.copyAbbreviatedSelf()
+            isOptimized = [True] + [False] * (len(self.Joints) - 1) #isOptimized[i] is True if joint i is optimized
+            numOptimized = 1
 
-            iters = 20
-            tolerance = self.r/10
-            if isOptimized[self.Parents[index]]:
-                iters = 50
+            def optimizeFromIndex(index):       
+                nonlocal tree
+                nonlocal numOptimized
+
+                iters = 20
                 tolerance = self.r/10
+                if isOptimized[self.Parents[index]]:
+                    iters = 50
+                    tolerance = self.r/10
 
-            if isWaypoint(self.Joints[index]):
-                tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
-            else:
-                tree, loss = tree.optimizeJointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
-
-            if isOptimized[self.Parents[index]]:
-                isOptimized[index] = True
-                numOptimized += 1
-            else:
-                optimizeFromIndex(self.Parents[index])
-
-
-        while numOptimized < len(self.Joints):
-            i = None
-            for j in range(len(self.Joints) - 1, 0, -1):
-                if not isOptimized[j] and len(self.Children[j]) == 0:
-                    i = j
-
-            print(f"OPTIMIZING CHAIN ENDING AT {i}:")
-            start2 = time.time()
-            order = []
-
-            parent = i
-            while not isOptimized[parent]:
-                order.append(parent)
-                parent = self.Parents[parent]
-            order.reverse()
-
-            optimizeStreak = 0
-
-            for j in range(0, len(order)):
-                iters = 50
-                tolerance = self.r/10
-                
-                if isWaypoint(self.Joints[order[j]]):
-                    try:
-                        tree2, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
-
-                        if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
-                            raise Exception("Moving all children caused collision.")
-
-                        tree = tree2
-
-                        if optimizeStreak == j:
-                            isOptimized[order[j]] = True
-                            numOptimized += 1
-                            optimizeStreak += 1
-                    except Exception as e:
-                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
-                        if j != 0:
-                            if isOptimized[tree.Parents[order[j]]]:
-                                isOptimized[tree.Parents[order[j]]] = False
-                                numOptimized -= 1
-                        # for idx in order:
-                        #     if isOptimized[idx]:
-                        #         isOptimized[idx] = False
-                        #         numOptimized -= 1
-
-                        tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize)
-                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
-                        #tree.show()
-                        break
+                if isWaypoint(self.Joints[index]):
+                    tree, loss = tree.optimizeWaypointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
                 else:
-                    try:
-                        tree2, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
+                    tree, loss = tree.optimizeJointPlacement(index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
 
-                        if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
-                            raise Exception("Moving all children caused collision.")
-                        
-                        tree = tree2
-
-                        if optimizeStreak == j:
-                            isOptimized[order[j]] = True
-                            numOptimized += 1
-                            optimizeStreak += 1
-                    except Exception as e:
-                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
-                        if j != 0:
-                            if isOptimized[tree.Parents[order[j]]]:
-                                isOptimized[tree.Parents[order[j]]] = False
-                                numOptimized -= 1
-                        # for idx in order:
-                        #     if isOptimized[idx]:
-                        #         isOptimized[idx] = False
-                        #         numOptimized -= 1
-
-                        tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
-                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
-                        break
+                if isOptimized[self.Parents[index]]:
+                    isOptimized[index] = True
+                    numOptimized += 1
+                else:
+                    optimizeFromIndex(self.Parents[index])
                 
+                times.append(time.time() - start)
+                losses.append(optimizationLoss(tree))
 
-            while not isOptimized[i]:
-                optimizeFromIndex(i)
 
-            # Another pass, not totally necessary but helps streamline shape, commented out to improve runtime
-            if streamline:
+            while numOptimized < len(self.Joints):
+                i = None
+                for j in range(len(self.Joints) - 1, 0, -1):
+                    if not isOptimized[j] and len(self.Children[j]) == 0:
+                        i = j
+
+                print(f"OPTIMIZING CHAIN ENDING AT {i}:")
+                start2 = time.time()
+                order = []
+
+                parent = i
+                while not isOptimized[parent]:
+                    order.append(parent)
+                    parent = self.Parents[parent]
+                order.reverse()
+
+                optimizeStreak = 0
+
                 for j in range(0, len(order)):
                     iters = 50
                     tolerance = self.r/10
                     
                     if isWaypoint(self.Joints[order[j]]):
-                        tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                        try:
+                            tree2, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
+
+                            if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
+                                raise Exception("Moving all children caused collision.")
+
+                            tree = tree2
+
+                            if optimizeStreak == j:
+                                isOptimized[order[j]] = True
+                                numOptimized += 1
+                                optimizeStreak += 1
+                        except Exception as e:
+                            print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                            if j != 0:
+                                if isOptimized[tree.Parents[order[j]]]:
+                                    isOptimized[tree.Parents[order[j]]] = False
+                                    numOptimized -= 1
+                            for idx in order:
+                                if isOptimized[idx]:
+                                    isOptimized[idx] = False
+                                    numOptimized -= 1
+
+                            tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize)
+                            print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                            #tree.show()
+                            break
                     else:
-                        tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                        try:
+                            tree2, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
 
-            print("CURRENT COLLISIONS")
-            if tree.detectCollisions(debug=True) == 0:
-                print("NONE")
+                            if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
+                                raise Exception("Moving all children caused collision.")
+                            
+                            tree = tree2
 
-            if showSteps:
-                tree.show()
+                            if optimizeStreak == j:
+                                isOptimized[order[j]] = True
+                                numOptimized += 1
+                                optimizeStreak += 1
+                        except Exception as e:
+                            print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                            if j != 0:
+                                if isOptimized[tree.Parents[order[j]]]:
+                                    isOptimized[tree.Parents[order[j]]] = False
+                                    numOptimized -= 1
+                            for idx in order:
+                                if isOptimized[idx]:
+                                    isOptimized[idx] = False
+                                    numOptimized -= 1
 
-            print(f"Optimized chain ending at {i} in {time.time() - start2}s \n")
+                            tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
+                            print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                            break
 
-        print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+                    times.append(time.time() - start)
+                    losses.append(optimizationLoss(tree))
+                    
 
-        return tree
+                while not isOptimized[i]:
+                    optimizeFromIndex(i)
+
+                # Another pass, not totally necessary but helps streamline shape, commented out to improve runtime
+                if streamline:
+                    for j in range(0, len(order)):
+                        iters = 50
+                        tolerance = self.r/10
+                        
+                        if isWaypoint(self.Joints[order[j]]):
+                            tree, loss = tree.optimizeWaypointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                        else:
+                            tree, loss = tree.optimizeJointPlacement(order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                        
+                        times.append(time.time() - start)
+                        losses.append(optimizationLoss(tree))
+
+                print("CURRENT COLLISIONS")
+                if tree.detectCollisions(debug=True) == 0:
+                    print("NONE")
+
+                if showSteps:
+                    tree.show()
+
+                print(f"Optimized chain ending at {i} in {time.time() - start2}s \n")
+
+            print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+            
+            if (evaluate):
+                return tree, times, losses
+                
+            return tree
     
     def save(self, filename: str):
         #TODO: ADD EXTENSIONS FOR PRINTED JOINTS
@@ -1474,6 +1483,12 @@ class KinematicTree(Generic[J]):
             
             f.write(save)
             f.close()
+
+def optimizationLoss(tree):
+    loss = 0
+    for i in range(1, len(tree.Joints)):
+        loss += tree.Links[i].path.length
+    return loss
 
 def loadKinematicTree(filename : str):
     def getJoint(line):
