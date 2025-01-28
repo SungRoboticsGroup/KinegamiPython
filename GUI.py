@@ -808,6 +808,8 @@ class PointEditorWindow(QMainWindow):
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
 
+        self.add_to_end = False
+
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
@@ -1320,6 +1322,7 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
+        self.add_to_end = not (index == 0 and self.chain and len(self.chain.Joints) > 1)
         if index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
@@ -1764,20 +1767,36 @@ class PointEditorWindow(QMainWindow):
         if dialog.exec_() == QDialog.Accepted:
             joint : Joint = dialog.getJoint()
 
-            if (self.chain == None):
-                joint.id = 0
-            else:
-                joint.id = len(self.chain.Joints)
+            if self.add_to_end:
+                if (self.chain == None):
+                    joint.id = 0
+                else:
+                    joint.id = len(self.chain.Joints)
 
-            if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
-            else :
-                self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-                #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-            
-            self.selected_joint = len(self.chain.Joints)
+                if (self.chain == None or len(self.chain.Joints) == 0) :
+                    self.chain = KinematicChain(joint)
+                else :
+                    self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                    #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                self.selected_joint = len(self.chain.Joints) - 1
+            else:
+                joint.id = 0
+                new_chain = KinematicChain(joint)
+                if (self.chain == None or len(self.chain.Joints) == 0) :
+                    self.chain = new_chain
+                else:
+                    old_root = self.chain.Joints[0]
+                    joint.Pose = joint.Pose @ old_root.Pose
+                    
+                    for jt in self.chain.Joints:
+                        jt.id += 1
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
+                    self.chain = new_chain
+
+                self.selected_joint = 0
             self.update_joint()
             self.log_version()
+
 
     def chain_not_created(self):
         self.show_error('Please create a chain first.')
@@ -1798,7 +1817,10 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                if self.add_to_end:
+                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                else:
+                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_end=False)
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.radius)
 
@@ -1810,7 +1832,10 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                if self.add_to_end:
+                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                else:
+                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_end=False)
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.radius)
             
@@ -1844,38 +1869,44 @@ class PointEditorWindow(QMainWindow):
             self.log_version()
 
         else: 
-            if (self.chain and len(self.chain.Joints) > 0):
-                prevJoint = self.chain.Joints[len(self.chain.Joints)-1]
+            if self.chain == None or len(self.chain.Joints) == 0:
+                waypoint = Waypoint(self.numSides, self.radius, SE3())
+                waypoint.id = 0
+                self.chain = KinematicChain(waypoint)
+            else:
+                prevJoint = self.chain.Joints[-1]
+                if not self.add_to_end:
+                    prevJoint = self.chain.Joints[0]
 
                 if (prevJoint is None):
                     pose = SE3()
                 else:
                     distance = 4 * self.radius + norm(prevJoint.distalPosition()-prevJoint.Pose.t)
+                    if not self.add_to_end: distance *= -1
                     pose = SE3(0,0,distance)
                     if prevJoint.pathIndex() == 0:
                         pose = SE3.Ry(np.pi/2) @ pose
 
                 waypoint = Waypoint(self.numSides, self.radius, pose)
-            
-            if (self.chain == None):
-                waypoint = Waypoint(self.numSides, self.radius, SE3())
-                waypoint.id = 0
-            else:
-                waypoint.id = len(self.chain.Joints)
-            
-            if (self.chain == None) or len(self.chain.Joints) == 0:
-                waypoint = Waypoint(self.numSides, self.radius, SE3())
-                self.chain = KinematicChain(waypoint)
-            elif waypoint.id != 0:
-                self.chain.append(newJoint = waypoint, 
+
+                if not self.add_to_end:
+                    waypoint.id = 0
+                    new_chain = KinematicChain(waypoint)
+                    old_root = self.chain.Joints[0]
+                    waypoint.Pose = waypoint.Pose @ old_root.Pose
+                    
+                    for jt in self.chain.Joints:
+                        jt.id += 1
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
+                    self.chain = new_chain
+                else:
+                    waypoint.id = len(self.chain.Joints)
+                    self.chain.append(newJoint = waypoint, 
                                     relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-            else:
-                self.chain.append(newJoint = waypoint, 
-                                    relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_joint()
             self.log_version()
-            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
+            self.select_joint_options.setCurrentIndex(waypoint.id)
 
     def add_tip_func(self):
         if (not self.chain_created):
@@ -1884,7 +1915,10 @@ class PointEditorWindow(QMainWindow):
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 #className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
+                if self.add_to_end:
+                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
+                else:
+                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[0], add_to_end=False)
             else:
                 dialog = AddTipDialog(self.numSides, self.radius)
 
