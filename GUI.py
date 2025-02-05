@@ -808,6 +808,8 @@ class PointEditorWindow(QMainWindow):
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
 
+        self.add_to_root = False
+
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
         self.axis_key_widget = QWidget()
@@ -1320,6 +1322,7 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
+        self.add_to_root = (index == 0 and self.chain and len(self.chain.Joints) > 1)
         if index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
@@ -1763,19 +1766,29 @@ class PointEditorWindow(QMainWindow):
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
             joint : Joint = dialog.getJoint()
-            """
-            if (self.chain == None):
-                joint.id = 0
+            if not self.add_to_root:
+                if (self.chain == None or len(self.chain.Joints) == 0) :
+                    self.chain = KinematicChain(joint)
+                else :
+                    self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                    #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                self.selected_joint = len(self.chain.Joints) - 1
             else:
-                joint.id = len(self.chain.Joints)
-            """
-            if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
-            else :
-                self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-                #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-            
-            self.selected_joint = len(self.chain.Joints)
+
+                if (self.chain == None or len(self.chain.Joints) == 0) :
+                    self.chain = KinematicChain(joint)
+                else:
+                    old_root = self.chain.Joints[0]
+                    joint.Pose = old_root.Pose @ joint.Pose
+
+                    new_chain = KinematicChain(joint)
+                    
+                    for jt in self.chain.Joints:
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
+                    self.chain = new_chain
+
+                self.selected_joint = 0
+
             self.update_joint()
             self.log_version()
 
@@ -1798,7 +1811,10 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                if not self.add_to_root:
+                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                else:
+                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_root=True)
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.radius)
 
@@ -1810,7 +1826,10 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                if not self.add_to_root:
+                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
+                else:
+                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_root=True)
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.radius)
             
@@ -1887,7 +1906,10 @@ class PointEditorWindow(QMainWindow):
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 #className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
+                if not self.add_to_root:
+                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
+                else:
+                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[0], add_to_root=True)
             else:
                 dialog = AddTipDialog(self.numSides, self.radius)
 

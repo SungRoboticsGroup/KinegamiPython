@@ -76,7 +76,7 @@ class AddJointDialog(QDialog):
             return None
         
 class AddPrismaticDialog(AddJointDialog):
-    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_end = True):
+    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_root = False):
         super().__init__()
         self.setWindowTitle('Add new prismatic joint')
         self.setGeometry(100, 100, 300, 100)
@@ -113,7 +113,7 @@ class AddPrismaticDialog(AddJointDialog):
         self.numSides = numSides
         self.r = r
         self.prevJoint = prevJoint
-        self.add_to_end = add_to_end
+        self.add_to_root = add_to_root
                 
     def onApplyClicked(self):
         try:            
@@ -125,7 +125,7 @@ class AddPrismaticDialog(AddJointDialog):
                 pose = SE3()
             else:
                 distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
-                if not self.add_to_end: distance *= -1
+                if self.add_to_root: distance *= -1
                 pose = SE3(0,0,distance)
                 if self.prevJoint.pathIndex() == 0:
                     pose = SE3.Ry(np.pi/2) @ pose
@@ -138,7 +138,7 @@ class AddPrismaticDialog(AddJointDialog):
             # error_dialog.exec_()
 
 class AddRevoluteDialog(AddJointDialog):
-    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_end = True):
+    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_root = False):
         super().__init__()
         self.setWindowTitle('Add new revolute joint')
         self.setGeometry(100, 100, 300, 100)
@@ -161,7 +161,7 @@ class AddRevoluteDialog(AddJointDialog):
         self.numSides = numSides
         self.r = r
         self.prevJoint = prevJoint
-        self.add_to_end = add_to_end
+        self.add_to_root = add_to_root
         #self.prevClass = prevClass
         
     def onApplyClicked(self):
@@ -172,7 +172,7 @@ class AddRevoluteDialog(AddJointDialog):
 
         if not self.prevJoint is None:
             distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2
-            if not self.add_to_end: distance *= -1
+            if self.add_to_root: distance *= -1
             pose = SE3(distance,0,0)
             if self.prevJoint.pathIndex() == 2:
                 pose = SE3.Ry(-np.pi/2) @ pose
@@ -183,7 +183,7 @@ class AddRevoluteDialog(AddJointDialog):
 class AddTipDialog(AddJointDialog):
     isStart = True
 
-    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_end = True):
+    def __init__(self, numSides, r, prevJoint : Joint = None, add_to_root = False):
         super().__init__()
         self.setWindowTitle('Add new joint')
         self.setGeometry(100, 100, 300, 100)
@@ -208,7 +208,7 @@ class AddTipDialog(AddJointDialog):
         layout.addWidget(apply_button)
 
         self.setLayout(layout)
-        self.add_to_end = add_to_end
+        self.add_to_root = add_to_root
 
     def onApplyClicked(self):
         try:
@@ -217,7 +217,7 @@ class AddTipDialog(AddJointDialog):
                 self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
             else:
                 distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
-                if not self.add_to_end: distance *= -1
+                if self.add_to_root: distance *= -1
                 pose = SE3(0,0,distance)
                 if self.prevJoint.pathIndex() == 0:
                     pose = SE3.Ry(np.pi/2) @ pose
