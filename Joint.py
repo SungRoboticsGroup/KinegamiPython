@@ -17,11 +17,10 @@ from TubularPattern import *
 from geometryHelpers import *
 from style import *
 
-class LineItemWithID(gl.GLLinePlotItem):
-    def __init__(self, id : int = -1, **kwds):
-        """All keyword arguments are passed to setData()"""
+class LineItem(gl.GLLinePlotItem):
+    def __init__(self, **kwds):
+        """ All keyword arguments are passed to setData() """
         super().__init__(**kwds)
-        self.id = id
 
 class LineSphere(gl.GLMeshItem):
     def __init__(self, position = [], rotation=0.0, **kwds):
@@ -45,7 +44,7 @@ class Joint(ABC):
         self.state = 0
         self.initialState = initialState
         self.TransformStateTo(initialState)
-        self.id = 0
+        # self.id = 0
         self.collisionCapsules = self.getCapsules()
     
     @abstractmethod #0 for xhat, 2 for zhat

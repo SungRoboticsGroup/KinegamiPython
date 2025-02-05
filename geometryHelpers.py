@@ -19,8 +19,8 @@ from matplotlib import cm
 
 from style import *
 
-class MeshItemWithID(gl.GLMeshItem):
-    def __init__(self, id : int = -1, **kwds):
+class MeshItem(gl.GLMeshItem):
+    def __init__(self, **kwds):
         self.opts = {
             'meshdata': None,
             'color': meshItemDefaultColor,
@@ -33,7 +33,6 @@ class MeshItemWithID(gl.GLMeshItem):
         }
         
         super().__init__(**kwds)        
-        self.id = id
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -325,9 +324,9 @@ class Ball:
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
         
-    def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False, id=-1):
+    def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False):
         md = gl.MeshData.sphere(rows=10, cols=10)
-        sphere = MeshItemWithID(meshdata=md, color=tuple(color), shader='shaded', smooth=True, id=id)
+        sphere = MeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
         sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)
@@ -442,10 +441,10 @@ class Cylinder:
 
         return vertices, np.array(indices)
 
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False, id=-1):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
-        meshitem = MeshItemWithID(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True, id=id)
+        meshitem = MeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
         meshitem.setGLOptions('translucent')
         if (is_joint):
             meshitem.setObjectName("Joint")

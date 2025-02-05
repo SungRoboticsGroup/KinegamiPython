@@ -87,7 +87,7 @@ class RevoluteJoint(OrigamiJoint):
             faces = np.append(faces, hull2.simplices + self.numSides + 2, axis=0)
 
             meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-            item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True, id=self.id)
+            item = MeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
             item.setGLOptions('translucent')
             item.setObjectName("Joint")
             widget.plot_widget.addItem(item)
@@ -233,7 +233,7 @@ class PrismaticJoint(OrigamiJoint):
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
         if showSurface:
             self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=surfaceColor, 
-                                                is_joint=True, id=self.id)
+                                                is_joint=True)
 
         super().addToWidget(widget, xColor, yColor, zColor, proximalColor,
                             centerColor, distalColor, sphereColor, showSphere,
@@ -298,9 +298,9 @@ class Waypoint(OrigamiJoint):
                 widget.plot_widget.addItem(line)
 
         if showSphere:
-            self.boundingBall().addToWidget(widget, sphereColor, is_waypoint=True, id=self.id)
+            self.boundingBall().addToWidget(widget, sphereColor, is_waypoint=True)
         else:
-            self.boundingBall().addToWidget(widget, (0,0,0,0.5), is_waypoint=True, id=self.id)
+            self.boundingBall().addToWidget(widget, (0,0,0,0.5), is_waypoint=True)
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -356,7 +356,7 @@ class Tip(OrigamiJoint):
             for s in hull.simplices:
                 vertices = tipPoints[s]
                 meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
-                item = MeshItemWithID(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent', id=self.id)
+                item = MeshItem(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
                 item.setObjectName("Joint")
                 widget.plot_widget.addItem(item)
         

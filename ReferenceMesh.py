@@ -2,7 +2,7 @@ import pyqtgraph.opengl as gl
 from spatialmath import SE3
 import numpy as np
 from style import *
-from Joint import LineItemWithID, LineSphere
+from Joint import LineItem, LineSphere
 from pyqtgraph import Transform3D
 
 class ReferenceMesh():
@@ -138,7 +138,7 @@ class ReferenceMesh():
 
         for i, axis in enumerate(axes):
             pos = np.array([point1, point1 + rad * 1 * axis])
-            line = LineItemWithID(pos=pos, color=colors[i], width=10, antialias=True, id=i)
+            line = LineItem(pos=pos, color=colors[i], width=10, antialias=True)
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)
 
@@ -192,7 +192,7 @@ class ReferenceMesh():
             points.append(points[0])
 
             #generate the lighter circles
-            circle = LineItemWithID(pos=points, color=extended_circle_color[i], width=5, antialias=True, id=i)
+            circle = LineItem(pos=points, color=extended_circle_color[i], width=5, antialias=True)
             circle.setObjectName("circle")
             widget.plot_widget.addItem(circle)
 
@@ -201,6 +201,6 @@ class ReferenceMesh():
             arrows = np.append(arrow, arrow2, axis=0)
 
             # generate the arrows
-            line = LineItemWithID(pos=arrows, color=colors[i], width=15, antialias=True, id=i)
+            line = LineItem(pos=arrows, color=colors[i], width=15, antialias=True)
             line.setObjectName("Arrow")
             widget.plot_widget.addItem(line)

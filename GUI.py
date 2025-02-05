@@ -584,7 +584,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         closest_joint = joint
             
             if (closest_joint != None):
-                self.click_signal.emit(closest_joint.id)
+                self.click_signal.emit(self.parent_window.chain.Joints.index(closest_joint))
             elif (closest_joint == None and not self.is_dragging and not self.hit_cylinder): 
                 self.click_signal.emit(-1)
 
@@ -807,8 +807,6 @@ class PointEditorWindow(QMainWindow):
         self.add_joints_widget = QWidget()
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
-
-        self.add_to_end = False
 
         # //////////////////////////////////    AXIS KEY    ////////////////////////////////////
         axis_key_layout = QVBoxLayout()
@@ -1086,7 +1084,7 @@ class PointEditorWindow(QMainWindow):
             self.chain = None
         else:
             self.chain = self.versions.pop()
-        self.reload_IDs()
+        # self.reload_IDs()
         self.update_joint()
     
     def toggle_grid_func(self):
@@ -1129,7 +1127,7 @@ class PointEditorWindow(QMainWindow):
             backup = copy.deepcopy(self.chain)
             try:
                 self.chain = chainWithJointDeleted(self.chain, self.selected_joint)
-                self.reload_IDs()
+                # self.reload_IDs()
                 self.update_joint()
                 self.show_success('Joint successfully deleted!')
             except Exception as e:
@@ -1322,7 +1320,6 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
-        self.add_to_end = not (index == 0 and self.chain and len(self.chain.Joints) > 1)
         if index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
@@ -1530,8 +1527,8 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.blockSignals(True)
         self.select_joint_options.clear() 
     
-        for joint in self.chain.Joints:
-            self.select_joint_options.addItem("Joint " + str(joint.id) + " - " + joint.__class__.__name__)
+        for i, joint in enumerate(self.chain.Joints):
+            self.select_joint_options.addItem("Joint " + str(i) + " - " + joint.__class__.__name__)
     
         self.select_joint_options.blockSignals(False) 
         self.select_joint_options.setCurrentIndex(self.selected_joint)
@@ -1539,8 +1536,8 @@ class PointEditorWindow(QMainWindow):
         self.select_link_options.blockSignals(True)
         self.select_link_options.clear()
 
-        for link in self.chain.Links: 
-            self.select_link_options.addItem("Link " + str(link.id) + " - " + link.__class__.__name__)
+        for link in enumerate(self.chain.Links): 
+            self.select_link_options.addItem("Link " + str(i) + " - " + link.__class__.__name__)
         
         self.select_link_options.blockSignals(False)
         self.select_link_options.setCurrentIndex(self.selected_link)
@@ -1650,12 +1647,12 @@ class PointEditorWindow(QMainWindow):
             # error_dialog.exec_()
         else:
             self.show_delete_widget()
-
-    def reload_IDs(self):
+    """
+    def reload_IDs(self): 
         if self.chain is not None:
             for index, joint in enumerate(self.chain.Joints):
                 joint.id = index
-
+    """
     def rotation_matrix(self, axis, theta):
         # rodrigues rotation formula
         axis = np.asarray(axis)
@@ -1723,16 +1720,16 @@ class PointEditorWindow(QMainWindow):
                 self.select_link_options.blockSignals(False)
 
                 if (self.control_type == "Translate"):
-                    for joint in self.chain.Joints:
-                        if (joint.id == self.selected_joint):
+                    for i, joint in enumerate(self.chain.Joints):
+                        if i == self.selected_joint:
                             if (self.selected_frame == -1):
                                 joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
                             else:
                                 frame_joint = self.chain.Joints[self.selected_frame]
                                 joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
                 elif (self.control_type == "Rotate"):
-                    for joint in self.chain.Joints:
-                        if (joint.id == self.selected_joint):
+                    for i, joint in enumerate(self.chain.Joints):
+                        if i == self.selected_joint:
                             if (self.selected_frame == -1):
                                 joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
                             else: 
@@ -1766,37 +1763,21 @@ class PointEditorWindow(QMainWindow):
     def add_joint(self, dialog):
         if dialog.exec_() == QDialog.Accepted:
             joint : Joint = dialog.getJoint()
-
-            if self.add_to_end:
-                if (self.chain == None):
-                    joint.id = 0
-                else:
-                    joint.id = len(self.chain.Joints)
-
-                if (self.chain == None or len(self.chain.Joints) == 0) :
-                    self.chain = KinematicChain(joint)
-                else :
-                    self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-                    #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-                self.selected_joint = len(self.chain.Joints) - 1
-            else:
+            """
+            if (self.chain == None):
                 joint.id = 0
-                new_chain = KinematicChain(joint)
-                if (self.chain == None or len(self.chain.Joints) == 0) :
-                    self.chain = new_chain
-                else:
-                    old_root = self.chain.Joints[0]
-                    joint.Pose = joint.Pose @ old_root.Pose
-                    
-                    for jt in self.chain.Joints:
-                        jt.id += 1
-                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
-                    self.chain = new_chain
-
-                self.selected_joint = 0
+            else:
+                joint.id = len(self.chain.Joints)
+            """
+            if (self.chain == None or len(self.chain.Joints) == 0) :
+                self.chain = KinematicChain(joint)
+            else :
+                self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+            
+            self.selected_joint = len(self.chain.Joints)
             self.update_joint()
             self.log_version()
-
 
     def chain_not_created(self):
         self.show_error('Please create a chain first.')
@@ -1817,10 +1798,7 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                if self.add_to_end:
-                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
-                else:
-                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_end=False)
+                dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
             else:
                 dialog = AddPrismaticDialog(self.numSides, self.radius)
 
@@ -1832,10 +1810,7 @@ class PointEditorWindow(QMainWindow):
         else: #elif self.is_parent_joint_selected():
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                if self.add_to_end:
-                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
-                else:
-                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_end=False)
+                dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
             else:
                 dialog = AddRevoluteDialog(self.numSides, self.radius)
             
@@ -1856,57 +1831,54 @@ class PointEditorWindow(QMainWindow):
             newRot = SE3(rot)
 
             waypoint = Waypoint(self.numSides, self.radius, newPos * newRot)
-            waypoint.id = len(self.chain.Joints)
+            waypoint_index = len(self.chain.Joints)
             
             self.chain.append(newJoint = waypoint, 
                                 relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
-            self.chain.Links[nextJoint.id] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
+            
+            nextJoint_index = self.chain.Joints.index(nextJoint)
+
+            self.chain.Links[nextJoint_index] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
                                             nextJoint.ProximalDubinsFrame(),
                                             self.chain.maxAnglePerElbow, lastJoint=waypoint, nextJoint=nextJoint)
-            self.chain.Parents[nextJoint.id] = waypoint.id
-            self.chain.Children[waypoint.id].append(nextJoint.id)
+            self.chain.Parents[nextJoint_index] = waypoint_index
+            self.chain.Children[waypoint_index].append(nextJoint_index)
             self.update_joint()
             self.log_version()
 
         else: 
-            if self.chain == None or len(self.chain.Joints) == 0:
-                waypoint = Waypoint(self.numSides, self.radius, SE3())
-                waypoint.id = 0
-                self.chain = KinematicChain(waypoint)
-            else:
-                prevJoint = self.chain.Joints[-1]
-                if not self.add_to_end:
-                    prevJoint = self.chain.Joints[0]
+            if (self.chain and len(self.chain.Joints) > 0):
+                prevJoint = self.chain.Joints[len(self.chain.Joints)-1]
 
                 if (prevJoint is None):
                     pose = SE3()
                 else:
                     distance = 4 * self.radius + norm(prevJoint.distalPosition()-prevJoint.Pose.t)
-                    if not self.add_to_end: distance *= -1
                     pose = SE3(0,0,distance)
                     if prevJoint.pathIndex() == 0:
                         pose = SE3.Ry(np.pi/2) @ pose
 
                 waypoint = Waypoint(self.numSides, self.radius, pose)
-
-                if not self.add_to_end:
-                    waypoint.id = 0
-                    new_chain = KinematicChain(waypoint)
-                    old_root = self.chain.Joints[0]
-                    waypoint.Pose = waypoint.Pose @ old_root.Pose
-                    
-                    for jt in self.chain.Joints:
-                        jt.id += 1
-                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
-                    self.chain = new_chain
-                else:
-                    waypoint.id = len(self.chain.Joints)
-                    self.chain.append(newJoint = waypoint, 
+            
+            if (self.chain == None):
+                waypoint = Waypoint(self.numSides, self.radius, SE3())
+                waypoint_index = 0
+            else:
+                waypoint_index = len(self.chain.Joints)
+            
+            if (self.chain == None) or len(self.chain.Joints) == 0:
+                waypoint = Waypoint(self.numSides, self.radius, SE3())
+                self.chain = KinematicChain(waypoint)
+            elif waypoint_index != 0:
+                self.chain.append(newJoint = waypoint, 
                                     relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+            else:
+                self.chain.append(newJoint = waypoint, 
+                                    relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
 
             self.update_joint()
             self.log_version()
-            self.select_joint_options.setCurrentIndex(waypoint.id)
+            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
     def add_tip_func(self):
         if (not self.chain_created):
@@ -1915,10 +1887,7 @@ class PointEditorWindow(QMainWindow):
             if (self.chain and len(self.chain.Joints) > 0):
                 #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
                 #className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                if self.add_to_end:
-                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
-                else:
-                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[0], add_to_end=False)
+                dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
             else:
                 dialog = AddTipDialog(self.numSides, self.radius)
 
