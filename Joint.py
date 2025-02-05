@@ -314,7 +314,7 @@ class Joint(ABC):
         if frame:
             axes = [frame.R[:, i] for i in range(3)]
 
-        rad = self.boundingBall().r
+        rad = self.r
         colors = rotateArrowColors
         opacity = [0.8, 0.8, 0.8]
 

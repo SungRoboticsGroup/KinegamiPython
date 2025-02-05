@@ -236,6 +236,9 @@ class KinematicTree(Generic[J]):
                   selectedJoint=None, selectedLink=None):
         # TODO: IMPLEMENT showGlobalFrame
         #print(lastJoint)
+        if showSpheres:
+            self.boundingBall.addToWidget(widget, color=sphereColor)
+            
         for index, joint in enumerate(self.Joints):
             """
             if index > lastJoint and index == selectedJoint:
@@ -296,8 +299,7 @@ class KinematicTree(Generic[J]):
                                 showBoundary=showLinkSurface,
                                 linkID=index)
 
-        if showSpheres:
-            self.boundingBall.addToWidget(widget, color=sphereColor)
+
         widget.add_chain(self)
 
     def detectCollisions(self, specificJointIndices = [], plot=False):
