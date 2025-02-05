@@ -29,10 +29,10 @@ class KinematicChain(KinematicTree):
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 safe : bool = True) -> int:
+                 safe : bool = True, cachedLink : LinkCSC = None) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, safe)
+                                fixedOrientation, safe, cachedLink)
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         chainPattern = copy.deepcopy(self.Joints[0].pattern)

@@ -116,7 +116,8 @@ class KinematicTree(Generic[J]):
     def addJoint(self, parentIndex : int, newJoint : J, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 safe : bool = True, endPlane : Plane = None) -> int:
+                 safe : bool = True, endPlane : Plane = None,
+                 cachedLink : LinkCSC = None) -> int:
         
         if isinstance(newJoint, OrigamiJoint):
             if newJoint.r != self.r:
@@ -179,8 +180,10 @@ class KinematicTree(Generic[J]):
                 newJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
 
 
-
-        newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+        if cachedLink:
+            newLink = cachedLink
+        else:
+            newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow, lastJoint=parent, nextJoint=newJoint)
         if newLink is None:

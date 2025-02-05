@@ -1782,8 +1782,12 @@ class PointEditorWindow(QMainWindow):
                     joint.Pose = old_root.Pose @ joint.Pose
 
                     new_chain = KinematicChain(joint)
-                    
-                    for jt in self.chain.Joints:
+
+                    for i, jt in enumerate(self.chain.Joints):
+                        if i == 0:
+                            cachedLink = None
+                        else:
+                            cachedLink = self.chain.Links[i]
                         new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
                     self.chain = new_chain
 
@@ -1872,7 +1876,10 @@ class PointEditorWindow(QMainWindow):
                 if (prevJoint is None):
                     pose = SE3()
                 else:
+                    prevJoint = self.chain.Joints[0] if self.add_to_root else self.chain.Joints[-1]
                     distance = 4 * self.radius + norm(prevJoint.distalPosition()-prevJoint.Pose.t)
+                    if self.add_to_root:
+                        distance *= -1
                     pose = SE3(0,0,distance)
                     if prevJoint.pathIndex() == 0:
                         pose = SE3.Ry(np.pi/2) @ pose
@@ -1889,7 +1896,14 @@ class PointEditorWindow(QMainWindow):
                 waypoint = Waypoint(self.numSides, self.radius, SE3())
                 self.chain = KinematicChain(waypoint)
             elif waypoint_index != 0:
-                self.chain.append(newJoint = waypoint, 
+                if self.add_to_root:
+                    waypoint.Pose = self.chain.Joints[0].Pose @ waypoint.Pose
+                    new_chain = KinematicChain(waypoint)
+                    for jt in self.chain.Joints:
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
+                    self.chain = new_chain
+                else:
+                    self.chain.append(newJoint = waypoint, 
                                     relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
             else:
                 self.chain.append(newJoint = waypoint, 
@@ -1897,7 +1911,11 @@ class PointEditorWindow(QMainWindow):
 
             self.update_joint()
             self.log_version()
-            self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
+            if self.add_to_root:
+                self.select_joint_options.setCurrentIndex(0)
+            else:
+                self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
+
 
     def add_tip_func(self):
         if (not self.chain_created):
