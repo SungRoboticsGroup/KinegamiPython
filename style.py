@@ -70,7 +70,8 @@ selectedArrowColor = (1, 1, 1, 1)  # white
 extendedCircleColors = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]  # red, green, blue (0.5 opacity)
 
 selectedLinkColor = (1.0, 1.0, 0.0, 0.5)  # yellow (0.5 opacity)
-selectedJointColor = (1.0, 1.0, 0.5, 0.5)  # light yellow (0.5 opacity)
+selectedSphereColor = (1.0, 1.0, 0.5, 0.5)  # light yellow (0.5 opacity)
+selectedJointColor = (0.0, 0.0, 1.0, 0.5)  # blue (0.5 opacity)
 
 pathStartColor = 'r'  # red
 pathEndColor = 'b'  # blue
