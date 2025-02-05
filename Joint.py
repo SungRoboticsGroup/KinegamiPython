@@ -17,17 +17,6 @@ from TubularPattern import *
 from geometryHelpers import *
 from style import *
 
-class LineItem(gl.GLLinePlotItem):
-    def __init__(self, **kwds):
-        """ All keyword arguments are passed to setData() """
-        super().__init__(**kwds)
-
-class LineSphere(gl.GLMeshItem):
-    def __init__(self, position = [], rotation=0.0, **kwds):
-        super().__init__(**kwds)
-        self.position = position
-        self.rotation = rotation
-
 class Joint(ABC):
     """
     r is the tubular radius

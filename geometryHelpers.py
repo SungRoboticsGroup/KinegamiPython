@@ -17,26 +17,10 @@ from math import remainder
 import pyqtgraph.opengl as gl
 from matplotlib import cm
 
-from style import *
-
-class MeshItem(gl.GLMeshItem):
-    def __init__(self, **kwds):
-        self.opts = {
-            'meshdata': None,
-            'color': meshItemDefaultColor,
-            'drawEdges': False,
-            'drawFaces': True,
-            'edgeColor': meshItemEdgeColor,
-            'shader': None,
-            'smooth': True,
-            'computeNormals': True,
-        }
-        
-        super().__init__(**kwds)        
+from style import *  
 
 def unit(v):
     return v / np.linalg.norm(v)
-
 
 """
 Output n points spaced evenly from start to end.
@@ -326,7 +310,7 @@ class Ball:
         
     def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False):
         md = gl.MeshData.sphere(rows=10, cols=10)
-        sphere = MeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
+        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
         sphere.setGLOptions('translucent')
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)
@@ -444,7 +428,7 @@ class Cylinder:
     def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False):
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
-        meshitem = MeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
         meshitem.setGLOptions('translucent')
         if (is_joint):
             meshitem.setObjectName("Joint")

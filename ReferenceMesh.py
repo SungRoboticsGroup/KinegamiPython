@@ -2,7 +2,6 @@ import pyqtgraph.opengl as gl
 from spatialmath import SE3
 import numpy as np
 from style import *
-from Joint import LineItem, LineSphere
 from pyqtgraph import Transform3D
 
 class ReferenceMesh():
@@ -112,95 +111,7 @@ class ReferenceMesh():
         return rotated_vector
         
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
-        rad = 1
-        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
-
-        if selectedArrow != -1:
-            colors[selectedArrow] = (1, 1, 1, 1)
-
-        extended_axis_color = [(1, 0, 0, 0.2), (0, 1, 0, 0.2), (0, 0, 1, 0.2)]
-        point1 = self.Pose.t
-
-        if local:
-            axes = [self.Pose.R[:, i] for i in range(3)]
-        else:
-            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
-
-        if frame:
-            axes = [frame.R[:, i] for i in range(3)]
-
-        if selectedArrow != -1:
-            point2 = point1 + rad * 1 * axes[selectedArrow]
-            extended_line_points = self.generate_extended_line_points(point1, point2, 0.1)
-            extended_axis = self.generate_extended_axis(point1, point2, 20)
-            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=5, antialias=True)
-            widget.plot_widget.addItem(extended_axis_line)
-
-        for i, axis in enumerate(axes):
-            pos = np.array([point1, point1 + rad * 1 * axis])
-            line = LineItem(pos=pos, color=colors[i], width=10, antialias=True)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
+        pass
 
     def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
-        if local:
-            axes = [self.Pose.R[:, i] for i in range(3)]
-        else: 
-            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
-
-        if frame:
-            axes = [frame.R[:, i] for i in range(3)]
-
-        rad = 1
-        colors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)] 
-
-        if selectedArrow != -1:
-            colors[selectedArrow] = selectedArrowColor
-
-        center = self.Pose.t
-        extended_circle_color = extendedCircleColors
-        num_points = 20
-
-        R = self.Pose.R
-        theta = [np.arctan2(R[2, 1], R[2, 2]), np.arctan2(R[0, 2], R[0, 0]), np.arctan2(R[1, 0], R[1, 1])]
-
-        # generate the marker points around the arrows
-        if selectedArrow != -1:
-            points = self.generate_circle_points(axes[selectedArrow], center, rad, num_points, theta[selectedArrow])
-            angles = self.generate_angles(num_points)
-
-            for i, point in enumerate(points[:num_points]):
-                md = gl.MeshData.sphere(rows=3, cols=3)
-                sphere = LineSphere(meshdata=md, color=lineSphereColor, shader='shaded', smooth=True, position=point, rotation=angles[i])
-                sphere.setObjectName("rotate_sphere")
-                sphere.setGLOptions('translucent')
-                sphere.scale(0.1, 0.1, 0.1)
-                sphere.translate(*point)
-                widget.plot_widget.addItem(sphere)
-
-        #swap the axes so that the selected axis gets rendered last -> appears above the other axes
-        numbered_axes = [[0, axes[0]], [1, axes[1]], [2, axes[2]]]
-
-        if selectedArrow != -1:
-            numbered_axes[selectedArrow], numbered_axes[2] = numbered_axes[2], numbered_axes[selectedArrow]
-
-        for tul in numbered_axes:    
-            i = tul[0]
-            axis = tul[1]
-
-            points = self.generate_circle_points(axis, center, rad, num_points, theta[selectedArrow])
-            points.append(points[0])
-
-            #generate the lighter circles
-            circle = LineItem(pos=points, color=extended_circle_color[i], width=5, antialias=True)
-            circle.setObjectName("circle")
-            widget.plot_widget.addItem(circle)
-
-            arrow = np.array(points[-num_points//4:])
-            arrow2 = np.array(points[:num_points//4])
-            arrows = np.append(arrow, arrow2, axis=0)
-
-            # generate the arrows
-            line = LineItem(pos=arrows, color=colors[i], width=15, antialias=True)
-            line.setObjectName("Arrow")
-            widget.plot_widget.addItem(line)
+        pass
