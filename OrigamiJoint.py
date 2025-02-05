@@ -87,7 +87,7 @@ class RevoluteJoint(OrigamiJoint):
             faces = np.append(faces, hull2.simplices + self.numSides + 2, axis=0)
 
             meshdata = gl.MeshData(vertexes=vertices, faces=faces)
-            item = MeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
+            item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, shader='shaded', smooth=False, drawEdges=True)
             item.setGLOptions('translucent')
             item.setObjectName("Joint")
             widget.plot_widget.addItem(item)
@@ -356,7 +356,7 @@ class Tip(OrigamiJoint):
             for s in hull.simplices:
                 vertices = tipPoints[s]
                 meshdata = gl.MeshData(vertexes=vertices, faces=[np.arange(len(vertices))])
-                item = MeshItem(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
+                item = gl.GLMeshItem(meshdata=meshdata, color=surfaceColor, smooth=False, drawEdges=True, shader='shaded', glOptions='translucent')
                 item.setObjectName("Joint")
                 widget.plot_widget.addItem(item)
         
