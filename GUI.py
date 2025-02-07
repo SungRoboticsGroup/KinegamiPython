@@ -832,12 +832,16 @@ class PointEditorWindow(QMainWindow):
         
         self.editing_widget.setLayout(self.joint_editing_layout)
 
+        self.joint_add_root_button = QCheckBox("Add to Root")
+        self.joint_add_root_button.setChecked(False)
+        self.joint_add_root_button.stateChanged.connect(self.add_to_root_func)
         self.select_joint_options = QComboBox()
         self.select_link_options = QComboBox()
         self.delete_joint_button = QPushButton("Delete Joint")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         #joint_layout = QVBoxLayout()
+        self.joint_editing_layout.addWidget(self.joint_add_root_button)
         self.joint_editing_layout.addWidget(self.select_joint_options)
         self.joint_editing_layout.addWidget(self.delete_joint_button)
         self.joint_editing_layout.addWidget(self.select_link_options)
@@ -1048,6 +1052,9 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+
+    def add_to_root_func(self, state):
+        self.add_to_root = state == Qt.Checked
 
     def onUpdateJointState(self, value):
         # regenerate joint
@@ -1319,7 +1326,6 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index):
-        self.add_to_root = (index == 0 and self.chain and len(self.chain.Joints) > 1)
         if index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
@@ -1786,7 +1792,7 @@ class PointEditorWindow(QMainWindow):
                             cachedLink = None
                         else:
                             cachedLink = self.chain.Links[i]
-                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=False, safe=False)
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
                     self.chain = new_chain
 
                 self.selected_joint = 0
