@@ -257,8 +257,8 @@ class KinematicTree(Generic[J]):
             if index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
-                        sphereColor=selectedSphereColor, showSphere=True,
-                        surfaceColor=selectedJointColor, showSurface=showJointSurface, 
+                        sphereColor=selectedJointColor, showSphere=True,
+                        surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
             else:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
@@ -1048,9 +1048,10 @@ class KinematicTree(Generic[J]):
     def save(self, filename: str):
         with open(f"save/{filename}.tree", "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
+            states = []
             for i in range(0, len(self.Joints)):
                 joint = self.Joints[i]
-                
+                states.append(str(joint.state))
                 save += str(self.Parents[i]) + " "
                 if isinstance(joint, Waypoint):
                     save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
@@ -1064,8 +1065,8 @@ class KinematicTree(Generic[J]):
                     save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " "
                 else:
                     raise Exception("Not Implemented")
-                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
-                save += "\n"
+                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()]) + "]"
+                save += states[-1] + "\n"
             
             f.write(save)
             f.close()
@@ -1118,8 +1119,9 @@ def loadKinematicTree(filename : str):
             tree = KinematicTree[OrigamiJoint](getJoint(lines[1]), float(lines[0]))
             for i in range(2, len(lines)):
                 parent = int(lines[i].split(" ")[0])
-                tree.addJoint(parent, getJoint(lines[i]), relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
-            
+                joint, savedState = getJoint(lines[i])
+                jointIndex = tree.addJoint(parent, joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)  
+                tree.Joints[jointIndex].TransformStateTo(savedState)  
             return tree
     except Exception as e:
         print(e)
