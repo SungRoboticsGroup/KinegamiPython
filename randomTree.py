@@ -6,19 +6,12 @@ import random
 from collections import defaultdict, deque
 import json
 from functools import partial
+import threading
 
+branchingRatio = 0
 def generateTree(nJoints):
     poses = [
-        SE3(
-            random.uniform(-100, 100),  # Random x-coordinate
-            random.uniform(-100, 100),  # Random y-coordinate
-            random.uniform(-100, 100),  # Random z-coordinate
-        ) * SE3.RPY(
-            random.uniform(0, 360),  # Random roll in degrees
-            random.uniform(0, 360),  # Random pitch in degrees
-            random.uniform(0, 360),  # Random yaw in degrees
-            unit='deg'
-        )
+        SE3.Rand(xrange=(-100,100),yrange=(-100,100),zrange=(-100,100))
         for _ in range(nJoints)
     ]
 
@@ -28,24 +21,30 @@ def generateTree(nJoints):
     tree = JointSpecificationTree(Waypoint(numSides,r,poses[0]))
 
     for i in range(1,nJoints):
-        match np.random.randint(1,3):
+        parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
+        match np.random.randint(1,2):
             case 1:
-                tree.addJoint(np.random.randint(0, i), RevoluteJoint(numSides,r,np.pi,poses[i]))
-            case 2:
-                tree.addJoint(np.random.randint(0, i), PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i]))
+                tree.addJoint(parent, RevoluteJoint(numSides,r,np.pi,poses[i]))
             case _:
-                tree.addJoint(np.random.randint(0, i), Waypoint(numSides,r,poses[i]))
+                tree.addJoint(parent, PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i]))
 
     return makeTubularKinematicTree(tree)
 
 optimizations = [partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=True),
                 partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=False),
                 partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False),
-                partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=True)]
+                partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=True),
+                partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=False)]
+labels = ["Streamline + Guarantee", 
+          "Streamline No Guarantee",
+          "No Streamline No Guarantee",
+          "No Streamline Guarantee",
+          "Linear"]
 
 results = []
-for i in range(0,3):
-    construct = generateTree(12)
+
+for i in range(0,2):
+    construct = generateTree(6)
     results.append([])
     for f in optimizations:
         optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True)
@@ -57,9 +56,11 @@ with open("random_results.json", "w") as file:
 
 for result in results:
     plt.figure(figsize=(8, 5)) 
-
+    
+    idx = 0
     for x, y in result:
-        plt.plot(x, y, marker='o', linestyle='-', label='Loss over Time')
+        plt.plot(x, y, marker='o', linestyle='-', label=labels[idx])
+        idx += 1
 
     plt.xlabel('Time')
     plt.ylabel('Loss')
