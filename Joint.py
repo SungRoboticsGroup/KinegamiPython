@@ -250,10 +250,10 @@ class Joint(ABC):
         colors = rotateArrowColors
         opacity = [0.8, 0.8, 0.8]
 
-        if selectedArrow != -1:
-            colors[selectedArrow] = selectedArrowColor
-            opacity = [0.1, 0.1, 0.1]
-            opacity[selectedArrow] = 0.8
+        # if selectedArrow != -1:
+        #     colors[selectedArrow] = selectedArrowColor
+        #     opacity = [0.1, 0.1, 0.1]
+        #     opacity[selectedArrow] = 0.8
 
         extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
         center = self.Pose.t

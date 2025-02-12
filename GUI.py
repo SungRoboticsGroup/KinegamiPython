@@ -491,7 +491,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 trans = new_pos_3D - qsphere_start
                 transformation = SE3.Trans(trans[0], trans[1], trans[2])
 
-                propogate = self.parent_window.propogateSliderCheckbox.isChecked()
+                propogate = self.parent_window.propogate_slider_checkbox.isChecked()
 
                 self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
                 self.parent_window.update_joint()

@@ -89,7 +89,7 @@ def compute_plane_intersection(org, dir, normal, point):
 
     return org + t * direction
 
-def compute_torus_intersection(self, org: QVector3D, dir: QVector3D, center: QVector3D, normal: QVector3D, major_radius: float, minor_radius: float):
+def compute_torus_intersection(org: QVector3D, dir: QVector3D, center: QVector3D, normal: QVector3D, major_radius: float, minor_radius: float):
     n = dir.normalized()
     o = org - center
     n_dot_n = QVector3D.dotProduct(n, n)
