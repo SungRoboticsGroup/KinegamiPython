@@ -1209,9 +1209,9 @@ class PointEditorWindow(QMainWindow):
             self, "Open File", "save/", "Chain Files (*.chain)", options=options
         )
         if file_path:
+            self.chain = loadKinematicChain(file_path)
             self.radius = self.chain.r
             self.num_sides = self.chain.numSides
-            self.chain = loadKinematicChain(file_path)
             self.chain_created = True
             self.update_joint()
             self.log_version()
