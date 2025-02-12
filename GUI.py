@@ -25,6 +25,7 @@ from testqtgraph import *
 from style import *
 from ReferenceMesh import *
 from Dialog import *
+from IntersectionHelper import *
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -44,19 +45,19 @@ class DeleteWidget(QWidget):
         layout.addWidget(QLabel('Are you sure you want to delete the joint?'))
 
         self.apply_button = QPushButton('Confirm')
-        self.apply_button.clicked.connect(self.onApplyClicked)
+        self.apply_button.clicked.connect(self.on_apply_clicked)
         layout.addWidget(self.apply_button)
 
         self.cancel_button = QPushButton('Cancel')
-        self.cancel_button.clicked.connect(self.onCancelClicked)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
         layout.addWidget(self.cancel_button)
 
         self.setLayout(layout)
 
-    def onApplyClicked(self):
+    def on_apply_clicked(self):
         self.window().delete_selected_joint()
 
-    def onCancelClicked(self):
+    def on_cancel_clicked(self):
         self.window().delete_joint_dock.setVisible(False)
 
 # Widget to add a new mesh to the scene, imported from a file
@@ -83,19 +84,19 @@ class AddMeshWidget(QWidget):
         self.scale_slider.setMaximum(100)  # Maximum value
         self.scale_slider.setValue(50)  # Initial value
         self.scale_slider.setEnabled(False)
-        self.scale_slider.valueChanged.connect(self.onUpdateScale)
+        self.scale_slider.valueChanged.connect(self.on_update_scale)
         scale_layout.addWidget(scale_label)
         scale_layout.addWidget(self.scale_slider)
         layout.addLayout(scale_layout)
 
         # Apply button to add the mesh
         self.add_button = QPushButton('Add Mesh', self)
-        self.add_button.clicked.connect(self.onAddClicked)
+        self.add_button.clicked.connect(self.on_add_clicked)
         layout.addWidget(self.add_button)
 
         # Clear button to remove the mesh
         self.clear_button = QPushButton('Clear Mesh', self)
-        self.clear_button.clicked.connect(self.onClearClicked)
+        self.clear_button.clicked.connect(self.on_clear_clicked)
         layout.addWidget(self.clear_button)
 
         self.visible_toggle = QCheckBox('Mesh Visibility')
@@ -112,13 +113,13 @@ class AddMeshWidget(QWidget):
         print("Mesh visibility toggled:", "Visible" if self.window().mesh_visible else "Hidden")
         self.window().update_joint()
 
-    def onUpdateScale(self, value):
+    def on_update_scale(self, value):
         if (self.window().referenceMesh is not None):
             self.scale = value / 50.0
             self.window().referenceMesh.updateScale(self.scale)
             self.change_scale.emit(self.scale)
 
-    def onAddClicked(self):
+    def on_add_clicked(self):
         try:
             # Get the file path and call a function in the main window to add the mesh
             file_path = self.file_input.text()
@@ -139,7 +140,7 @@ class AddMeshWidget(QWidget):
         except ValueError:
             self.show_error("Please enter a valid file path and scale factor.")
 
-    def onClearClicked(self):
+    def on_clear_clicked(self):
         self.window().referenceMesh = None
         #self.scale_slider.setEnabled(False)
         self.window().update_joint()
@@ -156,11 +157,11 @@ class AddChainWidget(QWidget):
 
         # Input for the number of sides
         numSides_layout = QHBoxLayout()
-        numSides_label = QLabel("Number of Sides:")
-        self.numSides_input = QLineEdit()
-        self.numSides_input.setPlaceholderText("Enter number of sides")
-        numSides_layout.addWidget(numSides_label)
-        numSides_layout.addWidget(self.numSides_input)
+        num_sides_label = QLabel("Number of Sides:")
+        self.num_sides_input = QLineEdit()
+        self.num_sides_input.setPlaceholderText("Enter number of sides")
+        numSides_layout.addWidget(num_sides_label)
+        numSides_layout.addWidget(self.num_sides_input)
         layout.addLayout(numSides_layout)
 
         # Input for the radius
@@ -174,20 +175,20 @@ class AddChainWidget(QWidget):
 
         # Apply button to create the chain
         self.create_button = QPushButton('Create Chain', self)
-        self.create_button.clicked.connect(self.onCreateClicked)
+        self.create_button.clicked.connect(self.on_create_clicked)
         layout.addWidget(self.create_button)
 
         # Cancel button to close the widget
         self.cancel_button = QPushButton('Cancel', self)
-        self.cancel_button.clicked.connect(self.onCancelClicked)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
         layout.addWidget(self.cancel_button)
 
         self.setLayout(layout)
 
-    def onCreateClicked(self):
+    def on_create_clicked(self):
         try:
             # Get input values
-            numSides = int(self.numSides_input.text())
+            numSides = int(self.num_sides_input.text())
             radius = float(self.radius_input.text())
             
             # Call a function in the main window to create the new chain
@@ -199,7 +200,7 @@ class AddChainWidget(QWidget):
         except ValueError:
             self.show_error("Please enter valid integers.")
 
-    def onCancelClicked(self):
+    def on_cancel_clicked(self):
         # Hide the widget if the user cancels
         self.window().add_chain_dock.setVisible(False)
 
@@ -273,9 +274,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     mesh_selected = False
 
     selected_joint_temp = None
-
-    cylinder_drag_start_pos = None
-
     camera_type = "Rotate"
 
     def toggle_lock(self):
@@ -303,93 +301,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         return near_point, direction
     
-    def compute_sphere_intersection(self, org, dir, cen, rad):
-        a = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]
-        b = 2 * (dir[0] * (org[0] - cen[0]) + dir[1] * (org[1] - cen[1]) + dir[2] * (org[2] - cen[2]))
-        c = (org[0] - cen[0]) ** 2 +  (org[1] - cen[1]) ** 2 + (org[2] - cen[2]) ** 2 - rad * rad
-
-        discrim = b*b - 4*a*c
-
-        if (discrim < -0.00001) :
-            return 2000
-        else: 
-            t0 = (-b - math.sqrt(discrim)) / (2*a)
-
-            if (t0 > 0):
-                return t0
-            else:
-                return (-b + math.sqrt(discrim)) / (2*a)
-    
-    def compute_cylinder_intersection(self, org: QVector3D, dir: QVector3D, start: QVector3D, axis: QVector3D, rad, len): 
-        # not bothering with computing endcaps because they're too small to matter anyway
-
-        n = dir.normalized()
-        a = axis.normalized()
-        b = start - org
-
-        n_cross_a = QVector3D.crossProduct(n, a)
-
-        discrim = QVector3D.dotProduct(n_cross_a, n_cross_a) * rad * rad - QVector3D.dotProduct(a, a) * (QVector3D.dotProduct(b, n_cross_a) ** 2)
-
-        if (discrim < -0.00001):
-            return 2000
-        else:
-            d = (QVector3D.dotProduct(n_cross_a, QVector3D.crossProduct(b, a)) - math.sqrt(discrim)) / QVector3D.dotProduct(n_cross_a, n_cross_a)
-            
-            if (d < 0):
-                d = (QVector3D.dotProduct(n_cross_a, QVector3D.crossProduct(b, a)) + math.sqrt(discrim)) / QVector3D.dotProduct(n_cross_a, n_cross_a)
-
-            t = QVector3D.dotProduct(a, (n * d - b))
-            if (t > 0 and t < len):
-                return d
-            else:
-                return 2000
-            
-    def compute_closest_point_on_axis(self, org, dir, center, axis):
-        threshold = 0.001
-        # Normalize direction vectors
-        direction1 = dir.normalized()
-        direction2 = axis.normalized()
-        
-        # Compute the cross product of the direction vectors
-        cross_directions = QVector3D.crossProduct(direction1, direction2)
-        cross_directions_norm = cross_directions.length()
-        
-        # If the cross product is zero, the lines are parallel
-        if cross_directions_norm < threshold:
-            raise ValueError("The lines are parallel and do not intersect.")
-        
-        # Compute the vector between the origins
-        origin_diff = center - org
-        
-        # Compute the determinants
-        det1 = QVector3D.dotProduct(origin_diff, QVector3D.crossProduct(direction2, cross_directions))
-        det2 = QVector3D.dotProduct(origin_diff, QVector3D.crossProduct(direction1, cross_directions))
-        
-        # Compute the parameters for the points of closest approach
-        t1 = det1 / cross_directions_norm**2
-        t2 = det2 / cross_directions_norm**2
-        
-        # Compute the points of closest approach
-        point1 = org + t1 * direction1
-        point2 = center + t2 * direction2
-        
-        return point2
-    
-    def compute_plane_intersection(self, org, dir, normal, point):
-        threshold = 0.001
-        direction = dir.normalized()
-        n = normal.normalized()
-        a = QVector3D.dotProduct(n, direction)
-
-        if (abs(a) < threshold):
-            return None
-        
-        b = point - org
-        t = QVector3D.dotProduct(n, b) / a
-
-        return org + t * direction
-    
     def get_normalized_plane_vectors(self, event):
         if self.is_dragging and self.selected_torus:
             origin, dir = self.get_world_coordinates(event)
@@ -397,7 +308,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             center = selected_joint.Pose.t
             qcenter = QVector3D(center[0], center[1], center[2])
             qaxis = self.selected_torus
-            npos = self.compute_plane_intersection(origin, dir, qaxis, qcenter)
+            npos = compute_plane_intersection(origin, dir, qaxis, qcenter)
 
             plane_vector = npos - qcenter
             plane_vector.normalize()
@@ -431,35 +342,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             return math.degrees(angle), normal
     
-    def compute_torus_intersection(self, org: QVector3D, dir: QVector3D, center: QVector3D, normal: QVector3D, major_radius: float, minor_radius: float):
-        n = dir.normalized()
-        o = org - center
-        n_dot_n = QVector3D.dotProduct(n, n)
-        o_dot_n = QVector3D.dotProduct(o, n)
-        o_dot_o = QVector3D.dotProduct(o, o)
-        n_dot_o = QVector3D.dotProduct(n, o)
-        n_dot_normal = QVector3D.dotProduct(n, normal)
-        o_dot_normal = QVector3D.dotProduct(o, normal)
-        
-        R = major_radius
-        r = minor_radius
-        
-        A = n_dot_n * n_dot_n
-        B = 4 * n_dot_n * n_dot_o
-        C = 2 * n_dot_n * (o_dot_o - R * R - r * r) + 4 * n_dot_o * n_dot_o + 4 * R * R * n_dot_normal * n_dot_normal
-        D = 4 * (o_dot_o - R * R - r * r) * n_dot_o + 8 * R * R * o_dot_normal * n_dot_normal
-        E = (o_dot_o - R * R - r * r) * (o_dot_o - R * R - r * r) - 4 * R * R * (r * r - o_dot_normal * o_dot_normal)
-        
-        coeffs = [A, B, C, D, E]
-        roots = np.roots(coeffs)
-        
-        real_roots = [root.real for root in roots if np.isreal(root) and root.real > 0]
-        
-        if not real_roots:
-            return 2000
-        
-        return min(real_roots)
-    
     def get_closest_point(self, event):
         if self.is_dragging and self.selected_axis:
             origin, dir = self.get_world_coordinates(event)
@@ -467,7 +349,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             joint_center = selected_joint.Pose.t
             qcenter = QVector3D(joint_center[0], joint_center[1], joint_center[2])
             axis = self.selected_axis
-            new_pos_3D = self.compute_closest_point_on_axis(origin, dir, qcenter, axis)
+            new_pos_3D = compute_closest_point_on_axis(origin, dir, qcenter, axis)
 
             return new_pos_3D
         
@@ -487,7 +369,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         hit_cylinder = False
 
         for i in range(3):
-            hit_location = self.compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.boundingBall().r+1)
+            if (self.is_local):
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.boundingBall().r+1)
+            else:
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.boundingBall().r+1)
             
             if (hit_location < shortest_location):
                 shortest_location = hit_location
@@ -496,10 +381,14 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         if (hit_cylinder):
             self.click_signal_arrow.emit(shortest_idx)
-            self.selected_axis = self.selected_joint_axes[shortest_idx]
+            
+            if (self.is_local):
+                self.selected_axis = self.selected_joint_axes[shortest_idx]
+            else:
+                self.selected_axis = self.original_axes[shortest_idx]
+
             self.hit_cylinder = True
             self.is_dragging = True
-            self.cylinder_drag_start_pos = self.get_closest_point(event)
         else:
             self.is_dragging = False
             self.selected_axis = None
@@ -512,16 +401,24 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         for i in range(3):
             center = joint_center
             tor_rad = selected_joint.r
-            cyl_axis = self.selected_joint_axes[i]
 
-            hit_location = self.compute_torus_intersection(origin, direction, center, cyl_axis, major_radius=tor_rad, minor_radius=0.4)
+            if (self.is_local):
+                cyl_axis = self.selected_joint_axes[i]
+            else:
+                cyl_axis = self.original_axes[i]
+
+            hit_location = compute_torus_intersection(origin, direction, center, cyl_axis, major_radius=tor_rad, minor_radius=0.4)
             if (hit_location < shortest_location):
                 shortest_location = hit_location
                 shortest_idx = i
                 hit_torus = True
 
         if (hit_torus):
-            self.selected_torus = self.selected_joint_axes[shortest_idx]
+            if (self.is_local):
+                self.selected_torus = self.selected_joint_axes[shortest_idx]
+            else:
+                self.selected_torus = self.original_axes[shortest_idx]
+
             self.selected_axis_orig = self.original_axes[shortest_idx]
 
             dot = QVector3D.dotProduct(direction, self.selected_torus)
@@ -539,6 +436,8 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.drag_start_pos = event.pos()
 
             origin, direction = self.get_world_coordinates(event)
+
+            self.is_local = self.parent_window.is_local
 
             # raycasting for widgets
             if (self.parent_window.selected_joint != -1):
@@ -570,7 +469,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 for joint in self.parent_window.chain.Joints:
                     center = joint.Pose.t
                     radius = self.parent_window.radius
-                    hit_location = self.compute_sphere_intersection(origin, direction, center, radius + .2)
+                    hit_location = compute_sphere_intersection(origin, direction, center, radius + .2)
                     if (hit_location < closest_joint_dist):
                         closest_joint_dist = hit_location
                         closest_joint = joint
@@ -637,8 +536,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             dpr = self.devicePixelRatioF()
             region = tuple([x * dpr for x in region])
 
-            arrow_index = -1
-
             links = []
             mesh = []
 
@@ -700,9 +597,6 @@ class PointEditorWindow(QMainWindow):
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
-
-        self.numSides = 4
-        self.radius = 1
 
         self.control_type = "Translate"
         self.is_local = True
@@ -1144,13 +1038,13 @@ class PointEditorWindow(QMainWindow):
         # Show the AddChainWidget dock when this function is called
         self.add_chain_popup_dock.setVisible(True)
 
-    def create_new_chains(self, numSides, radius):
+    def create_new_chains(self, num_sides, radius):
         # Implement chain creation logic here
         self.chain = None
-        self.chain_created = True
-        self.numSides = numSides
-        self.selected_joint = -1
         self.radius = radius
+        self.num_sides = num_sides
+        self.chain_created = True
+        self.selected_joint = -1
         self.plot_widget.clear()
         self.setCentralWidget(self.plot_widget)
 
@@ -1312,9 +1206,9 @@ class PointEditorWindow(QMainWindow):
             self, "Open File", "save/", "Chain Files (*.chain)", options=options
         )
         if file_path:
-            self.chain = loadKinematicChain(file_path)
             self.radius = self.chain.r
-            self.numSides = self.chain.numSides
+            self.num_sides = self.chain.numSides
+            self.chain = loadKinematicChain(file_path)
             self.chain_created = True
             self.update_joint()
             self.log_version()
@@ -1339,15 +1233,6 @@ class PointEditorWindow(QMainWindow):
             self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
             self.update_state_slider()
             #self.update_radius_slider()
-
-            # Check if a valid joint is selected
-            # if self.selected_joint != -1:
-            #     # Get the world coordinates of the joint's center
-            #     joint_center = self.chain.Joints[self.selected_joint].Pose.t
-            #     self.plot_widget.opts["center"] = QVector3D(joint_center[0], joint_center[1], joint_center[2])
-            # else:
-            #     # Set the center to the origin
-            #     self.plot_widget.opts["center"] = QVector3D(0, 0, 0)
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -1449,79 +1334,76 @@ class PointEditorWindow(QMainWindow):
                 self.update_rotation_slider()
                 self.update_translate_slider()
 
-    def update_rotation_slider(self):
-        self.rotationSlider.setMinimum(-360)
-        self.rotationSlider.setMaximum(360)
-        if self.selected_arrow != -1:
+    def update_slider(self, slider_type):
+        if (slider_type == "rotation"):
+            slider = self.rotationSlider
+            input = self.rotationInput
+
+            slider.setMinimum(-360)
+            slider.setMaximum(360)
+
             rotation_matrix = self.chain.Joints[self.selected_joint].Pose.R
             angle_degrees = self.rotation_angle_from_matrix(rotation_matrix, self.selected_arrow)
-            self.rotationSlider.blockSignals(True)
-            self.rotationSlider.setValue(int(angle_degrees))
-            self.oldRotVal = angle_degrees
-            self.rotationSlider.setDisabled(False)
-            self.rotationSlider.blockSignals(False)
-            self.rotationInput.blockSignals(True)
-            self.rotationInput.setText(str(int(angle_degrees)))
-            self.rotationInput.blockSignals(False)
-            self.rotationInput.setDisabled(False)
-        else:
-            self.rotationSlider.blockSignals(True)
-            self.rotationSlider.setValue(0)
-            self.rotationSlider.setDisabled(True)
-            self.rotationSlider.blockSignals(False)
-            self.rotationInput.blockSignals(True)
-            self.rotationInput.setText("")
-            self.rotationInput.blockSignals(False)
-            self.rotationInput.setDisabled(True)
+            slider_value = int(angle_degrees)
+            slider_text = str(int(angle_degrees))
+
+            set_slider = self.selected_arrow != -1
+
+            if (set_slider):
+                self.oldRotVal = angle_degrees
+
+        elif (slider_type == "translation"):
+            slider = self.translate_slider
+            input = self.translationInput
+
+            amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
+            slider_value = int(amount * 10)
+            slider_text = str(slider_value)
+
+            set_slider = self.selected_arrow != -1
+
+            if (set_slider):
+                self.oldTransVal = amount
+
+        elif (slider_type == "state"):
+            slider = self.state_slider
+            input = self.stateInput
+
+            min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
+            max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
+
+            current = int(math.degrees(self.chain.Joints[self.selected_joint].state))
+            slider_value = current
+            slider_text = str(current)
+
+            set_slider = self.selected_joint != -1 and min != 0 and max != 0
+
+            if (set_slider):
+                self.state_slider.setMinimum(int(min))
+                self.state_slider.setMaximum(int(max))
+                self.oldStateVal = current
+
+        if not set_slider:
+            slider_value = 0
+            slider_text = ""
+
+        slider.blockSignals(True)
+        slider.setValue(slider_value)
+        slider.setDisabled(False)
+        slider.blockSignals(False)
+        input.blockSignals(True)
+        input.setText(slider_text)
+        input.blockSignals(False)
+        input.setDisabled(False)
+
+    def update_rotation_slider(self):
+        self.update_slider("rotation")
 
     def update_translate_slider(self):
-        if self.selected_arrow != -1:
-            amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
-            self.translate_slider.blockSignals(True)
-            self.translate_slider.setValue(int(amount * 10))
-            self.oldTransVal = amount
-            self.translate_slider.setDisabled(False)
-            self.translate_slider.blockSignals(False)
-            self.translationInput.blockSignals(True)
-            self.translationInput.setText(str(int(amount * 10)))
-            self.translationInput.blockSignals(False)
-            self.translationInput.setDisabled(False)
-        else:
-            self.translate_slider.blockSignals(True)
-            self.translate_slider.setValue(0)
-            self.translate_slider.setDisabled(True)
-            self.translate_slider.blockSignals(False)
-            self.translationInput.blockSignals(True)
-            self.translationInput.setText("")
-            self.translationInput.blockSignals(False)
-            self.translationInput.setDisabled(True)
+        self.update_slider("translation")
 
     def update_state_slider(self):
-        # if self.chain.Joints[self.selected_joint]
-        min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
-        max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
-        if self.selected_joint != -1 and min != 0 and max != 0:
-            self.state_slider.setMinimum(int(min))
-            self.state_slider.setMaximum(int(max))
-            current = int(math.degrees(self.chain.Joints[self.selected_joint].state))
-            self.oldStateVal = current
-            self.state_slider.blockSignals(True)
-            self.state_slider.setValue(current)
-            self.state_slider.setDisabled(False)
-            self.state_slider.blockSignals(False)
-            self.stateInput.blockSignals(True)
-            self.stateInput.setText(str(current))
-            self.stateInput.blockSignals(False)
-            self.stateInput.setDisabled(False)
-        else:
-            self.state_slider.blockSignals(True)
-            self.state_slider.setValue(0)
-            self.state_slider.setDisabled(True)
-            self.state_slider.blockSignals(False)
-            self.stateInput.blockSignals(True)
-            self.stateInput.setText("")
-            self.stateInput.blockSignals(False)
-            self.stateInput.setDisabled(True)
+        self.update_slider("state")
 
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
@@ -1659,17 +1541,6 @@ class PointEditorWindow(QMainWindow):
             for index, joint in enumerate(self.chain.Joints):
                 joint.id = index
     """
-    def rotation_matrix(self, axis, theta):
-        # rodrigues rotation formula
-        axis = np.asarray(axis)
-        axis = axis / np.linalg.norm(axis)
-        a = np.cos(theta / 2.0)
-        b, c, d = -axis * np.sin(theta / 2.0)
-        aa, bb, cc, dd = a*a, b*b, c*c, d*d
-        bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
-        return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
-                        [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
-                        [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
 
     def rotate_joint(self, angle, axis):
         # Update the position of the spheres
@@ -1799,51 +1670,45 @@ class PointEditorWindow(QMainWindow):
 
             self.update_joint()
             self.log_version()
+    
+    def add_joint_func(self, joint_type):
+        numSides = self.num_sides
 
-    def chain_not_created(self):
-        self.show_error('Please create a chain first.')
-        # error_dialog = ErrorDialog('Please create a chain first.')
-        # error_dialog.exec_()
-        self.create_new_chain_func()
+        if (not self.chain_created):
+            self.chain_not_created()
+            return
 
-    def is_parent_joint_selected(self):
-        if self.selected_joint == -1 and self.chain is not None:
-            self.show_error("Please select a parent joint or link first.")
-            # QMessageBox.warning(self, "Selection Required", "Please select a parent joint or link before adding a new one.")
-            return False
-        return True
+        if (self.chain and len(self.chain.Joints) > 0):
+            if not self.add_to_root:
+                prevJoint = self.chain.Joints[-1]
+                add_to_root = False
+            else:
+                prevJoint = self.chain.Joints[0]
+                add_to_root = True
+        else: 
+            prevJoint = None
+            add_to_root = False
+
+        if joint_type == "prismatic":
+            dialog = AddPrismaticDialog(numSides, self.radius, prevJoint=prevJoint, add_to_root=add_to_root)
+        elif joint_type == "revolute":
+            dialog = AddRevoluteDialog(numSides, self.radius, prevJoint=prevJoint, add_to_root=add_to_root)
+        elif joint_type == "tip":
+            dialog = AddTipDialog(numSides, self.radius, prevJoint=prevJoint, add_to_root=add_to_root)
+
+        self.add_joint(dialog)
 
     def add_prismatic_func(self):
-        if (not self.chain_created):
-            self.chain_not_created()
-        else: #elif self.is_parent_joint_selected():
-            if (self.chain and len(self.chain.Joints) > 0):
-                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                if not self.add_to_root:
-                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
-                else:
-                    dialog = AddPrismaticDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_root=True)
-            else:
-                dialog = AddPrismaticDialog(self.numSides, self.radius)
-
-            self.add_joint(dialog)
+        self.add_joint_func("prismatic")
 
     def add_revolute_func(self):
-        if (not self.chain_created):
-            self.chain_not_created()
-        else: #elif self.is_parent_joint_selected():
-            if (self.chain and len(self.chain.Joints) > 0):
-                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                if not self.add_to_root:
-                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[-1])
-                else:
-                    dialog = AddRevoluteDialog(self.numSides, self.radius, prevJoint = self.chain.Joints[0], add_to_root=True)
-            else:
-                dialog = AddRevoluteDialog(self.numSides, self.radius)
-            
-            self.add_joint(dialog)
+        self.add_joint_func("revolute")
+
+    def add_tip_func(self):
+        self.add_joint_func("tip")
 
     def add_waypoint_func(self):
+        numSides = self.num_sides
         if (not self.chain_created):
             self.chain_not_created()
         elif (self.selected_link != -1):
@@ -1857,7 +1722,7 @@ class PointEditorWindow(QMainWindow):
             rot = link.cylinder.orientation()
             newRot = SE3(rot)
 
-            waypoint = Waypoint(self.numSides, self.radius, newPos * newRot)
+            waypoint = Waypoint(numSides, self.radius, newPos * newRot)
             waypoint_index = len(self.chain.Joints)
             
             self.chain.append(newJoint = waypoint, 
@@ -1888,16 +1753,16 @@ class PointEditorWindow(QMainWindow):
                     if prevJoint.pathIndex() == 0:
                         pose = SE3.Ry(np.pi/2) @ pose
 
-                waypoint = Waypoint(self.numSides, self.radius, pose)
+                waypoint = Waypoint(numSides, self.radius, pose)
             
             if (self.chain == None):
-                waypoint = Waypoint(self.numSides, self.radius, SE3())
+                waypoint = Waypoint(numSides, self.radius, SE3())
                 waypoint_index = 0
             else:
                 waypoint_index = len(self.chain.Joints)
             
             if (self.chain == None) or len(self.chain.Joints) == 0:
-                waypoint = Waypoint(self.numSides, self.radius, SE3())
+                waypoint = Waypoint(numSides, self.radius, SE3())
                 self.chain = KinematicChain(waypoint)
             elif waypoint_index != 0:
                 if self.add_to_root:
@@ -1920,28 +1785,18 @@ class PointEditorWindow(QMainWindow):
             else:
                 self.select_joint_options.setCurrentIndex(len(self.chain.Joints) - 1)
 
+    def chain_not_created(self):
+        self.show_error('Please create a chain first.')
+        # error_dialog = ErrorDialog('Please create a chain first.')
+        # error_dialog.exec_()
+        self.create_new_chain_func()
 
-    def add_tip_func(self):
-        if (not self.chain_created):
-            self.chain_not_created()
-        else: #elif self.is_parent_joint_selected():
-            if (self.chain and len(self.chain.Joints) > 0):
-                #className = str(self.chain.Joints[self.selected_joint].__class__).split('.')[1][:-2]
-                #className = str(self.chain.Joints[len(self.chain.Joints)-1].__class__).split('.')[1][:-2]
-                if not self.add_to_root:
-                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[-1])
-                else:
-                    dialog = AddTipDialog(self.numSides, self.radius, prevJoint=self.chain.Joints[0], add_to_root=True)
-            else:
-                dialog = AddTipDialog(self.numSides, self.radius)
-
-            self.add_joint(dialog)
-
-    # def create_new_chain_func(self):
-        # dialog = CreateNewChainDialog()
-            # clears everything
-            # success_dialog = SuccessDialog('Chain created!')
-            # success_dialog.exec_()
+    def is_parent_joint_selected(self):
+        if self.selected_joint == -1 and self.chain is not None:
+            self.show_error("Please select a parent joint or link first.")
+            # QMessageBox.warning(self, "Selection Required", "Please select a parent joint or link before adding a new one.")
+            return False
+        return True
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
