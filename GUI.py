@@ -611,6 +611,9 @@ class PointEditorWindow(QMainWindow):
         self.mesh_visible = True
         self.mesh_scale = 1.0
 
+        self.num_sides = 4
+        self.radius = 1.0
+
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.click_signal_link.connect(self.link_selection_changed)
@@ -716,13 +719,13 @@ class PointEditorWindow(QMainWindow):
         self.editing_widget = QWidget()
         self.joint_editing_layout = QVBoxLayout()
 
-        self.translateJointLabel = QLabel("Translate")
-        self.rotateJointLabel = QLabel("Rotate")
-        self.translateJointRadioButton = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate")
-        self.rotateJointRadioButton = ImageRadioButton("ui/rotate_unchecked.png", "ui/rotate_checked.png", "Rotate")
-        self.translateJointRadioButton.setChecked(True)
-        self.translateJointRadioButton.toggled.connect(self.change_control_type)
-        self.rotateJointRadioButton.toggled.connect(self.change_control_type)
+        self.translate_joint_label = QLabel("Translate")
+        self.rotate_joint_label = QLabel("Rotate")
+        self.translate_joint_radio_button = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate")
+        self.rotate_joint_radio_button = ImageRadioButton("ui/rotate_unchecked.png", "ui/rotate_checked.png", "Rotate")
+        self.translate_joint_radio_button.setChecked(True)
+        self.translate_joint_radio_button.toggled.connect(self.change_control_type)
+        self.rotate_joint_radio_button.toggled.connect(self.change_control_type)
         
         self.editing_widget.setLayout(self.joint_editing_layout)
 
@@ -748,12 +751,12 @@ class PointEditorWindow(QMainWindow):
         self.select_link_options.currentIndexChanged.connect(self.link_selection_changed)
 
         # self.rotationLabel = QLabel("Rotate N/A Axis: 0°")
-        self.rotationSlider = QSlider(Qt.Horizontal)
-        self.rotationSlider.setMinimum(-360)
-        self.rotationSlider.setMaximum(360)
-        self.rotationSlider.setValue(0)
-        self.rotationSlider.setDisabled(True) 
-        self.rotationSlider.valueChanged.connect(self.adjust_rotation)
+        self.rotation_slider = QSlider(Qt.Horizontal)
+        self.rotation_slider.setMinimum(-360)
+        self.rotation_slider.setMaximum(360)
+        self.rotation_slider.setValue(0)
+        self.rotation_slider.setDisabled(True) 
+        self.rotation_slider.valueChanged.connect(self.adjust_rotation)
 
         # self. = QLabel('Translate N/A Axis: 0', self)
         self.translate_slider = QSlider(Qt.Horizontal, self)
@@ -769,50 +772,50 @@ class PointEditorWindow(QMainWindow):
         self.state_slider.setValue(0)
         self.state_slider.valueChanged.connect(self.adjust_state)
 
-        translationLayout = QVBoxLayout()
-        translationHeaderLayout = QHBoxLayout()
-        translationHeaderLayout.addWidget(self.translateJointRadioButton)
-        translationHeaderLayout.addWidget(self.translateJointLabel)
-        translationLayout.addLayout(translationHeaderLayout)
-        translationSliderLayout = QHBoxLayout()
-        self.translationInput = QLineEdit(self)
-        self.translationInput.setPlaceholderText("Enter distance")
-        self.translationInput.textChanged.connect(self.adjust_translation)
-        translationSliderLayout.addWidget(self.translate_slider)
-        translationSliderLayout.addWidget(self.translationInput)
-        translationLayout.addLayout(translationSliderLayout)
+        translation_layout = QVBoxLayout()
+        translation_header_layout = QHBoxLayout()
+        translation_header_layout.addWidget(self.translate_joint_radio_button)
+        translation_header_layout.addWidget(self.translate_joint_label)
+        translation_layout.addLayout(translation_header_layout)
+        translation_slider_layout = QHBoxLayout()
+        self.translation_input = QLineEdit(self)
+        self.translation_input.setPlaceholderText("Enter distance")
+        self.translation_input.textChanged.connect(self.adjust_translation)
+        translation_slider_layout.addWidget(self.translate_slider)
+        translation_slider_layout.addWidget(self.translation_input)
+        translation_layout.addLayout(translation_slider_layout)
 
-        rotationLayout = QVBoxLayout()
-        rotationHeaderLayout = QHBoxLayout()
-        rotationHeaderLayout.addWidget(self.rotateJointRadioButton)
-        rotationHeaderLayout.addWidget(self.rotateJointLabel)
-        rotationLayout.addLayout(rotationHeaderLayout)
-        rotationSliderLayout = QHBoxLayout()
-        self.rotationInput = QLineEdit(self)
-        self.rotationInput.setPlaceholderText("Enter angle in degrees")
-        self.rotationInput.textChanged.connect(self.adjust_rotation)
-        rotationSliderLayout.addWidget(self.rotationSlider)
-        rotationSliderLayout.addWidget(self.rotationInput)
-        rotationLayout.addLayout(rotationSliderLayout)
+        rotation_layout = QVBoxLayout()
+        rotation_header_layout = QHBoxLayout()
+        rotation_header_layout.addWidget(self.rotate_joint_radio_button)
+        rotation_header_layout.addWidget(self.rotate_joint_label)
+        rotation_layout.addLayout(rotation_header_layout)
+        rotation_slider_layout = QHBoxLayout()
+        self.rotation_input = QLineEdit(self)
+        self.rotation_input.setPlaceholderText("Enter angle in degrees")
+        self.rotation_input.textChanged.connect(self.adjust_rotation)
+        rotation_slider_layout.addWidget(self.rotation_slider)
+        rotation_slider_layout.addWidget(self.rotation_input)
+        rotation_layout.addLayout(rotation_slider_layout)
 
-        stateLayout = QVBoxLayout()
-        stateLayout.addWidget(self.current_state_label)
-        stateSliderLayout = QHBoxLayout()
-        self.stateInput = QLineEdit(self)
-        self.stateInput.setPlaceholderText("Enter state")
-        self.stateInput.textChanged.connect(self.adjust_state)
-        stateSliderLayout.addWidget(self.state_slider)
-        stateSliderLayout.addWidget(self.stateInput)
-        stateLayout.addLayout(stateSliderLayout)
+        state_layout = QVBoxLayout()
+        state_layout.addWidget(self.current_state_label)
+        state_slider_layout = QHBoxLayout()
+        self.state_input = QLineEdit(self)
+        self.state_input.setPlaceholderText("Enter state")
+        self.state_input.textChanged.connect(self.adjust_state)
+        state_slider_layout.addWidget(self.state_slider)
+        state_slider_layout.addWidget(self.state_input)
+        state_layout.addLayout(state_slider_layout)
 
-        checkboxLayout = QHBoxLayout() 
-        self.propogateSliderCheckbox = QCheckBox("Propagate")
-        self.relativeSliderCheckbox = QCheckBox("Relative")
-        self.propogateSliderCheckbox.setChecked(True)
-        self.relativeSliderCheckbox.setChecked(True)
-        self.relativeSliderCheckbox.stateChanged.connect(self.relative_clicked)
-        checkboxLayout.addWidget(self.propogateSliderCheckbox)
-        checkboxLayout.addWidget(self.relativeSliderCheckbox)
+        checkbox_layout = QHBoxLayout() 
+        self.propogate_slider_checkbox = QCheckBox("Propagate")
+        self.relative_slider_checkbox = QCheckBox("Relative")
+        self.propogate_slider_checkbox.setChecked(True)
+        self.relative_slider_checkbox.setChecked(True)
+        self.relative_slider_checkbox.stateChanged.connect(self.relative_clicked)
+        checkbox_layout.addWidget(self.propogate_slider_checkbox)
+        checkbox_layout.addWidget(self.relative_slider_checkbox)
 
         joint_range_layout = QHBoxLayout()
         joint_range_label = QLabel("Joint Range of Motion:")
@@ -825,23 +828,23 @@ class PointEditorWindow(QMainWindow):
         joint_range_layout.addWidget(joint_range_label)
         joint_range_layout.addWidget(self.joint_range_slider)
 
-        self.joint_editing_layout.addLayout(stateLayout)
-        self.joint_editing_layout.addLayout(checkboxLayout)
-        self.joint_editing_layout.addLayout(rotationLayout)
-        self.joint_editing_layout.addLayout(translationLayout)
+        self.joint_editing_layout.addLayout(state_layout)
+        self.joint_editing_layout.addLayout(checkbox_layout)
+        self.joint_editing_layout.addLayout(rotation_layout)
+        self.joint_editing_layout.addLayout(translation_layout)
         self.joint_editing_layout.addLayout(radius_layout)
         self.joint_editing_layout.addLayout(joint_range_layout)
 
-        self.oldRotVal = 0
-        self.oldTransVal = 0
-        self.oldStateVal = 0
-        self.oldRadiusVal = 1
-        self.rotationSlider.setDisabled(True)
+        self.old_rot_val = 0
+        self.old_trans_val = 0
+        self.old_state_val = 0
+        self.old_radius_val = 1
+        self.rotation_slider.setDisabled(True)
         self.translate_slider.setDisabled(True)
         self.state_slider.setDisabled(True)
-        self.rotationInput.setDisabled(True)
-        self.translationInput.setDisabled(True)
-        self.stateInput.setDisabled(True)
+        self.rotation_input.setDisabled(True)
+        self.translation_input.setDisabled(True)
+        self.state_input.setDisabled(True)
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
         self.options_dock = QDockWidget("Options", self)
@@ -1094,13 +1097,13 @@ class PointEditorWindow(QMainWindow):
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
         self.frame_label.setText("Joint selected as frame: " + str(self.selected_frame))
-        self.relativeSliderCheckbox.setDisabled(True)
+        self.relative_slider_checkbox.setDisabled(True)
         self.update_joint()
 
     def remove_frame_button(self):
         self.selected_frame = -1
         self.frame_label.setText("Joint selected as frame: N/A")
-        self.relativeSliderCheckbox.setDisabled(False)
+        self.relative_slider_checkbox.setDisabled(False)
         self.update_joint()
 
     def init_key_bar(self):
@@ -1130,13 +1133,13 @@ class PointEditorWindow(QMainWindow):
         self.key_bar_layout.addWidget(right_spacer)
 
     def relative_clicked(self):
-        self.is_local = self.relativeSliderCheckbox.isChecked()
+        self.is_local = self.relative_slider_checkbox.isChecked()
         self.update_joint()
 
     def change_control_type(self):
-        if self.translateJointRadioButton.isChecked():
+        if self.translate_joint_radio_button.isChecked():
             self.control_type = "Translate"
-        elif self.rotateJointRadioButton.isChecked():
+        elif self.rotate_joint_radio_button.isChecked():
             self.control_type = "Rotate"
 
         self.update_joint()
@@ -1153,10 +1156,10 @@ class PointEditorWindow(QMainWindow):
     def key_pressed(self, key):
         if key == "Translate":
             self.control_type = key
-            self.translateJointRadioButton.setChecked(True)
+            self.translate_joint_radio_button.setChecked(True)
         elif key == "Rotate":
             self.control_type = key
-            self.rotateJointRadioButton.setChecked(True)
+            self.rotate_joint_radio_button.setChecked(True)
         elif key == "Delete":
             if self.chain and self.selected_joint != -1:
                 self.delete_selected_joint()
@@ -1269,7 +1272,7 @@ class PointEditorWindow(QMainWindow):
 
     @QtCore.pyqtSlot(np.ndarray)
     def drag_translate(self, new_position):
-        propogate = self.propogateSliderCheckbox.isChecked()
+        propogate = self.propogate_slider_checkbox.isChecked()
 
         if (self.mesh_selected):
             old_position = self.referenceMesh.Pose.t
@@ -1308,7 +1311,7 @@ class PointEditorWindow(QMainWindow):
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
         transformation = SE3()
-        propogate = self.propogateSliderCheckbox.isChecked()
+        propogate = self.propogate_slider_checkbox.isChecked()
 
         if (self.selected_axis_name == 'X'):
             transformation = SE3.Rx(new_rotation)
@@ -1336,8 +1339,8 @@ class PointEditorWindow(QMainWindow):
 
     def update_slider(self, slider_type):
         if (slider_type == "rotation"):
-            slider = self.rotationSlider
-            input = self.rotationInput
+            slider = self.rotation_slider
+            input = self.rotation_input
 
             slider.setMinimum(-360)
             slider.setMaximum(360)
@@ -1350,11 +1353,11 @@ class PointEditorWindow(QMainWindow):
             set_slider = self.selected_arrow != -1
 
             if (set_slider):
-                self.oldRotVal = angle_degrees
+                self.old_rot_val = angle_degrees
 
         elif (slider_type == "translation"):
             slider = self.translate_slider
-            input = self.translationInput
+            input = self.translation_input
 
             amount = self.chain.Joints[self.selected_joint].Pose.t[self.selected_arrow]
             slider_value = int(amount * 10)
@@ -1363,11 +1366,11 @@ class PointEditorWindow(QMainWindow):
             set_slider = self.selected_arrow != -1
 
             if (set_slider):
-                self.oldTransVal = amount
+                self.old_trans_val = amount
 
         elif (slider_type == "state"):
             slider = self.state_slider
-            input = self.stateInput
+            input = self.state_input
 
             min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
             max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
@@ -1381,7 +1384,7 @@ class PointEditorWindow(QMainWindow):
             if (set_slider):
                 self.state_slider.setMinimum(int(min))
                 self.state_slider.setMaximum(int(max))
-                self.oldStateVal = current
+                self.old_state_val = current
 
         if not set_slider:
             slider_value = 0
@@ -1462,7 +1465,7 @@ class PointEditorWindow(QMainWindow):
         # if not isinstance(value, float):
         #     value = value.strip()
         value = float(value) if len(str(value)) > 0 else 0
-        angle_radians = math.radians(value - self.oldRotVal)
+        angle_radians = math.radians(value - self.old_rot_val)
         if self.chain and self.selected_joint != -1:
             if self.selected_arrow == 0:
                 transformation = SE3.Rx(angle_radians)
@@ -1470,26 +1473,26 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Ry(angle_radians)
             else:
                 transformation = SE3.Rz(angle_radians)
-            propogate = self.propogateSliderCheckbox.isChecked()
-            relative = self.relativeSliderCheckbox.isChecked()
+            propogate = self.propogate_slider_checkbox.isChecked()
+            relative = self.relative_slider_checkbox.isChecked()
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
-                self.oldRotVal = int(value)
+                self.old_rot_val = int(value)
                 self.update_rotation_slider()
             else:
-                self.rotationSlider.blockSignals(True)
-                self.rotationSlider.setValue(int(self.oldRotVal))
-                self.rotationSlider.blockSignals(False)
+                self.rotation_slider.blockSignals(True)
+                self.rotation_slider.setValue(int(self.old_rot_val))
+                self.rotation_slider.blockSignals(False)
 
     def adjust_translation(self, value):
         if not isinstance(value, float) and not isinstance(value, int):
             value = value.strip()
         value = float(value) if value else 0
         actualVal = value / 10
-        amount = actualVal - self.oldTransVal
+        amount = actualVal - self.old_trans_val
         if self.chain and self.selected_joint != -1:
-            propogate = self.propogateSliderCheckbox.isChecked()
-            relative = self.relativeSliderCheckbox.isChecked()
+            propogate = self.propogate_slider_checkbox.isChecked()
+            relative = self.relative_slider_checkbox.isChecked()
             transformation = SE3()
             if (self.selected_arrow == 0):
                 transformation = SE3.Tx(amount)
@@ -1499,11 +1502,11 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Tz(amount)
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
                 self.update_joint()
-                self.oldTransVal = actualVal
+                self.old_trans_val = actualVal
                 self.update_translate_slider()
             else:
                 self.translate_slider.blockSignals(True)
-                self.translate_slider.setValue(int(self.oldTransVal * 10))
+                self.translate_slider.setValue(int(self.old_trans_val * 10))
 
     def adjust_state(self, value):
         if not isinstance(value, float) and not isinstance(value, int):
@@ -1521,7 +1524,7 @@ class PointEditorWindow(QMainWindow):
                 self.update_state_slider()
             else:
                 self.state_slider.blockSignals(True)
-                self.state_slider.setValue(int(self.oldStateVal))
+                self.state_slider.setValue(int(self.old_state_val))
 
     def delete_joint(self):
         # dialog = DeleteDialog(self)
@@ -1546,8 +1549,8 @@ class PointEditorWindow(QMainWindow):
         # Update the position of the spheres
         joint = self.selected_joint
 
-        propogate = self.propogateSliderCheckbox.isChecked()
-        relative = self.relativeSliderCheckbox.isChecked()
+        propogate = self.propogate_slider_checkbox.isChecked()
+        relative = self.relative_slider_checkbox.isChecked()
 
         transformation = SE3.AngleAxis(angle, [axis[0], axis[1], axis[2]], unit='deg')
         # transformation = SE3.Trans(0, 1, 0)
@@ -1615,10 +1618,10 @@ class PointEditorWindow(QMainWindow):
                 self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
 
             if self.selected_arrow != -1:
-                self.rotationSlider.setDisabled(False)
+                self.rotation_slider.setDisabled(False)
                 self.translate_slider.setDisabled(False)
             else:
-                self.rotationSlider.setDisabled(True)
+                self.rotation_slider.setDisabled(True)
                 self.translate_slider.setDisabled(True)
                 
     def create_axis_label(self, text, color):
@@ -1801,11 +1804,11 @@ class PointEditorWindow(QMainWindow):
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
             self.control_type = "Translate"
-            self.translateJointRadioButton.setChecked(True)
+            self.translate_joint_radio_button.setChecked(True)
             self.update_joint()
         elif event.key() == Qt.Key_R:
             self.control_type = "Rotate"
-            self.rotateJointRadioButton.setChecked(True)
+            self.rotate_joint_radio_button.setChecked(True)
             self.update_joint()
         elif event.key() == Qt.Key_Delete or event.key() == Qt.Key_Backspace:
             if (self.chain and self.selected_joint != -1):
