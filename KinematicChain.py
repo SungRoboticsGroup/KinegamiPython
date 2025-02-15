@@ -95,23 +95,22 @@ class KinematicChain(KinematicTree):
             save = str(self.maxAnglePerElbow) + "\n"
             for i in range(0, len(self.Joints)):
                 joint = self.Joints[i]
-                
                 save += str(self.Parents[i]) + " "
                 if isinstance(joint, Waypoint):
                     save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
                 elif isinstance(joint, RevoluteJoint):
-                    save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
+                    save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
                 elif isinstance(joint, ExtendedRevoluteJoint):
-                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
+                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
                 elif isinstance(joint, PrismaticJoint):
-                    save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.initialState) + " "
+                    save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.state) + " "
                 elif isinstance(joint, Tip):
                     save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " "
                 else:
                     raise Exception("Not Implemented")
-                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
-                save += "\n"
-            
+                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()]) 
+                save += "\n"   
+
             f.write(save)
             f.close()
     
@@ -131,24 +130,24 @@ def loadKinematicChain(filepath : str):
                 r = float(first[3])
                 totalBendingAngle = float(first[4])
                 numSinkLayers = int(first[5])
-                initialState = float(first[6])
-                return RevoluteJoint(numSides, r, totalBendingAngle, pose, numSinkLayers, initialState)
+                savedState = float(first[6])
+                return RevoluteJoint(numSides, r, totalBendingAngle, pose, numSinkLayers, savedState)
             case "ExtendedRevoluteJoint":
                 numSides = int(first[2])
                 r = float(first[3])
                 totalBendingAngle = float(first[4])
                 tubeLength = float(first[5])
                 numSinkLayers = int(first[6])
-                initialState = float(first[7])
-                return ExtendedRevoluteJoint(numSides, r, totalBendingAngle, tubeLength, pose, numSinkLayers, initialState)
+                savedState = float(first[7])
+                return ExtendedRevoluteJoint(numSides, r, totalBendingAngle, tubeLength, pose, numSinkLayers, savedState)
             case "PrismaticJoint":
                 numSides = int(first[2])
                 r = float(first[3])
                 neutralLength = float(first[4])
                 numLayers = int(first[5])
                 coneAngle = float(first[6])
-                initialState = float(first[7])
-                return PrismaticJoint(numSides, r, neutralLength, numLayers, coneAngle, pose, initialState)
+                savedState = float(first[7])
+                return PrismaticJoint(numSides, r, neutralLength, numLayers, coneAngle, pose, savedState)
             case "Tip":
                 numSides = int(first[2])
                 r = float(first[3])
@@ -164,8 +163,8 @@ def loadKinematicChain(filepath : str):
             chain = KinematicChain(getJoint(lines[1]), float(lines[0]))
             for i in range(2, len(lines)):
                 parent = int(lines[i].split(" ")[0])
-                chain.addJoint(parent, getJoint(lines[i]), relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
-            
+                joint = getJoint(lines[i])
+                chain.addJoint(parent, joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
             return chain
     except Exception as e:
         raise Exception(f"Error loading file: {e}")

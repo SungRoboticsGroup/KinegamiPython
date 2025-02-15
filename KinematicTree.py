@@ -1048,25 +1048,23 @@ class KinematicTree(Generic[J]):
     def save(self, filename: str):
         with open(f"save/{filename}.tree", "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
-            states = []
             for i in range(0, len(self.Joints)):
                 joint = self.Joints[i]
-                states.append(str(joint.state))
                 save += str(self.Parents[i]) + " "
                 if isinstance(joint, Waypoint):
                     save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
                 elif isinstance(joint, RevoluteJoint):
-                    save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
+                    save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
                 elif isinstance(joint, ExtendedRevoluteJoint):
-                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
+                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
                 elif isinstance(joint, PrismaticJoint):
-                    save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.initialState) + " "
+                    save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.state) + " "
                 elif isinstance(joint, Tip):
                     save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " "
                 else:
                     raise Exception("Not Implemented")
-                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()]) + "]"
-                save += states[-1] + "\n"
+                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
+                save += "\n"
             
             f.write(save)
             f.close()
@@ -1119,9 +1117,8 @@ def loadKinematicTree(filename : str):
             tree = KinematicTree[OrigamiJoint](getJoint(lines[1]), float(lines[0]))
             for i in range(2, len(lines)):
                 parent = int(lines[i].split(" ")[0])
-                joint, savedState = getJoint(lines[i])
-                jointIndex = tree.addJoint(parent, joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)  
-                tree.Joints[jointIndex].TransformStateTo(savedState)  
+                joint = getJoint(lines[i])
+                tree.addJoint(parent, joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)  
             return tree
     except Exception as e:
         print(e)
