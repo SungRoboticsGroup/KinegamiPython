@@ -185,7 +185,7 @@ class KinematicTree(Generic[J]):
         else:
             newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
-                                self.maxAnglePerElbow, lastJoint=parent, nextJoint=newJoint)
+                                self.maxAnglePerElbow)
         if newLink is None:
             print("WARNING: no valid path found to newJoint, chain not changed.")
             return None
@@ -581,7 +581,7 @@ class KinematicTree(Generic[J]):
             if recomputeLinkPath and jointIndex > 0:
                 self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
                                         joint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow, lastJoint=parent, nextJoint=joint)
+                                        self.maxAnglePerElbow)
             else:
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
             if propogate:
@@ -595,9 +595,7 @@ class KinematicTree(Generic[J]):
                     child = self.Joints[c]
                     self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
                                             child.ProximalDubinsFrame(),
-                                            self.maxAnglePerElbow, 
-                                            lastJoint=joint,
-                                            nextJoint=child)
+                                            self.maxAnglePerElbow)
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
 

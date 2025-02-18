@@ -1716,8 +1716,7 @@ class PointEditorWindow(QMainWindow):
             self.chain_not_created()
         elif (self.selected_link != -1):
             link = self.chain.Links[self.selected_link]
-            lastJoint = link.lastJoint
-            nextJoint = link.nextJoint
+            nextJoint = self.chain.Links[self.selected_link]
             
             pos = link.cylinder.start + 0.5 * link.cylinder.length * link.cylinder.direction
             newPos = SE3().Trans(x=pos[0], y=pos[1], z=pos[2])
@@ -1735,7 +1734,7 @@ class PointEditorWindow(QMainWindow):
 
             self.chain.Links[nextJoint_index] = LinkCSC(self.chain.r, waypoint.DistalDubinsFrame(), 
                                             nextJoint.ProximalDubinsFrame(),
-                                            self.chain.maxAnglePerElbow, lastJoint=waypoint, nextJoint=nextJoint)
+                                            self.chain.maxAnglePerElbow)
             self.chain.Parents[nextJoint_index] = waypoint_index
             self.chain.Children[waypoint_index].append(nextJoint_index)
             self.update_joint()

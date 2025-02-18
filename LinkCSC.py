@@ -21,8 +21,7 @@ from meshHelpers import *
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, 
-                 path : PathCSC = None, EPSILON : float = 0.01,
-                 lastJoint : Joint = None, nextJoint : Joint = None):
+                 path : PathCSC = None, EPSILON : float = 0.01):
         assert(r>0)
         assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
         self.r = r
@@ -36,8 +35,6 @@ class LinkCSC:
                                 self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
         else:
             self.path = path
-        self.lastJoint = lastJoint
-        self.nextJoint = nextJoint
         self.id = -1
         
         if norm(self.path.error) > self.DISTANCE_EPSILON:
@@ -122,7 +119,7 @@ class LinkCSC:
                        Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
-                       EPSILON = self.EPSILON, lastJoint=self.lastJoint, nextJoint=self.nextJoint)
+                       EPSILON = self.EPSILON)
     
     def addToWidget(self, widget, numSides : int = 32, color = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -164,8 +161,7 @@ class LinkCSC:
 
             if (len(vertices) > 0 and len(faces) > 0):
                 meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
-                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True,
-                                    lastJoint=self.lastJoint, nextJoint=self.nextJoint)
+                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
                 meshitem.setObjectName("Link")
                 meshitem.setGLOptions('translucent')
                 widget.plot_widget.addItem(meshitem)
@@ -234,3 +230,15 @@ class LinkCSC:
 
     def recomputeCollisionCapsules(self):
         self.collisionCapsules = self.getCapsules()
+        
+    def __repr__(self):
+        return (
+            "LinkCSC("
+            f"r={repr(self.r)},"
+            f"StartDubinsPose={repr(self.StartDubinsPose)},"
+            f"EndDubinsPose={repr(self.EndDubinsPose)},"
+            f"maxAnglePerElbow={repr(self.maxAnglePerElbow)},"
+            f"path={repr(self.path)},"
+            f"EPSILON={repr(self.EPSILON)},"
+            ")"
+        )
