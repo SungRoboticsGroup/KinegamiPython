@@ -1448,9 +1448,13 @@ class KinematicTree(Generic[J]):
                 
             return tree
     
-    def save(self, filename: str):
+    def save(self, filename: str, saveDir = True):
         #TODO: ADD EXTENSIONS FOR PRINTED JOINTS
-        with open(f"save/{filename}.tree", "w") as f:
+        name = filename + ".tree"
+        if saveDir:
+            name = "save/" + filename
+        
+        with open(name, "w") as f:
             save = str(self.maxAnglePerElbow) + "\n"
             for i in range(0, len(self.Joints)):
                 joint = self.Joints[i]

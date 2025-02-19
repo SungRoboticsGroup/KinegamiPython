@@ -7,8 +7,16 @@ from collections import defaultdict, deque
 import json
 from functools import partial
 import threading
+import os 
 
-branchingRatio = 0
+title = "Test"
+jointCount = 3
+treeCount = 1
+multipleIterations=False
+
+os.makedirs("sim_results/" + title, exist_ok=True)
+
+branchingRatio = 1
 def generateTree(nJoints):
     poses = [
         SE3.Rand(xrange=(-100,100),yrange=(-100,100),zrange=(-100,100))
@@ -28,30 +36,46 @@ def generateTree(nJoints):
             case _:
                 tree.addJoint(parent, PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i]))
 
-    return makeTubularKinematicTree(tree)
+    try:
+        return makeTubularKinematicTree(tree)
+    except:
+        return generateTree(nJoints)
 
 optimizations = [partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=True),
                 partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=False),
                 partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False),
+                partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False,resetOnFail=False),
                 partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=True),
                 partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=False)]
-labels = ["Streamline + Guarantee", 
-          "Streamline No Guarantee",
-          "No Streamline No Guarantee",
-          "No Streamline Guarantee",
-          "Linear"]
+labels = ["Streamline + Guarantee (SG)", 
+          "Streamline No Guarantee (SNG)",
+          "No Streamline No Guarantee (NSNG)",
+          "NSNG, No Reset on Fail",
+          "No Streamline Guarantee (NSG)",
+          "Linear (L)"]
 
 results = []
 
-for i in range(0,2):
-    construct = generateTree(6)
+for i in range(0,treeCount):
+    print(f"Constructing tree {i}")
+    construct = generateTree(jointCount)
+    construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
     results.append([])
-    for f in optimizations:
-        optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True)
+    for no, f in enumerate(optimizations):
+        print(f"Trying loss function {no}")
+        direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
+        os.makedirs(direc, exist_ok=True)
+        optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
+        if multipleIterations:
+            count = 2
+            while (losses[0] - losses[-1] > 100):
+                print(f"Trying loss function {no} for the {count}th time")
+                optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
+                count += 1
         #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
         results[i].append((times, losses))
 
-with open("random_results.json", "w") as file:
+with open("sim_results/" + title + "/random_results.json", "w") as file:
     json.dump(results, file)
 
 for result in results:
@@ -64,7 +88,7 @@ for result in results:
 
     plt.xlabel('Time')
     plt.ylabel('Loss')
-    plt.title('Loss vs Time')
+    plt.title('Loss vs Time: ' + str(title))
     plt.legend()
 
     plt.grid(True)

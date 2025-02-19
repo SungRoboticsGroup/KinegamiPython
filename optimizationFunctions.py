@@ -1,6 +1,6 @@
 from KinematicTree import *
 
-def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater = False, parallelize = False):
+def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
     parentIndex = subject.Parents[index]
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
@@ -117,7 +117,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childPa
 
     #print(minSwarmLoss, loss)
 
-    print(f"Optimized joint {index} in {time.time() - start}s -- Old loss: {initialLoss}, Improved Loss: {loss}")
+    if verbose:
+        print(f"Optimized joint {index} in {time.time() - start}s -- Old loss: {initialLoss}, Improved Loss: {loss}")
 
     which = objective(result, returnWhich=True)
 
@@ -150,7 +151,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childPa
             raise Exception()
         return tree, loss
 
-def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater=False, parallelize=False):
+def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, childParentRatio = 1, ignorePlacement=False, ignoreLater=False, parallelize=False, verbose = True):
 
     #make initial guess as close as possible to previous
     start = time.time()
@@ -225,12 +226,13 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, chil
     
     tree = subject.copyAbbreviatedSelf()
     if tree.transformJoint(index, SE3.Trans(minSwarmResult[0:3]) @ SE3.Rz(minSwarmResult[3]) @ SE3.Ry(minSwarmResult[4]) @ SE3.Rz(minSwarmResult[5]),  propogate=False, safe=False, relative=False, recomputeBoundingBall=False):
-        print(f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}")
+        if verbose:
+            print(f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}")
         return tree, minSwarmResult
     else:
         raise Exception("Optimization failed dramatically")
 
-def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False):
+def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
     losses = []
 
@@ -258,6 +260,13 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
 
     start = time.time()
 
+    def log(t, idx):
+        diff = time.time() - start
+        times.append(diff)
+        losses.append(optimizationLoss(t))
+        if directory != None:
+            t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
+
     tree = subject.copyAbbreviatedSelf()
     isOptimized = [True] + [False] * (len(subject.Joints) - 1) #isOptimized[i] is True if joint i is optimized
     numOptimized = 1
@@ -273,18 +282,17 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
             tolerance = subject.r/10
 
         if isWaypoint(subject.Joints[index]):
-            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+
+        log(tree, index)
 
         if isOptimized[subject.Parents[index]]:
             isOptimized[index] = True
             numOptimized += 1
         else:
             optimizeFromIndex(subject.Parents[index])
-        
-        times.append(time.time() - start)
-        losses.append(optimizationLoss(tree))
 
 
     while numOptimized < len(subject.Joints):
@@ -311,7 +319,7 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
             
             if isWaypoint(subject.Joints[order[j]]):
                 try:
-                    tree2, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
+                    tree2, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
                     if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
                         raise Exception("Moving all children caused collision.")
@@ -323,23 +331,28 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
                         numOptimized += 1
                         optimizeStreak += 1
                 except Exception as e:
-                    print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                    if verbose:
+                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
                     if j != 0:
                         if isOptimized[tree.Parents[order[j]]]:
                             isOptimized[tree.Parents[order[j]]] = False
                             numOptimized -= 1
-                    for idx in order:
-                        if isOptimized[idx]:
-                            isOptimized[idx] = False
-                            numOptimized -= 1
+                    
+                    if resetOnFail:
+                        print(f"RESET ON FAIL OCCURRED: JOINT {order[j]} TIME: {time.time() - start}")
+                        for idx in order:
+                            if isOptimized[idx]:
+                                isOptimized[idx] = False
+                                numOptimized -= 1
 
-                    tree, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize)
-                    print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                    tree, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    if verbose:
+                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
                     #tree.show()
                     break
             else:
                 try:
-                    tree2, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
+                    tree2, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
                     if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
                         raise Exception("Moving all children caused collision.")
@@ -351,22 +364,25 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
                         numOptimized += 1
                         optimizeStreak += 1
                 except Exception as e:
-                    print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                    if verbose:
+                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
                     if j != 0:
                         if isOptimized[tree.Parents[order[j]]]:
                             isOptimized[tree.Parents[order[j]]] = False
                             numOptimized -= 1
-                    for idx in order:
-                        if isOptimized[idx]:
-                            isOptimized[idx] = False
-                            numOptimized -= 1
+                    if resetOnFail:
+                        print(f"RESET ON FAIL OCCURRED: JOINT {order[j]} TIME: {time.time() - start}")
+                        for idx in order:
+                            if isOptimized[idx]:
+                                isOptimized[idx] = False
+                                numOptimized -= 1
 
-                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize)
-                    print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    if verbose:
+                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
                     break
 
-            times.append(time.time() - start)
-            losses.append(optimizationLoss(tree))
+            log(tree, order[j])
             
 
         while not isOptimized[i]:
@@ -379,16 +395,15 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
                 tolerance = subject.r/10
                 
                 if isWaypoint(subject.Joints[order[j]]):
-                    tree, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                    tree, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                 else:
-                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                 
-                times.append(time.time() - start)
-                losses.append(optimizationLoss(tree))
-
-        print("CURRENT COLLISIONS")
-        if tree.detectCollisions(debug=True) == 0:
-            print("NONE")
+                log(tree, order[j])
+        if verbose:
+            print("CURRENT COLLISIONS")
+            if tree.detectCollisions(debug=True) == 0:
+                print("NONE")
 
         if showSteps:
             tree.show()
@@ -397,12 +412,14 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
 
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
     
+    if directory != None:
+        tree.save(directory + "final", saveDir=False)
     if (evaluate):
         return tree, times, losses
         
     return tree
 
-def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False):
+def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False, verbose=True, directory=None):
     times = []
     losses = []
     start = time.time()
@@ -431,6 +448,13 @@ def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = Fa
 
     start = time.time()
 
+    def log(t, idx):
+        diff = time.time() - start
+        times.append(diff)
+        losses.append(optimizationLoss(t))
+        if directory != None:
+            t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
+
     tree = subject.copyAbbreviatedSelf()
     isOptimized = [True] + [False] * (len(subject.Joints) - 1) #isOptimized[i] is True if joint i is optimized
     numOptimized = 1
@@ -443,21 +467,22 @@ def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = Fa
         tolerance = subject.r/10
 
         if isWaypoint(subject.Joints[index]):
-            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize)
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
+        log(tree, index)
+        
         for child in subject.Children[index]:
             optimizeFromIndex(child)
-        
-        times.append(time.time() - start)
-        losses.append(optimizationLoss(tree))
     
     for child in subject.Children[0]:
         optimizeFromIndex(child)
 
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
 
+    if directory != None:
+        tree.save(directory + "final", saveDir=False)
     if (evaluate):
         return tree, times, losses
     
