@@ -1672,7 +1672,7 @@ class PointEditorWindow(QMainWindow):
                             cachedLink = None
                         else:
                             cachedLink = self.chain.Links[i]
-                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
+                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False, cachedLink=cachedLink)
                     self.chain = new_chain
 
                 self.selected_joint = 0
