@@ -3,6 +3,7 @@
 """
 
 import sys
+import os
 import numpy as np
 import pyqtgraph.opengl as gl
 import PyQt5
@@ -1198,7 +1199,12 @@ class PointEditorWindow(QMainWindow):
                     self, "Save File", "save/", "Chain Files (*.chain)", options=options
                 )
             else:
-                file_path = f"save/autosave/autosave_{autosave_id}.chain"
+                try:
+                    base_path = sys._MEIPASS
+                except AttributeError:
+                    base_path = os.path.abspath(".")
+                file_path = os.path.join(base_path, f"save/autosave/autosave_{autosave_id}.chain")
+                # file_path = f"save/autosave/autosave_{autosave_id}.chain"
 
             if file_path:
                 self.chain.save(file_path)
