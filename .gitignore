@@ -8,6 +8,6 @@ report.log
 .venv/
 *.log
 *.png
-sim_results/*
 testenv/
 Dockerfile
+save/*

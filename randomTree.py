@@ -8,15 +8,17 @@ import json
 from functools import partial
 import threading
 import os 
+import shutil
 
-title = "Test"
-jointCount = 3
-treeCount = 1
+title = "30 Joint Trees"
+jointCount = 30
+treeCount = 10
+restartFrom = 0
 multipleIterations=False
 
 os.makedirs("sim_results/" + title, exist_ok=True)
 
-branchingRatio = 1
+branchingRatio = 0
 def generateTree(nJoints):
     poses = [
         SE3.Rand(xrange=(-100,100),yrange=(-100,100),zrange=(-100,100))
@@ -56,13 +58,17 @@ labels = ["Streamline + Guarantee (SG)",
 
 results = []
 
-for i in range(0,treeCount):
-    print(f"Constructing tree {i}")
+restartDir = "sim_results/" + title + "/" + str(restartFrom)
+if os.path.exists(restartDir):
+    shutil.rmtree(restartDir)
+
+for i in range(restartFrom,treeCount):
+    print(f"\n\nConstructing tree {i}")
     construct = generateTree(jointCount)
     construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
     results.append([])
     for no, f in enumerate(optimizations):
-        print(f"Trying loss function {no}")
+        print(f"\nTrying loss function {no}")
         direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
         os.makedirs(direc, exist_ok=True)
         optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
@@ -74,6 +80,8 @@ for i in range(0,treeCount):
                 count += 1
         #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
         results[i].append((times, losses))
+    with open("sim_results/" + title + "/random_results_chkpt" + str(i) + ".json", "w") as file:
+        json.dump(results, file)
 
 with open("sim_results/" + title + "/random_results.json", "w") as file:
     json.dump(results, file)
