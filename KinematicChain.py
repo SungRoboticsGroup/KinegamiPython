@@ -94,7 +94,10 @@ class KinematicChain(KinematicTree):
             return True
         
     def __repr__(self):
-        return (
+        numpy_precision = np.get_printoptions()['precision']
+        if numpy_precision < 16:
+            np.set_printoptions(precision=16)
+        output = (
             f"KinematicChain(startJoint={repr(self.Joints[0])}, "
             f"maxAnglePerElbow={repr(self.maxAnglePerElbow)}, "
             f"joints={repr(self.Joints)}, "
@@ -102,6 +105,9 @@ class KinematicChain(KinematicTree):
             f"children={repr(self.Children)}, "
             f"parents={repr(self.Parents)})"
         )
+        np.set_printoptions(precision=numpy_precision)
+        return output
+    
         
     def save(self, file_path: str):
         with open(file_path, "w") as f:

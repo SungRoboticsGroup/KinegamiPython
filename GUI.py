@@ -2,8 +2,21 @@
 @author: Raymond Feng, Andy Wang, Daniel Feshbach
 """
 
-import sys
-import os
+import sys, os
+
+if sys.stdout is None:
+    class DummyStream:
+        def write(self, data):
+            pass
+        def flush(self):
+            pass
+        def isatty(self):
+            return False
+
+    sys.stdout = DummyStream()
+if sys.stderr is None:
+    sys.stderr = DummyStream()
+    
 import numpy as np
 import pyqtgraph.opengl as gl
 import PyQt5
