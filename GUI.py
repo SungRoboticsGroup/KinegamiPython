@@ -83,9 +83,13 @@ class AddMeshWidget(QWidget):
         self.scale = 1.0
 
         # Input for the file path
-        self.file_input_button = QPushButton('Import Mesh', self)
-        self.file_input_button.clicked.connect(self.on_import_stl)
-        layout.addWidget(self.file_input_button)
+        file_layout = QHBoxLayout()
+        file_label = QLabel("STL File Path:")
+        self.file_input = QLineEdit()
+        self.file_input.setPlaceholderText("Enter file path")
+        file_layout.addWidget(file_label)
+        file_layout.addWidget(self.file_input)
+        layout.addLayout(file_layout)
 
         scale_layout = QHBoxLayout()
         scale_label = QLabel("Scale:")
@@ -98,6 +102,11 @@ class AddMeshWidget(QWidget):
         scale_layout.addWidget(scale_label)
         scale_layout.addWidget(self.scale_slider)
         layout.addLayout(scale_layout)
+
+        # Apply button to add the mesh
+        self.add_button = QPushButton('Add Mesh', self)
+        self.add_button.clicked.connect(self.on_add_clicked)
+        layout.addWidget(self.add_button)
 
         # Clear button to remove the mesh
         self.clear_button = QPushButton('Clear Mesh', self)
@@ -113,18 +122,6 @@ class AddMeshWidget(QWidget):
 
     change_scale = qc.pyqtSignal(float)
 
-    def on_import_stl(self):
-        options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import STL", "referenceMeshes/", "STL Files (*.stl)", options=options
-        )
-        if file_path:
-            mesh = stlToMeshItem(file_path, scale=1)
-            mesh.setObjectName("Mesh")
-            self.window().referenceMesh = ReferenceMesh(mesh=mesh)
-            self.scale_slider.setEnabled(True)
-            self.window().update_joint()
-        
     def toggle_visibility(self):
         self.window().mesh_visible = self.visible_toggle.isChecked()
         print("Mesh visibility toggled:", "Visible" if self.window().mesh_visible else "Hidden")
