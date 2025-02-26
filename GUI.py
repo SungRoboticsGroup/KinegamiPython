@@ -921,7 +921,13 @@ class PointEditorWindow(QMainWindow):
 
         self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
-        file_dock_layout.addWidget(self.save_crease_pattern_button)  
+        file_dock_layout.addWidget(self.save_crease_pattern_button) 
+
+        self.crease_pattern_unit = QComboBox()
+        self.crease_pattern_unit.addItems(["Milimeter (mm)", "Centimeter (cm)", "Meter (m)", "Inch (in)", "Foot (ft)"])
+        self.crease_pattern_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
+        self.crease_pattern_unit.setCurrentIndex(0)
+        file_dock_layout.addWidget(self.crease_pattern_unit)
 
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
@@ -966,6 +972,10 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+
+    def crease_pattern_unit_changed(self, index):
+        selected_option = self.crease_pattern_unit.itemText(index)
+        print(f"Selected unit: {selected_option}")
 
     def add_to_root_func(self, state):
         self.add_to_root = state == Qt.Checked
