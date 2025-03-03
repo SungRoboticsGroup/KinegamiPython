@@ -115,8 +115,12 @@ class AddMeshWidget(QWidget):
 
     def on_import_stl(self):
         options = QFileDialog.Options()
+        try:
+            base_path = sys._MEIPASS 
+        except AttributeError:
+            base_path = os.path.abspath(".")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import STL", "referenceMeshes/", "STL Files (*.stl)", options=options
+            self, "Import STL", os.path.join(base_path, "referenceMeshes/"), "STL Files (*.stl)", options=options
         )
         if file_path:
             mesh = stlToMeshItem(file_path, scale=1)
@@ -738,8 +742,16 @@ class PointEditorWindow(QMainWindow):
 
         self.translate_joint_label = QLabel("Translate")
         self.rotate_joint_label = QLabel("Rotate")
-        self.translate_joint_radio_button = ImageRadioButton("ui/move_unchecked.png", "ui/move_checked.png", "Translate")
-        self.rotate_joint_radio_button = ImageRadioButton("ui/rotate_unchecked.png", "ui/rotate_checked.png", "Rotate")
+        try:
+            base_path = sys._MEIPASS
+        except AttributeError:
+            base_path = os.path.abspath(".")
+        move_unchecked = os.path.join(base_path, "ui/move_unchecked.png")
+        move_checked = os.path.join(base_path, "ui/move_checked.png")
+        rotate_unchecked = os.path.join(base_path, "ui/rotate_unchecked.png")
+        rotate_checked = os.path.join(base_path, "ui/rotate_checked.png")
+        self.translate_joint_radio_button = ImageRadioButton(move_unchecked, move_checked, "Translate")
+        self.rotate_joint_radio_button = ImageRadioButton(rotate_unchecked, rotate_checked, "Rotate")
         self.translate_joint_radio_button.setChecked(True)
         self.translate_joint_radio_button.toggled.connect(self.change_control_type)
         self.rotate_joint_radio_button.toggled.connect(self.change_control_type)
@@ -1204,8 +1216,12 @@ class PointEditorWindow(QMainWindow):
     def save_crease_pattern(self):
         if self.chain:
             options = QFileDialog.Options()
+            try:
+                base_path = sys._MEIPASS 
+            except AttributeError:
+                base_path = os.path.abspath(".")
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save File", "save/", "DXF Files (*.dxf)", options=options
+                self, "Save File", os.path.join(base_path, "save/"), "DXF Files (*.dxf)", options=options
             )
             crease_pattern = self.chain.creasePattern()
             if file_path:
@@ -1221,8 +1237,12 @@ class PointEditorWindow(QMainWindow):
             if autosave_id is None:
                 print("save dialog")
                 options = QFileDialog.Options()
+                try:
+                    base_path = sys._MEIPASS 
+                except AttributeError:
+                    base_path = os.path.abspath(".")  
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "Save File", "save/", "Chain Files (*.chain)", options=options
+                    self, "Save File", os.path.join(base_path, "save/"), "Chain Files (*.chain)", options=options
                 )
             else:
                 try:
@@ -1237,8 +1257,12 @@ class PointEditorWindow(QMainWindow):
         
     def load_chain(self):
         options = QFileDialog.Options()
+        try:
+            base_path = sys._MEIPASS
+        except AttributeError:
+            base_path = os.path.abspath(".")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open File", "save/", "Chain Files (*.chain)", options=options
+            self, "Open File", os.path.join(base_path, "save/"), "Chain Files (*.chain)", options=options
         )
         if file_path:
             self.chain = loadKinematicChain(file_path)
