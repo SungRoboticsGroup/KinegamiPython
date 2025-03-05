@@ -1,21 +1,35 @@
 # -*- mode: python ; coding: utf-8 -*-
-
-
+block_cipher = None
 a = Analysis(
     ['GUI.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
-    datas=[('ui/*.png', './ui')],
+    datas=[
+        ('ui/rotate_unchecked.png', 'ui'),
+        ('ui/rotate_checked.png', 'ui'),
+        ('ui/move_unchecked.png', 'ui'),
+        ('ui/move_checked.png', 'ui'),
+        ('save/test.tree', 'save'),
+        ('save/test.chain', 'save'),
+        ('save/r.dxf', 'save'),
+        ('save/r.chain', 'save'),
+        ('save/autosave/autosave_0.chain', 'save/autosave'),
+        ('referenceMeshes/stanfordBunnyLowPoly.stl', 'referenceMeshes'),
+        ('referenceMeshes/meshSources.txt', 'referenceMeshes'),
+        ('referenceMeshes/legBones.stl', 'referenceMeshes'),
+        ('referenceMeshes/humanArmBones.stl', 'referenceMeshes'),
+        ('referenceMeshes/arm.stl', 'referenceMeshes'),
+    ],
     hiddenimports=[],
     hookspath=[],
-    hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=False,
-    optimize=0,
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False
 )
-pyz = PYZ(a.pure)
-
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
@@ -26,19 +40,14 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    console=False
 )
 coll = COLLECT(
     exe,
     a.binaries,
+    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    name='GUI',
+    name='GUI'
 )
