@@ -22,7 +22,7 @@ import pyqtgraph.opengl as gl
 import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QAction, QActionGroup
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3
 from pyqtgraph.Qt import QtCore
@@ -677,12 +677,6 @@ class PointEditorWindow(QMainWindow):
 
         # Add the message layout to the main layout
         #message_display_widget.setLayout(self.message_layout)
-        # //////////////////////////////////    MENU BAR    ///////////////////////////////////
-        self.menu_bar = self.menuBar()
-        self.file_menu = self.menu_bar.addMenu("File")
-        self.edit_menu = self.menu_bar.addMenu("Edit")
-        self.view_menu = self.menu_bar.addMenu("View")
-
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
@@ -884,111 +878,73 @@ class PointEditorWindow(QMainWindow):
         self.state_input.setDisabled(True)
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
-        # self.options_dock = QDockWidget("Options", self)
-        # self.options_widget = QWidget()
-        # self.options_layout = QVBoxLayout()
+        self.options_dock = QDockWidget("Options", self)
+        self.options_widget = QWidget()
+        self.options_layout = QVBoxLayout()
 
-        # #self.debug_btn = QPushButton("Debug")
-        # #self.debug_btn.clicked.connect(self.debug)
-        # #self.options_layout.addWidget(self.debug_btn)
-        
-        # self.undo_button = QPushButton("Undo")
-        # self.undo_button.clicked.connect(self.undo)
-        # self.options_layout.addWidget(self.undo_button)
-        
-        # self.toggle_grid = QPushButton("Hide Grid")
-        # self.toggle_grid.clicked.connect(self.toggle_grid_func)
-        # self.options_layout.addWidget(self.toggle_grid)
+        #self.debug_btn = QPushButton("Debug")
+        #self.debug_btn.clicked.connect(self.debug)
+        #self.options_layout.addWidget(self.debug_btn)
 
-        # self.options_widget.setLayout(self.options_layout)
-        # self.options_dock.setWidget(self.options_widget)
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.clicked.connect(self.undo)
+        self.options_layout.addWidget(self.undo_button)
+        
+        self.toggle_grid = QPushButton("Hide Grid")
+        self.toggle_grid.clicked.connect(self.toggle_grid_func)
+        self.options_layout.addWidget(self.toggle_grid)
+
+        self.options_widget.setLayout(self.options_layout)
+        self.options_dock.setWidget(self.options_widget)
         #self.options_dock.setMaximumSize(300, 150)
 
-        undo_action = QAction("Undo", self)
-        undo_action.triggered.connect(self.undo)
-
-        toggle_grid_action = QAction("Toggle Grid", self)
-        toggle_grid_action.triggered.connect(self.toggle_grid_func)
-
-        self.edit_menu.addAction(undo_action)
-        self.view_menu.addAction(toggle_grid_action)
-
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
-        # self.camera_controls_dock = QDockWidget("Camera Controls", self)
-        # self.camera_options_widget = QWidget()
-        # self.camera_layout = QVBoxLayout()
+        self.camera_controls_dock = QDockWidget("Camera Controls", self)
+        self.camera_options_widget = QWidget()
+        self.camera_layout = QVBoxLayout()
 
-        # self.camera1 = QRadioButton("Rotate Camera")
-        # self.camera2 = QRadioButton("Pan Camera")
-        # self.camera1.setChecked(True)
+        self.camera1 = QRadioButton("Rotate Camera")
+        self.camera2 = QRadioButton("Pan Camera")
+        self.camera1.setChecked(True)
 
-        # self.camera1.toggled.connect(self.change_camera_type)
-        # self.camera2.toggled.connect(self.change_camera_type)
+        self.camera1.toggled.connect(self.change_camera_type)
+        self.camera2.toggled.connect(self.change_camera_type)
     
-        # self.camera_layout.addWidget(self.camera1)
-        # self.camera_layout.addWidget(self.camera2)
+        self.camera_layout.addWidget(self.camera1)
+        self.camera_layout.addWidget(self.camera2)
         
-        # self.camera_options_widget.setLayout(self.camera_layout)
-        # self.camera_controls_dock.setWidget(self.camera_options_widget)
-
-        view_mode_group = QActionGroup(self)
-
-        self.rotate_camera_action = QAction("Rotate Camera", self, checkable=True)
-        self.rotate_camera_action.triggered.connect(self.change_camera_type)
-
-        self.pan_camera_action = QAction("Pan Camera", self, checkable=True)
-        self.pan_camera_action.triggered.connect(self.change_camera_type)
-
-        view_mode_group.addAction(self.rotate_camera_action)
-        view_mode_group.addAction(self.pan_camera_action)
-
-        self.rotate_camera_action.setChecked(True)
-
-        self.view_menu.addAction(self.rotate_camera_action)
-        self.view_menu.addAction(self.pan_camera_action)
+        self.camera_options_widget.setLayout(self.camera_layout)
+        self.camera_controls_dock.setWidget(self.camera_options_widget)
         
         #self.camera_controls_dock.setMaximumSize(300, 150)
 
         # ////////////////////////////////    FILE   ///////////////////////////////////
-        load_chain_action = QAction("Load Chain", self)
-        load_chain_action.triggered.connect(self.load_chain)
+        file_dock = QDockWidget("File", self)
+        #file_dock.setAllowedAreas(Qt.RightDockWidgetArea)
 
-        save_chain_action = QAction("Save Chain", self)
-        save_chain_action.triggered.connect(self.save_chain)
+        file_dock_widget = QWidget()
+        file_dock_layout = QVBoxLayout(file_dock_widget)
 
-        save_crease_pattern_action = QAction("Export Crease Pattern", self)
-        save_crease_pattern_action.triggered.connect(self.save_crease_pattern)
+        self.save_chain_button = QPushButton('Save Chain')
+        self.save_chain_button.clicked.connect(self.save_chain)
+        file_dock_layout.addWidget(self.save_chain_button)
 
-        self.file_menu.addAction(load_chain_action)
-        self.file_menu.addAction(save_chain_action)
-        self.file_menu.addAction(save_crease_pattern_action)
-        
-        # file_dock = QDockWidget("File", self)
-        # #file_dock.setAllowedAreas(Qt.RightDockWidgetArea)
+        self.load_chain_button = QPushButton('Load Chain')
+        self.load_chain_button.clicked.connect(self.load_chain)
+        file_dock_layout.addWidget(self.load_chain_button)
 
-        # file_dock_widget = QWidget()
-        # file_dock_layout = QVBoxLayout(file_dock_widget)
+        self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
+        self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
+        file_dock_layout.addWidget(self.save_crease_pattern_button) 
 
-        # self.save_chain_button = QPushButton('Save Chain')
-        # self.save_chain_button.clicked.connect(self.save_chain)
-        # file_dock_layout.addWidget(self.save_chain_button)
+        self.crease_pattern_unit = QComboBox()
+        self.crease_pattern_unit.addItems(["Milimeter (mm)", "Centimeter (cm)", "Meter (m)", "Inch (in)", "Foot (ft)"])
+        self.crease_pattern_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
+        self.crease_pattern_unit.setCurrentIndex(0)
+        file_dock_layout.addWidget(self.crease_pattern_unit)
 
-        # self.load_chain_button = QPushButton('Load Chain')
-        # self.load_chain_button.clicked.connect(self.load_chain)
-        # file_dock_layout.addWidget(self.load_chain_button)
-
-        # self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
-        # self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
-        # file_dock_layout.addWidget(self.save_crease_pattern_button) 
-
-        # self.crease_pattern_unit = QComboBox()
-        # self.crease_pattern_unit.addItems(["Milimeter (mm)", "Centimeter (cm)", "Meter (m)", "Inch (in)", "Foot (ft)"])
-        # self.crease_pattern_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
-        # self.crease_pattern_unit.setCurrentIndex(0)
-        # file_dock_layout.addWidget(self.crease_pattern_unit)
-
-        # file_dock_widget.setLayout(file_dock_layout)
-        # file_dock.setWidget(file_dock_widget)
+        file_dock_widget.setLayout(file_dock_layout)
+        file_dock.setWidget(file_dock_widget)
 
         # ////////////////////////////////    STL CONVERSION    ///////////////////////////////////
         # self.random_btn_dock = QDockWidget("Export Options", self)
@@ -1020,12 +976,12 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
         self.addDockWidget(Qt.TopDockWidgetArea, message_display_widget)
 
-        # self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
-        # self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_popup_dock)
-        # self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_controls_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_controls_dock)
         
         self.addDockWidget(Qt.RightDockWidgetArea, self.add_chain_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.add_chain_popup_dock)
@@ -1078,10 +1034,10 @@ class PointEditorWindow(QMainWindow):
     def toggle_grid_func(self):
         if self.grid_on:
             self.plot_widget.removeItem(self.grid)
-            # self.toggle_grid.setText("Show Grid")
+            self.toggle_grid.setText("Show Grid")
         else:
             self.plot_widget.addItem(self.grid)
-            # self.toggle_grid.setText("Hide Grid")
+            self.toggle_grid.setText("Hide Grid")
         self.grid_on = not self.grid_on
 
     # Success message method with timer
@@ -1233,9 +1189,9 @@ class PointEditorWindow(QMainWindow):
         self.update_joint()
 
     def change_camera_type(self):
-        if self.rotate_camera_action.isChecked():
+        if self.camera1.isChecked():
             self.plot_widget.camera_type = "Rotate"
-        elif self.pan_camera_action.isChecked():
+        elif self.camera2.isChecked():
             self.plot_widget.camera_type = "Pan"
 
         self.update_joint()
