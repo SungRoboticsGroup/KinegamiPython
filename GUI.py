@@ -211,7 +211,8 @@ class AddChainWidget(QWidget):
             # Call a function in the main window to create the new chain
             self.window().create_new_chains(numSides, radius)            
             # Optionally hide the widget after successful creation
-            self.window().add_chain_dock.setVisible(False)
+            self.window().add_chain_popup_dock.setVisible(False)
+            self.window().add_chain_dock.setVisible(True)
             self.window().radius_slider.setEnabled(True)
             self.window().joint_range_slider.setEnabled(True)
         except ValueError:
@@ -219,7 +220,8 @@ class AddChainWidget(QWidget):
 
     def on_cancel_clicked(self):
         # Hide the widget if the user cancels
-        self.window().add_chain_dock.setVisible(False)
+        self.window().add_chain_popup_dock.setVisible(False)
+        self.window().add_chain_dock.setVisible(True)
 
     def show_error(self, message):
         QMessageBox.warning(self, "Invalid Input", message)
@@ -967,8 +969,10 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_popup_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.camera_controls_dock)
         
-        self.addDockWidget(Qt.RightDockWidgetArea, self.camera_controls_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.add_chain_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.add_chain_popup_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
@@ -1067,6 +1071,7 @@ class PointEditorWindow(QMainWindow):
     def create_new_chain_func(self):
         # Show the AddChainWidget dock when this function is called
         self.add_chain_popup_dock.setVisible(True)
+        self.add_chain_dock.setVisible(False)
 
     def create_new_chains(self, num_sides, radius):
         # Implement chain creation logic here
@@ -1448,7 +1453,7 @@ class PointEditorWindow(QMainWindow):
     def add_chain(self, chain):
         self.chain = chain
         self.select_joint_options.blockSignals(True)
-        self.select_joint_options.clear() 
+        self.select_joint_options.clear()
     
         for i, joint in enumerate(self.chain.Joints):
             self.select_joint_options.addItem("Joint " + str(i) + " - " + joint.__class__.__name__)
