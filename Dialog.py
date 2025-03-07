@@ -104,7 +104,7 @@ class AddPrismaticDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        apply_button = QPushButton('Add')
+        apply_button = QPushButton('Add Prismatic Joint')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
 
@@ -152,7 +152,7 @@ class AddRevoluteDialog(AddJointDialog):
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
-        apply_button = QPushButton('Add')
+        apply_button = QPushButton('Add Revolute Joint')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
 
@@ -203,7 +203,7 @@ class AddTipDialog(AddJointDialog):
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
             
-        apply_button = QPushButton('Add')
+        apply_button = QPushButton('Add Tip')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
 
