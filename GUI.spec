@@ -1,11 +1,8 @@
-# my_project.spec
-# PyInstaller spec file example
-
+# -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
-
 a = Analysis(
     ['GUI.py'],
-    pathex=['.'], 
+    pathex=['.'],
     binaries=[],
     datas=[
         ('ui/rotate_unchecked.png', 'ui'),
@@ -32,22 +29,19 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False
 )
-
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='GUI',  
+    name='GUI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False  
+    console=False
 )
-
 coll = COLLECT(
     exe,
     a.binaries,
@@ -55,5 +49,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name='GUI' 
+    name='GUI'
 )

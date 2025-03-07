@@ -398,7 +398,7 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show(block=block)
+            plt.show(block=False)
 
         return doc
 
