@@ -1488,6 +1488,41 @@ class KinematicTree(Generic[J]):
             f.write(save)
             f.close()
 
+    def totalLengthLowerBound(self):
+        sum = self.Joints[0].neutralLength/2
+        for i in range(1, len(self.Joints)):
+            # if this isn't a waypoint
+            if not isinstance(self.Joints[i], Waypoint):
+                # backtrack until finding the parent that's not a waypoint, or reach the root
+                p = self.Parents[i]
+                while isinstance(self.Joints[p], Waypoint) and p > 0:
+                    p = self.Parents[p]
+                
+                parent = self.Joints[p]
+                child = self.Joints[i]
+                
+                jointLength = parent.neutralLength/2 + child.neutralLength/2
+                distanceBetweenZaxes = shortestDistanceBetweenLines(parent.Pose.t,
+                                                                parent.Pose.R[:,2],
+                                                                child.Pose.t,
+                                                                child.Pose.R[:,2])
+                sum += max(jointLength, distanceBetweenZaxes)
+        return sum
+
+    def totalLength(self):
+        sum = 0
+        for i in range(len(self.Joints)):
+            sum += self.Joints[i].neutralLength
+        for i in range(1, len(self.Links)):
+            sum += self.Links[i].path.length
+        return sum
+
+    def leaves(self):
+        return [i for i in range(len(self.Joints)) if len(self.Children[i]) == 0]
+    
+    def nonLeaves(self):
+        return [i for i in range(len(self.Joints)) if len(self.Children[i]) > 0]
+
 def optimizationLoss(tree):
     loss = 0
     for i in range(1, len(tree.Joints)):
@@ -1581,7 +1616,7 @@ def loadKinematicTree(filename : str):
         raise Exception(f"{first[1]} not implemented in save")
             
     try:
-        with open(f"save/{filename}.tree") as f:
+        with open(filename) as f:
             lines = f.readlines()
             rootJoint = getJoint(lines[1])
             if isinstance(rootJoint, OrigamiJoint):
@@ -1595,7 +1630,7 @@ def loadKinematicTree(filename : str):
             return tree
     except Exception as e:
         print(e)
-        raise Exception(f"file save/{filename}.tree doesnt exist")
+        raise Exception(f"file {filename} doesnt exist")
 
 def isWaypoint(joint):
     if joint is None:

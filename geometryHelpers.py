@@ -746,6 +746,17 @@ def commonNormal(point1, direction1, point2, direction2, undefined=None):
         return undefined
 
 
+def shortestDistanceBetweenLines(point1, direction1, point2, direction2):
+    direction1 = direction1 / norm(direction1)
+    direction2 = direction2 / norm(direction2)
+    cp = cross(direction1, direction2)
+    norm_cp = norm(cp)
+    if norm_cp == 0: #lines are parallel
+        return norm(cross(direction1, point2 - point1)/norm(direction1))
+    else:
+        return abs(dot(point2 - point1, cp) / norm_cp)
+
+
 class Torus:
     def __init__(self, majorRadius, minorRadius, center, axisDirection):
         self.R = majorRadius

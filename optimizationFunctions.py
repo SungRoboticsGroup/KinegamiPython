@@ -234,7 +234,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, chil
 
 def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
-    losses = []
+    lengths = []
 
     for i in range(0, len(subject.Joints)):
         subject.Joints[i].recomputeCollisionCapsules()
@@ -263,7 +263,7 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
     def log(t, idx):
         diff = time.time() - start
         times.append(diff)
-        losses.append(optimizationLoss(t))
+        lengths.append(t.totalLength())
         if directory != None:
             t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
 
@@ -415,13 +415,13 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
     if directory != None:
         tree.save(directory + "final", saveDir=False)
     if (evaluate):
-        return tree, times, losses
+        return tree, times, lengths
         
     return tree
 
 def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False, verbose=True, directory=None):
     times = []
-    losses = []
+    lengths = []
     start = time.time()
 
     for i in range(0, len(subject.Joints)):
@@ -451,7 +451,7 @@ def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = Fa
     def log(t, idx):
         diff = time.time() - start
         times.append(diff)
-        losses.append(optimizationLoss(t))
+        lengths.append(t.totalLength())
         if directory != None:
             t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
 
@@ -484,6 +484,6 @@ def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = Fa
     if directory != None:
         tree.save(directory + "final", saveDir=False)
     if (evaluate):
-        return tree, times, losses
+        return tree, times, lengths
     
     return tree

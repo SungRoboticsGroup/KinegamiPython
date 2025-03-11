@@ -33,6 +33,26 @@ class JointSpecificationTree:
 
     def zHats(self):
         return np.array([joint.Pose.R[:,2] for joint in self.Joints])
+    
+    def leaves(self):
+        return [i for i in range(len(self.Joints)) if len(self.Children[i]) == 0]
+    
+    def nonLeaves(self):
+        return [i for i in range(len(self.Joints)) if len(self.Children[i]) > 0]
+    
+    def totalLengthLowerBound(self):
+        sum = self.Joints[0].neutralLength/2
+        for i in range(1,len(self.Joints)):
+            p = self.Parents[i]
+            parent = self.Joints[p]
+            child = self.Joints[i]
+            jointLengthBetweenAxes = (parent.neutralLength + child.neutralLength)/2
+            distanceBetweenZaxes = shortestDistanceBetweenLines(parent.Pose.t, 
+                                                            parent.Pose.R[:,2],
+                                                            child.Pose.t, 
+                                                            child.Pose.R[:,2])
+            sum += max(jointLengthBetweenAxes, distanceBetweenZaxes)
+        return sum
 
 
 def orientJoint(joint : Joint, planeNormal : np.ndarray):

@@ -10,38 +10,51 @@ import threading
 import os 
 import shutil
 
-title = "30 Joint Trees"
-jointCount = 30
-treeCount = 10
+jointCount = 5
+probabilityOfBranching = 0.5
+sparse = False
+cubeSize = 100 if sparse else 10
+title = str(jointCount)+" Joint " + ("Chains" if probabilityOfBranching == 0 else "Trees") + (" Sparse" if sparse else " Dense")
+treeCount = 3
 restartFrom = 0
 multipleIterations=False
 
 os.makedirs("sim_results/" + title, exist_ok=True)
 
-branchingRatio = 0
+
 def generateTree(nJoints):
-    poses = [
-        SE3.Rand(xrange=(-100,100),yrange=(-100,100),zrange=(-100,100))
-        for _ in range(nJoints)
-    ]
+    bounds = (-cubeSize/2, cubeSize/2)
+    poses = [ SE3.Rand(xrange=bounds, yrange=bounds, zrange=bounds)
+                for _ in range(nJoints) ]
 
     r = 1
     numSides = 4
     neutralLength = 3
-    tree = JointSpecificationTree(Waypoint(numSides,r,poses[0]))
+
+    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
+            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+
+    specTree = JointSpecificationTree(root)
 
     for i in range(1,nJoints):
-        parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
-        match np.random.randint(1,2):
-            case 1:
-                tree.addJoint(parent, RevoluteJoint(numSides,r,np.pi,poses[i]))
-            case _:
-                tree.addJoint(parent, PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i]))
+        #parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
+        branching = np.random.rand() < probabilityOfBranching and i > 1
+        if branching:
+            # randomly select a parent from among the non-leaves
+            nonLeaves = specTree.nonLeaves()
+            parent = nonLeaves[np.random.randint(0,len(nonLeaves))]
+        else:
+            # randomly select a parent from among the leaves
+            leaves = specTree.leaves()
+            parent = leaves[np.random.randint(0,len(leaves))]
+        
+        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
+            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+        specTree.addJoint(parent, newJoint)
 
-    try:
-        return makeTubularKinematicTree(tree)
-    except:
-        return generateTree(nJoints)
+    initialTree = makeTubularKinematicTree(specTree)
+    assert(abs(specTree.totalLengthLowerBound() - initialTree.totalLengthLowerBound()) < 1e-5)
+    return initialTree
 
 optimizations = [partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=True),
                 partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=False),
@@ -56,16 +69,19 @@ labels = ["Streamline + Guarantee (SG)",
           "No Streamline Guarantee (NSG)",
           "Linear (L)"]
 
+lowerBounds = []
 results = []
 
 restartDir = "sim_results/" + title + "/" + str(restartFrom)
 if os.path.exists(restartDir):
     shutil.rmtree(restartDir)
 
+
 for i in range(restartFrom,treeCount):
     print(f"\n\nConstructing tree {i}")
     construct = generateTree(jointCount)
     construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
+    lowerBounds.append(construct.totalLengthLowerBound())
     results.append([])
     for no, f in enumerate(optimizations):
         print(f"\nTrying loss function {no}")
@@ -86,7 +102,8 @@ for i in range(restartFrom,treeCount):
 with open("sim_results/" + title + "/random_results.json", "w") as file:
     json.dump(results, file)
 
-for result in results:
+
+for index, result in enumerate(results):
     plt.figure(figsize=(8, 5)) 
     
     idx = 0
@@ -94,10 +111,15 @@ for result in results:
         plt.plot(x, y, marker='o', linestyle='-', label=labels[idx])
         idx += 1
 
+    # plot the lower bound as a horizontal line
+    plt.axhline(y=lowerBounds[index], color='r', linestyle='-', label='Lower Bound')
+
     plt.xlabel('Time')
     plt.ylabel('Loss')
     plt.title('Loss vs Time: ' + str(title))
     plt.legend()
 
     plt.grid(True)
+    # save to an image file
+    plt.savefig("sim_results/" + str(title) + "/example" + str(index) + ".png")
     plt.show()
