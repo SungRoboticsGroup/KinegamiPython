@@ -231,7 +231,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, chil
         return tree, minSwarmResult
     else:
         raise Exception("Optimization failed dramatically")
-
+    
 def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
     lengths = []
@@ -264,6 +264,7 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
         diff = time.time() - start
         times.append(diff)
         lengths.append(t.totalLength())
+
         if directory != None:
             t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
 
@@ -416,13 +417,12 @@ def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = F
         tree.save(directory + "final", saveDir=False)
     if (evaluate):
         return tree, times, lengths
-        
+    
     return tree
 
 def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, guarantee=False, parallelize=False, evaluate=False, verbose=True, directory=None):
     times = []
     lengths = []
-    start = time.time()
 
     for i in range(0, len(subject.Joints)):
         subject.Joints[i].recomputeCollisionCapsules()
@@ -487,3 +487,63 @@ def linearOptimize(subject, showSteps=False, childParentRatio=1, streamline = Fa
         return tree, times, lengths
     
     return tree
+
+def perpetualOptimize(subject, iterations, showSteps=False, childParentRatio=1, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
+    def log(t, idx):
+        diff = time.time() - start
+        times.append(diff)
+        lengths.append(t.totalLength())
+        if directory != None:
+            t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
+    
+    times = []
+    lengths = []
+
+    for i in range(0, len(subject.Joints)):
+        subject.Joints[i].recomputeCollisionCapsules()
+
+    if subject.detectCollisions(debug=True) > 0:
+        print("Warning: Initial tree contains collisions.")
+    if showSteps and isinstance(subject.Joints[0], OrigamiJoint):
+        subject.show()
+
+    collisionError = 0
+    for i in range(0, len(subject.Joints)):
+        if len(subject.Children[i]) > 0:
+            continue
+        j = i
+        length = 0
+        while j != 0:
+            length += subject.Links[j].path.length ** 2
+            j = subject.Parents[j]
+        if length > collisionError:
+            collisionError = length
+
+    print(f"Collision error is {collisionError}")
+    tree = subject.copyAbbreviatedSelf()
+
+    start = time.time()
+
+    subIters = 50
+    tolerance = subject.r/10
+
+    for _ in range(0, iterations):
+        index = np.random.randint(1, len(tree.Joints))
+        if isWaypoint(subject.Joints[index]):
+            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=subIters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+        else:
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=subIters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+        
+        log(tree, index)
+        
+
+    print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+
+    if directory != None:
+        tree.save(directory + "final", saveDir=False)
+    if (evaluate):
+        return tree, times, lengths
+
+    return tree
+
+    

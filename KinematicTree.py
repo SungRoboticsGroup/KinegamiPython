@@ -200,7 +200,7 @@ class KinematicTree(Generic[J]):
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  showJointSurface=True, jointColor=jointColorDefault,
+                  showJointSurface=True, jointColor=jointColorDefault, jointEdgeColor=jointEdgeColorDefault,
                   jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
@@ -220,7 +220,7 @@ class KinematicTree(Generic[J]):
             handles = joint.addToPlot(ax, xColor, yColor, zColor, 
                                     proximalColor, centerColor, distalColor, 
                                     sphereColor=sphereColor, showSphere=showSpheres, 
-                                    surfaceColor=jointColor, surfaceOpacity=surfaceOpacity,
+                                    surfaceColor=jointColor, edgeColor=jointEdgeColor, surfaceOpacity=surfaceOpacity,
                                     showSurface=showJointSurface, axisScale=jointAxisScale,
                                     showPoses=showJointPoses)
             if not handles is None:
@@ -251,11 +251,11 @@ class KinematicTree(Generic[J]):
         for linkIndex, capsuleIndex in showSpecificCapsules[1]:
             self.Links[linkIndex].collisionCapsules[capsuleIndex].addToPlot(ax)
         
-        for jointIndex, capsuleIndex in showCollisionBoxes[0]:
-            self.Joints[jointIndex].collisionCapsules[capsuleIndex].box.addToPlot(ax)
+        # for jointIndex, capsuleIndex in showCollisionBoxes[0]:
+        #     self.Joints[jointIndex].collisionCapsules[capsuleIndex].box.addToPlot(ax)
 
-        for linkIndex, capsuleIndex in showCollisionBoxes[1]:
-            self.Links[linkIndex].collisionCapsules[capsuleIndex].box.addToPlot(ax)
+        # for linkIndex, capsuleIndex in showCollisionBoxes[1]:
+        #     self.Links[linkIndex].collisionCapsules[capsuleIndex].box.addToPlot(ax)
         
         if showSpheres:
             self.boundingBall.addToPlot(ax, color=sphereColor, 

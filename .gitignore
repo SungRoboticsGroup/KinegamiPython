@@ -11,3 +11,4 @@ report.log
 testenv/
 Dockerfile
 save/*
+img_output.png
