@@ -267,6 +267,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.drag_start_pos = None
         self.last_drag_pos = None
         self.parent_window = parent_window
+        self.orbit_speed = 0.3
 
         dist = self.opts['distance']
         self.near_clip = dist * 0.001
@@ -534,7 +535,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                     self.pan(diff.x(), diff.y(), 0, relative='view')
                 elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
                     if (self.camera_type == "Rotate"):
-                        self.orbit(-diff.x(), diff.y())
+                        self.orbit(-diff.x()*self.orbit_speed, diff.y()*self.orbit_speed)
                     elif (self.camera_type == "Pan"):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
