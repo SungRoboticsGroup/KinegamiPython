@@ -220,8 +220,6 @@ class AddChainWidget(QWidget):
             self.window().add_chain_dock.setVisible(True)
             self.window().radius_slider.setEnabled(True)
             self.window().joint_range_slider.setEnabled(True)
-            self.window().add_prismatic_menu.initUI()
-            self.window().add_revolute_menu.initUI()
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -694,6 +692,8 @@ class PointEditorWindow(QMainWindow):
         self.add_revolute_menu = AddRevoluteMenu(self)
         self.add_revolute_menu.setVisible(False)
         self.add_tip = QPushButton("Add Tip")
+        self.add_tip_menu = AddTipMenu(self)
+        self.add_tip_menu.setVisible(False)
         self.create_new_chain = QPushButton("Create New Chain")
 
         add_waypoints_layout = QVBoxLayout()
@@ -719,13 +719,14 @@ class PointEditorWindow(QMainWindow):
         add_joints_layout.addWidget(self.add_revolute_menu)
         add_joints_layout.addLayout(add_waypoints_layout)
         add_joints_layout.addWidget(self.add_tip)
+        add_joints_layout.addWidget(self.add_tip_menu)
 
         add_chain_layout.addWidget(self.create_new_chain)
 
         self.add_prismatic.clicked.connect(self.add_prismatic_toggle)
         self.add_revolute.clicked.connect(self.add_revolute_toggle)
         self.add_waypoint.clicked.connect(self.add_waypoint_func)
-        self.add_tip.clicked.connect(self.add_tip_func)
+        self.add_tip.clicked.connect(self.add_tip_toggle)
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
 
         self.add_chain_dock = QDockWidget("New Chain", self)
@@ -1722,35 +1723,35 @@ class PointEditorWindow(QMainWindow):
     # def add_joint(self, dialog):
     #     if dialog.exec_() == QDialog.Accepted:
     #         joint : Joint = dialog.getJoint()
-    #         if not self.add_to_root:
-    #             if (self.chain == None or len(self.chain.Joints) == 0) :
-    #                 self.chain = KinematicChain(joint)
-    #             else :
-    #                 self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-    #                 #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-    #             self.selected_joint = len(self.chain.Joints) - 1
-    #         else:
+            # if not self.add_to_root:
+            #     if (self.chain == None or len(self.chain.Joints) == 0) :
+            #         self.chain = KinematicChain(joint)
+            #     else :
+            #         self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+            #         #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+            #     self.selected_joint = len(self.chain.Joints) - 1
+            # else:
 
-    #             if (self.chain == None or len(self.chain.Joints) == 0) :
-    #                 self.chain = KinematicChain(joint)
-    #             else:
-    #                 old_root = self.chain.Joints[0]
-    #                 joint.Pose = old_root.Pose @ joint.Pose
+            #     if (self.chain == None or len(self.chain.Joints) == 0) :
+            #         self.chain = KinematicChain(joint)
+            #     else:
+            #         old_root = self.chain.Joints[0]
+            #         joint.Pose = old_root.Pose @ joint.Pose
 
-    #                 new_chain = KinematicChain(joint)
+            #         new_chain = KinematicChain(joint)
 
-    #                 for i, jt in enumerate(self.chain.Joints):
-    #                     if i == 0:
-    #                         cachedLink = None
-    #                     else:
-    #                         cachedLink = self.chain.Links[i]
-    #                     new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False, cachedLink=cachedLink)
-    #                 self.chain = new_chain
+            #         for i, jt in enumerate(self.chain.Joints):
+            #             if i == 0:
+            #                 cachedLink = None
+            #             else:
+            #                 cachedLink = self.chain.Links[i]
+            #             new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False, cachedLink=cachedLink)
+            #         self.chain = new_chain
 
-    #             self.selected_joint = 0
+            #     self.selected_joint = 0
 
-    #         self.update_joint()
-    #         self.log_version()
+            # self.update_joint()
+            # self.log_version()
     def add_joint(self, joint : Joint):
         if not self.add_to_root:
             if (self.chain == None or len(self.chain.Joints) == 0) :
@@ -1820,15 +1821,25 @@ class PointEditorWindow(QMainWindow):
     #     self.add_joint_func("tip")
 
     def add_prismatic_toggle(self):
+        if (not self.chain_created):
+            self.chain_not_created()
+            return
         self.add_prismatic_menu.setVisible(not self.add_prismatic_menu.isVisible())
         self.add_prismatic.setVisible(not self.add_prismatic.isVisible())
 
     def add_revolute_toggle(self):
+        if (not self.chain_created):
+            self.chain_not_created()
+            return
         self.add_revolute_menu.setVisible(not self.add_revolute_menu.isVisible())
         self.add_revolute.setVisible(not self.add_revolute.isVisible())
 
-    def add_tip_func(self):
-        self.add_joint_func("tip")
+    def add_tip_toggle(self):
+        if (not self.chain_created):
+            self.chain_not_created()
+            return
+        self.add_tip_menu.setVisible(not self.add_tip_menu.isVisible())
+        self.add_tip.setVisible(not self.add_tip.isVisible())
 
     def add_waypoint_func(self):
         numSides = self.num_sides

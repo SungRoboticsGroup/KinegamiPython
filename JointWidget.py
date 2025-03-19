@@ -56,7 +56,9 @@ class AddJointMenu(QWidget):
 class AddPrismaticMenu(AddJointMenu):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.add_joint = self.window().add_joint        
+        self.add_joint = self.window().add_joint
+
+        self.initUI()        
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -123,7 +125,9 @@ class AddPrismaticMenu(AddJointMenu):
 class AddRevoluteMenu(AddJointMenu):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.add_joint = self.window().add_joint   
+        self.add_joint = self.window().add_joint
+
+        self.initUI()   
 
     def initUI(self):
         layout = QVBoxLayout()
@@ -165,3 +169,55 @@ class AddRevoluteMenu(AddJointMenu):
     
         self.add_joint(self.jointToAdd)
         self.window().add_revolute_toggle()
+
+class AddTipMenu(AddJointMenu):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.add_joint = self.window().add_joint
+
+        self.isStart = True
+
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout()
+
+        length_layout = QHBoxLayout()
+        length_label = QLabel("Length:")
+        self.length_input = QLineEdit()
+        length_layout.addWidget(length_label)
+        length_layout.addWidget(self.length_input)
+        layout.addLayout(length_layout)
+            
+        apply_button = QPushButton('Add Tip')
+        apply_button.clicked.connect(self.onApplyClicked)
+        layout.addWidget(apply_button)
+
+        cancel_button = QPushButton('Cancel')
+        cancel_button.clicked.connect(self.window().add_tip_toggle)
+        layout.addWidget(cancel_button)
+
+        self.setLayout(layout)
+
+    def onApplyClicked(self):
+        try:
+            self.update()
+
+            length = float(self.length_input.text())
+            if self.prevJoint is None:
+                self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
+            else:
+                distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
+                if self.add_to_root: distance *= -1
+                pose = SE3(0,0,distance)
+                if self.prevJoint.pathIndex() == 0:
+                    pose = SE3.Ry(np.pi/2) @ pose
+                self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
+
+            self.add_joint(self.jointToAdd)
+            self.window().add_tip_toggle()
+
+        except ValueError:
+            self.show_error('Please enter valid integers.')
+            # error_dialog = ErrorDialog('Please enter valid integers.')
+            # error_dialog.exec_()
