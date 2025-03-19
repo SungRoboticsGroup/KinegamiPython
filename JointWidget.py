@@ -43,7 +43,7 @@ class AddJointMenu(QWidget):
         self.r = self.window().radius
 
         if (self.window().chain and len(self.window().chain.Joints) > 0):
-            if not self.add_to_root:
+            if not self.window().add_to_root:
                 self.prevJoint = self.window().chain.Joints[-1]
                 self.add_to_root = False
             else:
