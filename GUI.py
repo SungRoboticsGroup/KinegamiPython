@@ -108,6 +108,7 @@ class AddMeshWidget(QWidget):
         self.visible_toggle.setChecked(True)
         self.visible_toggle.toggled.connect(self.toggle_visibility)  
         layout.addWidget(self.visible_toggle)
+
         
         self.setLayout(layout)
 
@@ -681,6 +682,7 @@ class PointEditorWindow(QMainWindow):
         self.add_revolute = QPushButton("Add Revolute Joint")
         self.add_tip = QPushButton("Add Tip")
         self.create_new_chain = QPushButton("Create New Chain")
+        self.edit_dimension_button = QPushButton("Edit Dimension")
 
         add_waypoints_layout = QVBoxLayout()
         self.add_waypoint = QPushButton("Add Waypoint")
@@ -703,6 +705,7 @@ class PointEditorWindow(QMainWindow):
         add_joints_layout.addWidget(self.add_revolute)
         add_joints_layout.addLayout(add_waypoints_layout)
         add_joints_layout.addWidget(self.add_tip)
+        add_joints_layout.addWidget(self.edit_dimension_button)
         add_chain_layout.addWidget(self.create_new_chain)
 
         self.add_prismatic.clicked.connect(self.add_prismatic_func)
@@ -710,6 +713,7 @@ class PointEditorWindow(QMainWindow):
         self.add_waypoint.clicked.connect(self.add_waypoint_func)
         self.add_tip.clicked.connect(self.add_tip_func)
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
+        self.edit_dimension_button.clicked.connect(self.edit_joint_dimension)
 
         self.add_chain_dock = QDockWidget("New Chain", self)
         self.add_chain_button_widget = QWidget()
@@ -1488,6 +1492,54 @@ class PointEditorWindow(QMainWindow):
         
         self.select_link_options.blockSignals(False)
         self.select_link_options.setCurrentIndex(self.selected_link)
+
+    import copy
+
+    def edit_joint_dimension(self):
+        backup_chain = copy.deepcopy(self.chain)
+
+        try:
+            new_chain = None
+            selected = self.selected_joint
+
+            for idx, joint in enumerate(backup_chain.Joints):
+                if idx == selected:
+                    prev = None
+                    if idx > 0:
+                        prev = backup_chain.Joints[idx - 1]
+                    if joint.__class__.__name__ == "PrismaticJoint":
+                        dialog = AddPrismaticDialog(self.chain.numSides, self.radius, prevJoint=prev)
+                    elif joint.__class__.__name__ == "RevoluteJoint":
+                        dialog = AddRevoluteDialog(self.chain.numSides, self.radius, prevJoint=prev)
+                    elif joint.__class__.__name__ == "StartTip" or joint.__class__.__name__ == "EndTip":
+                        dialog = AddTipDialog(self.chain.numSides, self.radius, prevJoint=prev)
+                    else:
+                        self.show_error("Uneditabe joint type.")
+                        return
+
+                    if dialog.exec_() == QDialog.Accepted:
+                        joint : Joint = dialog.getJoint()
+                        if new_chain == None :
+                            new_chain = KinematicChain(joint)
+                        else :
+                            new_chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                        self.selected_joint = len(self.chain.Joints) - 1
+                else:
+                    if new_chain == None :
+                        new_chain = KinematicChain(joint)
+                    else:
+                        new_chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+
+            self.chain = new_chain
+            self.log_version()
+            self.show_success("Chain updated successfully!")
+        
+        except Exception as e:
+            self.chain = backup_chain
+            self.show_error("Error rebuilding chain: " + str(e))
+        
+        self.update_joint()
+
 
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
