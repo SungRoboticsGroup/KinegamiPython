@@ -1547,6 +1547,8 @@ class PointEditorWindow(QMainWindow):
                         else :
                             new_chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
                         self.selected_joint = len(self.chain.Joints) - 1
+                    else:
+                        return
                 else:
                     if new_chain == None :
                         new_chain = KinematicChain(joint)
