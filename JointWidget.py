@@ -212,7 +212,10 @@ class AddTipMenu(AddJointMenu):
                 pose = SE3(0,0,distance)
                 if self.prevJoint.pathIndex() == 0:
                     pose = SE3.Ry(np.pi/2) @ pose
-                self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
+                if self.add_to_root:
+                    self.jointToAdd = StartTip(self.numSides, self.r, pose, length=length)
+                else:
+                    self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
 
             self.add_joint(self.jointToAdd)
             self.window().add_tip_toggle()
