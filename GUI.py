@@ -1527,6 +1527,9 @@ class PointEditorWindow(QMainWindow):
 
             for idx, joint in enumerate(backup_chain.Joints):
                 if idx == selected:
+
+                    current = joint.state
+            
                     prev = None
                     if idx > 0:
                         prev = backup_chain.Joints[idx - 1]
@@ -1542,6 +1545,13 @@ class PointEditorWindow(QMainWindow):
 
                     if dialog.exec_() == QDialog.Accepted:
                         joint : Joint = dialog.getJoint()
+                        min = joint.stateRange()[0]
+                        max = joint.stateRange()[1]
+                        if current < min:
+                            current = min
+                        elif current > max:
+                            current = max
+                        joint.state = current
                         if new_chain == None :
                             new_chain = KinematicChain(joint)
                         else :
@@ -1556,6 +1566,7 @@ class PointEditorWindow(QMainWindow):
                         new_chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
 
             self.chain = new_chain
+            self.selected_joint = selected
             self.log_version()
             self.show_success("Chain updated successfully!")
         
