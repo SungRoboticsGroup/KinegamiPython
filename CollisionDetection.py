@@ -261,6 +261,23 @@ class CollisionCapsule:
 
         return result, point
 
+    def collisionErrorWith(self, other, includeEnds=False):
+        p1, p2 = closestPointsBetweenLineSegments(self.start, self.end, other.start, other.end)
+    
+        vector = p2 - p1
+        distance = np.linalg.norm(vector)
+        
+        sumRadii = self.radius + other.radius
+
+        if distance < sumRadii:
+            collisionPoint = p1 + vector * 0.5
+
+            k = 50 #steepness of the transition
+            error = 1 / (1 + np.exp(-k * (sumRadii - distance)))
+            return error
+        else:
+            return 0
+
 def pointInCapsuleHemisphere(point, capsule):
     start, end, radius = capsule
     axis = end - start

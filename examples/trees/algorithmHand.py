@@ -8,6 +8,7 @@ main_dir = os.path.abspath(os.path.join(this_dir, '../..'))
 sys.path.append(main_dir)
 from makeKinematicTree import *
 from testqtgraph import *
+from optimizationFunctions import *
 
 r = 1
 numSides = 4
@@ -55,13 +56,11 @@ middleEnd = spec.addJoint(middle2, EndTip(numSides, r,
         SE3.Trans(4,0,0)@SE3.Ry(np.pi/2)@SE3.Rz(np.pi/2), 1), relative=True)
 
         
-tree = makeTubularKinematicTree(spec, plotSteps=False, optimize=False)
+tree = makeTubularKinematicTree(spec, plotSteps=False)
 
-tree = tree.squaredOptimize()
+tree = squaredOptimize(tree, parallelize=True, guarantee=False, evaluate=False)
 
 tree.show()
-
-tree.save("optimizedHand-new2")
 
 #plotPrintedTree(origamiToPrinted(tree, 0.05), "algorithmHandPrinted")
 #tree.show()

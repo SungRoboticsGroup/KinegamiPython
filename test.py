@@ -10,6 +10,17 @@ from testqtgraph import *
 from makeKinematicTree import *
 from optimizationFunctions import *
 from randomTree import *
+from multiObjectiveOptimizationFunctions import *
 
-tree = loadKinematicTree("old/10 Joint Chains/0/Linear (L)/4.545870780944824_1.tree")
-plotColoredTrees("old/10 Joint Chains/0/Linear (L)")
+r = 1
+numSides = 4
+
+spec = JointSpecificationTree(RevoluteJoint(numSides, r, np.pi, SE3()))
+i = spec.addJoint(0, PrismaticJoint(numSides,r,3,3,np.pi/5,SE3(4,0,0)@SE3.Ry(np.pi/2)), relative=True)
+i = spec.addJoint(i, RevoluteJoint(numSides,r,np.pi,SE3.Trans(0,0,4)@SE3.Ry(2*np.pi/3)), relative=True)
+i = spec.addJoint(i, RevoluteJoint(numSides,r,np.pi,SE3.Trans(1,0,0)@SE3.Rx(np.pi/4)), relative=True)
+tree = makeTubularKinematicTree(spec, plotSteps=False, orientUp=True)
+
+states = [[0,0,0,0],[np.pi/2,np.pi/4,np.pi/2,np.pi/3]]
+for t in method1(tree, states, parallelize=True):
+    t.show()
