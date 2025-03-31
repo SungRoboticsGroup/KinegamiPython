@@ -295,9 +295,9 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
             tolerance = subject.r/10
 
         if isWaypoint(subject.Joints[index]):
-            trees, losses = optimizeWaypointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            trees, loss = optimizeWaypointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            trees, losses = optimizeJointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            trees, loss = optimizeJointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
         # log(tree, index)
 
@@ -316,6 +316,83 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
 
         print(f"OPTIMIZING CHAIN ENDING AT {i}:")
         start2 = time.time()
+        order = []
+
+        parent = i
+        while not isOptimized[parent]:
+            order.append(parent)
+            parent = subject.Parents[parent]
+        order.reverse()
+
+        optimizeStreak = 0
+
+        for j in range(0, len(order)):
+            iters = 50
+            tolerance = subject.r/10
+            
+            if isWaypoint(subject.Joints[order[j]]):
+                try:
+                    trees2, loss = optimizeWaypointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+
+                    for tree in trees2:
+                        if tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
+                            raise Exception("Moving all children caused collision.")
+
+                    trees = trees2
+
+                    if optimizeStreak == j:
+                        isOptimized[order[j]] = True
+                        numOptimized += 1
+                        optimizeStreak += 1
+                except Exception as e:
+                    if verbose:
+                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                    if j != 0:
+                        if isOptimized[trees[0].Parents[order[j]]]:
+                            isOptimized[trees[0].Parents[order[j]]] = False
+                            numOptimized -= 1
+                    
+                    if resetOnFail:
+                        print(f"RESET ON FAIL OCCURRED: JOINT {order[j]} TIME: {time.time() - start}")
+                        for idx in order:
+                            if isOptimized[idx]:
+                                isOptimized[idx] = False
+                                numOptimized -= 1
+
+                    trees, loss = optimizeWaypointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    break
+            else:
+                try:
+                    trees2, loss = optimizeJointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+
+                    for tree in trees2:
+                        if tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
+                            raise Exception("Moving all children caused collision.")
+                    
+                    trees = trees2
+
+                    if optimizeStreak == j:
+                        isOptimized[order[j]] = True
+                        numOptimized += 1
+                        optimizeStreak += 1
+                except Exception as e:
+                    if verbose:
+                        print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
+                    if j != 0:
+                        if isOptimized[trees[0].Parents[order[j]]]:
+                            isOptimized[trees[0].Parents[order[j]]] = False
+                            numOptimized -= 1
+                    if resetOnFail:
+                        print(f"RESET ON FAIL OCCURRED: JOINT {order[j]} TIME: {time.time() - start}")
+                        for idx in order:
+                            if isOptimized[idx]:
+                                isOptimized[idx] = False
+                                numOptimized -= 1
+
+                    trees, loss = optimizeJointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    break
+
+            # log(tree, order[j])
 
         while not isOptimized[i]:
             optimizeFromIndex(i)
