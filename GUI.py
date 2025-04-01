@@ -983,8 +983,12 @@ class PointEditorWindow(QMainWindow):
         self.undo_button.clicked.connect(self.undo)
         self.options_layout.addWidget(self.undo_button)
         
-        self.toggle_grid = QPushButton("Edit Grid")
-        self.toggle_grid.clicked.connect(self.edit_grid_func)
+        self.edit_grid = QPushButton("Edit Grid")
+        self.edit_grid.clicked.connect(self.edit_grid_func)
+        self.options_layout.addWidget(self.edit_grid)
+
+        self.toggle_grid = QPushButton("Hide Grid")
+        self.toggle_grid.clicked.connect(self.toggle_grid_func)
         self.options_layout.addWidget(self.toggle_grid)
 
         self.options_widget.setLayout(self.options_layout)
@@ -1138,15 +1142,18 @@ class PointEditorWindow(QMainWindow):
         self.update_joint()
     
     def edit_grid_func(self):
-        # if self.grid_on:
-        #     self.plot_widget.removeItem(self.grid)
-        #     self.toggle_grid.setText("Show Grid")
-        # else:
-        #     self.plot_widget.addItem(self.grid)
-        #     self.toggle_grid.setText("Hide Grid")
-        
-        self.edit_grid_dock.setVisible(True)
-        # self.grid_on = not self.grid_on
+        visibility = self.edit_grid_dock.isVisible()
+        self.edit_grid_dock.setVisible(not visibility)
+
+    def toggle_grid_func(self):
+        if self.grid_on:
+            self.plot_widget.removeItem(self.grid)
+            self.toggle_grid.setText("Show Grid")
+        else:
+            self.plot_widget.addItem(self.grid)
+            self.toggle_grid.setText("Hide Grid")
+
+        self.grid_on = not self.grid_on
 
     # Success message method with timer
     def show_success(self, message):
