@@ -231,6 +231,71 @@ class AddChainWidget(QWidget):
 
     def show_error(self, message):
         QMessageBox.warning(self, "Invalid Input", message)
+
+class EditGridWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Create New Chain')
+
+        layout = QVBoxLayout()
+
+        # Input for line spacing
+        spacing_layout = QHBoxLayout()
+        spacing_label = QLabel("Grid line spacing: ")
+        unit_label = QLabel(self.window().crease_pattern_unit.currentText())
+        self.spacing_input = QLineEdit()
+        self.spacing_input.setPlaceholderText("Enter spacing")
+        spacing_layout.addWidget(spacing_label)
+        spacing_layout.addWidget(self.spacing_input)
+        spacing_layout.addWidget(unit_label)
+        layout.addLayout(spacing_layout)
+
+        # Input for the amount of lines
+        line_amt_layout = QHBoxLayout()
+        line_amt_label = QLabel("Size:")
+        self.line_amt_input = QLineEdit()
+        grid_lines_label = QLabel("Grid lines")
+        self.line_amt_input.setPlaceholderText("Enter line amount")
+        line_amt_layout.addWidget(line_amt_label)
+        line_amt_layout.addWidget(self.line_amt_input)
+        line_amt_layout.addWidget(grid_lines_label)
+        layout.addLayout(line_amt_layout)
+
+        button_layout = QHBoxLayout()
+
+        # Apply button to create the chain
+        apply_button = QPushButton('Apply Changes', self)
+        apply_button.clicked.connect(self.on_create_clicked)
+        button_layout.addWidget(apply_button)
+
+        # Cancel button to close the widget
+        self.cancel_button = QPushButton('Cancel', self)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
+        button_layout.addWidget(self.cancel_button)
+
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def on_create_clicked(self):
+        try:
+            # Get input values
+            spacing = int(self.spacing_input.text())
+            line_amt = int(self.line_amt_input.text())
+
+            # Send signals to parent
+            self.window().grid_size = line_amt * spacing
+            self.window().grid_spacing = spacing
+            self.window().update_joint()
+        except ValueError:
+            self.show_error("Please enter valid integers.")
+
+    def on_cancel_clicked(self):
+        # Hide the widget if the user cancels
+        self.window().edit_grid_dock.setVisible(False)
+
+    def show_error(self, message):
+        QMessageBox.warning(self, "Invalid Input", message)
     
 class ImageRadioButton(QRadioButton):
     def __init__(self, unchecked_img, checked_img, tooltip_text, parent=None):
@@ -616,9 +681,15 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget.setBackgroundColor(backgroundColorDefault)
 
+        self.grid_size = 10.0
+        self.grid_spacing = 2.0
+        self.grid_color = gridColorDefault
+
         self.grid = gl.GLGridItem()
         self.plot_widget.addItem(self.grid)
         self.grid.setColor(gridColorDefault)
+        self.grid.setSize(10.0, 10.0, 10.0)
+        self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
         self.grid_on = True
 
         self.current_point = 0
@@ -912,8 +983,8 @@ class PointEditorWindow(QMainWindow):
         self.undo_button.clicked.connect(self.undo)
         self.options_layout.addWidget(self.undo_button)
         
-        self.toggle_grid = QPushButton("Hide Grid")
-        self.toggle_grid.clicked.connect(self.toggle_grid_func)
+        self.toggle_grid = QPushButton("Edit Grid")
+        self.toggle_grid.clicked.connect(self.edit_grid_func)
         self.options_layout.addWidget(self.toggle_grid)
 
         self.options_widget.setLayout(self.options_layout)
@@ -960,7 +1031,7 @@ class PointEditorWindow(QMainWindow):
         file_dock_layout.addWidget(self.save_crease_pattern_button) 
 
         self.crease_pattern_unit = QComboBox()
-        self.crease_pattern_unit.addItems(["Milimeter (mm)", "Centimeter (cm)", "Meter (m)", "Inch (in)", "Foot (ft)"])
+        self.crease_pattern_unit.addItems(["Centimeter (cm)", "Inch (in)"])
         self.crease_pattern_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
         self.crease_pattern_unit.setCurrentIndex(0)
         file_dock_layout.addWidget(self.crease_pattern_unit)
@@ -994,12 +1065,18 @@ class PointEditorWindow(QMainWindow):
         self.add_chain_popup_dock = QDockWidget("Create New Chain", self)
         self.add_chain_popup_dock.setWidget(self.add_chain_button_widget)
         self.add_chain_popup_dock.setVisible(False)  # Initially hidden
+
+        self.edit_grid_widget = EditGridWidget(self)
+        self.edit_grid_dock = QDockWidget("Edit Grid", self)
+        self.edit_grid_dock.setWidget(self.edit_grid_widget)
+        self.edit_grid_dock.setVisible(False)
         
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
         self.addDockWidget(Qt.TopDockWidgetArea, message_display_widget)
 
         self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_grid_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_popup_dock)
@@ -1010,6 +1087,13 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+
+    def initialize_grid(self):
+        self.grid = gl.GLGridItem()
+        self.grid.setColor(self.grid_color)
+        self.grid.setSize(self.grid_size, self.grid_size, self.grid_size)
+        self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
+        # self.grid.setSpacing(self.grid_spacing)
 
     def crease_pattern_unit_changed(self, index):
         selected_option = self.crease_pattern_unit.itemText(index)
@@ -1053,14 +1137,16 @@ class PointEditorWindow(QMainWindow):
         # self.reload_IDs()
         self.update_joint()
     
-    def toggle_grid_func(self):
-        if self.grid_on:
-            self.plot_widget.removeItem(self.grid)
-            self.toggle_grid.setText("Show Grid")
-        else:
-            self.plot_widget.addItem(self.grid)
-            self.toggle_grid.setText("Hide Grid")
-        self.grid_on = not self.grid_on
+    def edit_grid_func(self):
+        # if self.grid_on:
+        #     self.plot_widget.removeItem(self.grid)
+        #     self.toggle_grid.setText("Show Grid")
+        # else:
+        #     self.plot_widget.addItem(self.grid)
+        #     self.toggle_grid.setText("Hide Grid")
+        
+        self.edit_grid_dock.setVisible(True)
+        # self.grid_on = not self.grid_on
 
     # Success message method with timer
     def show_success(self, message):
@@ -1117,8 +1203,7 @@ class PointEditorWindow(QMainWindow):
         self.plot_widget.clear()
         self.setCentralWidget(self.plot_widget)
 
-        self.grid = gl.GLGridItem()
-        self.grid.setColor(gridColorDefault)
+        self.initialize_grid()
 
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
@@ -1133,8 +1218,7 @@ class PointEditorWindow(QMainWindow):
 
         self.plot_widget.clear()
 
-        self.grid = gl.GLGridItem()
-        self.grid.setColor((0,0,0,255))
+        self.initialize_grid()
 
         if self.grid_on:
             self.plot_widget.addItem(self.grid)
@@ -1236,7 +1320,7 @@ class PointEditorWindow(QMainWindow):
         elif key == "Z":
             self.arrow_selection_changed(2)
         elif key == "G":
-            self.toggle_grid_func()
+            self.edit_grid_func()
 
         self.update_joint()
 
@@ -1722,8 +1806,7 @@ class PointEditorWindow(QMainWindow):
             self.select_link_options.clear()
             self.setCentralWidget(self.plot_widget)
 
-            self.grid = gl.GLGridItem()
-            self.grid.setColor(gridColorDefault)
+            self.initialize_grid()
 
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
@@ -2015,9 +2098,10 @@ class PointEditorWindow(QMainWindow):
         elif event.key() == Qt.Key_Z:
             self.arrow_selection_changed(2)
         elif event.key() == Qt.Key_G:
-            self.toggle_grid_func()
+            self.edit_grid_func()
 
 if __name__ == "__main__":
+
     app = QApplication(sys.argv)
     window = PointEditorWindow()
     window.show()
