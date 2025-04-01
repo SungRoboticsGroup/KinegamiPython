@@ -235,14 +235,14 @@ class AddChainWidget(QWidget):
 class EditGridWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle('Create New Chain')
+        self.setWindowTitle('Edit Grid')
 
         layout = QVBoxLayout()
 
         # Input for line spacing
         spacing_layout = QHBoxLayout()
         spacing_label = QLabel("Grid line spacing: ")
-        unit_label = QLabel(self.window().crease_pattern_unit.currentText())
+        unit_label = QLabel("(cm)")
         self.spacing_input = QLineEdit()
         self.spacing_input.setPlaceholderText("Enter spacing")
         spacing_layout.addWidget(spacing_label)
@@ -254,7 +254,7 @@ class EditGridWidget(QWidget):
         line_amt_layout = QHBoxLayout()
         line_amt_label = QLabel("Size:")
         self.line_amt_input = QLineEdit()
-        grid_lines_label = QLabel("Grid lines")
+        grid_lines_label = QLabel("grid lines")
         self.line_amt_input.setPlaceholderText("Enter line amount")
         line_amt_layout.addWidget(line_amt_label)
         line_amt_layout.addWidget(self.line_amt_input)
@@ -265,7 +265,7 @@ class EditGridWidget(QWidget):
 
         # Apply button to create the chain
         apply_button = QPushButton('Apply Changes', self)
-        apply_button.clicked.connect(self.on_create_clicked)
+        apply_button.clicked.connect(self.on_apply_clicked)
         button_layout.addWidget(apply_button)
 
         # Cancel button to close the widget
@@ -277,7 +277,7 @@ class EditGridWidget(QWidget):
 
         self.setLayout(layout)
 
-    def on_create_clicked(self):
+    def on_apply_clicked(self):
         try:
             # Get input values
             spacing = int(self.spacing_input.text())
@@ -296,6 +296,75 @@ class EditGridWidget(QWidget):
 
     def show_error(self, message):
         QMessageBox.warning(self, "Invalid Input", message)
+
+class EditDimensionsWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Edit Dimensions')
+
+        self.layout = QVBoxLayout()
+
+        self.radio_layout = QHBoxLayout()
+
+        self.radio1 = QRadioButton("Rescale Chain")
+        self.radio1.setChecked(True)
+        self.radio2 = QRadioButton("Rescale Pattern")
+
+        self.button_group = QButtonGroup(self)
+        self.button_group.addButton(self.radio1)
+        self.button_group.addButton(self.radio2)
+
+        self.button_group.buttonClicked.connect(self.on_selection_change)
+
+        # Add widgets to layout
+        self.radio_layout.addWidget(self.radio1)
+        self.radio_layout.addWidget(self.radio2)
+
+        self.units_layout = QHBoxLayout()
+        self.label1 = QLabel("Target units:")
+        self.units_layout.addWidget(self.label1)
+
+        self.target_unit = QComboBox()
+        self.target_unit.addItems(["Milimeter (mm)", "Inch (in)"])
+        self.target_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
+        self.target_unit.setCurrentIndex(0)
+        self.units_layout.addWidget(self.target_unit)
+
+        self.button_layout = QHBoxLayout()
+
+        # Apply button to create the chain
+        self.apply_button = QPushButton('Apply Changes', self)
+        self.apply_button.clicked.connect(self.on_apply_clicked)
+        self.button_layout.addWidget(self.apply_button)
+
+        # Cancel button to close the widget
+        self.cancel_button = QPushButton('Cancel', self)
+        self.cancel_button.clicked.connect(self.on_cancel_clicked)
+        self.button_layout.addWidget(self.cancel_button)
+
+        self.layout.addLayout(self.radio_layout)
+        self.layout.addLayout(self.units_layout)
+        self.layout.addLayout(self.button_layout)
+
+        self.setLayout(self.layout)
+
+    target_units = qc.pyqtSignal(str)
+
+    def on_apply_clicked(self):
+        units = self.target_unit.currentText()
+        self.window().units = units
+        self.target_units.emit(units)
+        self.window().edit_dims_dock.setVisible(False)
+
+    def on_cancel_clicked(self):
+        # Hide the widget if the user cancels
+        self.window().edit_dims_dock.setVisible(False)
+
+    def on_selection_change(self, button):
+        print(f"Selected: {button.text()}")
+
+    def crease_pattern_unit_changed(self):
+        print("Selected unit:", self.target_unit.currentText())
     
 class ImageRadioButton(QRadioButton):
     def __init__(self, unchecked_img, checked_img, tooltip_text, parent=None):
@@ -692,6 +761,8 @@ class PointEditorWindow(QMainWindow):
         self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
         self.grid_on = True
 
+        self.units = "Milimeter (mm)"
+
         self.current_point = 0
         self.chain = None
         self.versions = []
@@ -1034,11 +1105,13 @@ class PointEditorWindow(QMainWindow):
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         file_dock_layout.addWidget(self.save_crease_pattern_button) 
 
-        self.crease_pattern_unit = QComboBox()
-        self.crease_pattern_unit.addItems(["Centimeter (cm)", "Inch (in)"])
-        self.crease_pattern_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
-        self.crease_pattern_unit.setCurrentIndex(0)
-        file_dock_layout.addWidget(self.crease_pattern_unit)
+        self.units_layout = QHBoxLayout()
+        self.units_label = QLabel(f"Current units: {self.units}")
+        file_dock_layout.addWidget(self.units_label)
+
+        self.edit_dims_button = QPushButton("Edit Dimensions")
+        self.edit_dims_button.clicked.connect(self.edit_dims_func)
+        file_dock_layout.addWidget(self.edit_dims_button)
 
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
@@ -1074,11 +1147,18 @@ class PointEditorWindow(QMainWindow):
         self.edit_grid_dock = QDockWidget("Edit Grid", self)
         self.edit_grid_dock.setWidget(self.edit_grid_widget)
         self.edit_grid_dock.setVisible(False)
+
+        self.edit_dims_widget = EditDimensionsWidget(self)
+        self.edit_dims_dock = QDockWidget("Edit Dimensions", self)
+        self.edit_dims_dock.setWidget(self.edit_dims_widget)
+        self.edit_dims_dock.setVisible(False)
+        self.edit_dims_widget.target_units.connect(self.change_units)
         
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
         self.addDockWidget(Qt.TopDockWidgetArea, message_display_widget)
 
         self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_dims_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_grid_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
@@ -1092,16 +1172,22 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
 
+    @QtCore.pyqtSlot(str)
+    def change_units(self, key):
+        print(key)
+        self.units = key
+        self.units_label.setText(f"Current units: {self.units}")
+
+    def edit_dims_func(self):
+        visibility = self.edit_dims_dock.isVisible()
+        self.edit_dims_dock.setVisible(not visibility)
+
     def initialize_grid(self):
         self.grid = gl.GLGridItem()
         self.grid.setColor(self.grid_color)
         self.grid.setSize(self.grid_size, self.grid_size, self.grid_size)
         self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
         # self.grid.setSpacing(self.grid_spacing)
-
-    def crease_pattern_unit_changed(self, index):
-        selected_option = self.crease_pattern_unit.itemText(index)
-        print(f"Selected unit: {selected_option}")
 
     def add_to_root_func(self, state):
         self.add_to_root = state == Qt.Checked
