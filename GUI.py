@@ -242,12 +242,12 @@ class EditGridWidget(QWidget):
         # Input for line spacing
         spacing_layout = QHBoxLayout()
         spacing_label = QLabel("Grid line spacing: ")
-        unit_label = QLabel("(cm)")
+        self.unit_label = QLabel("(cm)")
         self.spacing_input = QLineEdit()
         self.spacing_input.setPlaceholderText("Enter spacing")
         spacing_layout.addWidget(spacing_label)
         spacing_layout.addWidget(self.spacing_input)
-        spacing_layout.addWidget(unit_label)
+        spacing_layout.addWidget(self.unit_label)
         layout.addLayout(spacing_layout)
 
         # Input for the amount of lines
@@ -325,7 +325,7 @@ class EditDimensionsWidget(QWidget):
         self.units_layout.addWidget(self.label1)
 
         self.target_unit = QComboBox()
-        self.target_unit.addItems(["Milimeter (mm)", "Inch (in)"])
+        self.target_unit.addItems(["Centimeter (cm)", "Inch (in)"])
         self.target_unit.currentIndexChanged.connect(self.crease_pattern_unit_changed)
         self.target_unit.setCurrentIndex(0)
         self.units_layout.addWidget(self.target_unit)
@@ -352,6 +352,13 @@ class EditDimensionsWidget(QWidget):
 
     def on_apply_clicked(self):
         units = self.target_unit.currentText()
+        if units == "Centimeter (cm)":
+            units_short = "cm"
+        elif units == "Inch (in)":
+            units_short = "in"
+        
+        self.window().edit_grid_widget.unit_label.setText(f"({units_short})")
+
         self.window().units = units
         self.target_units.emit(units)
         self.window().edit_dims_dock.setVisible(False)
@@ -761,7 +768,7 @@ class PointEditorWindow(QMainWindow):
         self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
         self.grid_on = True
 
-        self.units = "Milimeter (mm)"
+        self.units = "Centimeter (cm)"
 
         self.current_point = 0
         self.chain = None
