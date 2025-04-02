@@ -66,6 +66,7 @@ class AddPrismaticMenu(AddJointMenu):
         length_layout = QHBoxLayout()
         length_label = QLabel("Neutral Length (default: 3r):")
         self.length_input = QLineEdit()
+        self.length_input.returnPressed.connect(self.onApplyClicked)
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
@@ -73,6 +74,7 @@ class AddPrismaticMenu(AddJointMenu):
         numLayers_layout = QHBoxLayout()
         numLayers_label = QLabel("Number of Layers (default: 3):")
         self.numLayers_input = QLineEdit()
+        self.numLayers_input.returnPressed.connect(self.onApplyClicked)
         numLayers_layout.addWidget(numLayers_label)
         numLayers_layout.addWidget(self.numLayers_input)
         layout.addLayout(numLayers_layout)
@@ -80,11 +82,13 @@ class AddPrismaticMenu(AddJointMenu):
         angle_layout = QHBoxLayout()
         angle_label = QLabel("Cone Angle (degrees, default: 60):")
         self.angle_input = QLineEdit()
+        self.angle_input.returnPressed.connect(self.onApplyClicked)
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
         apply_button = QPushButton('Add Prismatic Joint')
+        apply_button.setAutoDefault(True)
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
 
@@ -135,12 +139,14 @@ class AddRevoluteMenu(AddJointMenu):
         angle_layout = QHBoxLayout()
         angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
         self.angle_input = QLineEdit()
+        self.angle_input.returnPressed.connect(self.onApplyClicked)
         angle_layout.addWidget(angle_label)
         angle_layout.addWidget(self.angle_input)
         layout.addLayout(angle_layout)
 
         apply_button = QPushButton('Add Revolute Joint')
         apply_button.clicked.connect(self.onApplyClicked)
+        apply_button.setAutoDefault(True)
         layout.addWidget(apply_button)
 
         cancel_button = QPushButton('Cancel')
@@ -185,6 +191,7 @@ class AddTipMenu(AddJointMenu):
         length_layout = QHBoxLayout()
         length_label = QLabel("Length:")
         self.length_input = QLineEdit()
+        self.length_input.returnPressed.connect(self.onApplyClicked)
         length_layout.addWidget(length_label)
         length_layout.addWidget(self.length_input)
         layout.addLayout(length_layout)
@@ -192,10 +199,12 @@ class AddTipMenu(AddJointMenu):
         apply_button = QPushButton('Add Tip')
         apply_button.clicked.connect(self.onApplyClicked)
         layout.addWidget(apply_button)
+        apply_button.setAutoDefault(True)
 
         cancel_button = QPushButton('Cancel')
         cancel_button.clicked.connect(self.window().add_tip_toggle)
         layout.addWidget(cancel_button)
+
 
         self.setLayout(layout)
 
