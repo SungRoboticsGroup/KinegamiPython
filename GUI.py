@@ -863,8 +863,8 @@ class PointEditorWindow(QMainWindow):
         add_joints_layout.addWidget(self.add_revolute_menu)
         add_joints_layout.addLayout(add_waypoints_layout)
         add_joints_layout.addWidget(self.add_tip)
-        add_joints_layout.addWidget(self.edit_dimension_button)
         add_joints_layout.addWidget(self.add_tip_menu)
+        add_joints_layout.addWidget(self.edit_dimension_button)
 
         add_chain_layout.addWidget(self.create_new_chain)
 
