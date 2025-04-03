@@ -42,6 +42,8 @@ class KinematicTree(Generic[J]):
     def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None, 
                  links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None):
         self.r = root.r
+        self.scaleFactor = 1.0
+        
         try:
             self.numSides = root.numSides
         except:
