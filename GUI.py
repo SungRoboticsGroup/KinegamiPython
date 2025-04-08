@@ -1006,7 +1006,7 @@ class PointEditorWindow(QMainWindow):
 
         checkbox_layout = QHBoxLayout() 
         self.propogate_slider_checkbox = QCheckBox("Propagate")
-        self.relative_slider_checkbox = QCheckBox("Relative")
+        self.relative_slider_checkbox = QCheckBox("Local Orientation")
         self.propogate_slider_checkbox.setChecked(True)
         self.relative_slider_checkbox.setChecked(True)
         self.relative_slider_checkbox.stateChanged.connect(self.relative_clicked)
