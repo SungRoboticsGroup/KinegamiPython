@@ -306,15 +306,13 @@ class EditDimensionsWidget(QWidget):
 
         self.radio_layout = QHBoxLayout()
 
-        self.radio1 = QRadioButton("Rescale Chain")
+        self.radio1 = QRadioButton("Rescale Dimensions")
         self.radio1.setChecked(True)
-        self.radio2 = QRadioButton("Rescale Pattern")
+        self.radio2 = QRadioButton("Preserve Dimensions")
 
         self.button_group = QButtonGroup(self)
         self.button_group.addButton(self.radio1)
         self.button_group.addButton(self.radio2)
-
-        self.button_group.buttonClicked.connect(self.on_selection_change)
 
         # Add widgets to layout
         self.radio_layout.addWidget(self.radio1)
@@ -359,16 +357,19 @@ class EditDimensionsWidget(QWidget):
         
         self.window().edit_grid_widget.unit_label.setText(f"({units_short})")
 
+        prev_units = self.window().units
         self.window().units = units
         self.target_units.emit(units)
         self.window().edit_dims_dock.setVisible(False)
 
+        if self.radio1.isChecked():
+            self.window().rescale_dimensions(prev_units, units)
+        elif self.radio2.isChecked():
+            self.window().preserve_dimensions(prev_units, units)
+
     def on_cancel_clicked(self):
         # Hide the widget if the user cancels
         self.window().edit_dims_dock.setVisible(False)
-
-    def on_selection_change(self, button):
-        print(f"Selected: {button.text()}")
 
     def crease_pattern_unit_changed(self):
         print("Selected unit:", self.target_unit.currentText())
@@ -1168,11 +1169,55 @@ class PointEditorWindow(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
 
+        self.factor = {
+            'Centimeter (cm)': 1.0,
+            'Meter (m)': 100.0,
+            'Milimeter (mm)': 10.0,
+            'Inch (in)': 2.54,
+            'Feet (ft)': 30.48
+        }
+
     @QtCore.pyqtSlot(str)
     def change_units(self, key):
-        print(key)
         self.units = key
         self.units_label.setText(f"Current units: {self.units}")
+        print(key)
+
+    def rescale_dimensions(self, prev, new):
+        if (prev != new):
+            conversion_factor = self.factor[prev] / self.factor[new]
+            self.plot_widget.opts['distance'] *= conversion_factor
+            self.update_joint()
+
+    def preserve_dimensions(self, prev, new):
+        if (prev != new):
+            conversion_factor = self.factor[prev] / self.factor[new]
+            
+            self.change_chain_size(conversion_factor)
+    
+    def change_chain_size(self, factor):
+        new_radius = self.radius * factor
+
+        if (self.chain_created):
+            self.chain.changeRadius(new_radius)
+
+            for joint in self.chain.Joints:
+                joint.Pose.t *= factor
+
+            new_chain = None
+
+            for joint in self.chain.Joints:
+                if (new_chain == None):
+                    new_chain = KinematicChain(self.chain.Joints[0])
+                else:
+                    new_chain.append(joint, relative=False, fixedPosition=True,
+                                            fixedOrientation=True, safe=False)
+                
+            self.chain = new_chain
+
+            self.plot_widget.opts['distance'] *= factor
+
+            self.update_joint()
 
     def edit_dims_func(self):
         visibility = self.edit_dims_dock.isVisible()
