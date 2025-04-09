@@ -1007,7 +1007,7 @@ class PointEditorWindow(QMainWindow):
 
         checkbox_layout = QHBoxLayout() 
         self.propogate_slider_checkbox = QCheckBox("Propagate")
-        self.relative_slider_checkbox = QCheckBox("Relative")
+        self.relative_slider_checkbox = QCheckBox("Local Orientation")
         self.propogate_slider_checkbox.setChecked(True)
         self.relative_slider_checkbox.setChecked(True)
         self.relative_slider_checkbox.stateChanged.connect(self.relative_clicked)
@@ -1928,7 +1928,7 @@ class PointEditorWindow(QMainWindow):
 
         # print(transformation)
 
-        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, safe=False)
+        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative, safe=False)
 
         # self.selected_joint.translate(-cnt[0], -cnt[1], -cnt[2])
         # self.selected_joint.rotate(angle, axis[0], axis[1], axis[2], local=False)

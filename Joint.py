@@ -136,6 +136,7 @@ class Joint(ABC):
         self.Pose = SE3.Rt(rotation @ SO3(otherJoint.Pose.R), position)
     
     def changeRadius(self, r : float):
+        self.neutralLength *= r / self.r
         self.r = r
     
     def translateAlongX(self, xChange : float):
