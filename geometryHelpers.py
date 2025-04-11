@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """
 Assorted geometry-related helper functions and classes
 """
-
+from __future__ import annotations
 import numpy as np
 from numpy import cross, dot, arctan2
 import scipy
@@ -151,6 +150,9 @@ class Line:
     
     def contains(self, point):
         return self.distanceToPoint(point) < self.EPSILON
+    
+    def projectionOfPoint(self, point):
+        return self.p + dot(point - self.p, self.dhat) * self.dhat
     
 class Ray:
     def __init__(self, startPoint, direction, EPSILON=1e-8):
@@ -339,6 +341,21 @@ class Ball:
     
     def translationToCenterOnPlane(self, plane : Plane):
         return Ball(plane.projectionOfPoint(self.c), self.r)
+    
+    def expandToCenterOnLine(self, line : Line):
+        self.c, self.r = line.projectionOfPoint(self.c), self.r + line.distanceToPoint(self.c)
+
+    # returns whether the balls are tangent (externally, internally, or coincident)
+    def isTangentToBall(self, otherBall : Ball, epsilon=1e-8) -> bool:
+        return abs(norm(self.c - otherBall.c) - abs(self.r - otherBall.r)) < epsilon
+
+    def newBallTransformedBy(self, T : SE3) -> Ball:
+        return Ball(T * self.c, self.r)
+    
+    def containsBall(self, otherBall : Ball, epsilon=1e-8) -> bool:
+        return norm(self.c - otherBall.c) + otherBall.r <= self.r + epsilon
+
+        
 
 """
 Note: we don't need to guarantee minimality of our bounding balls, so we build
@@ -662,17 +679,42 @@ class Arc3D:
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
     
-    def addToPlot(self, ax, color='black', alpha=1):
+    def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
+        if showDirections:
+            ax.quiver(*self.startPoint, *self.startTangent, length=self.r, color='green')
+            ax.quiver(*self.endPoint, *self.endTangent, length=self.r, color='blue')
         return ax.plot(X, Y, Z, color=color, alpha=alpha)
 
-    def show(self, color='black', alpha=1, block=blockDefault):
+    def show(self, color='black', alpha=1, block=blockDefault, showDirections=False):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandle = self.addToPlot(ax, color, alpha)
+        plotHandle = self.addToPlot(ax, color, alpha, showDirections)
         ax.set_aspect('equal')
         plt.show(block=block)
         
-        
+# arc from a given starting point+direction to a given ending direction 
+# (which cannot be parallel to the starting direction)
+def arcToDirection(startPoint, startDir, endDir, r) -> Arc3D:
+    startDir /= norm(startDir)
+    endDir /= norm(endDir)
+    if norm(startDir - endDir) < 1e-8:
+        # find any direction orthogonal to startDir to use as inward
+        # in the nullspace of something
+        inward = unitNormalToBoth(startDir, endDir)
+        center = startPoint + r*inward
+        return Arc3D(center, startPoint, startDir, 0)
+
+    normal = np.cross(startDir, endDir)
+    if norm(normal) == 0:
+        raise ValueError("startDir and endDir cannot be parallel")
+    normal = normal / norm(normal)
+    inward = np.cross(normal, startDir)
+    inward = inward / norm(inward)
+    center = startPoint + r*inward
+    angle = np.arccos(np.dot(startDir, endDir))
+    return Arc3D(center, startPoint, startDir, angle)
+    
+
 # add given reference frames to matplotlib figure ax with a 3d subplot
 # pose is a matrix of SE3() objects
 # returns the plot handles for the xHats, yHats, zHats, origins

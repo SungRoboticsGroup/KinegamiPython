@@ -231,7 +231,41 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, chil
         return tree, minSwarmResult
     else:
         raise Exception("Optimization failed dramatically")
-    
+
+
+def logTreeOptimizationProgress(tree, idx, start, times, lengths, directory):
+        diff = time.time() - start
+        times.append(diff)
+        lengths.append(tree.totalLength())
+
+        if directory != None:
+            tree.save(directory + str(diff) + "_" + str(idx), saveDir=False)
+
+# IN PROGRESS
+def optimizeTree(tree : KinematicTree, traversal, childParentRatio=1, guarantee=False, parallelize=True, verbose=True, iters=50, toleranceFactor=0.1, lengthPower=2, directory=None):
+    tolerance = tree.r * toleranceFactor
+    timesLog = []
+    lengthsLog = []
+
+    if guarantee: 
+        # Why does this recompute collision capsules? 
+        # Why just for joints and not links?
+        # TODO: make an option in tree detectCollisions to recompute necessary capsules
+        for i in range(0, len(tree.Joints)):
+            tree.Joints[i].recomputeCollisionCapsules()
+        assert(tree.detectCollisions() == 0)
+
+    start = time.time()
+    for i in traversal(tree):
+        if isWaypoint(tree.Joints[i]):
+            tree, loss = optimizeWaypointPlacement(tree,i, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+        else:
+            tree, loss = optimizeJointPlacement(tree,i, maxiter=iters, tol=tolerance, collisionError=collisionError, childParentRatio=childParentRatio, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+
+        logTreeOptimizationProgress(tree, i, start, timesLog, lengthsLog, directory)
+
+
+
 def squaredOptimize(subject, showSteps=False, childParentRatio=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
     lengths = []

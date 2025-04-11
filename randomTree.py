@@ -63,13 +63,15 @@ def test():
                     partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False),
                     partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False,resetOnFail=False),
                     partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=True),
-                    partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=False)]
+                    partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=False),
+                    partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=True)]
     labels = ["Streamline + Guarantee (SG)", 
             "Streamline No Guarantee (SNG)",
             "No Streamline No Guarantee (NSNG)",
             "NSNG, No Reset on Fail",
             "No Streamline Guarantee (NSG)",
-            "Linear (L)"]
+            "Linear No Guarantee (LNG)",
+            "Linear Guarantee (LG)"]
 
     lowerBounds = []
     results = []

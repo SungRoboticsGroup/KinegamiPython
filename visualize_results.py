@@ -2,7 +2,7 @@ import json
 import os
 from matplotlib import pyplot as plt
 
-title = "10 Joint Chains"
+title = "10 Joint Trees Dense"
 
 folder = "sim_results/" + title + "/images/"
 

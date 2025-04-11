@@ -46,11 +46,6 @@ class KinematicTree(Generic[J]):
     """
     def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2):
         self.r = root.r
-        try:
-            self.numSides = root.numSides
-        except:
-            self.numSides = 4
-
         self.Joints = [root]
         self.Parents = [-1]     # root has no parent
         self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
@@ -64,12 +59,12 @@ class KinematicTree(Generic[J]):
         self.Children = [[]]
     
     def dataDeepCopy(self):
-        return copy.deepcopy([self.r, self.numSides, self.Joints, self.Parents, 
+        return copy.deepcopy([self.r, self.Joints, self.Parents, 
                               self.Links, self.maxAnglePerElbow, 
                               self.boundingBall, self.Children])
     
     def setTo(self, data : list):
-        self.r, self.numSides, self.Joints, self.Parents, \
+        self.r, self.Joints, self.Parents, \
             self.Links, self.maxAnglePerElbow, \
             self.boundingBall, self.Children = data
 
@@ -98,13 +93,14 @@ class KinematicTree(Generic[J]):
     def addJoint(self, parentIndex : int, newJoint : J, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 safe : bool = True, endPlane : Plane = None) -> int:
+                 safe : bool = True, endPlane : Plane = None,
+                 chooseXhatToMinPath : bool = False) -> int:
         
         if isinstance(newJoint, OrigamiJoint):
             if newJoint.r != self.r:
                 raise ValueError("ERROR: newJoint.r != self.r")
-            if newJoint.numSides != self.numSides:
-                raise ValueError("ERROR: newJoint.numSides != self.numSides")
+            if newJoint.numSides != self.Joints[parentIndex].numSides:
+                raise ValueError("ERROR: newJoint.numSides != self.Joints[parentIndex].numSides")
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
                 safe and fixedPosition both True")
@@ -136,7 +132,23 @@ class KinematicTree(Generic[J]):
                                                             endPlane)
 
         if not fixedOrientation:
-            if endPlane is None:
+            if chooseXhatToMinPath:
+                if not newJoint.pathIndex() == 2:
+                    def objective(angleToRotateAboutZ):
+                        newJointCopy = copy.deepcopy(newJoint)
+                        newJointCopy.applyTransformationToPose(SE3.Rz(angleToRotateAboutZ))
+                        endDubinsFrame = newJointCopy.ProximalDubinsFrame()
+                        startDubinsFrame = parent.DistalDubinsFrame()
+                        path = shortestCSC(newJoint.r, startDubinsFrame.t, startDubinsFrame.R[:,0], 
+                                        endDubinsFrame.t, endDubinsFrame.R[:,0])
+                        if path is None or norm(path.error) > 0.001 * path.r:
+                            return np.inf
+                        else:
+                            return path.length
+                        
+                    result = minimize(objective, 0)
+                    newJoint.applyTransformationToPose(SE3.Rz(result.x[0]))
+            elif endPlane is None:
                 xhat = commonNormal(parent.Pose.t, parent.Pose.R[:,2],
                                     newJoint.Pose.t, newJoint.Pose.R[:,2],
                                     undefined=newJoint.Pose.R[:,0])
@@ -258,8 +270,13 @@ class KinematicTree(Generic[J]):
         #     self.Links[linkIndex].collisionCapsules[capsuleIndex].box.addToPlot(ax)
         
         if showSpheres:
-            self.boundingBall.addToPlot(ax, color=sphereColor, 
+            if self.nestedBallsRelativeToJoints is None:
+                self.boundingBall.addToPlot(ax, color=sphereColor, 
                                         alpha=0.05, frame=True)
+            else:
+                for i, ball in enumerate(self.nestedBallsGlobal()):
+                    # ball is expressed relative to joint i, but we need it in global coordinates
+                    ball.addToPlot(ax, color=sphereColor, alpha=0.05, frame=True)
         
         if not plotPoint is None:
             ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
@@ -807,16 +824,19 @@ class KinematicTree(Generic[J]):
 
             # plot the plane
             ax.plot_surface(xx, yy, z, alpha=surfaceOpacity/4, color=groundPlaneColor)
-        xyzHandles, abcHandles = self.addToPlot(ax, xColor, yColor, zColor, 
-                                    proximalColor, centerColor, distalColor,
-                                    showJointSurface, jointColor, 
-                                    jointAxisScale, showJointPoses,
-                                    linkColor, surfaceOpacity, showLinkSurface, 
-                                    showLinkPoses, showLinkPath, pathColor,
-                                    showPathCircles, sphereColor,
-                                    showSpheres, showGlobalFrame, globalAxisScale, showCollisionBoxes=showCollisionBoxes, showSpecificCapsules=showSpecificCapsules, plotPoint=plotPoint, addCapsules=addCapsules)
-        
-        
+                
+        xyzHandles, abcHandles = self.addToPlot(ax, xColor=xColor, yColor=yColor, zColor=zColor,
+                                                proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                                                showJointSurface=showJointSurface, jointColor=jointColor,
+                                                jointAxisScale=jointAxisScale, showJointPoses=showJointPoses,
+                                                linkColor=linkColor, surfaceOpacity=surfaceOpacity, showLinkSurface=showLinkSurface,
+                                                showLinkPoses=showLinkPoses, showLinkPath=showLinkPath, pathColor=pathColor,
+                                                showPathCircles=showPathCircles, sphereColor=sphereColor,
+                                                showSpheres=showSpheres, showGlobalFrame=showGlobalFrame, globalAxisScale=globalAxisScale,
+                                                showCollisionBoxes=showCollisionBoxes, showSpecificCapsules=showSpecificCapsules, 
+                                                plotPoint=plotPoint, addCapsules=addCapsules)
+
+
         # Get the current limits of the axes
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
@@ -863,8 +883,8 @@ class KinematicTree(Generic[J]):
         plt.show(block=block)
 
 
-    def transformAll(self, Transformation : SE3):
-        self.transformJoint(0, Transformation, safe=False)
+    def transformAll(self, Transformation : SE3, recomputeBoundingBall : bool = True):
+        self.transformJoint(0, Transformation, safe=False, recomputeBoundingBall=recomputeBoundingBall)
 
     """ 
     Apply given transformation (SE3() object) to given joint (index), 
@@ -875,7 +895,7 @@ class KinematicTree(Generic[J]):
     print a warning, and return False rather than throwing an error.   
     """
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
-                       propogate : bool = True, recomputeBoundingBall=True,
+                       propogate : bool = True, recomputeBoundingBall : bool = True,
                        recomputeLinkPath : bool = True, 
                        safe : bool = True, relative : bool = False) -> bool:
         if relative:
@@ -921,6 +941,8 @@ class KinematicTree(Generic[J]):
             
             if recomputeBoundingBall:
                 self.recomputeBoundingBall()
+            elif jointIndex == 0:
+                self.boundingBall = self.boundingBall.newBallTransformedBy(Transformation)
 
         return True
                 

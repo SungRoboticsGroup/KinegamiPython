@@ -22,3 +22,5 @@ OpenSCAD installers: https://openscad.org/downloads.html
 Once you install OpenSCAD, edit the file openscad.bat to set it to the path to your openscad executable.
 
 Note (current as of 11/26/2024): The development release of OpenSCAD has a new option to use the manifold library as its backend, which speeds up 3D printing file generation by 2 orders of magnitude. To use this option with our code, make sure you have the Nightly build for OpenSCAD (under Development Snapshots in https://openscad.org/downloads.html). Then set the optional paramter `manifold=True` when calling the method `export3DKinematicTree` on a `KinematicTree[PrintedJoint]` object.
+
+If you're on WSL, you may need to do use apt to install qtbase5-dev (if apt says it cannot locate that package, try running sudo apt update and then retrying).
