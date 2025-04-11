@@ -21,7 +21,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childFr
 
         transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
-        defaultError = collisionError * len(subject.Joints) * (len(subject.Children) + 1)
+        defaultError = collisionError * (len(subject.Joints) ** 2) * (len(subject.Children) + 1)
         linkLossUnchanged = defaultError
         linkLossReversedZhat = defaultError
 
