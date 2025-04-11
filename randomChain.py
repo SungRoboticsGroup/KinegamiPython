@@ -12,9 +12,9 @@ import threading
 import os 
 import shutil
 
-jointCount = 5
+jointCount = 8
 sparse = False
-cubeSize = 20
+cubeSize = 30
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
 chainCount = 1
 restartFrom = 0
@@ -43,10 +43,10 @@ def generateRandomChain(nJoints):
     return chain
 
 def test():
-    optimizations = [partial(squaredOptimize, childParentRatio=1, streamline=True, guarantee=True),
-                    partial(linearOptimize, childParentRatio=1, streamline=False, guarantee=True),
-                    partial(linearOptimize, childParentRatio=1, streamline=True, guarantee=True),
-                    partial(squaredOptimize, childParentRatio=1, streamline=False, guarantee=True)]
+    optimizations = [partial(squaredOptimize, childFraction=1, streamline=True, guarantee=True),
+                    partial(linearOptimize, childFraction=1, streamline=False, guarantee=True),
+                    partial(linearOptimize, childFraction=1, streamline=True, guarantee=True),
+                    partial(squaredOptimize, childFraction=1, streamline=False, guarantee=True)]
     labels = ["Quadratic+Streamline", 
             "Quadratic",
             "Linear+Streamline",

@@ -10,8 +10,9 @@ from functools import partial
 import threading
 import os 
 import shutil
+import re
 
-jointCount = 5
+jointCount = 12
 probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
@@ -57,21 +58,26 @@ def generateTree(nJoints):
     assert(abs(specTree.totalLengthLowerBound() - initialTree.totalLengthLowerBound()) < 1e-5)
     return initialTree
 
-def test():
-    optimizations = [partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=True),
-                    partial(squaredOptimize, childParentRatio=0,streamline=True,guarantee=False),
-                    partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False),
-                    partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=False,resetOnFail=False),
-                    partial(squaredOptimize, childParentRatio=0,streamline=False,guarantee=True),
-                    partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=False),
-                    partial(linearOptimize, childParentRatio=0, streamline=False,guarantee=True)]
+def testRandomTrees():
+    optimizations = [partial(squaredOptimize, childFraction=0,streamline=True,guarantee=True),
+                    partial(squaredOptimize, childFraction=0,streamline=True,guarantee=False),
+                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False),
+                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False,resetOnFail=False),
+                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=True),
+                    partial(linearOptimize, childFraction=0, streamline=False,guarantee=False),
+                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=False),
+                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=True),
+                    partial(perpetualOptimize, iterations=jointCount * 2, childFraction=1)]
+
     labels = ["Streamline + Guarantee (SG)", 
             "Streamline No Guarantee (SNG)",
             "No Streamline No Guarantee (NSNG)",
             "NSNG, No Reset on Fail",
             "No Streamline Guarantee (NSG)",
-            "Linear No Guarantee (LNG)",
-            "Linear Guarantee (LG)"]
+            "Linear (L)",
+            "Equal Child No Guarantee (ECNG)",
+            "Equal Child Guarantee (ECG)",
+            "Perpetual (P)"]
 
     lowerBounds = []
     results = []
@@ -132,21 +138,36 @@ def generate_colors(x, cmap_name="rainbow"):
     cmap = plt.get_cmap(cmap_name)
     return [cmap(i / (x - 1))[:3] for i in range(x)]
 
-def plotColoredTrees(directory):
-    files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".tree")]
-    trees =  [loadKinematicTree(f) for f in files]
-    plottingColors = generate_colors(len(trees))
-    
-    ax = plt.figure().add_subplot(projection='3d')
+def plotColoredTrees(directory, collection = []):
+    filenames = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".tree")]
 
-    labels = []
-    for i in range(0,len(trees)):
-        color = plottingColors[i]
-        trees[i].addToPlot(ax, jointColor=color, jointEdgeColor=color, linkColor=color, surfaceOpacity=0.07,showLinkPath=False,showJointPoses=False)
-        labels.append(plt.Line2D([0], [0], color=color, lw=4, label=str(i)))
+    final_file = [f for f in filenames if 'final.tree' in f]
+    other_files = [f for f in filenames if 'final.tree' not in f]
+    other_files.sort(key=lambda x: float(re.search(r'/([\d.]+)_', x).group(1)))
+    sorted_files = other_files + final_file
     
-    ax.set_aspect('equal')
-    ax.legend(handles=labels, loc='upper right', fontsize='small')
-    plt.axis('off')
-    #plt.savefig(directory + "graph_output.png", dpi=800)
-    plt.show(block=True)
+    trees =  [loadKinematicTree(f) for f in sorted_files]
+
+    plottingColors = generate_colors(len(collection) if (len(collection) > 0) else len(trees))
+    
+    def plotCollection(col):
+        labels = []
+        ax = plt.figure().add_subplot(projection='3d')
+        for ct, i in enumerate(col):
+            color = plottingColors[ct]
+            trees[i].addToPlot(ax, jointColor=color, jointEdgeColor=color, linkColor=color, surfaceOpacity=0.5,showLinkPath=False,showJointPoses=False)
+            labels.append(plt.Line2D([0], [0], color=color, lw=4, label=str(i)))
+    
+        ax.set_aspect('equal')
+        ax.legend(handles=labels, loc='upper right', fontsize='small')
+        plt.axis('off')
+        #plt.savefig(directory + "graph_output.png", dpi=800)
+        plt.show(block=True)
+
+    if (collection == None):
+        for i in range(0,len(trees)):
+            plotCollection([i, i+1])
+        
+        trees[-1].show()
+    else:
+        plotCollection(collection)

@@ -8,6 +8,7 @@ from scipy.spatial import ConvexHull
 import Joint
 from Joint import *
 from CollisionDetection import *
+import style
 
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
