@@ -2,14 +2,14 @@ from KinematicTree import *
 from optimizationFunctions import *
 import json
 
-title = "8 Joint Chains Sparse"
+title = "5 Joint Generalized Gimbal Chains Cube Size 10"
 path = "sim_results/" + title + "/0.tree"
 construct = loadKinematicTree(path)
-construct.show(block=False)
+construct.show(block=False, showScaleBar=False, jointAxisScale=40)
 
-path = "sim_results/" + title + "/0/Streamline + Guarantee (SG)/final.tree"
+path = "sim_results/" + title + "/0/Quadratic/final.tree"
 sg = loadKinematicTree(path)
-sg.show(block=True)
+sg.show(block=True, showScaleBar=False)
 
 
 """

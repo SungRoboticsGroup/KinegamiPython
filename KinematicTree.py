@@ -1578,6 +1578,45 @@ class KinematicTree(Generic[J]):
     def nonLeaves(self):
         return [i for i in range(len(self.Joints)) if len(self.Children[i]) > 0]
 
+    def realJointIndices(self) -> np.ndarray:
+        """
+        Returns a numpy array of the real (non-waypoint) joints in the chain.
+        """
+        return np.array([i for i in range(len(self.Joints)) if not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[i], PrintedWaypoint)])
+
+    # Returns the current configuration of the chain as a numpy array of joint states.
+    def configuration(self, realJointsOnly : bool = False) -> np.ndarray:
+        if realJointsOnly:
+            return np.array([self.Joints[i].state for i in self.realJointIndices()])
+        else:
+            return np.array([joint.state for joint in self.Joints])
+    
+    def setConfiguration(self, newConfig, realJointsOnly : bool = False):
+        if realJointsOnly:
+            if len(newConfig) != len(self.realJointIndices()):
+                raise ValueError("Length mismatch between new configuration and real joints")
+            for i, jointIndex in enumerate(self.realJointIndices()):
+                self.setJointState(i, newConfig[i])
+        else:
+            if len(newConfig) != len(self.Joints):
+                raise ValueError("Length mismatch between new configuration and all joints")
+            for i, joint in enumerate(self.Joints):
+                self.setJointState(i, newConfig[i])
+    
+    # Returns the state ranges of the joints in the chain as a 2D numpy array.
+    # Each row represents a joint, and each column represents the min and max state of that joint.
+    def stateRanges(self, realJointsOnly : bool = False) -> np.ndarray:
+        if realJointsOnly:
+            return np.array([self.Joints[i].stateRange() for i in self.realJointIndices()])
+        else:
+            return np.array([joint.stateRange() for joint in self.Joints])
+    
+    def randomConfiguration(self, realJointsOnly : bool = False) -> np.ndarray:
+        if realJointsOnly:
+            return np.array([np.random.uniform(*self.Joints[i].stateRange()) for i in self.realJointIndices()])
+        else:
+            return np.array([np.random.uniform(*joint.stateRange()) for joint in self.Joints])
+
 def optimizationLoss(tree):
     loss = 0
     for i in range(1, len(tree.Joints)):

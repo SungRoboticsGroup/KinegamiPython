@@ -3,7 +3,7 @@ import random
 
 #TODO: make smooth collision error with sigmoid
 
-def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
+def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
     parentIndex = subject.Parents[index]
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
@@ -11,8 +11,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childFr
     def linkLoss(t, link, curveLossFactor = 2):
         #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
-        childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
-        return t.Links[index].path.length ** 2 + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
+        childrenLoss = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
+        return t.Links[index].path.length ** 2 + t.getCollisionError(selectedIndices, selectedCapsules) * penaltyScale + childrenLoss# + d * t.r
     def objective(params, returnWhich = False):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
@@ -21,31 +21,35 @@ def optimizeJointPlacement(subject, index, maxiter, tol, collisionError, childFr
 
         transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
-        defaultError = collisionError * (len(subject.Joints) ** 2) * (len(subject.Children) + 1)
-        linkLossUnchanged = defaultError
-        linkLossReversedZhat = defaultError
+        pathNonExistancePenalty = penaltyScale * (len(subject.Joints) ** 4) * (len(subject.Children[index]) + 1)
+        linkLossReversedZhat = pathNonExistancePenalty
 
         #try just moving it
         if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
-            linkLossUnchanged = linkLoss(tree, index)
+            linkLossSameZhat = linkLoss(tree, index)
+        else:
+            linkLossSameZhat = pathNonExistancePenalty
         
         #try switching zhat
         tree.Joints[index].reverseZhat()
-        if ((linkLossUnchanged == defaultError) | (not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False))):
+        if (linkLossSameZhat == pathNonExistancePenalty or
+             not tree.transformJoint(index, SE3(), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False)):
             tree2 = subject.copyAbbreviatedSelf(ignoreLater, index)
             tree2.Joints[index].reverseZhat()
             if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
                 linkLossReversedZhat = linkLoss(tree2, index)
+            else:
+                linkLossReversedZhat = pathNonExistancePenalty
         else:
             linkLossReversedZhat = linkLoss(tree, index)
 
         if returnWhich:
-            if linkLossUnchanged <= linkLossReversedZhat:
+            if linkLossSameZhat <= linkLossReversedZhat:
                 return 1
             else:
                 return 2
         else:
-            return min(linkLossUnchanged,linkLossReversedZhat)
+            return min(linkLossSameZhat,linkLossReversedZhat)
 
     start = time.time()
 
@@ -257,7 +261,7 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
         if isWaypoint(subject.Joints[index]):
             tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
         log(tree, index)
 
@@ -325,7 +329,7 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
                     break
             else:
                 try:
-                    tree2, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree2, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
                     if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
                         raise Exception("Moving all children caused collision.")
@@ -350,7 +354,7 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
                                 isOptimized[idx] = False
                                 numOptimized -= 1
 
-                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                     if verbose:
                         print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
                     break
@@ -370,7 +374,7 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
                 if isWaypoint(subject.Joints[order[j]]):
                     tree, loss = optimizeWaypointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                 else:
-                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeJointPlacement(tree,order[j], maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                 
                 log(tree, order[j])
         if verbose:
@@ -443,7 +447,7 @@ def linearOptimize(subject, showSteps=False, childFraction=1, streamline = False
         if isWaypoint(subject.Joints[index]):
             tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
         log(tree, index)
         
@@ -512,7 +516,7 @@ def perpetualOptimize(subject, iterations, weighted = True, showSteps=False, chi
         if isWaypoint(subject.Joints[index]):
             tree, loss = optimizeWaypointPlacement(tree,index, maxiter=subIters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = False, parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=subIters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = False, parallelize=parallelize, verbose=verbose)
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=subIters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = False, parallelize=parallelize, verbose=verbose)
         
         log(tree, index)
         

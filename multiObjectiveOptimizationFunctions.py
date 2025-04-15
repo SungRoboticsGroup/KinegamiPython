@@ -13,7 +13,7 @@ def optimizeJointPlacementMulti(subjects, index, maxiter, tol, collisionError, c
         childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
         return t.Links[index].path.length ** 2 + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
-    defaultError = collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)
+    defaultError = collisionError**2 * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)
     def single_tree_objective(tree, treeIdx, params, which):
         translation = params[0]
         rotation = params[1]
@@ -44,7 +44,7 @@ def optimizeJointPlacementMulti(subjects, index, maxiter, tol, collisionError, c
             return linkLoss(tree, index, treeIdx)
     
     def objective(params, returnWhich = False):
-        defaultError = (collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)) * len(subjects)
+        defaultError = (collisionError**2 * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)) * len(subjects)
         linkLossUnchanged = 0
         linkLossReversedZhat = 0
 
@@ -168,20 +168,20 @@ def optimizeWaypointPlacementMulti(subjects, index, maxiter, tol, collisionError
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
     capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater) for subject in subjects]
 
-    def linkLoss(t, treeIdx, link, curveLossFactor = np.pi):
+    def linkLoss(t, treeIdx, curveLossFactor = np.pi):
         selectedCapsules = capsuleSelections[treeIdx]
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
         childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
         return t.Links[index].path.length ** 2  + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
-    defaultError = collisionError * len(subject.Joints) * (len(subject.Children) + 1)
-    def single_tree_objective(tree, params, treeIdx):
+    defaultError = collisionError**2 * len(subjects[0].Joints) * (len(subjects[0].Children[index]) + 1)
+    def single_tree_objective(subject, params, treeIdx):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
         if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
             return defaultError
         
-        return linkLoss(tree, index) + np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
+        return linkLoss(tree, treeIdx) + np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
 
     def objective(params):
         loss = 0
@@ -237,7 +237,7 @@ def optimizeWaypointPlacementMulti(subjects, index, maxiter, tol, collisionError
 
     return returnTrees, minSwarmResult
 
-def method1(subject, states = None, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaulate=False, verbose=True, directory=None):
+def method1(subject, states = None, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose=True, directory=None):
     if states == None:
         states = [[0] * len(subject.Joints)]
     
@@ -419,11 +419,11 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
 
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
     
-    #TODO:
-    # if directory != None:
-    #     tree.save(directory + "final", saveDir=False)
-    # if (evaluate):
-    #     return tree, times, lengths
+    if directory != None:
+        neutralTree = trees[0]
+        neutralTree.save(directory + "final", saveDir=False)
+    if evaluate:
+        return trees, times, lengths
     
     return trees
 

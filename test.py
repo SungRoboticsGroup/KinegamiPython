@@ -1,6 +1,6 @@
 from KinematicChain import *
 
-"""
+
 r = 1
 numSides = 4
 gg = KinematicChain(RevoluteJoint(numSides, r, 3*np.pi/2, SE3()), gimbal=True)
@@ -71,3 +71,4 @@ for i in range(numRandomConfigs):
     chain.checkBallsAreNested()
     chain.show(block=(i==numRandomConfigs-1), showGroundPlane=True, groundPlaneScale=800, showSpheres=False, showScaleBar=False, showJointPoses=False)
 
+"""
