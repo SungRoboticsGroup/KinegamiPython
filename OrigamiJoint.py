@@ -10,7 +10,7 @@ from Joint import *
 from CollisionDetection import *
 
 class OrigamiJoint(Joint):
-    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
+    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3, 
                  initialState : float = 0):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
