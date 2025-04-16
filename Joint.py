@@ -55,6 +55,10 @@ class Joint(ABC):
     @abstractmethod
     def boundingBall(self) -> Ball:
         pass
+
+    @abstractmethod
+    def cloneWithNewRadius(self, new_r: float):
+        pass
     
     def ProximalFrame(self) -> SE3:
         return SE3.Trans(-(self.neutralLength/2) * self.pathDirection()) @ self.Pose
@@ -134,10 +138,6 @@ class Joint(ABC):
         elif self.pathIndex() == 2 and otherJoint.pathIndex() == 0:
             rotation = SO3.Ry(-np.pi/2)
         self.Pose = SE3.Rt(rotation @ SO3(otherJoint.Pose.R), position)
-    
-    def changeRadius(self, r : float):
-        self.neutralLength *= r / self.r
-        self.r = r
     
     def translateAlongX(self, xChange : float):
         self.Pose = self.Pose @ SE3.Trans([xChange,0,0])

@@ -1010,12 +1010,12 @@ class PointEditorWindow(QMainWindow):
 
         checkbox_layout = QHBoxLayout() 
         self.propogate_slider_checkbox = QCheckBox("Propagate")
-        self.relative_slider_checkbox = QCheckBox("Local Orientation")
+        self.local_orient_slider_checkbox = QCheckBox("Local Orientation")
         self.propogate_slider_checkbox.setChecked(True)
-        self.relative_slider_checkbox.setChecked(True)
-        self.relative_slider_checkbox.stateChanged.connect(self.relative_clicked)
+        self.local_orient_slider_checkbox.setChecked(True)
+        self.local_orient_slider_checkbox.stateChanged.connect(self.local_orient_clicked)
         checkbox_layout.addWidget(self.propogate_slider_checkbox)
-        checkbox_layout.addWidget(self.relative_slider_checkbox)
+        checkbox_layout.addWidget(self.local_orient_slider_checkbox)
 
         joint_range_layout = QHBoxLayout()
         joint_range_label = QLabel("Joint Range of Motion:")
@@ -1381,13 +1381,13 @@ class PointEditorWindow(QMainWindow):
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
         self.frame_label.setText("Joint selected as frame: " + str(self.selected_frame))
-        self.relative_slider_checkbox.setDisabled(True)
+        self.local_orient_slider_checkbox.setDisabled(True)
         self.update_joint()
 
     def remove_frame_button(self):
         self.selected_frame = -1
         self.frame_label.setText("Joint selected as frame: N/A")
-        self.relative_slider_checkbox.setDisabled(False)
+        self.local_orient_slider_checkbox.setDisabled(False)
         self.update_joint()
 
     def init_key_bar(self):
@@ -1416,8 +1416,8 @@ class PointEditorWindow(QMainWindow):
         right_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.key_bar_layout.addWidget(right_spacer)
 
-    def relative_clicked(self):
-        self.is_local = self.relative_slider_checkbox.isChecked()
+    def local_orient_clicked(self):
+        self.is_local = self.local_orient_slider_checkbox.isChecked()
         self.update_joint()
 
     def change_control_type(self):
@@ -1843,8 +1843,8 @@ class PointEditorWindow(QMainWindow):
             else:
                 transformation = SE3.Rz(angle_radians)
             propogate = self.propogate_slider_checkbox.isChecked()
-            relative = self.relative_slider_checkbox.isChecked()
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
+            localOrient = self.local_orient_slider_checkbox.isChecked()
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
                 self.update_joint()
                 self.old_rot_val = int(value)
                 self.update_rotation_slider()
@@ -1861,7 +1861,7 @@ class PointEditorWindow(QMainWindow):
         amount = actualVal - self.old_trans_val
         if self.chain and self.selected_joint != -1:
             propogate = self.propogate_slider_checkbox.isChecked()
-            relative = self.relative_slider_checkbox.isChecked()
+            localOrient = self.local_orient_slider_checkbox.isChecked()
             transformation = SE3()
             if (self.selected_arrow == 0):
                 transformation = SE3.Tx(amount)
@@ -1869,7 +1869,7 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Ty(amount)
             if (self.selected_arrow == 2):
                 transformation = SE3.Tz(amount)
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
                 self.update_joint()
                 self.old_trans_val = actualVal
                 self.update_translate_slider()
@@ -1919,14 +1919,14 @@ class PointEditorWindow(QMainWindow):
         joint = self.selected_joint
 
         propogate = self.propogate_slider_checkbox.isChecked()
-        relative = self.relative_slider_checkbox.isChecked()
+        localOrient = self.local_orient_slider_checkbox.isChecked()
 
         transformation = SE3.AngleAxis(angle, [axis[0], axis[1], axis[2]], unit='deg')
         # transformation = SE3.Trans(0, 1, 0)
 
         # print(transformation)
 
-        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative, safe=False)
+        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, safe=False, localOrient=localOrient)
 
         # self.selected_joint.translate(-cnt[0], -cnt[1], -cnt[2])
         # self.selected_joint.rotate(angle, axis[0], axis[1], axis[2], local=False)

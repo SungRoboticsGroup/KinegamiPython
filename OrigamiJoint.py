@@ -10,7 +10,7 @@ from Joint import *
 from CollisionDetection import *
 
 class OrigamiJoint(Joint):
-    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
+    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3, 
                  initialState : float = 0):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
@@ -105,6 +105,16 @@ class RevoluteJoint(OrigamiJoint):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
     
+    def cloneWithNewRadius(self, new_r):
+        return RevoluteJoint(
+            numSides=self.numSides,
+            r=new_r,
+            totalBendingAngle=self.totalBendingAngle,
+            Pose=copy.deepcopy(self.Pose),
+            numSinkLayers=self.numSinkLayers,
+            initialState=self.state
+        )
+    
     def __repr__(self):
         return (
             f"RevoluteJoint(numSides={repr(self.numSides)}, r={repr(self.r)}, "
@@ -193,6 +203,17 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.neutralLength/2)]
     
+    def cloneWithNewRadius(self, new_r):
+        return ExtendedRevoluteJoint(
+            numSides=self.numSides,
+            r=new_r,
+            totalBendingAngle=self.totalBendingAngle,
+            tubeLength=self.tubeLength,
+            Pose=copy.deepcopy(self.Pose),
+            numSinkLayers=self.numSinkLayers,
+            initialState=self.state
+        )
+    
     def __repr__(self):
         return (
             f"ExtendedRevoluteJoint(numSides={repr(self.numSides)}, r={repr(self.r)}, "
@@ -261,6 +282,18 @@ class PrismaticJoint(OrigamiJoint):
     def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)] 
     
+    def cloneWithNewRadius(self, new_r):
+        new_neutralLength = self.neutralLength * (new_r / self.r)
+        return PrismaticJoint(
+            numSides=self.numSides,
+            r=new_r,
+            neutralLength=new_neutralLength,
+            numLayers=self.numLayers,
+            coneAngle=self.coneAngle,
+            Pose=copy.deepcopy(self.Pose),
+            initialState=self.state
+        )
+    
     def __repr__(self):
         return (
             f"PrismaticJoint(numSides={repr(self.numSides)}, r={repr(self.r)}, "
@@ -322,6 +355,14 @@ class Waypoint(OrigamiJoint):
             self.boundingBall().addToWidget(widget, sphereColor, is_waypoint=True)
         else:
             self.boundingBall().addToWidget(widget, (0,0,0,0.5), is_waypoint=True)
+
+    def cloneWithNewRadius(self, new_r):
+        return Waypoint(
+            numSides=self.numSides,
+            r=new_r,
+            Pose=copy.deepcopy(self.Pose),
+            pathIndex=self.pidx
+        )
 
     def __repr__(self):
         return (
@@ -395,6 +436,16 @@ class Tip(OrigamiJoint):
     def toPrinted(self, screwRadius):
         from PrintedJoint import PrintedTip
         return PrintedTip(self.r, self.Pose, screwRadius)
+    
+    def cloneWithNewRadius(self, new_r):
+        new_neutralLength = self.neutralLength * (new_r / self.r)
+        return Tip(
+            numSides=self.numSides,
+            r=new_r,
+            Pose=copy.deepcopy(self.Pose),
+            length=new_neutralLength,
+            closesForward=self.forward
+        )
 
     def __repr__(self):
         return (
