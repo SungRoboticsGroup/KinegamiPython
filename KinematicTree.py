@@ -25,6 +25,7 @@ from scipy.optimize import dual_annealing
 
 from style import *
 from numpy import array
+from spatialmath import SE3
 
 J = TypeVar("J", bound=Joint)
 
@@ -82,16 +83,17 @@ class KinematicTree(Generic[J]):
             return True
 
         try:
-            new_root_joint = copy.deepcopy(self.Joints[0])
-            new_root_joint.changeRadius(new_radius)
-            new_root_joint = eval(repr(new_root_joint))
+            new_root_joint = self.Joints[0].cloneWithNewRadius(new_radius)
+            
+            # copy.deepcopy(self.Joints[0])
+            # new_root_joint.changeRadius(new_radius)
+            # new_root_joint = eval(repr(new_root_joint))
+
             new_tree = KinematicTree(new_root_joint, self.maxAnglePerElbow)
 
             for i in range(1, len(self.Joints)):
                 parent_index = self.Parents[i]
-                new_joint = copy.deepcopy(self.Joints[i])
-                new_joint.changeRadius(new_radius)
-                new_joint = eval(repr(new_joint))
+                new_joint = self.Joints[i].cloneWithNewRadius(new_radius)
                 
                 new_tree.addJoint(parent_index, new_joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
 
