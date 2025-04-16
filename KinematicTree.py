@@ -583,8 +583,6 @@ class KinematicTree(Generic[J]):
         
         if relative:
             Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
-        else:
-            Transformation = SE3.Trans(self.Joints[jointIndex].Pose.t) @ Transformation @ SE3.Rt(self.Joints[jointIndex].Pose.R) @ self.Joints[jointIndex].Pose.inv()
         
         if safe:
             backup = self.dataDeepCopy()

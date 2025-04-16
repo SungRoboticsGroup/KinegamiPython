@@ -1846,7 +1846,7 @@ class PointEditorWindow(QMainWindow):
                 transformation = SE3.Rz(angle_radians)
             propogate = self.propogate_slider_checkbox.isChecked()
             relative = self.relative_slider_checkbox.isChecked()
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=relative):
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True):
                 self.update_joint()
                 self.old_rot_val = int(value)
                 self.update_rotation_slider()
