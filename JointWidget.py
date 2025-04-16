@@ -11,225 +11,464 @@ from testqtgraph import *
 from style import *
 
 class AddJointMenu(QWidget):
-    jointToAdd = None
+   jointToAdd = None
+   
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.numSides = 0
-        self.r = 0
-        self.prevJoint = None
-        self.add_to_root = False
+   def __init__(self, parent=None):
+       super().__init__(parent)
+       self.numSides = 0
+       self.r = 0
+       self.prevJoint = None
+       self.add_to_root = False
 
-    def getJoint(self):
-        return self.jointToAdd
-        
-    def parse_angle(self, exp):
-        try:
-            result = eval(exp, {'np': np})
-            return result
-        except Exception as e:
-            print("Error:", e)
-            return None
-    
-    def parse_pose(self, exp):
-        try:
-            return eval(exp)
-        except Exception as e:
-            print("Error:", e)
-            return None
-        
-    def update(self):
-        self.numSides = self.window().num_sides
-        self.r = self.window().radius
 
-        if (self.window().chain and len(self.window().chain.Joints) > 0):
-            if not self.window().add_to_root:
-                self.prevJoint = self.window().chain.Joints[-1]
-                self.add_to_root = False
-            else:
-                self.prevJoint = self.window().chain.Joints[0]
-                self.add_to_root = True
-        else: 
-            self.prevJoint = None
-            self.add_to_root = False
-    
+   def getJoint(self):
+       return self.jointToAdd
+      
+   def parse_angle(self, exp):
+       try:
+           result = eval(exp, {'np': np})
+           return result
+       except Exception as e:
+           print("Error:", e)
+           return None
+  
+   def parse_pose(self, exp):
+       try:
+           return eval(exp)
+       except Exception as e:
+           print("Error:", e)
+           return None
+      
+   def update(self):
+       self.numSides = self.window().num_sides
+       self.r = self.window().radius
+
+
+       if (self.window().chain and len(self.window().chain.Joints) > 0):
+           if not self.window().add_to_root:
+               self.prevJoint = self.window().chain.Joints[-1]
+               self.add_to_root = False
+           else:
+               self.prevJoint = self.window().chain.Joints[0]
+               self.add_to_root = True
+       else:
+           self.prevJoint = None
+           self.add_to_root = False
+  
 class AddPrismaticMenu(AddJointMenu):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.add_joint = self.window().add_joint
+   def __init__(self, parent=None):
+       super().__init__(parent)
+       self.add_joint = self.window().add_joint
 
-        self.initUI()        
 
-    def initUI(self):
-        layout = QVBoxLayout()
-        
-        length_layout = QHBoxLayout()
-        length_label = QLabel("Neutral Length (default: 3r):")
-        self.length_input = QLineEdit()
-        self.length_input.returnPressed.connect(self.onApplyClicked)
-        length_layout.addWidget(length_label)
-        length_layout.addWidget(self.length_input)
-        layout.addLayout(length_layout)
+       self.initUI()       
 
-        numLayers_layout = QHBoxLayout()
-        numLayers_label = QLabel("Number of Layers (default: 3):")
-        self.numLayers_input = QLineEdit()
-        self.numLayers_input.returnPressed.connect(self.onApplyClicked)
-        numLayers_layout.addWidget(numLayers_label)
-        numLayers_layout.addWidget(self.numLayers_input)
-        layout.addLayout(numLayers_layout)
 
-        angle_layout = QHBoxLayout()
-        angle_label = QLabel("Cone Angle (degrees, default: 60):")
-        self.angle_input = QLineEdit()
-        self.angle_input.returnPressed.connect(self.onApplyClicked)
-        angle_layout.addWidget(angle_label)
-        angle_layout.addWidget(self.angle_input)
-        layout.addLayout(angle_layout)
+   def initUI(self):
+       layout = QVBoxLayout()
+      
+       length_layout = QHBoxLayout()
+       length_label = QLabel("Neutral Length (default: 3r):")
+       self.length_input = QLineEdit()
+       self.length_input.returnPressed.connect(self.onApplyClicked)
+       length_layout.addWidget(length_label)
+       length_layout.addWidget(self.length_input)
+       layout.addLayout(length_layout)
 
-        apply_button = QPushButton('Add Prismatic Joint')
-        apply_button.setAutoDefault(True)
-        apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(apply_button)
 
-        cancel_button = QPushButton('Cancel')
-        cancel_button.clicked.connect(self.window().add_prismatic_toggle)
-        layout.addWidget(cancel_button)
+       numLayers_layout = QHBoxLayout()
+       numLayers_label = QLabel("Number of Layers (default: 3):")
+       self.numLayers_input = QLineEdit()
+       self.numLayers_input.returnPressed.connect(self.onApplyClicked)
+       numLayers_layout.addWidget(numLayers_label)
+       numLayers_layout.addWidget(self.numLayers_input)
+       layout.addLayout(numLayers_layout)
 
-        self.setLayout(layout)
 
-        self.update()
+       angle_layout = QHBoxLayout()
+       angle_label = QLabel("Cone Angle (degrees, default: 60):")
+       self.angle_input = QLineEdit()
+       self.angle_input.returnPressed.connect(self.onApplyClicked)
+       angle_layout.addWidget(angle_label)
+       angle_layout.addWidget(self.angle_input)
+       layout.addLayout(angle_layout)
 
-    def onApplyClicked(self):
-        try:
-            self.update()
 
-            neutralLength = 3*self.r if self.length_input.text()=="" else float(self.length_input.text())
-            numLayers = 3 if self.numLayers_input.text()=="" else int(self.numLayers_input.text())
-            coneAngleText = 60 if self.angle_input.text()=="" else float(self.angle_input.text())
+       apply_button = QPushButton('Add Prismatic Joint')
+       apply_button.setAutoDefault(True)
+       apply_button.clicked.connect(self.onApplyClicked)
+       layout.addWidget(apply_button)
 
-            if (self.prevJoint is None):
-                pose = SE3()
-            else:
-                distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
-                if self.add_to_root: distance *= -1
-                pose = SE3(0,0,distance)
-                if self.prevJoint.pathIndex() == 0:
-                    pose = SE3.Ry(np.pi/2) @ pose
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
-            self.add_joint(self.jointToAdd)
-            self.window().add_prismatic_toggle()
-        except ValueError:
-            self.show_error('Please enter valid numbers.')
-            # error_dialog = ErrorDialog('Please enter valid integers.')
-            # error_dialog.exec_()
+       cancel_button = QPushButton('Cancel')
+       cancel_button.clicked.connect(self.window().add_prismatic_toggle)
+       layout.addWidget(cancel_button)
+
+
+       self.setLayout(layout)
+
+
+       self.update()
+
+
+   def onApplyClicked(self):
+       try:
+           self.update()
+
+
+           neutralLength = 3*self.r if self.length_input.text()=="" else float(self.length_input.text())
+           numLayers = 3 if self.numLayers_input.text()=="" else int(self.numLayers_input.text())
+           coneAngleText = 60 if self.angle_input.text()=="" else float(self.angle_input.text())
+
+
+           if (self.prevJoint is None):
+               pose = SE3()
+           else:
+               distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
+               if self.add_to_root: distance *= -1
+               pose = SE3(0,0,distance)
+               if self.prevJoint.pathIndex() == 0:
+                   pose = SE3.Ry(np.pi/2) @ pose
+
+
+           self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
+           self.add_joint(self.jointToAdd)
+           self.window().add_prismatic_toggle()
+       except ValueError:
+           self.window().show_error("Please enter valid integers.")
+           # error_dialog = ErrorDialog('Please enter valid integers.')
+           # error_dialog.exec_()
+
+
 
 
 class AddRevoluteMenu(AddJointMenu):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.add_joint = self.window().add_joint
+   def __init__(self, parent=None):
+       super().__init__(parent)
+       self.add_joint = self.window().add_joint
 
-        self.initUI()   
 
-    def initUI(self):
-        layout = QVBoxLayout()
-        
-        angle_layout = QHBoxLayout()
-        angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
-        self.angle_input = QLineEdit()
-        self.angle_input.returnPressed.connect(self.onApplyClicked)
-        angle_layout.addWidget(angle_label)
-        angle_layout.addWidget(self.angle_input)
-        layout.addLayout(angle_layout)
+       self.initUI()  
 
-        apply_button = QPushButton('Add Revolute Joint')
-        apply_button.clicked.connect(self.onApplyClicked)
-        apply_button.setAutoDefault(True)
-        layout.addWidget(apply_button)
 
-        cancel_button = QPushButton('Cancel')
-        cancel_button.clicked.connect(self.window().add_revolute_toggle)
-        layout.addWidget(cancel_button)
+   def initUI(self):
+       layout = QVBoxLayout()
+      
+       angle_layout = QHBoxLayout()
+       angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
+       self.angle_input = QLineEdit()
+       self.angle_input.returnPressed.connect(self.onApplyClicked)
+       angle_layout.addWidget(angle_label)
+       angle_layout.addWidget(self.angle_input)
+       layout.addLayout(angle_layout)
 
-        self.setLayout(layout)
 
-        self.update()
-        
-    def onApplyClicked(self):
-        self.update()
+       apply_button = QPushButton('Add Revolute Joint')
+       apply_button.clicked.connect(self.onApplyClicked)
+       apply_button.setAutoDefault(True)
+       layout.addWidget(apply_button)
 
-        bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
-        
-        
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
 
-        if not self.prevJoint is None:
-            distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2
-            if self.add_to_root: distance *= -1
-            pose = SE3(distance,0,0)
-            if self.prevJoint.pathIndex() == 2:
-                pose = SE3.Ry(-np.pi/2) @ pose
-            self.jointToAdd.Pose = pose
-    
-        self.add_joint(self.jointToAdd)
-        self.window().add_revolute_toggle()
+       cancel_button = QPushButton('Cancel')
+       cancel_button.clicked.connect(self.window().add_revolute_toggle)
+       layout.addWidget(cancel_button)
+
+
+       self.setLayout(layout)
+
+
+       self.update()
+      
+   def onApplyClicked(self):
+       self.update()
+
+
+       bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
+      
+      
+       self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
+
+
+       if not self.prevJoint is None:
+           distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2
+           if self.add_to_root: distance *= -1
+           pose = SE3(distance,0,0)
+           if self.prevJoint.pathIndex() == 2:
+               pose = SE3.Ry(-np.pi/2) @ pose
+           self.jointToAdd.Pose = pose
+  
+       self.add_joint(self.jointToAdd)
+       self.window().add_revolute_toggle()
+
 
 class AddTipMenu(AddJointMenu):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.add_joint = self.window().add_joint
-
-        self.isStart = True
-
-        self.initUI()
-
-    def initUI(self):
-        layout = QVBoxLayout()
-
-        length_layout = QHBoxLayout()
-        length_label = QLabel("Length:")
-        self.length_input = QLineEdit()
-        self.length_input.returnPressed.connect(self.onApplyClicked)
-        length_layout.addWidget(length_label)
-        length_layout.addWidget(self.length_input)
-        layout.addLayout(length_layout)
-            
-        apply_button = QPushButton('Add Tip')
-        apply_button.clicked.connect(self.onApplyClicked)
-        layout.addWidget(apply_button)
-        apply_button.setAutoDefault(True)
-
-        cancel_button = QPushButton('Cancel')
-        cancel_button.clicked.connect(self.window().add_tip_toggle)
-        layout.addWidget(cancel_button)
+   def __init__(self, parent=None):
+       super().__init__(parent)
+       self.add_joint = self.window().add_joint
 
 
-        self.setLayout(layout)
+       self.isStart = True
 
-    def onApplyClicked(self):
-        try:
-            self.update()
 
-            length = float(self.length_input.text())
-            if self.prevJoint is None:
-                self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
-            else:
-                distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
-                if self.add_to_root: distance *= -1
-                pose = SE3(0,0,distance)
-                if self.prevJoint.pathIndex() == 0:
-                    pose = SE3.Ry(np.pi/2) @ pose
-                if self.add_to_root:
-                    self.jointToAdd = StartTip(self.numSides, self.r, pose, length=length)
-                else:
-                    self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
+       self.initUI()
 
-            self.add_joint(self.jointToAdd)
-            self.window().add_tip_toggle()
 
-        except ValueError:
-            self.show_error('Please enter valid integers.')
-            # error_dialog = ErrorDialog('Please enter valid integers.')
-            # error_dialog.exec_()
+   def initUI(self):
+       layout = QVBoxLayout()
+
+
+       length_layout = QHBoxLayout()
+       length_label = QLabel("Length:")
+       self.length_input = QLineEdit()
+       self.length_input.returnPressed.connect(self.onApplyClicked)
+       length_layout.addWidget(length_label)
+       length_layout.addWidget(self.length_input)
+       layout.addLayout(length_layout)
+          
+       apply_button = QPushButton('Add Tip')
+       apply_button.clicked.connect(self.onApplyClicked)
+       layout.addWidget(apply_button)
+       apply_button.setAutoDefault(True)
+
+
+       cancel_button = QPushButton('Cancel')
+       cancel_button.clicked.connect(self.window().add_tip_toggle)
+       layout.addWidget(cancel_button)
+
+
+
+
+       self.setLayout(layout)
+
+
+   def onApplyClicked(self):
+       try:
+           self.update()
+
+
+           length = float(self.length_input.text())
+           if self.prevJoint is None:
+               self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
+           else:
+               distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
+               if self.add_to_root: distance *= -1
+               pose = SE3(0,0,distance)
+               if self.prevJoint.pathIndex() == 0:
+                   pose = SE3.Ry(np.pi/2) @ pose
+               if self.add_to_root:
+                   self.jointToAdd = StartTip(self.numSides, self.r, pose, length=length)
+               else:
+                   self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
+
+
+           self.add_joint(self.jointToAdd)
+           self.window().add_tip_toggle()
+
+
+       except ValueError:
+           self.window().show_error("Please enter valid integers.")
+           # error_dialog = ErrorDialog('Please enter valid integers.')
+           # error_dialog.exec_()
+
+
+class EditDimensionMenu(AddJointMenu):
+
+
+   def __init__(self, parent=None):
+       super().__init__(parent)
+       self.mode = None
+       self.main_layout = QVBoxLayout()
+       self.setLayout(self.main_layout)
+
+
+   def clearLayout(self, layout):
+       while layout.count():
+           item = layout.takeAt(0)
+           widget = item.widget()
+           if widget is not None:
+               widget.setParent(None)
+               widget.deleteLater()
+           elif item.layout() is not None:
+               self.clearLayout(item.layout())
+
+
+   def rebuildLayout(self, new_layout):
+       self.clearLayout(self.main_layout)
+       while new_layout.count():
+           item = new_layout.takeAt(0)
+           if item.widget():
+               self.main_layout.addWidget(item.widget())
+           elif item.layout():
+               self.main_layout.addLayout(item.layout())
+       new_layout.deleteLater()
+
+
+   def updatePrismatic(self):
+       self.mode = "prismatic"
+       self.numSides = self.window().num_sides
+       self.r = self.window().radius
+
+
+       new_layout = QVBoxLayout()
+
+
+       length_layout = QHBoxLayout()
+       length_label = QLabel("Neutral Length (default: 3r):")
+       self.length_input = QLineEdit()
+       length_layout.addWidget(length_label)
+       length_layout.addWidget(self.length_input)
+       new_layout.addLayout(length_layout)
+
+
+       numLayers_layout = QHBoxLayout()
+       numLayers_label = QLabel("Number of Layers (default: 3):")
+       self.numLayers_input = QLineEdit()
+       numLayers_layout.addWidget(numLayers_label)
+       numLayers_layout.addWidget(self.numLayers_input)
+       new_layout.addLayout(numLayers_layout)
+
+
+       angle_layout = QHBoxLayout()
+       angle_label = QLabel("Cone Angle (degrees, default: 60):")
+       self.angle_input = QLineEdit()
+       angle_layout.addWidget(angle_label)
+       angle_layout.addWidget(self.angle_input)
+       new_layout.addLayout(angle_layout)
+
+
+       apply_button = QPushButton("Add Prismatic Joint")
+       apply_button.clicked.connect(self.onApplyClicked)
+       new_layout.addWidget(apply_button)
+
+
+       cancel_button = QPushButton("Cancel")
+       cancel_button.clicked.connect(self.window().edit_dimension_toggle)
+       new_layout.addWidget(cancel_button)
+
+
+       self.rebuildLayout(new_layout)
+
+
+   def updateRevolute(self):
+       self.mode = "revolute"
+       self.numSides = self.window().num_sides
+       self.r = self.window().radius
+      
+       new_layout = QVBoxLayout()
+
+
+       angle_layout = QHBoxLayout()
+       angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
+       self.angle_input = QLineEdit()
+       angle_layout.addWidget(angle_label)
+       angle_layout.addWidget(self.angle_input)
+       new_layout.addLayout(angle_layout)
+
+
+       apply_button = QPushButton("Add Revolute Joint")
+       apply_button.clicked.connect(self.onApplyClicked)
+       new_layout.addWidget(apply_button)
+
+
+       cancel_button = QPushButton("Cancel")
+       cancel_button.clicked.connect(self.window().edit_dimension_toggle)
+       new_layout.addWidget(cancel_button)
+
+
+       self.rebuildLayout(new_layout)
+
+
+   def updateTip(self):
+       self.mode = "tip"
+       self.numSides = self.window().num_sides
+       self.r = self.window().radius
+      
+       new_layout = QVBoxLayout()
+
+
+       length_layout = QHBoxLayout()
+       length_label = QLabel("Length:")
+       self.length_input = QLineEdit()
+       length_layout.addWidget(length_label)
+       length_layout.addWidget(self.length_input)
+       new_layout.addLayout(length_layout)
+
+
+       apply_button = QPushButton("Add Tip")
+       apply_button.clicked.connect(self.onApplyClicked)
+       new_layout.addWidget(apply_button)
+
+
+       cancel_button = QPushButton("Cancel")
+       cancel_button.clicked.connect(self.window().edit_dimension_toggle)
+       new_layout.addWidget(cancel_button)
+
+
+       self.rebuildLayout(new_layout)
+
+
+   def onApplyClicked(self):
+       try:
+           self.numSides = self.window().num_sides
+           self.r = self.window().radius
+           self.prev_joint = self.window().prev_joint
+
+
+           if self.mode == "prismatic":
+               neutral_length = float(self.length_input.text()) if self.length_input.text() != "" else 3 * self.r
+               num_layers = int(self.numLayers_input.text()) if self.numLayers_input.text() != "" else 3
+               cone_angle = float(self.angle_input.text()) if self.angle_input.text() != "" else 60.0
+
+
+               if self.prev_joint is None:
+                   pose = SE3()
+               else:
+                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
+                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + neutral_length / 2
+                   if self.add_to_root:
+                       distance *= -1
+                   pose = SE3(0, 0, distance)
+                   if self.prev_joint.pathIndex() == 0:
+                       pose = SE3.Ry(math.pi / 2) @ pose
+
+
+               self.editJoint = PrismaticJoint(self.numSides, self.r, neutral_length,
+                                                 num_layers, math.radians(cone_angle), pose)
+
+
+           elif self.mode == "revolute":
+               bending_angle = float(self.angle_input.text()) if self.angle_input.text() != "" else 180.0
+
+
+               self.editJoint = RevoluteJoint(self.numSides, self.r, math.radians(bending_angle), SE3())
+               if self.prev_joint is not None:
+                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
+                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + self.editJoint.neutralLength / 2
+                   if self.add_to_root:
+                       distance *= -1
+                   pose = SE3(distance, 0, 0)
+                   if self.prev_joint.pathIndex() == 2:
+                       pose = SE3.Ry(-math.pi / 2) @ pose
+                   self.editJoint.Pose = pose
+
+
+           elif self.mode == "tip":
+               length = float(self.length_input.text())
+               if self.prev_joint is None:
+                   self.editJoint = StartTip(self.numSides, self.r, SE3(), length=length)
+               else:
+                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
+                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + length / 2
+                   if self.add_to_root:
+                       distance *= -1
+                   pose = SE3(0, 0, distance)
+                   if self.prev_joint.pathIndex() == 0:
+                       pose = SE3.Ry(math.pi / 2) @ pose
+                   self.editJoint = EndTip(self.numSides, self.r, pose, length=length)
+
+
+           self.window().edit_dimension_toggle()
+           self.window().finish_joint_edit(self.editJoint)
+       except Exception as e:
+           self.window().show_error(str(e))

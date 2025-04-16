@@ -840,6 +840,8 @@ class PointEditorWindow(QMainWindow):
         self.add_tip_menu = AddTipMenu(self)
         self.add_tip_menu.setVisible(False)
         self.create_new_chain = QPushButton("Create New Chain")
+        self.edit_dimension_menu = EditDimensionMenu(self)
+        self.edit_dimension_menu.setVisible(False)
         self.edit_dimension_button = QPushButton("Edit Dimension")
 
         add_waypoints_layout = QVBoxLayout()
@@ -867,6 +869,7 @@ class PointEditorWindow(QMainWindow):
         add_joints_layout.addWidget(self.add_tip)
         add_joints_layout.addWidget(self.add_tip_menu)
         add_joints_layout.addWidget(self.edit_dimension_button)
+        add_joints_layout.addWidget(self.edit_dimension_menu)
 
         add_chain_layout.addWidget(self.create_new_chain)
 
@@ -1734,75 +1737,70 @@ class PointEditorWindow(QMainWindow):
     import copy
 
     def edit_joint_dimension(self):
+        self._backup_chain = copy.deepcopy(self.chain)
+        self._saved_states = []
 
-        backup_chain = copy.deepcopy(self.chain)
-        saved_states = []  
+        for idx, joint in enumerate(self._backup_chain.Joints):
+            original_state = joint.state
+            self._saved_states.append(original_state)
 
+            self._backup_chain.setJointState(idx, 0)
+
+        self._selected_joint = self.selected_joint
+
+        target_joint = self._backup_chain.Joints[self._selected_joint]
+        self.prev_joint = self._backup_chain.Joints[self._selected_joint - 1] if self._selected_joint > 0 else None
+
+        if target_joint.__class__.__name__ == "PrismaticJoint":
+            self.edit_dimension_menu.updatePrismatic()
+        elif target_joint.__class__.__name__ == "RevoluteJoint":
+            self.edit_dimension_menu.updateRevolute()
+        elif target_joint.__class__.__name__ in ["StartTip", "EndTip"]:
+            self.edit_dimension_menu.updateTip()
+        else:
+            self.show_error("Uneditable joint type.")
+            return
+
+        self.edit_dimension_toggle()
+
+    def finish_joint_edit(self, new_joint):
         try:
             new_chain = None
-            selected = self.selected_joint
+            for idx, joint in enumerate(self._backup_chain.Joints):
+                if idx == self._selected_joint:
+                    min_val, max_val = new_joint.stateRange()
+                    original_state = self._saved_states[idx]
+                    if original_state < min_val:
+                        original_state = min_val
+                    elif original_state > max_val:
+                        original_state = max_val
+                    self._saved_states[idx] = original_state
 
-            for idx, joint in enumerate(backup_chain.Joints):
-                original_state = joint.state
-                saved_states.append(original_state)
-
-                backup_chain.setJointState(idx, 0)
-            
-
-            for idx, joint in enumerate(backup_chain.Joints):
-
-                if idx == selected:
-                    prev = backup_chain.Joints[idx - 1] if idx > 0 else None
-                    if joint.__class__.__name__ == "PrismaticJoint":
-                        dialog = AddPrismaticDialog(self.chain.numSides, self.radius, prevJoint=prev)
-                    elif joint.__class__.__name__ == "RevoluteJoint":
-                        dialog = AddRevoluteDialog(self.chain.numSides, self.radius, prevJoint=prev)
-                    elif joint.__class__.__name__ in ["StartTip", "EndTip"]:
-                        dialog = AddTipDialog(self.chain.numSides, self.radius, prevJoint=prev)
+                    new_joint.Pose = joint.Pose
+                    if new_chain is None:
+                        new_chain = KinematicChain(new_joint)
                     else:
-                        self.show_error("Uneditable joint type.")
-                        return
-
-                    if dialog.exec_() == QDialog.Accepted:
-                        new_joint = dialog.getJoint()
-                        min_val, max_val = new_joint.stateRange()
-                        original_state = saved_states[idx]
-                        if original_state < min_val:
-                            original_state = min_val
-                        elif original_state > max_val:
-                            original_state = max_val
-
-                        saved_states[idx] = original_state
-                        new_joint.Pose = joint.Pose
-                        if new_chain is None:
-                            new_chain = KinematicChain(new_joint)
-                        else:
-                            new_chain.append(new_joint, relative=False, fixedPosition=True,
-                                            fixedOrientation=True, safe=False)
-                    else:
-                        return
+                        new_chain.append(new_joint, relative=False,
+                                        fixedPosition=True, fixedOrientation=True, safe=False)
                 else:
                     if new_chain is None:
                         new_chain = KinematicChain(joint)
                     else:
-                        new_chain.append(joint, relative=False, fixedPosition=True,
-                                        fixedOrientation=True, safe=False)
-
+                        new_chain.append(joint, relative=False,
+                                        fixedPosition=True, fixedOrientation=True, safe=False)
+            
             for idx, joint in enumerate(new_chain.Joints):
-                new_chain.setJointState(idx, saved_states[idx])
-
+                new_chain.setJointState(idx, self._saved_states[idx])
+            
             self.chain = new_chain
-            self.selected_joint = selected
+            self.selected_joint = self._selected_joint
             self.log_version()
             self.show_success("Chain updated successfully!")
-
-        
         except Exception as e:
-            self.chain = backup_chain
+            self.chain = self._backup_chain
             self.show_error("Error rebuilding chain: " + str(e))
         
         self.update_joint()
-
 
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
@@ -1940,6 +1938,8 @@ class PointEditorWindow(QMainWindow):
         #     a.translate(cnt[0], cnt[1], cnt[2])
 
     def update_joint(self):
+        self.edit_dimension_menu.setVisible(False)
+        self.edit_dimension_button.setVisible(True)
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
 
@@ -2118,6 +2118,8 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_prismatic_menu.setVisible(not self.add_prismatic_menu.isVisible())
         self.add_prismatic.setVisible(not self.add_prismatic.isVisible())
+        self.edit_dimension_menu.setVisible(False)
+        self.edit_dimension_button.setVisible(True)
 
     def add_revolute_toggle(self):
         if (not self.chain_created):
@@ -2125,6 +2127,8 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_revolute_menu.setVisible(not self.add_revolute_menu.isVisible())
         self.add_revolute.setVisible(not self.add_revolute.isVisible())
+        self.edit_dimension_menu.setVisible(False)
+        self.edit_dimension_button.setVisible(True)
 
     def add_tip_toggle(self):
         if (not self.chain_created):
@@ -2132,6 +2136,15 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_tip_menu.setVisible(not self.add_tip_menu.isVisible())
         self.add_tip.setVisible(not self.add_tip.isVisible())
+        self.edit_dimension_menu.setVisible(False)
+        self.edit_dimension_button.setVisible(True)
+
+    def edit_dimension_toggle(self):
+        if (not self.chain_created):
+            self.chain_not_created()
+            return
+        self.edit_dimension_menu.setVisible(not self.edit_dimension_menu.isVisible())
+        self.edit_dimension_button.setVisible(not self.edit_dimension_button.isVisible())
 
     def add_waypoint_func(self):
         numSides = self.num_sides
