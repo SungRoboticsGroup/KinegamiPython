@@ -467,7 +467,7 @@ class EditDimensionMenu(AddJointMenu):
                        pose = SE3.Ry(math.pi / 2) @ pose
                    self.editJoint = EndTip(self.numSides, self.r, pose, length=length)
 
-
+           self.window().log_version()
            self.window().edit_dimension_toggle()
            self.window().finish_joint_edit(self.editJoint)
        except Exception as e:

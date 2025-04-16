@@ -1345,6 +1345,8 @@ class PointEditorWindow(QMainWindow):
             self.plot_widget.addItem(self.referenceMesh.mesh)
 
         self.show_success('Chain created!')
+        self.edit_dimension_menu.setVisible(False)
+        self.edit_dimension_button.setVisible(True)
 
     def generate_stl(self):
         newTree = origamiToPrinted(self.chain, 0.05)
@@ -1755,7 +1757,7 @@ class PointEditorWindow(QMainWindow):
             self.edit_dimension_menu.updatePrismatic()
         elif target_joint.__class__.__name__ == "RevoluteJoint":
             self.edit_dimension_menu.updateRevolute()
-        elif target_joint.__class__.__name__ in ["StartTip", "EndTip"]:
+        elif target_joint.__class__.__name__ in ["StartTip", "EndTip", "Tip"]:
             self.edit_dimension_menu.updateTip()
         else:
             self.show_error("Uneditable joint type.")
@@ -1794,7 +1796,6 @@ class PointEditorWindow(QMainWindow):
             
             self.chain = new_chain
             self.selected_joint = self._selected_joint
-            self.log_version()
             self.show_success("Chain updated successfully!")
         except Exception as e:
             self.chain = self._backup_chain
@@ -2118,8 +2119,6 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_prismatic_menu.setVisible(not self.add_prismatic_menu.isVisible())
         self.add_prismatic.setVisible(not self.add_prismatic.isVisible())
-        self.edit_dimension_menu.setVisible(False)
-        self.edit_dimension_button.setVisible(True)
 
     def add_revolute_toggle(self):
         if (not self.chain_created):
@@ -2127,8 +2126,6 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_revolute_menu.setVisible(not self.add_revolute_menu.isVisible())
         self.add_revolute.setVisible(not self.add_revolute.isVisible())
-        self.edit_dimension_menu.setVisible(False)
-        self.edit_dimension_button.setVisible(True)
 
     def add_tip_toggle(self):
         if (not self.chain_created):
@@ -2136,8 +2133,6 @@ class PointEditorWindow(QMainWindow):
             return
         self.add_tip_menu.setVisible(not self.add_tip_menu.isVisible())
         self.add_tip.setVisible(not self.add_tip.isVisible())
-        self.edit_dimension_menu.setVisible(False)
-        self.edit_dimension_button.setVisible(True)
 
     def edit_dimension_toggle(self):
         if (not self.chain_created):
