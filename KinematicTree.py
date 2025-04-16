@@ -579,10 +579,14 @@ class KinematicTree(Generic[J]):
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall=True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True, relative : bool = False) -> bool:
+                       safe : bool = True, relative : bool = False, localOrient : bool = True) -> bool:
         
         if relative:
-            Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+            if localOrient:
+                Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+            else:
+                translate_transform = SE3(self.Joints[jointIndex].Pose.t)
+                Transformation = translate_transform @ Transformation @ translate_transform.inv()
         
         if safe:
             backup = self.dataDeepCopy()
