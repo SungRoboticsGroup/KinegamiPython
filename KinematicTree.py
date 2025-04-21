@@ -26,6 +26,7 @@ import logging
 import collections
 import traceback
 import style
+import style
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('pyswarms')
