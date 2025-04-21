@@ -1,77 +1,60 @@
 from KinematicTree import *
 
-def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
-    parentIndex = subject.Parents[index]
-
-    
-    subjects = [copy.deepcopy(subject) for _ in states]
-    for i in range(0,len(states)):
-        subjects[i].setConfiguration(states[i])
+def optimizeJointPlacementMulti(subjects, index, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
+    parentIndex = subjects[0].Parents[index]
 
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
     
     capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater) for subject in subjects]
-    def linkLoss(t, link, curveLossFactor = 2):
+    def linkLoss(t, link, treeIdx, curveLossFactor = 2):
+        selectedCapsules = capsuleSelections[treeIdx]
         #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
         childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
-        return t.Links[index].path.length ** 2 + childrenLength# + d * t.r
+        return t.Links[index].path.length ** 2 + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
-    defaultError = collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1) * len(states)    
-    
-    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) if ((j <= index) or (j in subject.Children[index]))] if ignoreLater else states[i]) for i in range(0,len(states))]
-
-    def objective(params, returnWhich = False):
-        tree = subject.copyAbbreviatedSelf(ignoreLater, index)
-
-        linkLossUnchanged = 0
-        linkLossReversedZhat = 0
-
+    defaultError = collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)
+    def single_tree_objective(tree, treeIdx, params, which):
         translation = params[0]
         rotation = params[1]
 
         transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
-        #try just moving it
-        if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
-            linkLossUnchanged = linkLoss(tree, index)
-            for i in range(0,len(states)):
-                selectedCapsules = capsuleSelections[i]
-                try:
-                    tree.setConfiguration(stateSubsets[i])
-                except:
-                    linkLossUnchanged = defaultError
-                    break
-                linkLossUnchanged += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionError
-        else:
-            linkLossUnchanged = defaultError
-        
-        tree.setConfiguration([0]*len(tree.Joints))
-        #try switching zhat
 
-        if linkLossUnchanged < defaultError:
+        if (which == 1):
+            #try just moving it
+            if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
+                return linkLoss(tree, index, treeIdx)
+            else:
+                return defaultError
+        
+        #try switching zhat
+        tree2 = tree.copyAbbreviatedSelf(ignoreLater, index)
+
+        if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
             tree.Joints[index].reverseZhat()
 
         if (not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False)):
-            tree2 = tree.copyAbbreviatedSelf(ignoreLater, index)
             tree2.Joints[index].reverseZhat()
             if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
-                linkLossReversedZhat = linkLoss(tree2, index)
+                return linkLoss(tree2, index, treeIdx)
             else:
-                linkLossReversedZhat = defaultError
+                return defaultError
         else:
-            linkLossReversedZhat = linkLoss(tree, index)
-            tree2 = tree
+            return linkLoss(tree, index, treeIdx)
+    
+    def objective(params, returnWhich = False):
+        defaultError = (collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1)) * len(subjects)
+        linkLossUnchanged = 0
+        linkLossReversedZhat = 0
 
-        if (linkLossReversedZhat < defaultError):
-            for i in range(0,len(states)):
-                selectedCapsules = capsuleSelections[i]
-                try:
-                    tree2.setConfiguration(stateSubsets[i])
-                except:
-                    linkLossReversedZhat = defaultError
-                    break
-                linkLossReversedZhat += tree2.getCollisionError(selectedIndices, selectedCapsules) * collisionError
+        for i, subject in enumerate(subjects):
+            tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            linkLossUnchanged += single_tree_objective(tree, i, params, 1)
+        
+        for i, subject in enumerate(subjects):
+            tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            linkLossReversedZhat += single_tree_objective(tree, i, params, 2)
 
         if returnWhich:
             if linkLossUnchanged <= linkLossReversedZhat:
@@ -141,32 +124,33 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
 
     which = objective(result, returnWhich=True)
 
-    tree = subject.copyAbbreviatedSelf()
-    if which == 1:
-        if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
-            raise Exception()
-    else:
-        try:
+    returnTrees = []
+    for subject in subjects:
+        tree = subject.copyAbbreviatedSelf()
+        if which == 1:
             if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
                 raise Exception()
-            
-            tree.Joints[index].reverseZhat()
-            if not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
-                raise Exception()
-        except:
-            tree2 = subject.copyAbbreviatedSelf()
-            tree2.Joints[index].reverseZhat()
-            if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
-                raise Exception()
-            tree = tree2
+            returnTrees.append(tree)
+        else:
+            try:
+                if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+                    raise Exception()
+                
+                tree.Joints[index].reverseZhat()
+                if not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+                    raise Exception()
+
+                returnTrees.append(tree)
+            except:
+                tree2 = subject.copyAbbreviatedSelf()
+                tree2.Joints[index].reverseZhat()
+                if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+                    raise Exception()
+                returnTrees.append(tree2)
     
-    return tree, loss
+    return returnTrees, loss
 
-def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater=False, parallelize=False, verbose = True):
-
-    subjects = [copy.deepcopy(subject) for _ in states]
-    for i in range(0,len(states)):
-        subjects[i].setConfiguration(states[i])
+def optimizeWaypointPlacementMulti(subjects, index, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater=False, parallelize=False, verbose = True):
 
     #make initial guess as close as possible to previous
     start = time.time()
@@ -184,33 +168,26 @@ def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisi
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
     capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater) for subject in subjects]
 
-    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) if ((j <= index) or (j in subject.Children[index]))] if ignoreLater else states[i]) for i in range(0,len(states))]
-
-    def linkLoss(t, link, curveLossFactor = np.pi):
+    def linkLoss(t, treeIdx, link, curveLossFactor = np.pi):
+        selectedCapsules = capsuleSelections[treeIdx]
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
         childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
-        return t.Links[index].path.length ** 2 + childrenLength# + d * t.r
+        return t.Links[index].path.length ** 2  + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
-    defaultError = collisionError * len(subject.Joints) * (len(subject.Children) + 1) * len(states)
+    defaultError = collisionError * len(subject.Joints) * (len(subject.Children) + 1)
+    def single_tree_objective(tree, params, treeIdx):
+        tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+
+        if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
+            return defaultError
+        
+        return linkLoss(tree, index) + np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
 
     def objective(params):
-        tree = subject.copyAbbreviatedSelf(ignoreLater, index)
-        transform = SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5])
-
-        if not tree.transformJoint(index, transform,  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
-            return defaultError
-            
-        loss = linkLoss(tree, index) + np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
-        
-        for i in range(0, len(states)):
-            selectedCapsules = capsuleSelections[i]
-            #TODO: Why are there exceptions here, should just transform link
-            try:
-                tree.setConfiguration(stateSubsets[i])
-            except:
-                return defaultError
-            loss += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionError
-
+        loss = 0
+        for i, subject in enumerate(subjects):
+            tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            loss += single_tree_objective(tree, params, i)
         return loss
 
     if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
@@ -248,14 +225,17 @@ def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisi
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':0.7, 'c2':0.5, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
     minSwarmLoss, minSwarmResult = optimizer.optimize(waypoint_batch_objective_function, iters=maxiter,verbose=False, n_processes=n_particles if parallelize else None)
     
-    tree = subject.copyAbbreviatedSelf()
-    if tree.transformJoint(index, SE3.Trans(minSwarmResult[0:3]) @ SE3.Rz(minSwarmResult[3]) @ SE3.Ry(minSwarmResult[4]) @ SE3.Rz(minSwarmResult[5]),  propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
-        if verbose:
-            print(f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}")
-    else:
-        raise Exception("Optimization failed dramatically")
+    returnTrees = []
+    for subject in subjects:
+        tree = subject.copyAbbreviatedSelf()
+        if tree.transformJoint(index, SE3.Trans(minSwarmResult[0:3]) @ SE3.Rz(minSwarmResult[3]) @ SE3.Ry(minSwarmResult[4]) @ SE3.Rz(minSwarmResult[5]),  propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
+            if verbose:
+                print(f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}")
+            returnTrees.append(tree)
+        else:
+            raise Exception("Optimization failed dramatically")
 
-    return tree, minSwarmResult
+    return returnTrees, minSwarmResult
 
 def method1(subject, states = None, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaulate=False, verbose=True, directory=None):
     if states == None:
@@ -275,6 +255,7 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
 
     print(f"Collision error is {collisionError}")
 
+    trees = []
     for state in states:
         tree = copy.deepcopy(subject)
         for i in range(0, len(tree.Joints)):
@@ -283,9 +264,8 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
             tree.Joints[i].recomputeCollisionCapsules()
             if tree.detectCollisions(debug=True) > 0:
                 print("Warning: Initial tree contains collisions.")
+        trees.append(tree)
     
-    tree = copy.deepcopy(subject)
-
     times = []
     lengths = []
 
@@ -305,7 +285,7 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
     numOptimized = 1
 
     def optimizeFromIndex(index):       
-        nonlocal tree
+        nonlocal trees
         nonlocal numOptimized
 
         iters = 20
@@ -315,9 +295,9 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
             tolerance = subject.r/10
 
         if isWaypoint(subject.Joints[index]):
-            tree, loss = optimizeWaypointPlacementMulti(tree, states, index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            trees, loss = optimizeWaypointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
         else:
-            tree, loss = optimizeJointPlacementMulti(tree, states, index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            trees, loss = optimizeJointPlacementMulti(trees,index, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
         # log(tree, index)
 
@@ -352,12 +332,13 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
             
             if isWaypoint(subject.Joints[order[j]]):
                 try:
-                    tree2, loss = optimizeWaypointPlacementMulti(tree, states, order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    trees2, loss = optimizeWaypointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
-                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
-                        raise Exception("Moving all children caused collision.")
+                    for tree in trees2:
+                        if tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
+                            raise Exception("Moving all children caused collision.")
 
-                    tree = tree2
+                    trees = trees2
 
                     if optimizeStreak == j:
                         isOptimized[order[j]] = True
@@ -367,8 +348,8 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
                     if verbose:
                         print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
                     if j != 0:
-                        if isOptimized[tree.Parents[order[j]]]:
-                            isOptimized[tree.Parents[order[j]]] = False
+                        if isOptimized[trees[0].Parents[order[j]]]:
+                            isOptimized[trees[0].Parents[order[j]]] = False
                             numOptimized -= 1
                     
                     if resetOnFail:
@@ -378,16 +359,17 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
                                 isOptimized[idx] = False
                                 numOptimized -= 1
 
-                    tree, loss = optimizeWaypointPlacementMulti(tree, states, order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    trees, loss = optimizeWaypointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                     break
             else:
                 try:
-                    tree2, loss = optimizeJointPlacementMulti(tree, states, order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    trees2, loss = optimizeJointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
 
-                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
-                        raise Exception("Moving all children caused collision.")
-                
-                    tree = tree2
+                    for tree in trees2:
+                        if tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
+                            raise Exception("Moving all children caused collision.")
+                    
+                    trees = trees2
 
                     if optimizeStreak == j:
                         isOptimized[order[j]] = True
@@ -397,8 +379,8 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
                     if verbose:
                         print(f"COULD NOT IGNORE CHILDREN PLACEMENT {order[j]}: {e}")
                     if j != 0:
-                        if isOptimized[tree.Parents[order[j]]]:
-                            isOptimized[tree.Parents[order[j]]] = False
+                        if isOptimized[trees[0].Parents[order[j]]]:
+                            isOptimized[trees[0].Parents[order[j]]] = False
                             numOptimized -= 1
                     if resetOnFail:
                         print(f"RESET ON FAIL OCCURRED: JOINT {order[j]} TIME: {time.time() - start}")
@@ -407,7 +389,7 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
                                 isOptimized[idx] = False
                                 numOptimized -= 1
 
-                    tree, loss = optimizeJointPlacementMulti(tree, states,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    trees, loss = optimizeJointPlacementMulti(trees,order[j], maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
                     break
 
             # log(tree, order[j])
@@ -428,9 +410,10 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
                 
         #         log(tree, order[j])
         if verbose:
-            print(f"CURRENT COLLISIONS: {i}")
-            if tree.detectCollisions(debug=True) == 0:
-                print("NONE")
+            for i, tree in enumerate(trees):
+                print(f"CURRENT COLLISIONS: {i}")
+                if tree.detectCollisions(debug=True) == 0:
+                    print("NONE")
 
         print(f"Optimized chain ending at {i} in {time.time() - start2}s \n")
 
@@ -441,12 +424,6 @@ def method1(subject, states = None, showSteps=False, childFraction=1, streamline
     #     tree.save(directory + "final", saveDir=False)
     # if (evaluate):
     #     return tree, times, lengths
-    trees = []
-    for state in states:
-        t = copy.deepcopy(tree)
-        for i in range(0, len(t.Joints)):
-            if (not isWaypoint(t.Joints[i])):
-                t.setJointState(i,state[i])
-        trees.append(t)
+    
     return trees
 

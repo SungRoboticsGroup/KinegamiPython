@@ -203,9 +203,13 @@ class KinematicTree(Generic[J]):
     def recomputeBoundingBall(self):
         self.boundingBall = self.Joints[0].boundingBall()
         for joint in self.Joints[1:]:
+            if joint is None:
+                continue
             self.boundingBall = minBoundingBall(self.boundingBall,
                                                 joint.boundingBall())
         for link in self.Links:
+            if link is None:
+                continue
             self.boundingBall = minBoundingBall(self.boundingBall,
                                                 link.elbow1BoundingBall)
             self.boundingBall = minBoundingBall(self.boundingBall,
@@ -284,7 +288,7 @@ class KinematicTree(Generic[J]):
             ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='black', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
-    def copyAbbreviatedSelf(self, isolate=False, isolateJoint = None):
+    def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):
         # tree = KinematicTree(Waypoint(self.numSides, self.r, SE3()), self.maxAnglePerElbow)
         # # for i in range(1, len(self.Joints)):
         # #     tree.addJoint(self.Parents[i], self.Joints[i].copy(), relative=False, fixedPosition=True, fixedOrientation=True, safe = False)
@@ -293,12 +297,16 @@ class KinematicTree(Generic[J]):
         # tree.Parents = self.Parents
         # tree.Children = self.Children
         # return tree
-        newTree = KinematicTree(copy.deepcopy(self.Joints[0]), self.maxAnglePerElbow)
+        try:
+            newTree = KinematicTree(copy.deepcopy(self.Joints[self.Parents[self.Parents[isolateJoint]]]), self.maxAnglePerElbow)
+        except:
+            newTree = KinematicTree(copy.deepcopy(self.Joints[0]), self.maxAnglePerElbow)
+
         if isolate:
-            assert(isolateJoint is not None)
 
             numChildren = len(self.Children[isolateJoint])
             childIdx = 0
+            
             i = 1
             while (childIdx < numChildren or i <= isolateJoint):
                 if i == self.Parents[isolateJoint]:
@@ -945,6 +953,7 @@ class KinematicTree(Generic[J]):
                     print(err)
                     print("Reverting chain to before outer call.")
                 self.setTo(backup)
+                return False
 
         else:
             self.Joints[jointIndex].transformPoseBy(Transformation)
@@ -982,10 +991,14 @@ class KinematicTree(Generic[J]):
                 
     def setJointState(self, jointIndex : int, newState : float) -> bool:
         joint = self.Joints[jointIndex]
+
+        if joint is None:
+            return False
+            
         minState, maxState = joint.stateRange()
         if newState < minState or newState > maxState:
-            print("WARNING: state out of range in setJointRange, "+
-                    "state unchanged.")
+            # print("WARNING: state out of range in setJointRange, "+
+            #         "state unchanged.")
             return False
         Transformation = joint.TransformStateTo(newState)
         for c in self.Children[jointIndex]:
@@ -1600,6 +1613,7 @@ class KinematicTree(Generic[J]):
                 self.setJointState(i, newConfig[i])
         else:
             if len(newConfig) != len(self.Joints):
+                print(len(newConfig), len(self.Joints))
                 raise ValueError("Length mismatch between new configuration and all joints")
             for i, joint in enumerate(self.Joints):
                 self.setJointState(i, newConfig[i])
