@@ -1,0 +1,69 @@
+# -*- coding: utf-8 -*-
+# Setting up path to be able to import from the parent directory
+# https://tutorpython.com/tutorial/python-import-from-parent-directory
+import os
+import sys
+this_dir = os.path.dirname(__file__)
+main_dir = os.path.abspath(os.path.join(this_dir, '../..'))
+sys.path.append(main_dir)
+
+from KinematicChain import *
+from numpy import sin, cos
+r = 100 #units: mm
+numSides = 6
+# An example PUMA arm, based on Denavit-Hartenberg parameters from:
+# C. S. G. Lee and M. Ziegler, 
+# "Geometric Approach in Solving Inverse Kinematics of PUMA Robots," 
+# in IEEE Transactions on Aerospace and Electronic Systems, 
+# vol. AES-20, no. 6, pp. 695-706, Nov. 1984, doi: 10.1109/TAES.1984.310452.
+
+
+# Function to convert Denavit-Hartenberg parameters to relative pose matrices
+def relativePoseFromDHOriginal(theta, alpha, a, d):
+    return SE3([[cos(theta), -cos(alpha)*sin(theta), sin(alpha)*sin(theta), a*cos(theta)],
+                [sin(theta), cos(alpha)*cos(theta), -sin(alpha)*cos(theta), a*sin(theta)],
+                [0,          sin(alpha),             cos(alpha),            d],
+                [0,          0,                      0,                     1]])
+
+# Construct pose matrices from the Denavit-Hartenberg parameters for a PUMA arm
+# from Lee and Ziegler 1984
+RelativePoses = [relativePoseFromDHOriginal(np.pi/2, -np.pi/2, 0, 0),
+         relativePoseFromDHOriginal(0, 0, 431.8, 149.09),
+         relativePoseFromDHOriginal(np.pi/2, np.pi/2, -20.32, 0),
+         relativePoseFromDHOriginal(0, -np.pi/2, 0, 433.07),
+         relativePoseFromDHOriginal(0, np.pi/2, 0, 0),
+         relativePoseFromDHOriginal(0, 0, 0, 56.25)]
+
+#RelativePosesReversed = [pose.inv() for pose in RelativePoses[::-1]]
+
+GlobalPoses = [RelativePoses[0]]
+for Pose in RelativePoses[1:]:
+    GlobalPoses.append(GlobalPoses[-1] @ Pose)
+
+GlobalPosesReversed = GlobalPoses[::-1]
+basePoseGlobal = SE3.Trans(0,0,-660.4)@SE3.Rz(np.pi)
+baseWaypoint = Waypoint(numSides, r, basePoseGlobal)
+baseWaypoint.reverseZhat()
+#GlobalPosesReversed.append(basePoseGlobal)
+
+# Initialize the chain with the end effector waypoint
+endEffector = StartTip(numSides, r, GlobalPosesReversed[0], 2*r)
+endEffector.reverseZhat()
+chain = KinematicChain(endEffector, gimbal=True)
+for Pose in GlobalPosesReversed[1:]:
+    chain.appendGeneralizedGimbal(RevoluteJoint(numSides, r, np.pi, Pose))
+# The last DH parameters (and thus pose matrix) is for the end effector
+#chain.append(EndTip(numSides, r, GlobalPoses[-1], 50), safe=False, relative=False)
+
+chain.transformAll(SE3.Trans(0,0,660.4), recomputeBoundingBall=False)
+chain.checkBallsAreNested()
+
+# Plot the resulting chain
+chain.show(block=False, showGroundPlane=True, groundPlaneScale=800, showSpheres=False, showScaleBar=False, showJointPoses=False)
+
+numRandomConfigs = 3
+randomConfigs = [chain.randomConfiguration() for _ in range(numRandomConfigs)]
+for i in range(numRandomConfigs):
+    chain.setConfiguration(randomConfigs[i])
+    chain.checkBallsAreNested()
+    chain.show(block=(i==numRandomConfigs-1), showGroundPlane=True, groundPlaneScale=800, showSpheres=False, showScaleBar=False, showJointPoses=False)
