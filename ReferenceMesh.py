@@ -3,6 +3,8 @@ from spatialmath import SE3
 import numpy as np
 from style import *
 from pyqtgraph import Transform3D
+from OpenGL.GL import glDisable, glEnable, GL_DEPTH_TEST
+import math
 
 class ReferenceMesh():
 
@@ -110,8 +112,48 @@ class ReferenceMesh():
         rotated_vector = np.dot(rotation_matrix, vector)
         return rotated_vector
         
-    def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
-        pass
+    def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame: SE3=None):
+        axes = (self.Pose.R if local else np.eye(3))
+        if frame is not None:
+            axes = frame.R @ axes
 
-    def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
-        pass
+        center = self.Pose.t
+        colors = rotateArrowColors
+
+        for i in range(3):
+            vec = axes[:, i]
+            start = center
+            end = center + self.mesh.scale() * vec
+            line = OverlayLine(pos=np.array([start, end]),
+                               color=colors[i],
+                               width=8,
+                               antialias=True)
+            widget.plot_widget.addItem(line)
+
+    def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame: SE3=None):
+        axes = (self.Pose.R if local else np.eye(3))
+        if frame is not None:
+            axes = frame.R @ axes
+
+        center = self.Pose.t
+        vis_rad = self.mesh.scale()
+        colors = rotateArrowColors
+
+        for i in range(3):
+            pts = self.generate_circle_points(
+                axis=axes[:, i],
+                center=center,
+                rad=vis_rad + 0.2,
+                num_points=64
+            )
+            circle = OverlayLine(pos=np.array(pts),
+                                 color=colors[i],
+                                 width=8,
+                                 antialias=True)
+            widget.plot_widget.addItem(circle)
+
+class OverlayLine(gl.GLLinePlotItem):
+    def paint(self):
+        glDisable(GL_DEPTH_TEST)
+        super().paint()
+        glEnable(GL_DEPTH_TEST)

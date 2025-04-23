@@ -12,6 +12,8 @@ from scipy.spatial import ConvexHull
 import pyqtgraph.opengl as gl
 from pyqtgraph import Transform3D
 from PyQt5.QtGui import QMatrix4x4, QVector4D, QVector3D
+from OpenGL.GL import glDisable, glEnable, GL_DEPTH_TEST
+import math
 
 from TubularPattern import *
 from geometryHelpers import *
@@ -246,67 +248,62 @@ class Joint(ABC):
         faces = np.array(faces)
         return gl.MeshData(vertexes=vertices, faces=faces)
     
-    def addArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None, mode=""):
-        rad = self.r
-        colors = rotateArrowColors
-        opacity = [0.8, 0.8, 0.8]
+    def addArrows(self, widget, selectedArrow=-1, local=True, frame: SE3 = None, mode=""):
+            rad = self.r
+            colors = rotateArrowColors
+            center = self.Pose.t
+            extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
 
-        # if selectedArrow != -1:
-        #     colors[selectedArrow] = selectedArrowColor
-        #     opacity = [0.1, 0.1, 0.1]
-        #     opacity[selectedArrow] = 0.8
+            if local:
+                axes = [self.Pose.R[:, i] for i in range(3)]
+            else:
+                axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+            if frame:
+                axes = [frame.R[:, i] for i in range(3)]
 
-        extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
-        center = self.Pose.t
+            if mode == "Translate":
+                for i, axis_vec in enumerate(axes):
+                    col = selectedArrowColor if i == selectedArrow else colors[i]
+                    start = center
+                    end = center + (rad + 1.0) * axis_vec
+                    line_item = OverlayLine(pos=np.array([start, end]), color=col, width=8, antialias=True)
+                    widget.plot_widget.addItem(line_item)
 
-        if local:
-            axes = [self.Pose.R[:, i] for i in range(3)]
-        else:
-            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+                if selectedArrow != -1:
+                    dir_pt = center + rad * axes[selectedArrow]
+                    ext = self.generate_extended_axis(center, dir_pt, 1000)
+                    ext_line = gl.GLLinePlotItem(pos=ext,
+                                                color=extended_axis_color[selectedArrow],
+                                                width=8,
+                                                antialias=True)
+                    widget.plot_widget.addItem(ext_line)
 
-        if frame:
-            axes = [frame.R[:, i] for i in range(3)]
+            elif mode == "Rotate":
+                for i, axis in enumerate(axes):
+                    helper = np.array([1,0,0])
+                    if abs(np.dot(axis, helper)) > 0.9:
+                        helper = np.array([0,1,0])
+                    u = np.cross(axis, helper); u /= np.linalg.norm(u)
+                    v = np.cross(axis, u)
 
-        transform = self.get_transform3D()
+                    pts = np.array([
+                        center + (rad + 0.2)*(u*np.cos(t) + v*np.sin(t))
+                        for t in np.linspace(0, 2*math.pi, 64)
+                    ])
 
-        if (mode == "Translate"):
-            meshdata = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad+1)
-        elif (mode == "Rotate"):
-            self.tube_rad=0.1
-            self.tor_rad=rad + 0.2
-            meshdata = self.create_torus_mesh(radius=self.tor_rad, tube_radius=self.tube_rad, radial_segments=20, tubular_segments=20)
-
-        axis_x = gl.GLMeshItem(meshdata=meshdata, color=colors[0], shader='shaded', smooth=True)
-        axis_x.rotate(90, 0, 1, 0, True)
-        widget.plot_widget.addItem(axis_x)
-
-        axis_y = gl.GLMeshItem(meshdata=meshdata, color=colors[1], shader='shaded', smooth=True)
-        axis_y.rotate(-90, 1, 0, 0, True)
-        widget.plot_widget.addItem(axis_y)
-
-        axis_z = gl.GLMeshItem(meshdata=meshdata, color=colors[2], shader='shaded', smooth=True)
-        widget.plot_widget.addItem(axis_z)
-
-        transform = self.get_transform3D(False)
-
-        if (local):
-            axis_x.applyTransform(transform, False)
-            axis_y.applyTransform(transform, False)
-            axis_z.applyTransform(transform, False)
-
-        axis_x.translate(center[0], center[1], center[2])
-        axis_y.translate(center[0], center[1], center[2])
-        axis_z.translate(center[0], center[1], center[2])
-
-        if selectedArrow != -1:
-            # generate the line here
-            dir = center + rad * self.r * axes[selectedArrow]
-            extended_axis = self.generate_extended_axis(center, dir, 1000)
-            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=3, antialias=True)
-            widget.plot_widget.addItem(extended_axis_line)
+                    col = selectedArrowColor if i == selectedArrow else colors[i]
+                    width = 8
+                    circle = OverlayLine(pos=pts, color=col, width=width, antialias=True)
+                    widget.plot_widget.addItem(circle)
 
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         self.addArrows(widget, selectedArrow, local, frame, mode="Translate")
     
     def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         self.addArrows(widget, selectedArrow, local, frame, mode="Rotate")
+
+class OverlayLine(gl.GLLinePlotItem):
+    def paint(self):
+        glDisable(GL_DEPTH_TEST)
+        super().paint()
+        glEnable(GL_DEPTH_TEST)

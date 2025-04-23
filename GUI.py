@@ -1944,7 +1944,7 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
 
-        if (not self.stl_generated):
+        if not self.stl_generated:
             self.plot_widget.clear()
             self.select_joint_options.clear()
             self.select_link_options.clear()
@@ -1952,49 +1952,61 @@ class PointEditorWindow(QMainWindow):
 
             self.grid = gl.GLGridItem()
             self.grid.setColor(gridColorDefault)
-
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
-        
+
             if self.mesh_visible and self.referenceMesh is not None:
                 self.plot_widget.addItem(self.referenceMesh.mesh)
-            
-            if self.mesh_selected:
-                if (self.control_type == "Translate"):
-                    self.referenceMesh.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                elif (self.control_type == "Rotate"):
-                    self.referenceMesh.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-            
+
             if self.chain is not None:
+                self.chain.addToWidget(
+                    self,
+                    selectedJoint=self.selected_joint,
+                    selectedLink=self.selected_link,
+                    lastJoint=self.last_joint
+                )
 
-                self.select_joint_options.blockSignals(False)
-                self.select_link_options.blockSignals(False)
-
-                if (self.control_type == "Translate"):
-                    for i, joint in enumerate(self.chain.Joints):
-                        if i == self.selected_joint:
-                            if (self.selected_frame == -1):
-                                joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                            else:
-                                frame_joint = self.chain.Joints[self.selected_frame]
-                                joint.addTranslateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
-                elif (self.control_type == "Rotate"):
-                    for i, joint in enumerate(self.chain.Joints):
-                        if i == self.selected_joint:
-                            if (self.selected_frame == -1):
-                                joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local)
-                            else: 
-                                frame_joint = self.chain.Joints[self.selected_frame]
-                                joint.addRotateArrows(self, selectedArrow=self.selected_arrow, local=self.is_local, frame=frame_joint.Pose)
-                
-                self.chain.addToWidget(self, selectedJoint=self.selected_joint, selectedLink=self.selected_link, lastJoint = self.last_joint)
-
-            if self.selected_arrow != -1:
-                self.rotation_slider.setDisabled(False)
-                self.translate_slider.setDisabled(False)
+        if self.mesh_selected and self.referenceMesh is not None:
+            if self.control_type == "Translate":
+                self.referenceMesh.addTranslateArrows(
+                    self,
+                    selectedArrow=self.selected_arrow,
+                    local=self.is_local
+                )
             else:
-                self.rotation_slider.setDisabled(True)
-                self.translate_slider.setDisabled(True)
+                self.referenceMesh.addRotateArrows(
+                    self,
+                    selectedArrow=self.selected_arrow,
+                    local=self.is_local
+                )
+
+        if self.chain is not None and self.selected_joint != -1:
+            joint = self.chain.Joints[self.selected_joint]
+            frame_pose = None
+            if self.selected_frame >= 0:
+                frame_pose = self.chain.Joints[self.selected_frame].Pose
+
+            if self.control_type == "Translate":
+                joint.addTranslateArrows(
+                    self,
+                    selectedArrow=self.selected_arrow,
+                    local=self.is_local,
+                    frame=frame_pose
+                )
+            else:
+                joint.addRotateArrows(
+                    self,
+                    selectedArrow=self.selected_arrow,
+                    local=self.is_local,
+                    frame=frame_pose
+                )
+
+        if self.selected_arrow != -1:
+            self.rotation_slider.setDisabled(False)
+            self.translate_slider.setDisabled(False)
+        else:
+            self.rotation_slider.setDisabled(True)
+            self.translate_slider.setDisabled(True)
                 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
