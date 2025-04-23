@@ -768,6 +768,7 @@ class PointEditorWindow(QMainWindow):
         self.current_point = 0
         self.chain = None
         self.versions = []
+        self.version_index = 0
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -1058,6 +1059,10 @@ class PointEditorWindow(QMainWindow):
         self.undo_button = QPushButton("Undo")
         self.undo_button.clicked.connect(self.undo)
         self.options_layout.addWidget(self.undo_button)
+
+        self.redo_button = QPushButton("Redo")
+        self.redo_button.clicked.connect(self.redo)
+        self.options_layout.addWidget(self.redo_button)
         
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
@@ -1254,22 +1259,36 @@ class PointEditorWindow(QMainWindow):
         #print("logging version")
         log_capacity = 100
         autosave_frequency = 10
+
+        # clear redo history on new version (include version index)
+        self.versions = self.versions[:self.version_index + 1]
+
         if len(self.versions) % autosave_frequency == 0 and not self.chain is None:
             self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
         if len(self.versions) < log_capacity:
+            
             self.versions.append(copy.deepcopy(self.chain))
         else:
             self.versions.pop(0)
             self.versions.append(copy.deepcopy(self.chain))
 
+        self.version_index = len(self.versions) - 1
+
     def undo(self):
         #print("UNDO, current log length: " + str(len(self.versions)))
-        if len(self.versions) == 0:
-            self.chain = None
+        if self.version_index > 0:
+            self.version_index -= 1
+            self.chain = self.versions[self.version_index]
         else:
-            self.chain = self.versions.pop()
+            self.chain = None
         # self.reload_IDs()
         self.update_joint()
+
+    def redo(self):
+        if self.version_index + 1 < len(self.versions):
+            self.version_index += 1
+            self.chain = self.versions[self.version_index]
+            self.update_joint()
     
     def toggle_grid_func(self):
         if self.grid_on:
