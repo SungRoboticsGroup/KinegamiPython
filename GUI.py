@@ -1870,6 +1870,7 @@ class PointEditorWindow(QMainWindow):
             
             self.chain = new_chain
             self.selected_joint = self._selected_joint
+            self.window().log_version()
             self.show_success("Chain updated successfully!")
         except Exception as e:
             self.chain = self._backup_chain
