@@ -1157,6 +1157,10 @@ class PointEditorWindow(QMainWindow):
         self.edit_dims_button.clicked.connect(self.edit_dims_func)
         file_dock_layout.addWidget(self.edit_dims_button)
 
+        self.edit_grid_button = QPushButton("Edit Grid")
+        self.edit_grid_button.clicked.connect(self.edit_grid_func)
+        file_dock_layout.addWidget(self.edit_grid_button)
+
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
 
@@ -1203,6 +1207,7 @@ class PointEditorWindow(QMainWindow):
 
         self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_dims_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_grid_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
@@ -1222,6 +1227,10 @@ class PointEditorWindow(QMainWindow):
             'Inch (in)': 2.54,
             'Feet (ft)': 30.48
         }
+
+    def edit_grid_func(self):
+        visibility = self.edit_grid_dock.isVisible()
+        self.edit_grid_dock.setVisible(not visibility)
 
     @QtCore.pyqtSlot(str)
     def change_units(self, key):
