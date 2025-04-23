@@ -808,7 +808,7 @@ class PointEditorWindow(QMainWindow):
         self.current_point = 0
         self.chain = None
         self.versions = []
-        self.version_index = 0
+        self.version_index = -1
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -1304,7 +1304,6 @@ class PointEditorWindow(QMainWindow):
         if len(self.versions) % autosave_frequency == 0 and not self.chain is None:
             self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
         if len(self.versions) < log_capacity:
-            
             self.versions.append(copy.deepcopy(self.chain))
         else:
             self.versions.pop(0)
@@ -1318,6 +1317,8 @@ class PointEditorWindow(QMainWindow):
             self.version_index -= 1
             self.chain = self.versions[self.version_index]
         else:
+            if self.version_index == 0:
+                self.version_index = -1
             self.chain = None
         # self.reload_IDs()
         self.update_joint()
