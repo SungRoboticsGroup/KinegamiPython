@@ -42,9 +42,10 @@ class KinematicTree(Generic[J]):
         Children        array of arrays of child indices of each joint
     """
     def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None, 
-                 links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None):
+                 links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None,
+                 units : str = "Centimeter (cm)"):
         self.r = root.r
-        self.scaleFactor = 1.0
+        self.units = units
         
         try:
             self.numSides = root.numSides

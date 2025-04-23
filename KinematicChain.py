@@ -26,8 +26,9 @@ A KinematicTree with no branching.
 """
 class KinematicChain(KinematicTree):
     def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None, 
-                 links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None):
-        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children)
+                 links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None,
+                 units : str = "Centimeter (cm)"):
+        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, units)
     
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
@@ -103,7 +104,8 @@ class KinematicChain(KinematicTree):
             f"joints={repr(self.Joints)}, "
             f"links={repr(self.Links)}, "
             f"children={repr(self.Children)}, "
-            f"parents={repr(self.Parents)})"
+            f"parents={repr(self.Parents)}, "
+            f"units={repr(self.units)})"
         )
         np.set_printoptions(precision=numpy_precision)
         return output

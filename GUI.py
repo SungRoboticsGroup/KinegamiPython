@@ -1227,7 +1227,7 @@ class PointEditorWindow(QMainWindow):
     def change_units(self, key):
         self.units = key
         self.units_label.setText(f"Current units: {self.units}")
-        print(key)
+        self.chain.units = key
 
     def rescale_dimensions(self, prev, new):
         if (prev != new):
@@ -1254,7 +1254,7 @@ class PointEditorWindow(QMainWindow):
 
             for joint in self.chain.Joints:
                 if (new_chain == None):
-                    new_chain = KinematicChain(self.chain.Joints[0])
+                    new_chain = KinematicChain(self.chain.Joints[0], units=self.units)
                 else:
                     new_chain.append(joint, relative=False, fixedPosition=True,
                                             fixedOrientation=True, safe=False)
@@ -1574,6 +1574,10 @@ class PointEditorWindow(QMainWindow):
             self.radius = self.chain.r
             self.num_sides = self.chain.numSides
             self.chain_created = True
+            
+            self.units = self.chain.units
+            self.units_label.setText(f"Current units: {self.units}")
+
             self.update_joint()
             self.log_version()
 
@@ -1838,13 +1842,13 @@ class PointEditorWindow(QMainWindow):
 
                     new_joint.Pose = joint.Pose
                     if new_chain is None:
-                        new_chain = KinematicChain(new_joint)
+                        new_chain = KinematicChain(new_joint, units=self.units)
                     else:
                         new_chain.append(new_joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
                 else:
                     if new_chain is None:
-                        new_chain = KinematicChain(joint)
+                        new_chain = KinematicChain(joint, units=self.units)
                     else:
                         new_chain.append(joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
@@ -2106,7 +2110,7 @@ class PointEditorWindow(QMainWindow):
     def add_joint(self, joint : Joint):
         if not self.add_to_root:
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
+                self.chain = KinematicChain(joint, units=self.units)
             else :
                 self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
                 #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
@@ -2114,12 +2118,12 @@ class PointEditorWindow(QMainWindow):
         else:
 
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
+                self.chain = KinematicChain(joint, units=self.units)
             else:
                 old_root = self.chain.Joints[0]
                 joint.Pose = old_root.Pose @ joint.Pose
 
-                new_chain = KinematicChain(joint)
+                new_chain = KinematicChain(joint, units=self.units)
 
                 for i, jt in enumerate(self.chain.Joints):
                     if i == 0:
@@ -2254,11 +2258,11 @@ class PointEditorWindow(QMainWindow):
             
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 waypoint = Waypoint(numSides, self.radius, SE3())
-                self.chain = KinematicChain(waypoint)
+                self.chain = KinematicChain(waypoint, units=self.units)
             elif waypoint_index != 0:
                 if self.add_to_root:
                     waypoint.Pose = self.chain.Joints[0].Pose @ waypoint.Pose
-                    new_chain = KinematicChain(waypoint)
+                    new_chain = KinematicChain(waypoint, units=self.units)
                     for jt in self.chain.Joints:
                         new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
                     self.chain = new_chain
