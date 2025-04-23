@@ -513,7 +513,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     def get_closest_point(self, event):
         if self.is_dragging and self.selected_axis:
             origin, dir = self.get_world_coordinates(event)
-            selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+
+            if (self.mesh_selected):
+                selected_joint = self.parent_window.referenceMesh
+            else:
+                selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+
             joint_center = selected_joint.Pose.t
             qcenter = QVector3D(joint_center[0], joint_center[1], joint_center[2])
             axis = self.selected_axis
@@ -538,9 +543,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         for i in range(3):
             if (self.is_local):
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.boundingBall().r+1)
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.r+1)
             else:
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.boundingBall().r+1)
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.r+1)
             
             if (hit_location < shortest_location):
                 shortest_location = hit_location
@@ -598,6 +603,33 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.selected_torus = None
 
     def mousePressEvent(self, event):
+        # check to see if link or mesh is selected 
+        lpos = event.position() if hasattr(event, 'position') else event.localPos()
+        region = [lpos.x()-5, lpos.y()-5, 10, 10]
+        dpr = self.devicePixelRatioF()
+        region = tuple([x * dpr for x in region])
+
+        links = []
+        mesh = []
+
+        for item in self.itemsAt(region):
+            if (item.objectName() == "Link"):
+                links.append(item)
+
+            if (item.objectName() == "Mesh"):
+                mesh.append(item)
+
+        if (not self.is_dragging):
+            if (len(mesh) == 0):
+                self.mesh_selected = False
+            else:
+                self.mesh_selected = True
+        
+        #print("Selected:", self.mesh_selected)
+
+        self.click_signal_link.emit(self.selected_link_index)
+        self.click_signal_mesh.emit(self.mesh_selected)
+        
         self.last_drag_pos = event.pos()
 
         if (event.buttons() and event.button() == Qt.MouseButton.MiddleButton):
@@ -611,8 +643,28 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             self.is_local = self.parent_window.is_local
 
+            # raycasting for mesh's widgets
+            if (self.mesh_selected and self.parent_window.selected_joint == -1):
+                self.selected_axis = None
+                self.selected_torus = None
+                mesh = self.window().referenceMesh
+
+                mesh_center = mesh.Pose.t
+                mesh_center = QVector3D(mesh_center[0], mesh_center[1], mesh_center[2])
+                self.compute_joint_axes(mesh)
+
+                # translation widget - cylinder intersection
+                if (self.parent_window.control_type == "Translate"):
+                    self.calculate_translation_isect(origin, direction, mesh_center, mesh, event)
+
+                # rotation widget - torus intersection
+                elif (self.parent_window.control_type == "Rotate"):
+                    self.calculate_rotation_isect(origin, direction, mesh_center, mesh)
+
+                # print(self.selected_axis)
+
             # raycasting for widgets
-            if (self.parent_window.selected_joint != -1):
+            elif (self.parent_window.selected_joint != -1):
                 self.selected_axis = None
                 self.selected_torus = None
                 selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
@@ -656,7 +708,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             if (self.selected_axis):
                 new_pos_3D = self.get_closest_point(event)
 
-                selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+                if (self.mesh_selected):
+                    selected_joint = self.parent_window.referenceMesh
+                else:
+                    selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
                 joint_center = selected_joint.Pose.t
                 qsphere_start = QVector3D(joint_center[0], joint_center[1], joint_center[2])
 
@@ -665,13 +720,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
                 propogate = self.parent_window.propogate_slider_checkbox.isChecked()
 
-                self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+                if (self.mesh_selected):
+                    self.parent_window.referenceMesh.transform(transformation)
+                else:
+                    self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+                
                 self.parent_window.update_joint()
             elif (self.selected_torus):
                 da, normal = self.get_axis_angle_delta(event)
                 if (not self.facing_same_dir):
                     da = -da
-                self.parent_window.rotate_joint(da, self.selected_axis_orig)
+                
+                if (self.mesh_selected):
+                    pass
+                else:
+                    self.parent_window.rotate_joint(da, self.selected_axis_orig)
+
                 self.parent_window.update_joint()
             else:
                 curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
@@ -688,6 +752,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
+
         if (self.selected_joint_temp != None):
             self.click_signal.emit(self.parent_window.chain.Joints.index(self.selected_joint_temp))
         elif (not self.is_dragging): 
@@ -700,31 +765,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         
         if self.is_dragging and (self.selected_axis or self.selected_torus):
             self.done_transforming.emit(True)
-
-        else:
-            # check to see if link or mesh is selected 
-            lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-5, lpos.y()-5, 10, 10]
-            dpr = self.devicePixelRatioF()
-            region = tuple([x * dpr for x in region])
-
-            links = []
-            mesh = []
-
-            for item in self.itemsAt(region):
-                if (item.objectName() == "Link"):
-                    links.append(item)
-
-                if (item.objectName() == "Mesh"):
-                    mesh.append(item)
-
-            if (len(mesh) == 0):
-                self.mesh_selected = False
-            else:
-                self.mesh_selected = True
-            
-            self.click_signal_link.emit(self.selected_link_index)
-            self.click_signal_mesh.emit(self.mesh_selected)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
@@ -889,8 +929,6 @@ class PointEditorWindow(QMainWindow):
         self.add_joints_widget = QWidget()
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
-
-
 
         self.add_to_root = False
 
