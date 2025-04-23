@@ -1237,6 +1237,8 @@ class PointEditorWindow(QMainWindow):
         self.units = key
         self.units_label.setText(f"Current units: {self.units}")
         self.chain.units = key
+        self.log_version()
+        self.update_joint()
 
     def rescale_dimensions(self, prev, new):
         if (prev != new):
@@ -1325,6 +1327,7 @@ class PointEditorWindow(QMainWindow):
         if self.version_index > 0:
             self.version_index -= 1
             self.chain = self.versions[self.version_index]
+            self.units = self.chain.units
         else:
             if self.version_index == 0:
                 self.version_index = -1
@@ -2014,6 +2017,8 @@ class PointEditorWindow(QMainWindow):
         self.edit_dimension_button.setVisible(True)
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
+
+        self.units_label.setText(f"Current units: {self.units}")
 
         if (not self.stl_generated):
             self.plot_widget.clear()
