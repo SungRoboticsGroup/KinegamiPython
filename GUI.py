@@ -513,7 +513,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     def get_closest_point(self, event):
         if self.is_dragging and self.selected_axis:
             origin, dir = self.get_world_coordinates(event)
-            selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+
+            if (self.mesh_selected):
+                selected_joint = self.parent_window.referenceMesh
+            else:
+                selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+
             joint_center = selected_joint.Pose.t
             qcenter = QVector3D(joint_center[0], joint_center[1], joint_center[2])
             axis = self.selected_axis
@@ -538,9 +543,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
         for i in range(3):
             if (self.is_local):
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.boundingBall().r+1)
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.r+1)
             else:
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.boundingBall().r+1)
+                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.r+1)
             
             if (hit_location < shortest_location):
                 shortest_location = hit_location
@@ -598,6 +603,33 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.selected_torus = None
 
     def mousePressEvent(self, event):
+        # check to see if link or mesh is selected 
+        lpos = event.position() if hasattr(event, 'position') else event.localPos()
+        region = [lpos.x()-5, lpos.y()-5, 10, 10]
+        dpr = self.devicePixelRatioF()
+        region = tuple([x * dpr for x in region])
+
+        links = []
+        mesh = []
+
+        for item in self.itemsAt(region):
+            if (item.objectName() == "Link"):
+                links.append(item)
+
+            if (item.objectName() == "Mesh"):
+                mesh.append(item)
+
+        if (not self.is_dragging):
+            if (len(mesh) == 0):
+                self.mesh_selected = False
+            else:
+                self.mesh_selected = True
+        
+        #print("Selected:", self.mesh_selected)
+
+        self.click_signal_link.emit(self.selected_link_index)
+        self.click_signal_mesh.emit(self.mesh_selected)
+        
         self.last_drag_pos = event.pos()
 
         if (event.buttons() and event.button() == Qt.MouseButton.MiddleButton):
@@ -611,8 +643,28 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
             self.is_local = self.parent_window.is_local
 
+            # raycasting for mesh's widgets
+            if (self.mesh_selected and self.parent_window.selected_joint == -1):
+                self.selected_axis = None
+                self.selected_torus = None
+                mesh = self.window().referenceMesh
+
+                mesh_center = mesh.Pose.t
+                mesh_center = QVector3D(mesh_center[0], mesh_center[1], mesh_center[2])
+                self.compute_joint_axes(mesh)
+
+                # translation widget - cylinder intersection
+                if (self.parent_window.control_type == "Translate"):
+                    self.calculate_translation_isect(origin, direction, mesh_center, mesh, event)
+
+                # rotation widget - torus intersection
+                elif (self.parent_window.control_type == "Rotate"):
+                    self.calculate_rotation_isect(origin, direction, mesh_center, mesh)
+
+                # print(self.selected_axis)
+
             # raycasting for widgets
-            if (self.parent_window.selected_joint != -1):
+            elif (self.parent_window.selected_joint != -1):
                 self.selected_axis = None
                 self.selected_torus = None
                 selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
@@ -656,7 +708,10 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             if (self.selected_axis):
                 new_pos_3D = self.get_closest_point(event)
 
-                selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
+                if (self.mesh_selected):
+                    selected_joint = self.parent_window.referenceMesh
+                else:
+                    selected_joint = self.parent_window.chain.Joints[self.parent_window.selected_joint]
                 joint_center = selected_joint.Pose.t
                 qsphere_start = QVector3D(joint_center[0], joint_center[1], joint_center[2])
 
@@ -665,13 +720,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
                 propogate = self.parent_window.propogate_slider_checkbox.isChecked()
 
-                self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+                if (self.mesh_selected):
+                    self.parent_window.referenceMesh.transform(transformation)
+                else:
+                    self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+                
                 self.parent_window.update_joint()
             elif (self.selected_torus):
                 da, normal = self.get_axis_angle_delta(event)
                 if (not self.facing_same_dir):
                     da = -da
-                self.parent_window.rotate_joint(da, self.selected_axis_orig)
+                
+                if (self.mesh_selected):
+                    pass
+                else:
+                    self.parent_window.rotate_joint(da, self.selected_axis_orig)
+
                 self.parent_window.update_joint()
             else:
                 curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
@@ -688,6 +752,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
+
         if (self.selected_joint_temp != None):
             self.click_signal.emit(self.parent_window.chain.Joints.index(self.selected_joint_temp))
         elif (not self.is_dragging): 
@@ -700,31 +765,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         
         if self.is_dragging and (self.selected_axis or self.selected_torus):
             self.done_transforming.emit(True)
-
-        else:
-            # check to see if link or mesh is selected 
-            lpos = event.position() if hasattr(event, 'position') else event.localPos()
-            region = [lpos.x()-5, lpos.y()-5, 10, 10]
-            dpr = self.devicePixelRatioF()
-            region = tuple([x * dpr for x in region])
-
-            links = []
-            mesh = []
-
-            for item in self.itemsAt(region):
-                if (item.objectName() == "Link"):
-                    links.append(item)
-
-                if (item.objectName() == "Mesh"):
-                    mesh.append(item)
-
-            if (len(mesh) == 0):
-                self.mesh_selected = False
-            else:
-                self.mesh_selected = True
-            
-            self.click_signal_link.emit(self.selected_link_index)
-            self.click_signal_mesh.emit(self.mesh_selected)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
@@ -768,6 +808,7 @@ class PointEditorWindow(QMainWindow):
         self.current_point = 0
         self.chain = None
         self.versions = []
+        self.version_index = -1
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -889,8 +930,6 @@ class PointEditorWindow(QMainWindow):
         self.add_joints_widget = QWidget()
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
-
-
 
         self.add_to_root = False
 
@@ -1058,6 +1097,10 @@ class PointEditorWindow(QMainWindow):
         self.undo_button = QPushButton("Undo")
         self.undo_button.clicked.connect(self.undo)
         self.options_layout.addWidget(self.undo_button)
+
+        self.redo_button = QPushButton("Redo")
+        self.redo_button.clicked.connect(self.redo)
+        self.options_layout.addWidget(self.redo_button)
         
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
@@ -1114,6 +1157,10 @@ class PointEditorWindow(QMainWindow):
         self.edit_dims_button.clicked.connect(self.edit_dims_func)
         file_dock_layout.addWidget(self.edit_dims_button)
 
+        self.edit_grid_button = QPushButton("Edit Grid")
+        self.edit_grid_button.clicked.connect(self.edit_grid_func)
+        file_dock_layout.addWidget(self.edit_grid_button)
+
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
 
@@ -1160,6 +1207,7 @@ class PointEditorWindow(QMainWindow):
 
         self.addDockWidget(Qt.LeftDockWidgetArea, file_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_dims_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_grid_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_chain_dock)
@@ -1180,11 +1228,17 @@ class PointEditorWindow(QMainWindow):
             'Feet (ft)': 30.48
         }
 
+    def edit_grid_func(self):
+        visibility = self.edit_grid_dock.isVisible()
+        self.edit_grid_dock.setVisible(not visibility)
+
     @QtCore.pyqtSlot(str)
     def change_units(self, key):
         self.units = key
         self.units_label.setText(f"Current units: {self.units}")
-        print(key)
+        self.chain.units = key
+        self.log_version()
+        self.update_joint()
 
     def rescale_dimensions(self, prev, new):
         if (prev != new):
@@ -1211,7 +1265,7 @@ class PointEditorWindow(QMainWindow):
 
             for joint in self.chain.Joints:
                 if (new_chain == None):
-                    new_chain = KinematicChain(self.chain.Joints[0])
+                    new_chain = KinematicChain(self.chain.Joints[0], units=self.units)
                 else:
                     new_chain.append(joint, relative=False, fixedPosition=True,
                                             fixedOrientation=True, safe=False)
@@ -1254,6 +1308,10 @@ class PointEditorWindow(QMainWindow):
         #print("logging version")
         log_capacity = 100
         autosave_frequency = 10
+
+        # clear redo history on new version (include version index)
+        self.versions = self.versions[:self.version_index + 1]
+
         if len(self.versions) % autosave_frequency == 0 and not self.chain is None:
             self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
         if len(self.versions) < log_capacity:
@@ -1262,14 +1320,26 @@ class PointEditorWindow(QMainWindow):
             self.versions.pop(0)
             self.versions.append(copy.deepcopy(self.chain))
 
+        self.version_index = len(self.versions) - 1
+
     def undo(self):
         #print("UNDO, current log length: " + str(len(self.versions)))
-        if len(self.versions) == 0:
-            self.chain = None
+        if self.version_index > 0:
+            self.version_index -= 1
+            self.chain = self.versions[self.version_index]
+            self.units = self.chain.units
         else:
-            self.chain = self.versions.pop()
+            if self.version_index == 0:
+                self.version_index = -1
+            self.chain = None
         # self.reload_IDs()
         self.update_joint()
+
+    def redo(self):
+        if self.version_index + 1 < len(self.versions):
+            self.version_index += 1
+            self.chain = self.versions[self.version_index]
+            self.update_joint()
     
     def toggle_grid_func(self):
         if self.grid_on:
@@ -1516,6 +1586,10 @@ class PointEditorWindow(QMainWindow):
             self.radius = self.chain.r
             self.num_sides = self.chain.numSides
             self.chain_created = True
+            
+            self.units = self.chain.units
+            self.units_label.setText(f"Current units: {self.units}")
+
             self.update_joint()
             self.log_version()
 
@@ -1780,13 +1854,13 @@ class PointEditorWindow(QMainWindow):
 
                     new_joint.Pose = joint.Pose
                     if new_chain is None:
-                        new_chain = KinematicChain(new_joint)
+                        new_chain = KinematicChain(new_joint, units=self.units)
                     else:
                         new_chain.append(new_joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
                 else:
                     if new_chain is None:
-                        new_chain = KinematicChain(joint)
+                        new_chain = KinematicChain(joint, units=self.units)
                     else:
                         new_chain.append(joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
@@ -1944,7 +2018,9 @@ class PointEditorWindow(QMainWindow):
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
 
-        if not self.stl_generated:
+        self.units_label.setText(f"Current units: {self.units}")
+
+        if (not self.stl_generated):
             self.plot_widget.clear()
             self.select_joint_options.clear()
             self.select_link_options.clear()
@@ -2060,7 +2136,7 @@ class PointEditorWindow(QMainWindow):
     def add_joint(self, joint : Joint):
         if not self.add_to_root:
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
+                self.chain = KinematicChain(joint, units=self.units)
             else :
                 self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
                 #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
@@ -2068,12 +2144,12 @@ class PointEditorWindow(QMainWindow):
         else:
 
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint)
+                self.chain = KinematicChain(joint, units=self.units)
             else:
                 old_root = self.chain.Joints[0]
                 joint.Pose = old_root.Pose @ joint.Pose
 
-                new_chain = KinematicChain(joint)
+                new_chain = KinematicChain(joint, units=self.units)
 
                 for i, jt in enumerate(self.chain.Joints):
                     if i == 0:
@@ -2208,11 +2284,11 @@ class PointEditorWindow(QMainWindow):
             
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 waypoint = Waypoint(numSides, self.radius, SE3())
-                self.chain = KinematicChain(waypoint)
+                self.chain = KinematicChain(waypoint, units=self.units)
             elif waypoint_index != 0:
                 if self.add_to_root:
                     waypoint.Pose = self.chain.Joints[0].Pose @ waypoint.Pose
-                    new_chain = KinematicChain(waypoint)
+                    new_chain = KinematicChain(waypoint, units=self.units)
                     for jt in self.chain.Joints:
                         new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
                     self.chain = new_chain
