@@ -249,7 +249,8 @@ class Joint(ABC):
         return gl.MeshData(vertexes=vertices, faces=faces)
     
     def addArrows(self, widget, selectedArrow=-1, local=True, frame: SE3 = None, mode=""):
-            rad = self.r
+            desired_axis_pixels = 80
+            rad = widget.plot_widget.world_length_for_pixel_length(desired_axis_pixels)
             colors = rotateArrowColors
             center = self.Pose.t
             extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]

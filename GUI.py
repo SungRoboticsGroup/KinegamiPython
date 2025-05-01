@@ -785,6 +785,21 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.key_pressed.emit("Z")
         elif event.key() == Qt.Key_G:
             self.key_pressed.emit("G")
+
+    def world_length_for_pixel_length(self, pixel_length: float) -> float:
+        dist = self.opts['distance']
+        fov_deg = self.opts.get('fov', 60)
+        fov = math.radians(fov_deg)
+
+        h_pixels = self.height()
+        if h_pixels == 0:
+            return 1.0 
+        angle_span = fov * (pixel_length / h_pixels)
+        return dist * math.tan(angle_span)
+    
+    def wheelEvent(self, ev):
+        super().wheelEvent(ev)
+        self.parent_window.update_joint()
  
 class PointEditorWindow(QMainWindow):
 
