@@ -1596,7 +1596,7 @@ class KinematicTree(Generic[J]):
         """
         Returns a numpy array of the real (non-waypoint) joints in the chain.
         """
-        return np.array([i for i in range(len(self.Joints)) if not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[i], PrintedWaypoint)])
+        return np.array([i for i in range(len(self.Joints)) if not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[i], PrintedWaypoint) and not isinstance(self.Joints[i], EndTip)])
 
     # Returns the current configuration of the chain as a numpy array of joint states.
     def configuration(self, realJointsOnly : bool = False) -> np.ndarray:
@@ -1608,6 +1608,7 @@ class KinematicTree(Generic[J]):
     def setConfiguration(self, newConfig, realJointsOnly : bool = False):
         if realJointsOnly:
             if len(newConfig) != len(self.realJointIndices()):
+                print(len(newConfig), len(self.realJointIndices()))
                 raise ValueError("Length mismatch between new configuration and real joints")
             for i, jointIndex in enumerate(self.realJointIndices()):
                 self.setJointState(i, newConfig[i])
