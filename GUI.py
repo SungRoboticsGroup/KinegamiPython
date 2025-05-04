@@ -752,19 +752,20 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
+        if self.is_dragging and (self.selected_axis or self.selected_torus):
+            self.done_transforming.emit(True)
 
         if (self.selected_joint_temp != None):
             self.click_signal.emit(self.parent_window.chain.Joints.index(self.selected_joint_temp))
-        elif (not self.is_dragging): 
-            self.click_signal.emit(-1)
+        elif (not self.is_dragging):
             self.selected_axis = None
             self.selected_torus = None
 
+            self.click_signal.emit(-1)
+
         self.is_dragging = False
         self.drag_prev_vector = None
-        
-        if self.is_dragging and (self.selected_axis or self.selected_torus):
-            self.done_transforming.emit(True)
+
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_T:
@@ -824,7 +825,7 @@ class PointEditorWindow(QMainWindow):
         self.chain = None
         self.versions = []
         self.version_index = -1
-        self.total_version_counter = 1
+        self.total_version_counter = 0
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -1321,14 +1322,13 @@ class PointEditorWindow(QMainWindow):
         self.mesh_scale = scale
 
     def log_version(self):
-        #print("logging version")
         log_capacity = 100
         autosave_frequency = 10
 
         # clear redo history on new version (include version index)
         self.versions = self.versions[:self.version_index + 1]
 
-        if len(self.total_version_counter) % autosave_frequency == 0 and not self.chain is None:
+        if self.total_version_counter % autosave_frequency == 0 and not self.chain is None:
             self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
         if len(self.versions) < log_capacity:
             self.versions.append(copy.deepcopy(self.chain))
@@ -1339,11 +1339,12 @@ class PointEditorWindow(QMainWindow):
         self.version_index = len(self.versions) - 1
         self.total_version_counter += 1
 
+        print("LOG     version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
+
     def undo(self):
-        #print("UNDO, current log length: " + str(len(self.versions)))
         if self.version_index > 0:
             self.version_index -= 1
-            self.chain = self.versions[self.version_index]
+            self.chain = copy.deepcopy(self.versions[self.version_index])
             self.units = self.chain.units
         else:
             if self.version_index == 0:
@@ -1352,11 +1353,15 @@ class PointEditorWindow(QMainWindow):
         # self.reload_IDs()
         self.update_joint()
 
+        print("UNDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
+
     def redo(self):
         if self.version_index + 1 < len(self.versions):
             self.version_index += 1
-            self.chain = self.versions[self.version_index]
+            self.chain = copy.deepcopy(self.versions[self.version_index])
             self.update_joint()
+
+        print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
     
     def toggle_grid_func(self):
         if self.grid_on:
@@ -1699,8 +1704,7 @@ class PointEditorWindow(QMainWindow):
 
     def done_transforming(self, done):
         if done:
-            pass
-            #self.log_version()
+            self.log_version()
 
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
