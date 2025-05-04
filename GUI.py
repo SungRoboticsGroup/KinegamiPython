@@ -824,6 +824,7 @@ class PointEditorWindow(QMainWindow):
         self.chain = None
         self.versions = []
         self.version_index = -1
+        self.total_version_counter = 1
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
@@ -1327,7 +1328,7 @@ class PointEditorWindow(QMainWindow):
         # clear redo history on new version (include version index)
         self.versions = self.versions[:self.version_index + 1]
 
-        if len(self.versions) % autosave_frequency == 0 and not self.chain is None:
+        if len(self.total_version_counter) % autosave_frequency == 0 and not self.chain is None:
             self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
         if len(self.versions) < log_capacity:
             self.versions.append(copy.deepcopy(self.chain))
@@ -1336,6 +1337,7 @@ class PointEditorWindow(QMainWindow):
             self.versions.append(copy.deepcopy(self.chain))
 
         self.version_index = len(self.versions) - 1
+        self.total_version_counter += 1
 
     def undo(self):
         #print("UNDO, current log length: " + str(len(self.versions)))
