@@ -257,7 +257,7 @@ def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisi
 
     return tree, minSwarmResult
 
-def method1(subject, states = None, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaulate=False, verbose=True, directory=None):
+def method1(subject, states = None, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=True, parallelize=False, evaulate=False, verbose=True, directory=None):
     if states == None:
         states = [[0] * len(subject.Joints)]
     
