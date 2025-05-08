@@ -70,7 +70,7 @@ chain.setJointState(4, np.pi/3)
 chain.setJointState(6, np.pi*2/3)
 pose2 = chain.Joints[-1].Pose
 
-newChain = squaredOptimizeEndEffector(chain, [len(chain.Joints) - 1] * 2, [pose1, pose2], parallelize=True, guarantee=True)
+newChain = squaredOptimizeForEndEffectorPoses(chain, [len(chain.Joints) - 1] * 2, [pose1, pose2], parallelize=True, guarantee=True)
 
 # newChain.show()
 

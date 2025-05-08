@@ -40,6 +40,7 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
                 try:
                     tree.setConfiguration(stateSubsets[i])
                 except:
+                    print("unwanted")
                     linkLossUnchanged = defaultError
                     break
                 linkLossUnchanged += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionError
@@ -69,6 +70,7 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
                 try:
                     tree2.setConfiguration(stateSubsets[i])
                 except:
+                    print("unwanted")
                     linkLossReversedZhat = defaultError
                     break
                 linkLossReversedZhat += tree2.getCollisionError(selectedIndices, selectedCapsules) * collisionError
