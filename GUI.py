@@ -286,7 +286,10 @@ class EditGridWidget(QWidget):
             # Send signals to parent
             self.window().grid_size = line_amt * spacing
             self.window().grid_spacing = spacing
-            self.window().update_joint()
+            self.window().initialize_grid()
+
+
+
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -843,6 +846,10 @@ class PointEditorWindow(QMainWindow):
         self.mesh_visible = True
         self.mesh_scale = 1.0
 
+        self.grid_color = gridColorDefault
+        self.grid_spacing = 1.0
+        self.grid_size = 10
+
         self.num_sides = 4
         self.radius = 1.0
 
@@ -1298,10 +1305,14 @@ class PointEditorWindow(QMainWindow):
         self.edit_dims_dock.setVisible(not visibility)
 
     def initialize_grid(self):
+
         self.grid = gl.GLGridItem()
         self.grid.setColor(self.grid_color)
         self.grid.setSize(self.grid_size, self.grid_size, self.grid_size)
         self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
+        
+        # print(self.grid_size, self.grid_spacing)
+        self.update_joint()
         # self.grid.setSpacing(self.grid_spacing)
 
     def add_to_root_func(self, state):
@@ -2048,8 +2059,6 @@ class PointEditorWindow(QMainWindow):
             self.select_link_options.clear()
             self.setCentralWidget(self.plot_widget)
 
-            self.grid = gl.GLGridItem()
-            self.grid.setColor(gridColorDefault)
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
 
