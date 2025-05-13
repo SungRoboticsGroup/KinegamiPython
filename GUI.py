@@ -1374,6 +1374,7 @@ class PointEditorWindow(QMainWindow):
         # handle unit change
         if prev_units != new_units:
             self.rescale_dimensions(prev_units, new_units)
+            self.change_units(new_units)
 
         self.update_joint()
 
