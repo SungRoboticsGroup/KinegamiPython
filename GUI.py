@@ -286,7 +286,10 @@ class EditGridWidget(QWidget):
             # Send signals to parent
             self.window().grid_size = line_amt * spacing
             self.window().grid_spacing = spacing
-            self.window().update_joint()
+            self.window().initialize_grid()
+
+
+
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -848,6 +851,10 @@ class PointEditorWindow(QMainWindow):
         self.mesh_visible = True
         self.mesh_scale = 1.0
 
+        self.grid_color = gridColorDefault
+        self.grid_spacing = 1.0
+        self.grid_size = 10
+
         self.num_sides = 4
         self.radius = 1.0
 
@@ -1259,7 +1266,7 @@ class PointEditorWindow(QMainWindow):
         self.units = key
         self.units_label.setText(f"Current units: {self.units}")
         self.chain.units = key
-        self.log_version()
+        # self.log_version()
         self.update_joint()
 
     def rescale_dimensions(self, prev, new):
@@ -1296,6 +1303,7 @@ class PointEditorWindow(QMainWindow):
 
             self.plot_widget.opts['distance'] *= factor
 
+            self.log_version()
             self.update_joint()
 
     def edit_dims_func(self):
@@ -1303,10 +1311,15 @@ class PointEditorWindow(QMainWindow):
         self.edit_dims_dock.setVisible(not visibility)
 
     def initialize_grid(self):
+
         self.grid = gl.GLGridItem()
         self.grid.setColor(self.grid_color)
         self.grid.setSize(self.grid_size, self.grid_size, self.grid_size)
         self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
+        
+        # print(self.grid_size, self.grid_spacing)
+        self.log_version()
+        self.update_joint()
         # self.grid.setSpacing(self.grid_spacing)
 
     def add_to_root_func(self, state):
@@ -1347,15 +1360,27 @@ class PointEditorWindow(QMainWindow):
         print("LOG     version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
     def undo(self):
+        prev_units = self.chain.units if self.chain else None
+
         if self.version_index > 0:
             self.version_index -= 1
+
             self.chain = copy.deepcopy(self.versions[self.version_index])
+            new_units = self.chain.units if self.chain else None
             self.units = self.chain.units
         else:
             if self.version_index == 0:
                 self.version_index = -1
+            
+            new_units = prev_units
             self.chain = None
         # self.reload_IDs()
+
+        # handle unit change
+        if prev_units != new_units:
+            self.rescale_dimensions(prev_units, new_units)
+            self.change_units(new_units)
+
         self.update_joint()
 
         print("UNDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
@@ -1363,11 +1388,20 @@ class PointEditorWindow(QMainWindow):
     def redo(self):
         if self.version_index + 1 < len(self.versions):
             self.version_index += 1
+            prev_units = self.chain.units if self.chain else None
+            
             self.chain = copy.deepcopy(self.versions[self.version_index])
+            new_units = self.chain.units if self.chain else None
+
+            # handle unit change
+            if prev_units != new_units:
+                self.rescale_dimensions(prev_units, new_units)
+                self.change_units(new_units)
+
             self.update_joint()
 
         print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
-    
+
     def toggle_grid_func(self):
         if self.grid_on:
             self.plot_widget.removeItem(self.grid)
@@ -2053,8 +2087,6 @@ class PointEditorWindow(QMainWindow):
             self.select_link_options.clear()
             self.setCentralWidget(self.plot_widget)
 
-            self.grid = gl.GLGridItem()
-            self.grid.setColor(gridColorDefault)
             if self.grid_on:
                 self.plot_widget.addItem(self.grid)
 
@@ -2110,6 +2142,8 @@ class PointEditorWindow(QMainWindow):
         else:
             self.rotation_slider.setDisabled(True)
             self.translate_slider.setDisabled(True)
+
+        #print("current radius: " + str(self.chain.r))
                 
     def create_axis_label(self, text, color):
         line_pixmap = QPixmap(20, 2)
