@@ -65,7 +65,7 @@ originPointsColor = (1, 1, 1, 1)  # white
 showAxisColor = (0.75, 0.75, 0.75, 1)  # light gray
 lineSphereColor = [0, 0, 0, 0]  # black, fully transparent
 rotateArrowColors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]  # red, green, blue
-selectedArrowColor = (1, 1, 1, 1)  # white 
+selectedArrowColor = (1, 1, 0, 1)  # yellow 
 
 extendedCircleColors = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]  # red, green, blue (0.5 opacity)
 

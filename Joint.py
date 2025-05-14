@@ -249,53 +249,47 @@ class Joint(ABC):
         return gl.MeshData(vertexes=vertices, faces=faces)
     
     def addArrows(self, widget, selectedArrow=-1, local=True, frame: SE3 = None, mode=""):
-            desired_axis_pixels = 80
-            rad = widget.plot_widget.world_length_for_pixel_length(desired_axis_pixels)
-            colors = rotateArrowColors
-            center = self.Pose.t
-            extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
+        desired_px = 80
+        thickness_px = 10
+        rad = widget.plot_widget.world_length_for_pixel_length(desired_px)
+        arrow_thick = widget.plot_widget.world_length_for_pixel_length(thickness_px)
+        colors = rotateArrowColors
+        center = self.Pose.t
 
-            if local:
-                axes = [self.Pose.R[:, i] for i in range(3)]
-            else:
-                axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
-            if frame:
-                axes = [frame.R[:, i] for i in range(3)]
+        # choose axes
+        if local:
+            axes = [self.Pose.R[:,i] for i in range(3)]
+        else:
+            axes = [np.array([1,0,0]),
+                    np.array([0,1,0]),
+                    np.array([0,0,1])]
+        if frame:
+            axes = [frame.R[:,i] for i in range(3)]
 
-            if mode == "Translate":
-                for i, axis_vec in enumerate(axes):
-                    col = selectedArrowColor if i == selectedArrow else colors[i]
-                    start = center
-                    end = center + (rad + 1.0) * axis_vec
-                    line_item = OverlayLine(pos=np.array([start, end]), color=col, width=8, antialias=True)
-                    widget.plot_widget.addItem(line_item)
+        if mode == "Translate":
+            for i, a in enumerate(axes):
+                col = selectedArrowColor if i==selectedArrow else colors[i]
+                start = center
+                end = center + rad * a
+                widget.plot_widget.addItem(
+                    OverlayLine(pos=np.array([start,end]), color=col, width=8, antialias=True)
+                )
 
-                if selectedArrow != -1:
-                    dir_pt = center + rad * axes[selectedArrow]
-                    ext = self.generate_extended_axis(center, dir_pt, 1000)
-                    ext_line = gl.GLLinePlotItem(pos=ext,
-                                                color=extended_axis_color[selectedArrow],
-                                                width=8,
-                                                antialias=True)
-                    widget.plot_widget.addItem(ext_line)
-
-            elif mode == "Rotate":
-                for i, axis in enumerate(axes):
-                    helper = np.array([1,0,0])
-                    if abs(np.dot(axis, helper)) > 0.9:
-                        helper = np.array([0,1,0])
-                    u = np.cross(axis, helper); u /= np.linalg.norm(u)
-                    v = np.cross(axis, u)
-
-                    pts = np.array([
-                        center + (rad + 0.2)*(u*np.cos(t) + v*np.sin(t))
-                        for t in np.linspace(0, 2*math.pi, 64)
-                    ])
-
-                    col = selectedArrowColor if i == selectedArrow else colors[i]
-                    width = 8
-                    circle = OverlayLine(pos=pts, color=col, width=width, antialias=True)
-                    widget.plot_widget.addItem(circle)
+        elif mode == "Rotate":
+            for i, axis in enumerate(axes):
+                helper = np.array([1,0,0])
+                if abs(np.dot(axis,helper))>0.9:
+                    helper = np.array([0,1,0])
+                u = np.cross(axis, helper); u/=np.linalg.norm(u)
+                v = np.cross(axis, u)
+                pts = np.array([
+                    center + (rad+arrow_thick)*(u*np.cos(t)+v*np.sin(t))
+                    for t in np.linspace(0,2*math.pi,64)
+                ])
+                col = selectedArrowColor if i==selectedArrow else colors[i]
+                widget.plot_widget.addItem(
+                    OverlayLine(pos=pts, color=col, width=8, antialias=True)
+                )
 
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
         self.addArrows(widget, selectedArrow, local, frame, mode="Translate")

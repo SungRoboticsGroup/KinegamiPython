@@ -499,6 +499,9 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             prev_vector = self.drag_prev_vector
 
             d = QVector3D.dotProduct(plane_vector, prev_vector)
+            prod = plane_vector.length() * prev_vector.length()
+            if prod == 0:
+                return
             angle = math.acos(d / (plane_vector.length() * prev_vector.length()))
 
             cross_product = QVector3D.crossProduct(prev_vector, plane_vector)
@@ -537,66 +540,69 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         self.selected_joint_axes[2] = axis_z
         
     def calculate_translation_isect(self, origin, direction, joint_center, selected_joint, event):
-        shortest_location = 1000
-        shortest_idx = -1
-        hit_cylinder = False
+        desired_px = 80
+        thickness_px = 10
+        arrow_len = self.world_length_for_pixel_length(desired_px)
+        arrow_thick = self.world_length_for_pixel_length(thickness_px)
+
+        shortest_loc = 1000
+        idx = -1
+        hit = False
 
         for i in range(3):
-            if (self.is_local):
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.selected_joint_axes[i], 0.2, selected_joint.r+1)
-            else:
-                hit_location = compute_cylinder_intersection(origin, direction, joint_center, self.original_axes[i], 0.2, selected_joint.r+1)
-            
-            if (hit_location < shortest_location):
-                shortest_location = hit_location
-                shortest_idx = i
-                hit_cylinder = True
+            axis = (self.selected_joint_axes[i]
+                    if self.is_local else self.original_axes[i])
+            loc = compute_cylinder_intersection(
+                origin, direction,
+                joint_center, axis,
+                arrow_thick,  
+                arrow_len 
+            )
+            if loc < shortest_loc:
+                shortest_loc = loc
+                idx = i
+                hit = True
 
-        if (hit_cylinder):
-            self.click_signal_arrow.emit(shortest_idx)
-            
-            if (self.is_local):
-                self.selected_axis = self.selected_joint_axes[shortest_idx]
-            else:
-                self.selected_axis = self.original_axes[shortest_idx]
-
-            self.hit_cylinder = True
+        if hit:
+            self.click_signal_arrow.emit(idx)
+            self.selected_axis = (self.selected_joint_axes[idx]
+                                  if self.is_local else self.original_axes[idx])
             self.is_dragging = True
         else:
             self.is_dragging = False
             self.selected_axis = None
 
     def calculate_rotation_isect(self, origin, direction, joint_center, selected_joint):
-        shortest_location = 1000
+        desired_px = 80
+        thickness_px = 10
+        arrow_len = self.world_length_for_pixel_length(desired_px)
+        arrow_thick = self.world_length_for_pixel_length(thickness_px)
+
+        shortest_loc = 1000
         shortest_idx = -1
         hit_torus = False
 
         for i in range(3):
-            center = joint_center
-            tor_rad = selected_joint.r
-
-            if (self.is_local):
-                cyl_axis = self.selected_joint_axes[i]
-            else:
-                cyl_axis = self.original_axes[i]
-
-            hit_location = compute_torus_intersection(origin, direction, center, cyl_axis, major_radius=tor_rad, minor_radius=0.4)
-            if (hit_location < shortest_location):
-                shortest_location = hit_location
+            axis = (self.selected_joint_axes[i]
+                    if self.is_local else self.original_axes[i])
+            loc = compute_torus_intersection(
+                origin, direction,
+                joint_center, axis,
+                major_radius=arrow_len,   
+                minor_radius=arrow_thick   
+            )
+            if loc < shortest_loc:
+                shortest_loc = loc
                 shortest_idx = i
                 hit_torus = True
 
-        if (hit_torus):
-            if (self.is_local):
-                self.selected_torus = self.selected_joint_axes[shortest_idx]
-            else:
-                self.selected_torus = self.original_axes[shortest_idx]
-
+        if hit_torus:
+            self.selected_torus = (self.selected_joint_axes[shortest_idx]
+                                      if self.is_local else self.original_axes[shortest_idx])
             self.selected_axis_orig = self.original_axes[shortest_idx]
 
             dot = QVector3D.dotProduct(direction, self.selected_torus)
-            self.facing_same_dir = dot > 0
-                    
+            self.facing_same_dir = (dot > 0)
             self.click_signal_arrow.emit(shortest_idx)
         else:
             self.is_dragging = False
@@ -762,7 +768,6 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.selected_torus = None
 
             self.click_signal.emit(-1)
-
         self.is_dragging = False
         self.drag_prev_vector = None
 

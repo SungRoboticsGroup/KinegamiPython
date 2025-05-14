@@ -79,69 +79,44 @@ class ReferenceMesh():
     def transform(self, transform: SE3):
         self.Pose = transform
         self.mesh.setTransform(self.get_transform3D())
-    
-    def addArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None, mode=""):
-        rad = self.r
-        colors = rotateArrowColors
-        opacity = [0.8, 0.8, 0.8]
 
-        # if selectedArrow != -1:
-        #     colors[selectedArrow] = selectedArrowColor
-        #     opacity = [0.1, 0.1, 0.1]
-        #     opacity[selectedArrow] = 0.8
+    def addArrows(self, widget, selectedArrow=-1, local=True, frame: SE3 = None, mode=""):
+        # match GUI sizing
+        desired_px = 80
+        thickness_px = 10
+        rad = widget.plot_widget.world_length_for_pixel_length(desired_px)
+        tube_rad = widget.plot_widget.world_length_for_pixel_length(thickness_px)
 
-        extended_axis_color = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
         center = self.Pose.t
+        colors = rotateArrowColors
 
-        if local:
-            axes = [self.Pose.R[:, i] for i in range(3)]
-        else:
-            axes = [np.array([1,0,0]), np.array([0,1,0]), np.array([0,0,1])]
+        # build a cylinder or torus mesh with those dims
+        if mode=="Translate":
+            meshdata = gl.MeshData.cylinder(
+                rows=2, cols=20,
+                radius=[tube_rad,tube_rad], length=rad
+            )
+        else:  # Rotate
+            meshdata = self.create_torus_mesh(
+                radius=rad,
+                tube_radius=tube_rad,
+                radial_segments=20,
+                tubular_segments=20
+            )
 
-        if frame:
-            axes = [frame.R[:, i] for i in range(3)]
-
-        transform = self.get_transform3D()
-
-        if (mode == "Translate"):
-            meshdata = gl.MeshData.cylinder(rows=2, cols=20, radius=[0.1,0.1], length=rad+1)
-        elif (mode == "Rotate"):
-            self.tube_rad=0.1
-            self.tor_rad=rad + 0.2
-            meshdata = self.create_torus_mesh(radius=self.tor_rad, tube_radius=self.tube_rad, radial_segments=20, tubular_segments=20)
-
-        axis_x = gl.GLMeshItem(meshdata=meshdata, color=colors[0], shader='shaded', smooth=True)
-        axis_x.rotate(90, 0, 1, 0, True)
-        #widget.plot_widget.addItem(axis_x)
-
-        axis_y = gl.GLMeshItem(meshdata=meshdata, color=colors[1], shader='shaded', smooth=True)
-        axis_y.rotate(-90, 1, 0, 0, True)
-        #widget.plot_widget.addItem(axis_y)
-
-        axis_z = gl.GLMeshItem(meshdata=meshdata, color=colors[2], shader='shaded', smooth=True)
-        #widget.plot_widget.addItem(axis_z)
-
-        transform = self.get_transform3D(False)
-
-        if (local):
-            axis_x.applyTransform(transform, False)
-            axis_y.applyTransform(transform, False)
-            axis_z.applyTransform(transform, False)
-
-        axis_x.translate(center[0], center[1], center[2])
-        axis_y.translate(center[0], center[1], center[2])
-        axis_z.translate(center[0], center[1], center[2])
-
-        if selectedArrow != -1:
-            # generate the line here
-            dir = center + rad * self.r * axes[selectedArrow]
-            extended_axis = self.generate_extended_axis(center, dir, 1)
-            extended_axis_line = gl.GLLinePlotItem(pos=extended_axis, color=extended_axis_color[selectedArrow], width=3, antialias=True)
-            widget.plot_widget.addItem(extended_axis_line)
-
-        widget.plot_widget.addItem(axis_x)
-        widget.plot_widget.addItem(axis_y)
-        widget.plot_widget.addItem(axis_z)
+        # add all three axes
+        for i in range(3):
+            item = gl.GLMeshItem(
+                meshdata=meshdata,
+                color=colors[i],
+                shader='shaded',
+                smooth=True
+            )
+            if mode=="Translate":
+                if i==0: item.rotate(90, 0,1,0, True)
+                if i==1: item.rotate(-90,1,0,0, True)
+            item.translate(*center)
+            widget.plot_widget.addItem(item)
         
     def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame: SE3=None):
         axes = (self.Pose.R if local else np.eye(3))
