@@ -5,7 +5,7 @@ Daniel A. Feshbach, Wei-Hsi Chen, Daniel E. Koditschek, Cynthia R. Sung. “Kine
 
 This is a python repository for creating and modifying kinematic chains and trees made of tubular origami and/or 3D printing. Examples of its usage can be found in the examples folder. 
 
-This branch contains the interactive GUI (in development).
+This branch contains the interactive GUI (in development). Run the file GUI.py to use the GUI.
 
 We developed and tested this code in python 3.12. To install the requirements:
 
