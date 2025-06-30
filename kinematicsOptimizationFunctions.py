@@ -1,12 +1,14 @@
 from KinematicTree import *
 from Kinematics import *
 
-def optimizeJointPlacementEndEffector(subject, index, endEffectorIndices, endEffectorPoses, maxiter, tol, penaltyScale, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
+def optimizeJointPlacementEndEffector(subject, index, endEffectorIndices, endEffectorPoses, posesOnly, maxiter, tol, penaltyScale, childFraction = 1, ignorePlacement=False, parallelize = False, verbose=True):
     parentIndex = subject.Parents[index]
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
-    selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater)
+    selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=False)
     def linkLoss(t, link, curveLossFactor = 2):
+        if posesOnly:
+            return 0
         #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
         childrenLoss = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
@@ -48,8 +50,10 @@ def optimizeJointPlacementEndEffector(subject, index, endEffectorIndices, endEff
                 trans = np.linalg.norm(FK.t - endEffectorPose.t)
                 rot = 2 * np.arccos(np.clip(np.dot(R.from_matrix(endEffectorPose.R).as_quat(), R.from_matrix(FK.R).as_quat()), -1.0, 1.0))
                 loss += (trans + t.r * rot) ** 2
-
-        return min(loss, penaltyScale)
+        if posesOnly:
+            return loss
+        else:
+            return min(loss, penaltyScale)
     
     def objective(params, returnWhich = False):
         tree = subject.copyAbbreviatedSelf()
@@ -173,7 +177,7 @@ def optimizeJointPlacementEndEffector(subject, index, endEffectorIndices, endEff
                 raise Exception()
             return tree2, loss
 
-def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, endEffectorPoses, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, ignoreLater=False, parallelize=False, verbose = True):
+def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, endEffectorPoses, posesOnly, maxiter, tol, collisionError, childFraction = 1, ignorePlacement=False, parallelize=False, verbose = True):
 
     #make initial guess as close as possible to previous
     start = time.time()
@@ -189,9 +193,11 @@ def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, end
     initialGuess[3:6] = SE3.Rt(transform.R, np.zeros(3)).eul()
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
-    selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater)
+    selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=False)
 
     def linkLoss(t, link, curveLossFactor = np.pi):
+        if posesOnly:
+            return 0
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
         childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
         return t.Links[index].path.length ** 2  + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
@@ -230,7 +236,10 @@ def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, end
                 rot = 2 * np.arccos(np.clip(np.dot(R.from_matrix(endEffectorPose.R).as_quat(), R.from_matrix(FK.R).as_quat()), -1.0, 1.0))
                 loss += (trans + t.r * rot) ** 2
 
-        return min(loss, penaltyScale)
+        if posesOnly:
+            return loss
+        else:
+            return min(loss, penaltyScale)
 
     def objective(params):
         tree = subject.copyAbbreviatedSelf()
@@ -282,7 +291,7 @@ def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, end
     else:
         raise Exception("Optimization failed dramatically")
     
-def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
+def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, posesOnly, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
     lengths = []
 
@@ -339,9 +348,9 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
             #TODO: WHY?
         if not index in endEffectorIndices:
             if isWaypoint(subject.Joints[index]):
-                tree, loss = optimizeWaypointPlacementEndEffector(tree,index, endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                tree, loss = optimizeWaypointPlacementEndEffector(tree,index, endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, parallelize=parallelize, verbose=verbose)
             else:
-                tree, loss = optimizeJointPlacementEndEffector(tree,index, endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                tree, loss = optimizeJointPlacementEndEffector(tree,index, endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, parallelize=parallelize, verbose=verbose)
 
         log(tree, index)
 
@@ -379,9 +388,9 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
             
             if isWaypoint(subject.Joints[order[j]]):
                 try:
-                    tree2, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree2, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, parallelize=parallelize, verbose=verbose)
 
-                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), debug=True) > 0:
+                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=False, debug=True) > 0:
                         raise Exception("Moving all children caused collision.")
 
                     tree = tree2
@@ -405,16 +414,16 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
                                 isOptimized[idx] = False
                                 numOptimized -= 1
 
-                    tree, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=False, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignorePlacement=False, parallelize=parallelize, verbose=verbose)
                     if verbose:
-                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=False, plot=False, debug=True))
                     #tree.show()
                     break
             else:
                 try:
-                    tree2, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree2, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, parallelize=parallelize, verbose=verbose)
 
-                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True) > 0:
+                    if tree2.detectCollisions(specificJointIndices=[order[j]], ignoreLater=False, plot=False, debug=True) > 0:
                         raise Exception("Moving all children caused collision.")
                     
                     tree = tree2
@@ -437,9 +446,9 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
                                 isOptimized[idx] = False
                                 numOptimized -= 1
 
-                    tree, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, parallelize=parallelize, verbose=verbose)
                     if verbose:
-                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=(not guarantee), plot=False, debug=True))
+                        print(tree.detectCollisions(specificJointIndices=[order[j]], ignoreLater=False, plot=False, debug=True))
                     break
 
             log(tree, order[j])
@@ -480,9 +489,9 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
                 tolerance = subject.r/10
                 
                 if isWaypoint(subject.Joints[order[j]]):
-                    tree, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeWaypointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, parallelize=parallelize, verbose=verbose)
                 else:
-                    tree, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+                    tree, loss = optimizeJointPlacementEndEffector(tree,order[j], endEffectorIndices, endEffectorPoses, posesOnly, maxiter=iters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, parallelize=parallelize, verbose=verbose)
                 
                 log(tree, order[j])
         if verbose:
@@ -532,3 +541,33 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, sh
         return tree, times, lengths
     
     return tree
+
+def squaredOptimizeForEndEffectorPoses(subject, endEffectorIndices, endEffectorPoses, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
+    treeWithPoses = squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, True, showSteps, childFraction, streamline, resetOnFail, guarantee, parallelize, evaluate, verbose, directory)
+    
+    print("Found reachable end effector poses")
+    
+    testTree = treeWithPoses.copyAbbreviatedSelf()
+    reachableEndEffectorPoses = []
+
+    for k, endEffectorPose in enumerate(endEffectorPoses):
+        chain = []
+        indices = []
+        currentIndex = endEffectorIndices[k]
+        while (currentIndex != -1):
+            indices.append(currentIndex)
+            chain.append(testTree.Joints[currentIndex])
+            currentIndex = testTree.Parents[currentIndex]
+
+        robotChain = robotFromJointList(chain[::-1])
+
+        bestIK = robotChain.ikine_LM(endEffectorPose, q0=[0]*len(robotChain.joints()))
+        if bestIK.success:
+            print(f"Pose {k} was achievable")
+        else:
+            print(f"Pose {k} was not achievable")
+        reachableEndEffectorPoses.append(robotChain.fkine(bestIK.q))
+        
+    print("Now trying to optimize link lengths and avoid self-collisions")
+    
+    return squaredOptimizeEndEffector(treeWithPoses, endEffectorIndices, reachableEndEffectorPoses, False, showSteps, childFraction, streamline, resetOnFail, guarantee, parallelize, evaluate, verbose, directory)
