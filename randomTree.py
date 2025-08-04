@@ -2,6 +2,7 @@ from optimizationFunctions import *
 from testqtgraph import *
 from makeKinematicTree import *
 from KinematicTree import *
+from treeTraversals import dfs, bfs
 
 import random
 from collections import defaultdict, deque
@@ -17,7 +18,7 @@ probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
 title = str(jointCount)+" Joint " + ("Chains" if probabilityOfBranching == 0 else "Trees") + (" Sparse" if sparse else " Dense")
-treeCount = 3
+treeCount = 1
 restartFrom = 0
 multipleIterations=False
 
@@ -33,25 +34,39 @@ def generateTree(nJoints):
     numSides = 4
     neutralLength = 3
 
-    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+    root = RevoluteJoint(numSides,
+                         r,
+                         np.pi,
+                         poses[0]) if np.random.rand() > 0.5 else PrismaticJoint(numSides,
+                                                                                 r,
+                                                                                 neutralLength,
+                                                                                 3,
+                                                                                 np.pi/5,
+                                                                                 poses[0])
 
     specTree = JointSpecificationTree(root)
 
-    for i in range(1,nJoints):
+    for i in range(1, nJoints):
         #parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
         branching = np.random.rand() < probabilityOfBranching and i > 1
         if branching:
             # randomly select a parent from among the non-leaves
             nonLeaves = specTree.nonLeaves()
-            parent = nonLeaves[np.random.randint(0,len(nonLeaves))]
+            parent = nonLeaves[np.random.randint(0, len(nonLeaves))]
         else:
             # randomly select a parent from among the leaves
             leaves = specTree.leaves()
-            parent = leaves[np.random.randint(0,len(leaves))]
+            parent = leaves[np.random.randint(0, len(leaves))]
         
-        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+        newJoint = RevoluteJoint(numSides,
+                                 r,
+                                 np.pi,
+                                 poses[i]) if np.random.rand() > 0.5 else PrismaticJoint(numSides,
+                                                                                         r,
+                                                                                         neutralLength,
+                                                                                         3,
+                                                                                         np.pi/5,
+                                                                                         poses[i])
         specTree.addJoint(parent, newJoint)
 
     initialTree = makeTubularKinematicTree(specTree)
@@ -59,25 +74,57 @@ def generateTree(nJoints):
     return initialTree
 
 def testRandomTrees():
-    optimizations = [partial(squaredOptimize, childFraction=0,streamline=True,guarantee=True),
-                    partial(squaredOptimize, childFraction=0,streamline=True,guarantee=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False,resetOnFail=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=True),
-                    partial(linearOptimize, childFraction=0, streamline=False,guarantee=False),
-                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=False),
-                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=True),
-                    partial(perpetualOptimize, iterations=jointCount * 2, childFraction=1)]
+    # optimizations = [partial(squaredOptimize, childFraction=0,streamline=True,guarantee=True),
+    #                 partial(squaredOptimize, childFraction=0,streamline=True,guarantee=False),
+    #                 partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False),
+    #                 partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False,resetOnFail=False),
+    #                 partial(squaredOptimize, childFraction=0,streamline=False,guarantee=True),
+    #                 partial(linearOptimize, childFraction=0, streamline=False,guarantee=False),
+    #                 partial(squaredOptimize, childFraction=1,streamline=True,guarantee=False),
+    #                 partial(squaredOptimize, childFraction=1,streamline=True,guarantee=True),
+    #                 partial(perpetualOptimize, iterations=jointCount * 2, childFraction=1)]
 
-    labels = ["Streamline + Guarantee (SG)", 
-            "Streamline No Guarantee (SNG)",
-            "No Streamline No Guarantee (NSNG)",
-            "NSNG, No Reset on Fail",
-            "No Streamline Guarantee (NSG)",
-            "Linear (L)",
-            "Equal Child No Guarantee (ECNG)",
-            "Equal Child Guarantee (ECG)",
-            "Perpetual (P)"]
+    # optimizations = [partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="outward", orderBy="longest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="outward", orderBy="shortest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="outward", orderBy="longest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="outward", orderBy="shortest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="inward", orderBy="longest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="inward", orderBy="shortest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="inward", orderBy="longest"),
+    #                  partial(linearOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="inward", orderBy="shortest")]
+
+    optimizations = [partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="outward", orderBy="longest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="outward", orderBy="shortest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="outward", orderBy="longest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="outward", orderBy="shortest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="inward", orderBy="longest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=dfs, direction="inward", orderBy="shortest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="inward", orderBy="longest"),
+                     partial(squaredOptimize, childFraction=1, streamline=False, guarantee=False, traversal=bfs, direction="inward", orderBy="shortest")]
+
+    # optimizations = [partial(perpetualOptimize, iterations=jointCount * 2, weighted=True, showSteps=True, childFraction=1),
+    #                  partial(perpetualOptimize, iterations=jointCount * 2, weighted=False, showSteps=True, childFraction=1)]
+
+    # labels = ["Streamline + Guarantee (SG)", 
+    #         "Streamline No Guarantee (SNG)",
+    #         "No Streamline No Guarantee (NSNG)",
+    #         "NSNG, No Reset on Fail",
+    #         "No Streamline Guarantee (NSG)",
+    #         "Linear (L)",
+    #         "Equal Child No Guarantee (ECNG)",
+    #         "Equal Child Guarantee (ECG)",
+    #         "Perpetual (P)"]
+
+    labels = ["DFS Outward Longest",
+              "DFS Outward Shortest",
+              "BFS Outward Longest",
+              "BFS Outward Shortest",
+              "DFS Inward Longest",
+              "DFS Inward Shortest",
+              "BFS Inward Longest",
+              "BFS Inward Shortest"]
+
+    # labels = ["Perpetual Weighted", "Perpetual Unweighted"]
 
     lowerBounds = []
     results = []
@@ -87,17 +134,21 @@ def testRandomTrees():
         shutil.rmtree(restartDir)
 
 
-    for i in range(restartFrom,treeCount):
+    for i in range(restartFrom, treeCount):
         print(f"\n\nConstructing tree {i}")
+        
         construct = generateTree(jointCount)
         construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
+        
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
-            direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
+            direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no]+ "/"
             os.makedirs(direc, exist_ok=True)
+            
             optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
+            
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
@@ -106,6 +157,7 @@ def testRandomTrees():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
+        
         with open("sim_results/" + title + "/random_results_chkpt" + str(i) + ".json", "w") as file:
             json.dump(results, file)
 
@@ -171,3 +223,6 @@ def plotColoredTrees(directory, collection = []):
         trees[-1].show()
     else:
         plotCollection(collection)
+
+
+testRandomTrees()

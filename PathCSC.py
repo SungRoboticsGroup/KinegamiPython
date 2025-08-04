@@ -199,14 +199,14 @@ class PathCSC:
     
     def __repr__(self):
         tDirMag = np.append(self.tUnit, self.tMag)
-        return "PathCSC(tDirMag="+repr(tDirMag)+\
-                        ", r="+repr(self.r)+\
-                        ", startPosition="+repr(self.startPosition)+\
-                        ", startDir="+repr(self.startDir)+\
-                        ", endPosition="+repr(self.endPosition)+\
-                        ", endDir="+repr(self.endDir)+\
-                        ", circle1sign="+repr(self.circle1sign)+\
-                        ", circle2sign="+repr(self.circle2sign)+")"
+        return "PathCSC(tDirMag=" + repr(tDirMag) + \
+                        ", r=" + repr(self.r) + \
+                        ", startPosition=" + repr(self.startPosition) + \
+                        ", startDir=" + repr(self.startDir) + \
+                        ", endPosition=" + repr(self.endPosition) + \
+                        ", endDir=" + repr(self.endDir) + \
+                        ", circle1sign=" + repr(self.circle1sign) + \
+                        ", circle2sign=" + repr(self.circle2sign) + ")"
     
     # add to existing matplotlib axis ax
     def addToPlot(self, ax, showCircles=True, showPoses=True, 

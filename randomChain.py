@@ -31,24 +31,51 @@ def generateRandomChain(nJoints):
     numSides = 4
     neutralLength = 3
 
-    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+    root = RevoluteJoint(numSides,
+                         r,
+                         np.pi,
+                         poses[0]) if np.random.rand() > 0.5 else PrismaticJoint(numSides,
+                                                                                 r,
+                                                                                 neutralLength,
+                                                                                 3,
+                                                                                 np.pi/5,
+                                                                                 poses[0])
 
     chain = KinematicChain(root, gimbal=True)
-    for i in range(1,nJoints):
-        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+    
+    for i in range(1, nJoints):
+        newJoint = RevoluteJoint(numSides,
+                                 r,
+                                 np.pi,
+                                 poses[i]) if np.random.rand() > 0.5 else PrismaticJoint(numSides,
+                                                                                         r,
+                                                                                         neutralLength,
+                                                                                         3,
+                                                                                         np.pi/5,
+                                                                                         poses[i])
+        
         chain.appendGeneralizedGimbal(newJoint)
 
     return chain
 
 def test():
-    optimizations = [partial(squaredOptimize, childFraction=1, streamline=True, guarantee=True),
-                    partial(squaredOptimize, childFraction=1, streamline=False, guarantee=True),
-                    partial(linearOptimize, childFraction=1, streamline=False, guarantee=True)]
-    labels = ["Quadratic then Linear", 
-            "Quadratic",
-            "Linear"]
+    # optimizations = [partial(squaredOptimize, childFraction=1, streamline=True, guarantee=True),
+    #                 partial(squaredOptimize, childFraction=1, streamline=False, guarantee=True),
+    #                 partial(linearOptimize, childFraction=1, streamline=False, guarantee=True)]
+
+    optimizations = [partial(squaredOptimize, childFraction=0, streamline=False, guarantee=False, resetOnFail=False),
+                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=False, resetOnFail=True),
+                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=True, resetOnFail=False),
+                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=True, resetOnFail=True),]
+    
+    # labels = ["Quadratic then Linear", 
+    #         "Quadratic",
+    #         "Linear"]
+
+    labels = ["NSNG, Reset on Fail",
+            "NSNG, No Reset on Fail",
+            "NSG, Reset on Fail",
+            "NSG, No Reset on Fail"]
 
     lowerBounds = []
     results = []
@@ -58,17 +85,21 @@ def test():
         shutil.rmtree(restartDir)
 
 
-    for i in range(restartFrom,chainCount):
+    for i in range(restartFrom, chainCount):
         print(f"\n\nConstructing tree {i}")
+
         construct = generateRandomChain(jointCount)
         construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
+
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
             direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
             os.makedirs(direc, exist_ok=True)
+
             optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
+            
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
@@ -76,7 +107,9 @@ def test():
                     optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
+            
             results[i].append((times, losses))
+        
         with open("sim_results/" + title + "/random_results_chkpt" + str(i) + ".json", "w") as file:
             json.dump(results, file)
 
