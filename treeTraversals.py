@@ -88,7 +88,7 @@ def dfs(subject, direction="outward", orderBy="default"):
             if child not in visited:
                 stack.append(child)
 
-    yield (order if direction == "outward" else reversed(order))
+    yield (order if direction == "outward" else list(reversed(order)))
 
 def bfs(subject, direction="outward", orderBy="default"):
     queue = deque([0])
@@ -118,7 +118,7 @@ def bfs(subject, direction="outward", orderBy="default"):
 
         queue.extend(current_level)
 
-    yield (order if direction == "outward" else reversed(order))
+    yield (order if direction == "outward" else list(reversed(order)))
 
 def randomized(subject, isWeighted, power, count, childFraction):
     for _ in range(count):
@@ -144,12 +144,12 @@ def testMultipleArguments(construct):
 
     for direction in directions:
         for order in orders:
-            # print(f"\nDFS (direction={direction} and orderBy={order}):")
+            print(f"\nDFS (direction={direction} and orderBy={order}):")
             for node in dfs(construct, direction=direction, orderBy=order):
                 print(node, end=' ')
             print("\n")
 
-            # print(f"BFS (direction={direction} and orderBy={order}):")
+            print(f"BFS (direction={direction} and orderBy={order}):")
             for node in bfs(construct, direction=direction, orderBy=order):
                 print(node, end=' ')
             print("\n")
@@ -204,23 +204,46 @@ def generateTree(nJoints):
     return initialTree
 
 def testRandomTrees():
-
     construct = generateTree(jointCount)
-    print("\n=== Tree Structure with Link Lengths ===")
-    for parent in range(len(construct.Children)):
-        children = construct.Children[parent]
-        if not children:
-            continue
 
-        print(f"- Joint {parent} ->")
-        for child in children:
-            link = construct.Links[child]
-            path = link.path
-            print(f" ---> Joint {child} | Length: {path.length:.2f} | Straight (tMag): {path.tMag:.2f}")
-        print("\n")
+    # Open file for writing outputs
+    with open("exampleTreeForTraversal.txt", "w") as f:
 
-    # test the arguments together
-    testMultipleArguments(construct)
+        # Save the tree structure as repr
+        f.write("=== Serialized Tree ===\n")
+        f.write(repr(construct) + "\n\n")
+
+        # Print structure with link lengths
+        print("\n=== Tree Structure with Link Lengths ===\n", file=f)
+        for parent in range(len(construct.Children)):
+            children = construct.Children[parent]
+            if not children:
+                continue
+
+            print(f"- Joint {parent} ->", file=f)
+            for child in children:
+                link = construct.Links[child]
+                path = link.path
+                print(f"   ---> Joint {child} | Length: {path.length:.2f}", file=f)
+            print("", file=f)
+
+        # DFS and BFS traversal orders
+        directions = ["outward", "inward"]
+        orders = ["default", "longest", "shortest"]
+
+        print("\n=== Traversal Orders ===", file=f)
+        for direction in directions:
+            for order in orders:
+                print(f"\n\nDFS (direction='{direction}', orderBy='{order}'):", file=f)
+                for node in dfs(construct, direction=direction, orderBy=order):
+                    print(" ", node, file=f)
+
+                print(f"\nBFS (direction='{direction}', orderBy='{order}'):", file=f)
+                for node in bfs(construct, direction=direction, orderBy=order):
+                    print(" ", node, file=f)
+
+    print("Tree and traversal outputs saved to exampleTreeForTraversal.txt")
+
 
 
 # testTree1 = generateTree(jointCount)
@@ -236,3 +259,4 @@ def testRandomTrees():
 # print("Reconstructed Tree:" + repr(testTree2) + "\n")
 
 testRandomTrees()
+
