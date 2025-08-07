@@ -11,11 +11,18 @@ from CollisionDetection import *
 import style
 
 class OrigamiJoint(Joint):
-    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
+    def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3, 
                  initialState : float = 0):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
         super().__init__(r, neutralLength, Pose, initialState)
+
+    def __repr__(self):
+        return "OrigamiJoint(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", neutralLength=" + repr(self.neutralLength) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", initialState=" + repr(self.initialState) + ")"
     
     def toPrinted(self, screwRadius):
         pass
@@ -35,6 +42,14 @@ class RevoluteJoint(OrigamiJoint):
         super().__init__(numSides, r, neutralLength, Pose, initialState)
         self.pattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
+        
+    def __repr__(self):
+        return "RevoluteJoint(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", totalBendingAngle=" + repr(self.totalBendingAngle) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", numSinkLayers=" + repr(self.numSinkLayers) + \
+            ", initialState=" + repr(self.initialState) + ")"
     
     def pathIndex(self) -> int:
         return 0 # xhat
@@ -127,6 +142,15 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         revolutePattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
         self.pattern = TubeFittingPattern(numSides, r, tubeLength).append(revolutePattern).append(TubeFittingPattern(numSides, r, tubeLength))
+
+    def __repr__(self):
+        return "ExtendedRevoluteJoint(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", totalBendingAngle=" + repr(self.totalBendingAngle) + \
+            ", tubeLength=" + repr(self.tubeLength) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", numSinkLayers=" + repr(self.numSinkLayers) + \
+            ", initialState=" + repr(self.initialState) + ")"
     
     def pathIndex(self) -> int:
         return 0 # xhat
@@ -287,6 +311,15 @@ class PrismaticJoint(OrigamiJoint):
         self.pattern = PrismaticJointPattern(numSides, r, neutralLength, 
                                              numLayers, coneAngle)
         
+    def __repr__(self):
+        return "PrismaticJoint(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", neutralLength=" + repr(self.neutralLength) + \
+            ", numLayers=" + repr(self.numLayers) + \
+            ", coneAngle=" + repr(self.coneAngle) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", initialState=" + repr(self.initialState) + ")"
+        
     def pathIndex(self) -> int:
         return 2 # zhat
     
@@ -350,7 +383,12 @@ class Waypoint(OrigamiJoint):
         self.pattern = TubularPattern(numSides, r)
         super().__init__(numSides, r, 0, Pose)
 
-    
+    def __repr__(self):
+        return "Waypoint(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", pathIndex=" + repr(self.pidx) + ")"
+
     def pathIndex(self) -> int:
         return self.pidx
     
@@ -403,6 +441,14 @@ class Tip(OrigamiJoint):
         super().__init__(numSides, r, length, Pose)
         self.pattern = TipPattern(numSides, r, length, closesForward)
         self.forward = closesForward
+
+    def __repr__(self):
+        return "Tip(numSides=" + repr(self.numSides) + \
+            ", r=" + repr(self.r) + \
+            ", Pose=" + repr(self.Pose) + \
+            ", length=" + repr(self.length) + \
+            ", closesForward=" + repr(self.closesForward) + \
+            ", pathIndex=" + repr(self.pidx) + ")"
     
     def pathIndex(self) -> int:
         return self.pidx

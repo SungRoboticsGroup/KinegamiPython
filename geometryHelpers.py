@@ -315,6 +315,13 @@ class Ball:
     def __init__(self, center, radius):
         self.c = center
         self.r = radius
+
+    def __repr__(self):
+        return (
+            "Ball("
+            f"center={repr(self.c)},"
+            f"radius={repr(self.r)})"
+        )
     
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
