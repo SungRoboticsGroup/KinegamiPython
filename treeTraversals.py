@@ -20,8 +20,11 @@ probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
 
-# TODO: make this also add collision penalty (summed over all configurations of interest), based on multiObjectiveOptimizationFunctions.py, as an optional parameter
-def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : float, collisionPenaltyScale : float):
+def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : float, 
+             collisionPenaltyScale : float, capsuleSelections=None, 
+             includeCollisionPenalty=False, ignorePlacement=False, 
+             ignoreOtherBranchCollisions=False, states=None, collisionErrorWeight=1):
+    
     assert(childFraction>=0 and power>=0 and index>=0 and collisionPenaltyScale>=0)
 
     # incoming link
@@ -31,12 +34,18 @@ def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : f
     if len(tree.Children[index]) > 0 and childFraction > 0: 
         loss += np.sum([tree.Links[idx].path.length ** 2 for idx in tree.Children[index]]) * childFraction
 
-    if collisionPenaltyScale > 0:
-        raise ValueError("Not yet implemented") # TODO
+    # collision penalty (optional)
+    if includeCollisionPenalty:
+        for i in range(0, len(states)):
+            selectedCapsules = capsuleSelections[i]
+            tree.setConfiguration(states[i])
+            loss += tree.collisionError(selectedCapsules,
+                                        ignoreLater=ignoreOtherBranchCollisions, 
+                                        ignorePlacement=ignorePlacement) * collisionErrorWeight
     
-    return loss
+    return loss 
 
-def dfs(subject, direction="outward", orderBy="default"):
+def dfs(subject, isOptimized, direction="outward", orderBy="default"):
     stack = [0]
     visited = set()
     order = []
@@ -90,7 +99,7 @@ def dfs(subject, direction="outward", orderBy="default"):
 
     yield (order if direction == "outward" else list(reversed(order)))
 
-def bfs(subject, direction="outward", orderBy="default"):
+def bfs(subject, isOptimized, direction="outward", orderBy="default"):
     queue = deque([0])
     visited = set()
     order = []
@@ -120,7 +129,7 @@ def bfs(subject, direction="outward", orderBy="default"):
 
     yield (order if direction == "outward" else list(reversed(order)))
 
-def randomized(subject, isWeighted, power, count, childFraction):
+def randomized(subject, isOptimized, power, count, childFraction, isWeighted=True):
     for _ in range(count):
         if isWeighted:
             weights = [linkLoss(subject, i, power, childFraction, 0) for i in range(1, len(subject.Joints))]
@@ -130,13 +139,37 @@ def randomized(subject, isWeighted, power, count, childFraction):
             yield np.random.randint(1, len(subject.Joints))
 
 def squared(subject, isOptimized, direction="outward", orderBy="default"):
-    order = []
+    visited = set()
 
-    for index in dfs(subject, direction=direction, orderBy=orderBy):
-        if not isOptimized[index]:
-            order.append(index)
+    while not all(isOptimized):
+        dfs_output = next(dfs(subject, direction=direction, orderBy=orderBy))
 
-    yield order 
+        leaf = None
+        # find an unoptimized leaf node
+        for node in reversed(dfs_output):
+            if not subject.Children[node] and not isOptimized[node]:
+                leaf = node
+                break
+
+        if leaf is None:
+            return
+        
+        # get the unoptimized chain
+        unoptimized_chain = []
+        j = leaf
+
+        while not isOptimized[j]:
+            unoptimized_chain.append(j)
+            j = subject.Parents[j]
+        unoptimized_chain.reverse()
+
+        print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
+
+        # yield one joint at a time
+        for node in unoptimized_chain:
+            if not isOptimized[node]:
+                visited.add(node)
+                yield node
 
 def testMultipleArguments(construct):
     directions = ["outward", "inward"]
@@ -258,5 +291,39 @@ def testRandomTrees():
 # testTree2 = eval(repr(testTree1))
 # print("Reconstructed Tree:" + repr(testTree2) + "\n")
 
-testRandomTrees()
+# testRandomTrees()
+
+tree = generateTree(jointCount)
+
+# Initially only root is optimized
+isOptimized = [True] + [False] * (len(tree.Joints) - 1)
+
+print("\n=== Tree Structure with Link Lengths ===\n")
+for parent in range(len(tree.Children)):
+    children = tree.Children[parent]
+    if not children:
+        continue
+
+    print(f"- Joint {parent} ->")
+    for child in children:
+        link = tree.Links[child]
+        path = link.path
+        print(f"   --> Joint {child} | Length: {path.length:.2f}")
+    print("")
+
+print("\nOptimization order:")
+for node in squared(tree, isOptimized, direction="outward", orderBy="longest"):
+    print(f"Optimizing joint {node}...")
+
+    # Simulate success or failure of optimization
+    success = random.random() > 0.2
+    if success:
+        print(f"Optimized joint {node}")
+        isOptimized[node] = True
+    else:
+        print(f"Optimization failed for joint {node}")
+
+print("\nFinal optimization status:")
+for i, status in enumerate(isOptimized):
+    print(f"  Joint {i}: {'YES' if status else 'NO'}")
 

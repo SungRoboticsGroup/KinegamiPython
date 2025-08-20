@@ -3,38 +3,51 @@ from numpy import random
 import random 
 from treeTraversals import *
 
-def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collisionErrorWeight,
-                           penaltyScale=1, childFraction=1, ignorePlacement=False, ignoreLater=False, 
-                           parallelize=False, verbose=True):
-    
-    def linkLoss(t, link, curveLossFactor=2):
-        # curve loss
-        d = t.Links[index].path.theta1 ** power + t.Links[index].path.theta2 ** power
+def optimizeNodePlacement(subject, index, waypoint, power, maxiter, tol, collisionErrorWeight,
+                           penaltyScale=1, childFraction=1, ignorePlacement=False, ignoreOtherBranchCollisions=False, 
+                           includeCollisionPenalty=False, parallelize=False, verbose=True, states=None):
 
-        # children loss
-        if len(t.children[index] == 0):
-            childrenLoss = 0
+    def computeAndMinimizeLoss(params, returnWhich=False):
+        subjects = [copy.deepcopy(subject) for _ in states]
+        for i in range(0,len(states)):
+            subjects[i].setConfiguration(states[i])
 
-        else:
-            childrenLoss = np.sum([t.Links[idx].path.length ** power 
-                                   for idx in t.Children[index]]) * childFraction
-            
-        return t.Links[index].path.length ** power + \
-                t.getCollisionError(selectedIndices, selectedCapsules) * penaltyScale + \
-                childrenLoss  
-
-    def objective(params, returnWhich=False):
-        if waypoint:
-            tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
         
-            if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
+        capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, 
+                                                            ignoreLater=ignoreOtherBranchCollisions) 
+                                                            for subject in subjects]
+        if waypoint:
+            tree = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
+            transform = SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5])
+        
+            if not tree.transformJoint(index, 
+                                       transform=transform,
+                                       propogate=ignorePlacement, 
+                                       safe=True, 
+                                       relative=False, 
+                                       recomputeBoundingBall=False):
                 return collisionErrorWeight * len(subject.Joints) * (len(subject.Children) + 1)
             
-            return linkLoss(tree, index) + np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
+            loss = linkLoss(tree, 
+                            index, 
+                            power,
+                            childFraction=childFraction,
+                            collisionPenaltyScale=1,
+                            capsuleSelections=capsuleSelections,
+                            includeCollisionPenalty=includeCollisionPenalty, 
+                            ignorePlacement=ignorePlacement,
+                            ignoreOtherBranchCollisions=ignoreOtherBranchCollisions,
+                            states=states,
+                            collisionErrorWeight=collisionErrorWeight) + \
+                            np.linalg.norm(np.array(params[3:6]) - \
+                            SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
+            
+            return loss
         
         else:
             # lightweight copy of the tree 
-            tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            tree = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
 
             translation = params[0]
             rotation = params[1]
@@ -47,32 +60,82 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
 
             # try just moving it
             # find the cost if valid, otherwise penalize
-            if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
-                linkLossSameZhat = linkLoss(tree, index)
+            if tree.transformJoint(index, 
+                                   transform, 
+                                   propogate=ignorePlacement, 
+                                   safe=True, 
+                                   relative=True, 
+                                   recomputeBoundingBall=False):
+                linkLossSameZhat = linkLoss(tree, 
+                                            index, 
+                                            power,
+                                            childFraction=childFraction,
+                                            collisionPenaltyScale=1,
+                                            capsuleSelections=capsuleSelections,
+                                            includeCollisionPenalty=includeCollisionPenalty, 
+                                            ignorePlacement=ignorePlacement,
+                                            ignoreOtherBranchCollisions=ignoreOtherBranchCollisions,
+                                            states=states,
+                                            collisionErrorWeight=collisionErrorWeight)
+
             else:
                 linkLossSameZhat = pathNonExistancePenalty
             
             # try switching zhat
-            tree.Joints[index].reverseZhat()
+            if linkLossSameZhat < pathNonExistancePenalty:
+                tree.Joints[index].reverseZhat()
 
             # if the original zhat didn't work or the new zhat resulted in an invalid transform
             if (linkLossSameZhat == pathNonExistancePenalty or
                 not tree.transformJoint(index, SE3(), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False)):
                 
                 # make a new copy of the tree 
-                tree2 = subject.copyAbbreviatedSelf(ignoreLater, index)
+                tree2 = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
 
                 # reverse the zhat again and try the inverse transform
                 # if it's valid, find the cost, otherwise penalize 
                 tree2.Joints[index].reverseZhat()
                 if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
-                    linkLossReversedZhat = linkLoss(tree2, index)
+                    linkLossReversedZhat = linkLoss(tree, 
+                                                    index, 
+                                                    power,
+                                                    childFraction=childFraction,
+                                                    collisionPenaltyScale=1,
+                                                    capsuleSelections=capsuleSelections,
+                                                    includeCollisionPenalty=includeCollisionPenalty, 
+                                                    ignorePlacement=ignorePlacement,
+                                                    ignoreOtherBranchCollisions=ignoreOtherBranchCollisions,
+                                                    states=states,
+                                                    collisionErrorWeight=collisionErrorWeight)
                 else:
                     linkLossReversedZhat = pathNonExistancePenalty
             
             # if the original zhat worked or the new one resulted in a valid transform,  find the cost
             else:
-                linkLossReversedZhat = linkLoss(tree, index)
+                linkLossReversedZhat = linkLoss(tree2, 
+                                                index, 
+                                                power,
+                                                childFraction=childFraction,
+                                                collisionPenaltyScale=1,
+                                                capsuleSelections=capsuleSelections,
+                                                includeCollisionPenalty=includeCollisionPenalty, 
+                                                ignorePlacement=ignorePlacement,
+                                                ignoreOtherBranchCollisions=ignoreOtherBranchCollisions,
+                                                states=states,
+                                                collisionErrorWeight=collisionErrorWeight)
+
+            if (linkLossReversedZhat < pathNonExistancePenalty):
+                linkLossReversedZhat = linkLoss(tree2, 
+                                                index, 
+                                                power,
+                                                childFraction=childFraction,
+                                                collisionPenaltyScale=1,
+                                                capsuleSelections=capsuleSelections,
+                                                includeCollisionPenalty=includeCollisionPenalty, 
+                                                ignorePlacement=ignorePlacement,
+                                                ignoreOtherBranchCollisions=ignoreOtherBranchCollisions,
+                                                states=states,
+                                                collisionErrorWeight=collisionErrorWeight)
 
             # if returnWhich is True, return 1 if the original zhat worked better, otherwise return 2
             # if returnWhich is False, return the minimum of the two costs
@@ -111,7 +174,7 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
 
     # preliminary steps before creating the optimizer
     if waypoint:
-        initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        initialTree = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
 
         initialGuess = [0]*6
         parent = initialTree.Joints[initialTree.Parents[index]]
@@ -131,7 +194,7 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
         # initialTree.detectCollisions(debug=True)        
             
         # compute the loss at the initial guess (baseline)
-        initialLoss = objective([0]*6)
+        initialLoss = computeAndMinimizeLoss([0]*6)
 
         # calculate the distance and the bounds for the optimization
         dist = subject.Links[index].path.length + max(np.amax(np.abs(initialGuess)), np.amax(np.abs(subject.Joints[index].Pose.t)))
@@ -152,38 +215,34 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
         initialPosition = transformation.t[2]
         initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0]) # rotation around z-axis
         initialGuess = [initialPosition,initialRotation] 
-        initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        initialTree = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
 
         # try the transform and rebuild the tree if it fails
         # if it fails again, use the initial guess as [0,0] and try to optimize from there
         if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
-            initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            initialTree = subject.copyAbbreviatedSelf(ignoreOtherBranchCollisions, index)
         
         if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
             initialGuess = [0,0]
 
         # compute the loss at the fallback pose
-        initialLoss = objective([0,0])
+        initialLoss = computeAndMinimizeLoss([0,0])
 
         # calculate dist and the bounds for the optimization
         dist = subject.Links[index].path.length
         bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
     
-    # get collision capsules
-    selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
-    selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices,
-                                                       ignoreLater=ignoreLater)
-
     # initialize the swarm
     global joint_batch_objective_function
     def joint_batch_objective_function(X):
-        return np.array([objective(x) for x in X])
+        return np.array([computeAndMinimizeLoss(x) for x in X])
     
     n_particles = 16 if waypoint else n_particles = 24
 
     init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles, 1))
     init_pos[1] = [0]*6 if waypoint else init_pos[1] = np.array([0,0]) 
     
+    # add noise to the initial positions and clip them to the bounds
     addNoiseAndClip(init_pos=init_pos,
                     dist=dist,
                     n_particles=n_particles)
@@ -215,7 +274,7 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
 
     else:
         # refine the search using Nelder-Mead
-        nelderMead = minimize(objective, 
+        nelderMead = minimize(computeAndMinimizeLoss, 
                             minSwarmResult, 
                             method="Nelder-Mead", 
                             bounds=bounds, 
@@ -230,7 +289,7 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
             print(f"Optimized joint {index} in {time.time() - start}s -- Old loss: {initialLoss}, Improved Loss: {loss}")
 
         # decide which zhat to use based on the objective function
-        which = objective(result, returnWhich=True)
+        which = computeAndMinimizeLoss(result, returnWhich=True)
 
         tree = subject.copyAbbreviatedSelf()
 
@@ -260,12 +319,25 @@ def optimizeJointPlacement(subject, index, waypoint, power, maxiter, tol, collis
                     raise Exception()
                 return tree2, loss
 
-def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, guarantee=False, 
+def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, ignoreDescendantCollisions=False, 
                  parallelize=False, evaluate=False, verbose=True, directory=None, power = 2, 
                  resetOnFail=True, traversal=dfs, direction="outward", orderBy="longest"):
                  
     times = []
     lengths = []
+
+    # if states is None, initialize it to a list of zeros
+    if states == None:
+        states = [[0] * len(subject.Joints)]
+
+    for state in states:
+        copied_subject = copy.deepcopy(subject)
+        for i in range(0, len(copied_subject.Joints)):
+            if (not isWaypoint(copied_subject.Joints[i])):
+                copied_subject.setJointState(i,state[i])
+            copied_subject.Joints[i].recomputeCollisionCapsules()
+            if copied_subject.detectCollisions(debug=True) > 0:
+                print("Warning: Initial tree contains collisions.")
 
     # recompute collision capsules for all joints
     for i in range(0, len(subject.Joints)):
@@ -301,7 +373,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
     numOptimized = 1
 
     # function to traverse the tree based on the specified traversal method
-    for index in traversal(subject, direction, orderBy):
+    for index in traversal(subject, isOptimized, direction, orderBy):
         iters = 50
         tolerance = subject.r/10
 
@@ -309,7 +381,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
 
         # optimize the node
         try:
-            tree, loss = optimizeJointPlacement(tree, 
+            tree, loss = optimizeNodePlacement(tree, 
                                                 index,
                                                 waypoint = isWaypoint(subject.Joints[index]),
                                                 power = 2,
@@ -317,13 +389,15 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
                                                 tol = tolerance, 
                                                 collisionErrorWeight = collisionErrorWeight, 
                                                 childFraction = childFraction, 
-                                                ignoreLater = (not guarantee), 
+                                                ignoreOtherBranchCollisions = (not ignoreDescendantCollisions), 
+                                                includeCollisionPenalty = True,
                                                 parallelize = parallelize, 
-                                                verbose = verbose)
+                                                verbose = verbose,
+                                                states = states)
             
             # check for collisions after the optimization
             if tree.detectCollisions(specificJointIndices=[index], 
-                                    ignoreLater=(not guarantee), 
+                                    ignoreOtherBranchCollisions=(not ignoreDescendantCollisions), 
                                     debug=True) > 0:
                 raise Exception("Moving all children caused collision.")
             
@@ -354,19 +428,21 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
                         numOptimized -= 1
 
             # try to optimize the joint placement again while ignoring the children
-            tree, loss = optimizeJointPlacement(tree, 
+            tree, loss = optimizeNodePlacement(tree, 
                                                 index, 
-                                                maxiter=iters, 
-                                                tol=tolerance, 
-                                                penaltyScale=collisionErrorWeight, 
-                                                childFraction=childFraction, 
-                                                ignorePlacement=True, 
-                                                ignoreLater = (not guarantee), 
-                                                parallelize=parallelize, 
-                                                verbose=verbose)
+                                                maxiter = iters, 
+                                                tol = tolerance, 
+                                                penaltyScale = collisionErrorWeight, 
+                                                childFraction = childFraction, 
+                                                ignorePlacement = True, 
+                                                ignoreOtherBranchCollisions = (not ignoreDescendantCollisions), 
+                                                includeCollisionPenalty = True,
+                                                parallelize = parallelize, 
+                                                verbose = verbose,
+                                                states = states)
             if verbose:
                 print(tree.detectCollisions(specificJointIndices=[index], 
-                                            ignoreLater=(not guarantee), 
+                                            ignoreOtherBranchCollisions=(not ignoreDescendantCollisions), 
                                             plot=False, 
                                             debug=True))
             break

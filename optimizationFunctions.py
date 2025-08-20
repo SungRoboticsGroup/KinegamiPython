@@ -421,19 +421,19 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
         # start optimizing from that joint
         print(f"OPTIMIZING CHAIN ENDING AT {i}:")
         start2 = time.time()
-        # order = []
+        order = []
 
-        # parent = i
+        parent = i
         
         # traverse up the tree to find the order of joints to optimize
-        # while not isOptimized[parent]:
-        #     order.append(parent)
-        #     parent = subject.Parents[parent]
-        # order.reverse()
+        while not isOptimized[parent]:
+            order.append(parent)
+            parent = subject.Parents[parent]
+        order.reverse()
 
         optimizeStreak = 0
 
-        for index in traversal(subject, direction=direction, orderBy=orderBy):
+        for index in order:
             optimizedThisPass = []
 
             # set the number of iterations and tolerance for the optimization

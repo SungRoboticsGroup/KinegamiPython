@@ -10,7 +10,10 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
 
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
     
-    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater) for subject in subjects]
+    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, 
+                                                         ignoreLater=ignoreLater) 
+                                                         for subject in subjects]
+    
     def linkLoss(t, link, curveLossFactor = 2):
         #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
@@ -19,7 +22,9 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
 
     defaultError = collisionError * len(subjects[0].Joints) * (len(subjects[0].Children) + 1) * len(states)    
     
-    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) if ((j <= index) or (j in subject.Children[index]))] if ignoreLater else states[i]) for i in range(0,len(states))]
+    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) 
+                      if ((j <= index) or (j in subject.Children[index]))] 
+                      if ignoreLater else states[i]) for i in range(0,len(states))]
 
     def objective(params, returnWhich = False):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
@@ -33,8 +38,11 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
         transform = SE3.Trans([0,0,translation]) @ SE3.Rz(rotation)
 
         #try just moving it
-        if tree.transformJoint(index, transform, propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
+        if tree.transformJoint(index, transform, propogate=ignorePlacement, 
+                               safe=True, relative=True, recomputeBoundingBall=False):
+            
             linkLossUnchanged = linkLoss(tree, index)
+
             for i in range(0,len(states)):
                 selectedCapsules = capsuleSelections[i]
                 try:
@@ -43,7 +51,8 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
                     print("unwanted")
                     linkLossUnchanged = defaultError
                     break
-                linkLossUnchanged += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionError
+                linkLossUnchanged += tree.getCollisionError(selectedIndices, selectedCapsules) * \
+                    collisionError
         else:
             linkLossUnchanged = defaultError
         
@@ -53,9 +62,13 @@ def optimizeJointPlacementMulti(subject, states, index, maxiter, tol, collisionE
         if linkLossUnchanged < defaultError:
             tree.Joints[index].reverseZhat()
 
-        if (not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False)):
+        if (not tree.transformJoint(index, SE3.Trans([0,0,0]), 
+                                    safe=True, relative=True, propogate=ignorePlacement, 
+                                    recomputeLinkPath=True, recomputeBoundingBall=False)):
+            
             tree2 = tree.copyAbbreviatedSelf(ignoreLater, index)
             tree2.Joints[index].reverseZhat()
+            
             if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
                 linkLossReversedZhat = linkLoss(tree2, index)
             else:
@@ -184,9 +197,13 @@ def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisi
     initialGuess[3:6] = SE3.Rt(transform.R, np.zeros(3)).eul()
 
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
-    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater) for subject in subjects]
+    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices, 
+                                                         ignoreLater=ignoreLater) 
+                                                         for subject in subjects]
 
-    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) if ((j <= index) or (j in subject.Children[index]))] if ignoreLater else states[i]) for i in range(0,len(states))]
+    stateSubsets = [([states[i][j] for j in range(0,len(states[i])) 
+                      if ((j <= index) or (j in subject.Children[index]))] 
+                      if ignoreLater else states[i]) for i in range(0,len(states))]
 
     def linkLoss(t, link, curveLossFactor = np.pi):
         d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
@@ -197,7 +214,8 @@ def optimizeWaypointPlacementMulti(subject, states, index, maxiter, tol, collisi
 
     def objective(params):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
-        transform = SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5])
+        transform = SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ \
+            SE3.Rz(params[5])
 
         if not tree.transformJoint(index, transform,  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
             return defaultError
