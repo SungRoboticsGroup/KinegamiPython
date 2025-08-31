@@ -21,9 +21,8 @@ sparse = False
 cubeSize = 100 if sparse else 10
 
 def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : float, 
-             collisionPenaltyScale : float, capsuleSelections=None, 
-             includeCollisionPenalty=False, ignorePlacement=False, 
-             ignoreOtherBranchCollisions=False, states=None, collisionErrorWeight=1):
+             collisionPenaltyScale : float, capsuleSelections=None, selectedIndices=None,
+             includeCollisionPenalty=False, configurations=None, collisionErrorWeight=1):
     
     assert(childFraction>=0 and power>=0 and index>=0 and collisionPenaltyScale>=0)
 
@@ -34,18 +33,19 @@ def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : f
     if len(tree.Children[index]) > 0 and childFraction > 0: 
         loss += np.sum([tree.Links[idx].path.length ** 2 for idx in tree.Children[index]]) * childFraction
 
+    print("loss (no collision):", loss)
+
     # collision penalty (optional)
     if includeCollisionPenalty:
-        for i in range(0, len(states)):
+        for i in range(0, len(configurations)):
             selectedCapsules = capsuleSelections[i]
-            tree.setConfiguration(states[i])
-            loss += tree.collisionError(selectedCapsules,
-                                        ignoreLater=ignoreOtherBranchCollisions, 
-                                        ignorePlacement=ignorePlacement) * collisionErrorWeight
+            tree.setConfiguration(configurations[i])
+            loss += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionErrorWeight
     
+    print("Loss with collision penalty:", loss)
     return loss 
 
-def dfs(subject, isOptimized, direction="outward", orderBy="default"):
+def dfs(subject, direction="outward", orderBy="default"):
     stack = [0]
     visited = set()
     order = []
@@ -97,9 +97,10 @@ def dfs(subject, isOptimized, direction="outward", orderBy="default"):
             if child not in visited:
                 stack.append(child)
 
-    yield (order if direction == "outward" else list(reversed(order)))
+    for node in (order if direction == "outward" else list(reversed(order))):
+        yield node
 
-def bfs(subject, isOptimized, direction="outward", orderBy="default"):
+def bfs(subject, direction="outward", orderBy="default"):
     queue = deque([0])
     visited = set()
     order = []
@@ -127,9 +128,10 @@ def bfs(subject, isOptimized, direction="outward", orderBy="default"):
 
         queue.extend(current_level)
 
-    yield (order if direction == "outward" else list(reversed(order)))
+    for node in (order if direction == "outward" else list(reversed(order))):
+        yield node
 
-def randomized(subject, isOptimized, power, count, childFraction, isWeighted=True):
+def randomized(subject, power, count, childFraction, isWeighted):
     for _ in range(count):
         if isWeighted:
             weights = [linkLoss(subject, i, power, childFraction, 0) for i in range(1, len(subject.Joints))]
@@ -293,37 +295,37 @@ def testRandomTrees():
 
 # testRandomTrees()
 
-tree = generateTree(jointCount)
+# tree = generateTree(jointCount)
 
-# Initially only root is optimized
-isOptimized = [True] + [False] * (len(tree.Joints) - 1)
+# # Initially only root is optimized
+# isOptimized = [True] + [False] * (len(tree.Joints) - 1)
 
-print("\n=== Tree Structure with Link Lengths ===\n")
-for parent in range(len(tree.Children)):
-    children = tree.Children[parent]
-    if not children:
-        continue
+# print("\n=== Tree Structure with Link Lengths ===\n")
+# for parent in range(len(tree.Children)):
+#     children = tree.Children[parent]
+#     if not children:
+#         continue
 
-    print(f"- Joint {parent} ->")
-    for child in children:
-        link = tree.Links[child]
-        path = link.path
-        print(f"   --> Joint {child} | Length: {path.length:.2f}")
-    print("")
+#     print(f"- Joint {parent} ->")
+#     for child in children:
+#         link = tree.Links[child]
+#         path = link.path
+#         print(f"   --> Joint {child} | Length: {path.length:.2f}")
+#     print("")
 
-print("\nOptimization order:")
-for node in squared(tree, isOptimized, direction="outward", orderBy="longest"):
-    print(f"Optimizing joint {node}...")
+# print("\nOptimization order:")
+# for node in squared(tree, isOptimized, direction="outward", orderBy="longest"):
+#     print(f"Optimizing joint {node}...")
 
-    # Simulate success or failure of optimization
-    success = random.random() > 0.2
-    if success:
-        print(f"Optimized joint {node}")
-        isOptimized[node] = True
-    else:
-        print(f"Optimization failed for joint {node}")
+#     # Simulate success or failure of optimization
+#     success = random.random() > 0.2
+#     if success:
+#         print(f"Optimized joint {node}")
+#         isOptimized[node] = True
+#     else:
+#         print(f"Optimization failed for joint {node}")
 
-print("\nFinal optimization status:")
-for i, status in enumerate(isOptimized):
-    print(f"  Joint {i}: {'YES' if status else 'NO'}")
+# print("\nFinal optimization status:")
+# for i, status in enumerate(isOptimized):
+#     print(f"  Joint {i}: {'YES' if status else 'NO'}")
 

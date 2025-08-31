@@ -1,8 +1,8 @@
-from optimizationFunctions import *
 from testqtgraph import *
 from makeKinematicTree import *
 from KinematicTree import *
 from KinematicChain import *
+from simplifiedOptimizationFunctions import *
 
 import random
 from collections import defaultdict, deque
@@ -59,23 +59,26 @@ def generateRandomChain(nJoints):
     return chain
 
 def test():
-    # optimizations = [partial(squaredOptimize, childFraction=1, streamline=True, guarantee=True),
-    #                 partial(squaredOptimize, childFraction=1, streamline=False, guarantee=True),
-    #                 partial(linearOptimize, childFraction=1, streamline=False, guarantee=True)]
+    optimizations = [
+        partial(optimizeTree,
+                traversal="dfs", direction="outward", orderBy="longest",
+                evaluate=True, verbose=False)
+        partial(optimizeTree,
+                traversal="bfs", direction="outward", orderBy="shortest",
+                evaluate=True, verbose=False)
+        partial(optimizeTree,
+                traversal="squared", direction="outward", orderBy="longest",
+                evaluate=True, verbose=False),
+        partial(optimizeTree,
+                traversal="randomized", evaluate=True, verbose=False)
+    ]
 
-    optimizations = [partial(squaredOptimize, childFraction=0, streamline=False, guarantee=False, resetOnFail=False),
-                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=False, resetOnFail=True),
-                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=True, resetOnFail=False),
-                partial(squaredOptimize, childFraction=0, streamline=False, guarantee=True, resetOnFail=True),]
-    
-    # labels = ["Quadratic then Linear", 
-    #         "Quadratic",
-    #         "Linear"]
-
-    labels = ["NSNG, Reset on Fail",
-            "NSNG, No Reset on Fail",
-            "NSG, Reset on Fail",
-            "NSG, No Reset on Fail"]
+    labels = [
+        "DFS-longest"
+        "BFS-shortest",
+        "Squared-longest",
+        "Randomized"
+    ]
 
     lowerBounds = []
     results = []

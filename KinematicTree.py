@@ -339,10 +339,13 @@ class KinematicTree(Generic[J]):
         # tree.Parents = self.Parents
         # tree.Children = self.Children
         # return tree
+        includedJointIndices = []
         try:
             newTree = KinematicTree(copy.deepcopy(self.Joints[self.Parents[self.Parents[isolateJoint]]]), self.maxAnglePerElbow)
+            includedJointIndices.append(self.Parents[self.Parents[isolateJoint]])
         except:
             newTree = KinematicTree(copy.deepcopy(self.Joints[0]), self.maxAnglePerElbow)
+            includedJointIndices.append(0)
 
         if isolate:
 
@@ -356,17 +359,20 @@ class KinematicTree(Generic[J]):
                     newTree.Children.append([isolateJoint])
                     newTree.Parents.append(None)
                     newTree.Links.append(copy.deepcopy(self.Links[i]))
+                    includedJointIndices.append(i)
                 elif isolateJoint == i:
                     newTree.Joints.append(copy.deepcopy(self.Joints[i]))
                     newTree.Children.append(self.Children[isolateJoint].copy())
                     newTree.Parents.append(self.Parents[i])
                     newTree.Links.append(copy.deepcopy(self.Links[i]))
+                    includedJointIndices.append(i)
                 elif numChildren > 0 and self.Children[isolateJoint][childIdx] == i:
                     newTree.Joints.append(copy.deepcopy(self.Joints[i]))
                     newTree.Links.append(copy.deepcopy(self.Links[i]))
                     newTree.Parents.append(self.Parents[i])
                     newTree.Children.append([])
                     childIdx += 1
+                    includedJointIndices.append(i)
                 else:
                     newTree.Links.append(None)
                     newTree.Joints.append(None)
@@ -379,8 +385,9 @@ class KinematicTree(Generic[J]):
             newTree.Links = [copy.deepcopy(link) for link in self.Links]
             newTree.Parents = self.Parents.copy()
             newTree.Children = self.Children.copy()
+            includedJointIndices = list(range(len(self.Joints)))
 
-        return newTree
+        return newTree, includedJointIndices
 
     def detectCollisions(self, specificJointIndices = None, plot=False, includeEnds=False, debug=False, ignoreLater=False, ignoreWaypoints=True):
         toCheck = list(range(len(self.Joints))) if specificJointIndices is None else specificJointIndices
