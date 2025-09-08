@@ -362,9 +362,16 @@ class LinkCSC:
                                        circular_segments=numSides)
         outset -= holeSlicer.translate((0,0,3*holeDiameter))
         outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(self.EndDubinsPose.A[:3,:])
-        
-        
-        
+
         tube += outset
         return tube
     
+
+    def saveModule(self, filename : str, wallThickness : float, holeDiameter : float, numHoles : int = 4,
+                           startRadius : float = None, endRadius : float = None) -> None:
+        module = self.connectableModule(wallThickness, holeDiameter, numHoles, startRadius, endRadius)
+        mesh_data = module.to_mesh()
+        vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
+        faces = mesh_data.tri_verts
+        tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        tri_mesh.export(filename)
