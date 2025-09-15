@@ -226,14 +226,14 @@ plotManifold(hollowHull)
 
 
 link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
-               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(2*np.pi/3)@SE3.Rz(3*np.pi/4), 
+               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(3*np.pi/4), 
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(wallThickness=0.1, holeDiameter=0.2, numHoles=4, startRadius=1, endRadius=0.5)
+module = link.connectableModule(wallThickness=0.1, holeDiameter=0.05, numHoles=4, startRadius=1, endRadius=0.25)
 #module = link.manifold(startRadius=1, endRadius=0.75, numSides=20, wallThickness=0.1)
 analyzeProperties(module)
 plotManifold(module)
-link.saveModule("linkModule.obj", wallThickness=0.1, holeDiameter=0.2, numHoles=4, startRadius=1, endRadius=0.5)
+link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
 
 
 """
