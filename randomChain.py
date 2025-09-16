@@ -60,24 +60,24 @@ def generateRandomChain(nJoints):
 
 def test():
     optimizations = [
-        partial(optimizeTree,
-                traversal="dfs", direction="outward", orderBy="longest",
-                evaluate=True, verbose=False)
-        partial(optimizeTree,
-                traversal="bfs", direction="outward", orderBy="shortest",
-                evaluate=True, verbose=False)
+        # partial(optimizeTree,
+        #         traversal="dfs", direction="outward", orderBy="longest",
+        #         evaluate=True, verbose=False)
+        # partial(optimizeTree,
+        #         traversal="bfs", direction="outward", orderBy="shortest",
+        #         evaluate=True, verbose=False)
         partial(optimizeTree,
                 traversal="squared", direction="outward", orderBy="longest",
-                evaluate=True, verbose=False),
-        partial(optimizeTree,
-                traversal="randomized", evaluate=True, verbose=False)
+                evaluate=True, verbose=False)
+        # partial(optimizeTree,
+        #         traversal="randomized", evaluate=True, verbose=False)
     ]
 
     labels = [
-        "DFS-longest"
-        "BFS-shortest",
-        "Squared-longest",
-        "Randomized"
+        # "DFS-longest"
+        # "BFS-shortest"
+        "Squared-longest"
+        # "Randomized"
     ]
 
     lowerBounds = []

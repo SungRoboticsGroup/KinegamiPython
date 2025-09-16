@@ -33,7 +33,7 @@ def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : f
     if len(tree.Children[index]) > 0 and childFraction > 0: 
         loss += np.sum([tree.Links[idx].path.length ** 2 for idx in tree.Children[index]]) * childFraction
 
-    print("loss (no collision):", loss)
+    # print("loss (no collision):", loss)
 
     # collision penalty (optional)
     if includeCollisionPenalty:
@@ -42,7 +42,7 @@ def linkLoss(tree : KinematicTree, index : int, power : float, childFraction : f
             tree.setConfiguration(configurations[i])
             loss += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionErrorWeight
     
-    print("Loss with collision penalty:", loss)
+    # print("Loss with collision penalty:", loss)
     return loss 
 
 def dfs(subject, direction="outward", orderBy="default"):
@@ -142,10 +142,9 @@ def randomized(subject, power, count, childFraction, isWeighted):
 
 def squared(subject, isOptimized, direction="outward", orderBy="default"):
     visited = set()
+    dfs_output = list(dfs(subject, direction=direction, orderBy=orderBy))
 
     while not all(isOptimized):
-        dfs_output = next(dfs(subject, direction=direction, orderBy=orderBy))
-
         leaf = None
         # find an unoptimized leaf node
         for node in reversed(dfs_output):
@@ -165,7 +164,7 @@ def squared(subject, isOptimized, direction="outward", orderBy="default"):
             j = subject.Parents[j]
         unoptimized_chain.reverse()
 
-        print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
+        # print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
 
         # yield one joint at a time
         for node in unoptimized_chain:

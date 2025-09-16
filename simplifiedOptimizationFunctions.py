@@ -39,10 +39,11 @@ def optimizeNodePlacement(subject, index, waypoint, power, maxiter, tol, collisi
 
         if waypoint:
             copiedSubject, includedIndices = subject.copyAbbreviatedSelf(ignoreNonLocalCollisions, index)
+            padTree(copiedSubject, subject)
             transform = SE3.Trans(transformResultFromPSO[0:3]) @ SE3.Rz(transformResultFromPSO[3]) @ SE3.Ry(transformResultFromPSO[4]) @ SE3.Rz(transformResultFromPSO[5])
         
             if not copiedSubject.transformJoint(index, 
-                                                transform=transform,
+                                                Transformation=transform,
                                                 propogate=ignorePlacement, 
                                                 safe=True, 
                                                 relative=False, 
@@ -186,6 +187,7 @@ def optimizeNodePlacement(subject, index, waypoint, power, maxiter, tol, collisi
             init_pos[:, 0] = np.clip(init_pos[:, 0], -dist*2, dist*2)
             init_pos[:, 1] = np.clip(init_pos[:, 1], -np.pi*2, np.pi*2)   
 
+    # OPTIMIZATION BEGINS HERE
     start = time.time()
 
     # preliminary steps before creating the optimizer
@@ -265,7 +267,7 @@ def optimizeNodePlacement(subject, index, waypoint, power, maxiter, tol, collisi
 
     # set up the PSO optimizer
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles, 
-                                        dimensions=2, 
+                                        dimensions=2 if not waypoint else 6, 
                                         options={'c1':0.6, 'c2':0.7, 'w':0.5},
                                         bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),
                                         init_pos=init_pos,
@@ -425,7 +427,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
             
             # check for collisions after the optimization
             if tree.detectCollisions(specificJointIndices=[index], 
-                                    ignoreNonLocalCollisions = ignoreNonLocalCollisions, 
+                                    ignoreLater = ignoreNonLocalCollisions, 
                                     debug=True) > 0:
                 raise Exception("Moving all children caused collision.")
             
@@ -433,7 +435,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1, streamline = False, 
             if isOptimized[subject.Parents[index]]:
                 isOptimized[index] = True
                 numOptimized += 1
-                optimizeStreak += 1
                 optimizedThisPass.append(index)
 
         # handle the exception if the optimization fails        

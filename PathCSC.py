@@ -53,7 +53,7 @@ def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir,
     return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                    circle1sign, circle2sign).error
 
-def shortestCSC(r, startPosition, startDir, endPosition, endDir):
+def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=None, epsilon=0.05):
     startDir = startDir / norm(startDir)
     endDir = endDir / norm(endDir)
     
@@ -67,16 +67,17 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     
     # solve for the path under all 4 sign combinations
     # solutions are values for tDirMag
+    convergenceThreshold = 1e-16
     with warnings.catch_warnings(action="ignore"):
         solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, 1, 1))
+                                (r, startPosition, startDir, endPosition, endDir, 1, 1), xtol=convergenceThreshold)
         solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, 1, -1))
+                                (r, startPosition, startDir, endPosition, endDir, 1, -1), xtol=convergenceThreshold)
         solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, -1, 1))
+                                (r, startPosition, startDir, endPosition, endDir, -1, 1), xtol=convergenceThreshold)
         solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, -1, -1))
-    
+                                (r, startPosition, startDir, endPosition, endDir, -1, -1), xtol=convergenceThreshold)
+
     # Construct the paths found based on the solutions found for tDirMag
     pathPP = PathCSC(solPP, r, startPosition, startDir, endPosition, endDir, 1, 1)
     pathPM = PathCSC(solPM, r, startPosition, startDir, endPosition, endDir, 1, -1)
@@ -87,7 +88,13 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
     # exclude invalid paths from length-min selection
-    lengths[errorNorms > 0.001*r] = np.inf
+    lengths[errorNorms > epsilon] = np.inf
+
+    if turnAngleLimit is not None:
+        theta1s = np.array([abs(path.theta1) for path in paths])
+        theta2s = np.array([abs(path.theta2) for path in paths])
+        lengths[theta1s > turnAngleLimit + epsilon] = np.inf
+        lengths[theta2s > turnAngleLimit + epsilon] = np.inf
     
     return paths[np.argmin(lengths)]
         
@@ -115,7 +122,7 @@ class PathCSC:
         startDir/endDir and tDir.
     """
     def __init__(self, tDirMag, r, startPosition, startDir, endPosition, endDir, 
-                 circle1sign, circle2sign):
+                 circle1sign, circle2sign, EPSILON=1e-6):
         assert(r>=0 and abs(circle1sign)==1 and abs(circle2sign)==1)
         self.r = r
         self.startPosition = startPosition
@@ -157,9 +164,31 @@ class PathCSC:
         the path departs circle 1 to where it enters circle 2
         (according to the Hota and Ghose construction).
         """ 
-        tError = self.t - (self.turn2start - self.turn1end)
-        # We also need a part of the error to enforce that tDir becomes unit.
-        self.error = np.append(tError, norm(tDirMag[0:3]) - 1)
+        # tError = self.t - (self.turn2start - self.turn1end)
+        s = self.turn2start - self.turn1end
+        if norm(s) < self.r*EPSILON:
+            # calculate tangent direction from turn2start
+            t1 = cross(self.y1, self.circleNormal1)
+            t2 = cross(self.y2, self.circleNormal2)
+            t1Error = self.tUnit - t1
+            t2Error = self.tUnit - t2
+            tError = t1Error + t2Error
+            
+            angleError1 = np.arctan2(norm(cross(self.tUnit, t1)), dot(self.tUnit, t1))
+            angleError2 = np.arctan2(norm(cross(self.tUnit, t2)), dot(self.tUnit, t2))
+            #angleError1 = np.arccos(dot(self.tUnit, t1))
+            #angleError2 = np.arccos(dot(self.tUnit, t2))
+            self.angleError = angleError1 + angleError2
+        else:
+            sUnit = s / norm(s)
+            tError = self.tUnit - dot(self.tUnit, sUnit)*sUnit
+            self.angleError = np.arctan2(norm(cross(self.tUnit, sUnit)), dot(self.tUnit, sUnit))
+        
+        self.lengthError = abs(norm(s) - self.tMag)
+        #self.error = np.append(tError, norm(tDirMag[0:3]) - 1)
+        self.error = np.array([self.lengthError * r, self.angleError, norm(tDirMag[0:3]) - 1, norm(tError)])
+
+
         
         
         # Measure turning angles along each circle

@@ -979,7 +979,7 @@ class KinematicTree(Generic[J]):
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall : bool = True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True, relative : bool = False, printErrors=False) -> bool:
+                       safe : bool = True, relative : bool = False, printErrors=True) -> bool:
         if relative:
             Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
         

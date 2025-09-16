@@ -32,7 +32,8 @@ class LinkCSC:
         self.EndDubinsPose = EndDubinsPose
         if path is None:
             self.path = shortestCSC(r, self.StartDubinsPose.t, self.StartDubinsPose.R[:,0],
-                                self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
+                                self.EndDubinsPose.t, self.EndDubinsPose.R[:,0], 
+                                turnAngleLimit=np.pi)
         else:
             self.path = path
         
@@ -40,11 +41,13 @@ class LinkCSC:
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
         if self.path.theta1 < -EPSILON:
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
-        if self.path.theta1 >= np.pi:
+        if self.path.theta1 >= np.pi + EPSILON:
+            print(f"\nTheta1 =  {self.path.theta1}\n")
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
         if self.path.theta2 < -EPSILON:
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
-        if self.path.theta2 >= np.pi:
+        if self.path.theta2 >= np.pi + EPSILON:
+            print(f"\nTheta2 =  {self.path.theta2}\n")
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
 
         
