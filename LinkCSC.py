@@ -329,11 +329,11 @@ class LinkCSC:
         return output
 
     def connectableModule(self, wallThickness : float, holeDiameter : float, numHoles : int = 4,
-                           startRadius : float = None, endRadius : float = None) -> m3d.Manifold:
-        numSides = 100
+                           startRadius : float = None, endRadius : float = None, numSides : int = 20,
+                           hullBends : bool = False) -> m3d.Manifold:
         connectionLength = 2 * holeDiameter
         tube = self.manifold(startRadius, endRadius, numSides, stabilize=True,
-                             wallThickness=wallThickness)
+                             wallThickness=wallThickness, hullBends=hullBends)
         
         holeSlicer = m3d.Manifold()
         holeAnglesDegrees = np.linspace(0, 360, numHoles, endpoint=False)
