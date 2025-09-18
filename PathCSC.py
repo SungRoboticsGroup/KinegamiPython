@@ -49,10 +49,10 @@ direction-magnitude to ensure tDir becomes the common tangent between circles
 even if t=[0,0,0]) and args are the Dubins start/end frames and the signs 
 controlling the circle directions.
 """
-def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
+def pathObjectiveCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                  circle1sign, circle2sign):
     return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
-                   circle1sign, circle2sign).error
+                   circle1sign, circle2sign).objective
 
 """
 Solves the equations for given combinations of signs of the circles. 
@@ -71,7 +71,7 @@ def solveCSC(r, startPosition, startDir, endPosition, endDir,
     
     if t0DirMag is None:
         t0 = endPosition - startPosition
-        if norm(t0)==0:
+        if norm(t0) < 1e-6:
             t0 = r * startDir
         t0mag = norm(t0)
         t0unit = t0 / t0mag
@@ -81,11 +81,11 @@ def solveCSC(r, startPosition, startDir, endPosition, endDir,
     if isinstance(circleSigns, tuple) and len(circleSigns)==2 and \
                 (circleSigns[0] in [-1, 1]) and (circleSigns[1] in [-1, 1]):
         circle1sign, circle2sign = circleSigns
-        f = partial(pathErrorCSC, r=r, 
+        f = partial(pathObjectiveCSC, r=r, 
                     startPosition=startPosition, startDir=startDir,
                     endPosition=endPosition, endDir=endDir,
                     circle1sign=circle1sign, circle2sign=circle2sign)
-        res = scipy.optimize.minimize(f, t0DirMag, method='L-BFGS-B')
+        res = scipy.optimize.minimize(f, t0DirMag, method='BFGS', tol=1e-16)
         return PathCSC(res.x, r, startPosition, startDir, 
                        endPosition, endDir, circle1sign, circle2sign)
 
@@ -178,20 +178,6 @@ class PathCSC:
         self.circleCenter2 = self.endPosition + self.r * self.w2
         self.turn2start = self.circleCenter2 - self.r * self.y2
         
-        """
-        If T is a valid solution, it should equal the vector from where 
-        the path departs circle 1 to where it enters circle 2
-        (according to the Hota and Ghose construction).
-        """ 
-        s = self.turn2start - self.turn1end
-        self.directionError = norm(self.t - s)
-        self.lengthError = abs(norm(s) - self.tMag)
-        self.unitLengthError = abs(norm(tDirMag[:3]) - 1)
-        self.error = self.directionError + self.lengthError + self.unitLengthError
-
-
-        
-        
         # Measure turning angles along each circle
         """
         self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
@@ -204,6 +190,18 @@ class PathCSC:
         self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
                                 cross(self.endDir, self.w2)))
         self.length = self.r*self.theta1 + self.tMag + self.r*self.theta2
+
+        """
+        If T is a valid solution, it should equal the vector from where 
+        the path departs circle 1 to where it enters circle 2
+        (according to the Hota and Ghose construction).
+        """ 
+        s = self.turn2start - self.turn1end
+        self.tError = norm(self.t - s)
+        self.lengthError = abs(norm(s) - self.tMag)
+        self.unitLengthError = abs(norm(tDirMag[:3]) - 1)
+        self.error = self.tError + self.unitLengthError + self.lengthError
+        self.objective = self.length + self.error
 
     def newPathTransformedBy(self, Transformation : SE3):
         new_turn1end = Transformation * self.turn1end
@@ -255,12 +253,12 @@ class PathCSC:
             # circles
             c1x, c1y, c1z = Circle3D(self.r, 
                             self.circleCenter1, self.circleNormal1).interpolate().T
-            ax.plot(c1x, c1y, c1z, color = startColor)
+            ax.plot(c1x, c1y, c1z, color = startColor, linestyle='--')
             c2x, c2y, c2z = Circle3D(self.r, 
                             self.circleCenter2, self.circleNormal2).interpolate().T
-            ax.plot(c2x, c2y, c2z, color = endColor)
-        
-        
+            ax.plot(c2x, c2y, c2z, color = endColor, linestyle='--')
+
+
         # path arcs (C components)
         a1x, a1y, a1z = Arc3D(self.circleCenter1, 
                 self.startPosition, self.startDir, self.theta1).interpolate().T
