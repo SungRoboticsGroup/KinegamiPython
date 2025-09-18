@@ -102,7 +102,7 @@ def solveCSC(r, startPosition, startDir, endPosition, endDir,
 
 
 def shortestCSC(r, startPosition, startDir, endPosition, endDir, 
-                turnAngleLimit=None, epsilon=1e-6):
+                turnAngleLimit=None, epsilon=1e-3):
     paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
@@ -141,7 +141,7 @@ class PathCSC:
         startDir/endDir and tDir.
     """
     def __init__(self, tDirMag, r, startPosition, startDir, endPosition, endDir, 
-                 circle1sign, circle2sign, EPSILON=1e-6):
+                 circle1sign, circle2sign, EPSILON=1e-4):
         assert(r>=0 and abs(circle1sign)==1 and abs(circle2sign)==1)
         self.r = r
         self.startPosition = startPosition
@@ -223,9 +223,6 @@ class PathCSC:
         return PathCSC(new_tDirMag, self.r, new_startPosition, new_startDir,
                        new_endPosition, new_endDir, 
                        self.circle1sign, self.circle2sign)
-    
-    def __str__(self):
-        return str(np.append(self.tUnit, self.tMag))
     
     def __repr__(self):
         tDirMag = np.append(self.tUnit, self.tMag)

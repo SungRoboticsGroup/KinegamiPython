@@ -38,16 +38,21 @@ class LinkCSC:
             self.path = path
         
         if norm(self.path.error) > self.DISTANCE_EPSILON:
+            print(self.path)
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
         if self.path.theta1 < -EPSILON:
+            print(self.path)
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
         if self.path.theta1 >= np.pi + EPSILON:
-            print(f"\nTheta1 =  {self.path.theta1}\n")
+            #print(f"\nTheta1 =  {self.path.theta1}\n")
+            print(self.path)
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
         if self.path.theta2 < -EPSILON:
+            print(self.path)
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
         if self.path.theta2 >= np.pi + EPSILON:
-            print(f"\nTheta2 =  {self.path.theta2}\n")
+            #print(f"\nTheta2 =  {self.path.theta2}\n")
+            print(self.path)
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
 
         
