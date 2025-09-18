@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import geometryHelpers
 from geometryHelpers import *
 import warnings
+from functools import *
 
 """
 Given tDirMag as a 4D vector containing [tDir, tMag] representing t,
@@ -53,38 +54,56 @@ def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir,
     return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                    circle1sign, circle2sign).error
 
-def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=None, epsilon=0.05):
+"""
+Solves the equations for given combinations of signs of the circles. 
+Defaults to all 4 combinations.
+If circleSigns is a list of tuples of 2 elements each -1 or 1, 
+solves for each pair and returns a list of PathCSC objects.
+If circleSigns is a single tuple of 2 elements each -1 or 1, 
+just solves for that and returns the single PathCSC object.
+
+Optional: t0DirMag can be provided as an initial guess for tDirMag.
+"""
+def solveCSC(r, startPosition, startDir, endPosition, endDir, 
+             t0DirMag=None, circleSigns=[(1, 1), (1, -1), (-1, 1), (-1, -1)]):
     startDir = startDir / norm(startDir)
     endDir = endDir / norm(endDir)
     
-    t0 = endPosition - startPosition
-    if norm(t0)==0:
-        t0 = r * startDir
-    t0mag = norm(t0)
-    t0unit = t0 / t0mag
-    t0DirMag = np.append(t0unit, t0mag)
+    if t0DirMag is None:
+        t0 = endPosition - startPosition
+        if norm(t0)==0:
+            t0 = r * startDir
+        t0mag = norm(t0)
+        t0unit = t0 / t0mag
+        t0DirMag = np.append(t0unit, t0mag)
     
-    
-    # solve for the path under all 4 sign combinations
-    # solutions are values for tDirMag
-    convergenceThreshold = 1e-16
-    with warnings.catch_warnings(action="ignore"):
-        solPP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, 1, 1), xtol=convergenceThreshold)
-        solPM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, 1, -1), xtol=convergenceThreshold)
-        solMP = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, -1, 1), xtol=convergenceThreshold)
-        solMM = scipy.optimize.fsolve(pathErrorCSC, x0=t0DirMag, args=
-                                (r, startPosition, startDir, endPosition, endDir, -1, -1), xtol=convergenceThreshold)
+    # if circleSigns is a single tuple, just solve for that
+    if isinstance(circleSigns, tuple) and len(circleSigns)==2 and \
+                (circleSigns[0] in [-1, 1]) and (circleSigns[1] in [-1, 1]):
+        circle1sign, circle2sign = circleSigns
+        f = partial(pathErrorCSC, r=r, 
+                    startPosition=startPosition, startDir=startDir,
+                    endPosition=endPosition, endDir=endDir,
+                    circle1sign=circle1sign, circle2sign=circle2sign)
+        res = scipy.optimize.minimize(f, t0DirMag, method='L-BFGS-B')
+        return PathCSC(res.x, r, startPosition, startDir, 
+                       endPosition, endDir, circle1sign, circle2sign)
 
-    # Construct the paths found based on the solutions found for tDirMag
-    pathPP = PathCSC(solPP, r, startPosition, startDir, endPosition, endDir, 1, 1)
-    pathPM = PathCSC(solPM, r, startPosition, startDir, endPosition, endDir, 1, -1)
-    pathMP = PathCSC(solMP, r, startPosition, startDir, endPosition, endDir, -1, 1)
-    pathMM = PathCSC(solMM, r, startPosition, startDir, endPosition, endDir, -1, -1)
-    
-    paths = [pathPP, pathPM, pathMP, pathMM]
+    elif isinstance(circleSigns, list) and \
+                all([isinstance(cs, tuple) and len(cs)==2 and \
+             (cs[0] in [-1, 1]) and (cs[1] in [-1, 1]) for cs in circleSigns]):
+        return [solveCSC(r, startPosition, startDir, endPosition, endDir, 
+                         t0DirMag=t0DirMag, circleSigns=tuple(signsPair)) 
+                         for signsPair in circleSigns]
+
+    else:
+        raise ValueError("circleSigns must be a tuple of 2 elements\
+                          each -1 or 1, or a list of such tuples")
+
+
+def shortestCSC(r, startPosition, startDir, endPosition, endDir, 
+                turnAngleLimit=None, epsilon=1e-6):
+    paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
     # exclude invalid paths from length-min selection
@@ -164,29 +183,11 @@ class PathCSC:
         the path departs circle 1 to where it enters circle 2
         (according to the Hota and Ghose construction).
         """ 
-        # tError = self.t - (self.turn2start - self.turn1end)
         s = self.turn2start - self.turn1end
-        if norm(s) < self.r*EPSILON:
-            # calculate tangent direction from turn2start
-            t1 = cross(self.y1, self.circleNormal1)
-            t2 = cross(self.y2, self.circleNormal2)
-            t1Error = self.tUnit - t1
-            t2Error = self.tUnit - t2
-            tError = t1Error + t2Error
-            
-            angleError1 = np.arctan2(norm(cross(self.tUnit, t1)), dot(self.tUnit, t1))
-            angleError2 = np.arctan2(norm(cross(self.tUnit, t2)), dot(self.tUnit, t2))
-            #angleError1 = np.arccos(dot(self.tUnit, t1))
-            #angleError2 = np.arccos(dot(self.tUnit, t2))
-            self.angleError = angleError1 + angleError2
-        else:
-            sUnit = s / norm(s)
-            tError = self.tUnit - dot(self.tUnit, sUnit)*sUnit
-            self.angleError = np.arctan2(norm(cross(self.tUnit, sUnit)), dot(self.tUnit, sUnit))
-        
+        self.directionError = norm(self.t - s)
         self.lengthError = abs(norm(s) - self.tMag)
-        #self.error = np.append(tError, norm(tDirMag[0:3]) - 1)
-        self.error = np.array([self.lengthError * r, self.angleError, norm(tDirMag[0:3]) - 1, norm(tError)])
+        self.unitLengthError = abs(norm(tDirMag[:3]) - 1)
+        self.error = self.directionError + self.lengthError + self.unitLengthError
 
 
         

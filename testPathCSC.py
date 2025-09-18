@@ -16,6 +16,7 @@ startDir=np.array([ 0.302911  , -0.61927601, -0.72439088])
 endPosition=np.array([ 25.60386095, -47.36059101, -59.58399416]) 
 endDir=np.array([ 0.302911  , -0.61927601, -0.72439088])
 
+"""
 exampleFromOpt = PathCSC(tDirMag=tDirMag, r=1,
                 startPosition=startPosition, startDir=startDir,
                 endPosition=endPosition, endDir=endDir,
@@ -23,8 +24,19 @@ exampleFromOpt = PathCSC(tDirMag=tDirMag, r=1,
 
 exampleFromOpt.show()
 
+paths = solveCSC(r=1, startPosition=startPosition, startDir=startDir,
+                          endPosition=endPosition, endDir=endDir)
+
+for path in paths:
+    path.show()
+
+"""
 
 shortestValid = shortestCSC(r=1, startPosition=startPosition, startDir=startDir,
                             endPosition=endPosition, endDir=endDir, turnAngleLimit=np.pi)
 
 shortestValid.show()
+
+
+
+
