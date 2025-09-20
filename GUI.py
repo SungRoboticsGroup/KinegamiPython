@@ -814,7 +814,7 @@ class PointEditorWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Point Editor")
+        self.setWindowTitle("Kinegami Interactive Editor")
         self.setGeometry(100, 100, 800, 600)
 
         self.plot_widget = ClickableGLViewWidget(parent_window=self)
@@ -1532,8 +1532,8 @@ class PointEditorWindow(QMainWindow):
         # Add instructions centered
         instructions = [
             "Middle Mouse Button: Pan Around",
-            "W: Translate",
-            "E: Rotate",
+            "T: Translate",
+            "R: Rotate",
             "Delete: Delete Joint",
             "X: Select X Axis",
             "Y: Select Y Axis",
