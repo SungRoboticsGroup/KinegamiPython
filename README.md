@@ -9,16 +9,14 @@ This branch contains the interactive GUI (in development). Run the file GUI.py t
 
 We developed and tested this code in python 3.12. To install the requirements:
 
-pip install -r requirements.txt
+`pip install -r requirements.txt`
 
-OR
+To compile into an executable:
 
-pip install spatialmath-python
-pip install pyqtgraph
-pip install PyQt5
-pip install PyOpenGL
-pip install ezdxf
-pip install numpy-stl
+`pyinstaller GUI.spec`
+
+The results will be in dist/GUI. Keep the executable and the _internal directory together within the same folder, but you can move that folder elsewhere. We currently have a windows executable GUI.exe compiled and kept in git tracking, and plan to add mac and linux versions.
+
 
 Abstract: Arms, legs, and fingers of animals and robots are all examples of “kinematic chains” - mechanisms with sequences of joints connected by rigid links. Lightweight kinematic chains can be manufactured quickly and cheaply using origami patterns rolled up into tubes. In recent work [[Chen et al. 22](https://repository.upenn.edu/entities/publication/66231fb3-9120-40e0-87c8-0d4f5c058983)], we demonstrated that origami patterns for kinematic chains with arbitrary numbers of degrees of freedom can be constructed algorithmically from a minimal kinematic specification (the axes that joints rotate about or translate along). The work was founded on a catalog of tubular crease patterns for revolute joints (rotation about an axis), prismatic joints (translation along an axis), and links, which compose together to form kinematic chains. In this paper, we implement these patterns and algorithms in python as a user-friendly, open-source tool for creating kinematic chains out of origami with little origami design expertise. Users can specify each joint by its axis only or by its full location and orientation. Our software uses this information to construct a single crease pattern for the corresponding chain. The software also includes a visualization tool so users can check that the chain can achieve their desired configurations, and methods to try modifications of an existing chain. This paper provides a detailed explanation of the code and its usage, including an explanation of our proposed representation for tubular crease patterns. We include a number of examples to illustrate the software’s capabilities and potential for robot and mechanism design.
 

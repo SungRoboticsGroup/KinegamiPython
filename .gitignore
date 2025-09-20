@@ -4,7 +4,6 @@ save/
 __pycache__/
 *.pyc
 *.zip
-dist/
 .venv
 .vscode/
 save/*.chain

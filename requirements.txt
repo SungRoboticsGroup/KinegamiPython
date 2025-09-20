@@ -1,3 +1,4 @@
+altgraph==0.17.4
 ansitable==0.11.2
 cfgv==3.4.0
 colored==2.2.4
@@ -14,9 +15,12 @@ nodeenv==1.9.1
 numpy==2.1.1
 numpy-stl==3.1.2
 packaging==24.1
+pefile==2023.2.7
 pillow==10.4.0
 platformdirs==4.3.6
 pre-commit==3.8.0
+pyinstaller==6.16.0
+pyinstaller-hooks-contrib==2025.8
 PyOpenGL==3.1.7
 pyparsing==3.1.4
 PyQt5==5.15.11
@@ -25,8 +29,10 @@ PyQt5_sip==12.15.0
 pyqtgraph==0.13.7
 python-dateutil==2.9.0.post0
 python-utils==3.9.0
+pywin32-ctypes==0.2.3
 PyYAML==6.0.2
 scipy==1.14.1
+setuptools==80.9.0
 six==1.16.0
 spatialmath-python==1.1.11
 typing_extensions==4.12.2
