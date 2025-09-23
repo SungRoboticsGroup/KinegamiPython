@@ -37,7 +37,7 @@ J = TypeVar("J", bound=Joint)
 class KinematicTree(Generic[J]):
     """
     Nodes are Joint objects
-    Edges are Dubins linkages from parent distal frame to child proximal frame    
+    Edges are Dubins linkages from parent distal frame to child proximal frame
     Attributes (GLOBAL COORDINATES):
         r               tubular radius
         Joints          array of Joint objects (nodes)

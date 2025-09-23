@@ -216,7 +216,7 @@ def optimizeNodePlacement(subject, index, waypoint, power, maxiter, tol, collisi
 
         # calculate the distance and the bounds for the optimization
         dist = subject.Links[index].path.length + max(np.amax(np.abs(initialGuess)), np.amax(np.abs(subject.Joints[index].Pose.t)))
-        bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
+        bounds = [(-dist*2, dist*2)] * 3 + [(-np.pi*2, np.pi*2)] * 3
 
     else:
         joint = subject.Joints[index]
