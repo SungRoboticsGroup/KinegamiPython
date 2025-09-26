@@ -129,6 +129,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, childFrac
         except:
             tree2 = subject.copyAbbreviatedSelf()
             tree2.Joints[index].reverseZhat()
+
             if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
                 raise Exception()
             return tree2, loss

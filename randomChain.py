@@ -12,13 +12,14 @@ import threading
 import os 
 import shutil
 
-jointCount = 5
+jointCount = 2
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
 chainCount = 1
 restartFrom = 0
 multipleIterations=False
+np.random.seed(42)
 
 os.makedirs("sim_results/" + title, exist_ok=True)
 

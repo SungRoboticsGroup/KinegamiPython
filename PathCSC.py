@@ -53,7 +53,7 @@ def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir,
     return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                    circle1sign, circle2sign).error
 
-def shortestCSC(r, startPosition, startDir, endPosition, endDir):
+def solveCSC(r, startPosition, startDir, endPosition, endDir):
     startDir = startDir / norm(startDir)
     endDir = endDir / norm(endDir)
     
@@ -84,11 +84,18 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     pathMM = PathCSC(solMM, r, startPosition, startDir, endPosition, endDir, -1, -1)
     
     paths = [pathPP, pathPM, pathMP, pathMM]
+    return paths
+
+def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=None, EPSILON=1e-6):
+    paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
     # exclude invalid paths from length-min selection
     lengths[errorNorms > 0.001*r] = np.inf
-    
+    if turnAngleLimit is not None:
+        for i, path in enumerate(paths):
+            if abs(path.theta1) > turnAngleLimit + EPSILON or abs(path.theta2) > turnAngleLimit + EPSILON:
+                lengths[i] = np.inf
     return paths[np.argmin(lengths)]
         
 # empty path of radius r at position p in direction d
