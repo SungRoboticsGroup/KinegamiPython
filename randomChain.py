@@ -44,12 +44,17 @@ def generateRandomChain(nJoints):
     return chain
 
 def test():
-    optimizations = [partial(squaredOptimize, childFraction=1, streamline=True, guarantee=True),
-                    partial(squaredOptimize, childFraction=1, streamline=False, guarantee=True),
-                    partial(linearOptimize, childFraction=1, streamline=False, guarantee=True)]
-    labels = ["Quadratic then Linear", 
-            "Quadratic",
-            "Linear"]
+    optimizations = [
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+    ]
+
+    labels = [
+            "Basic Traversal - DFS",
+            "Basic Traversal - BFS",
+            "Basic Traversal - Randomized"
+    ]
 
     lowerBounds = []
     results = []

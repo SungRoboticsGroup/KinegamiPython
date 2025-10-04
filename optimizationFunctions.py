@@ -1,16 +1,16 @@
 from KinematicTree import *
 import random 
+from treeTraversals import *
 
-def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, childFraction = 1, ignorePlacement=False, ignoreLater = False, parallelize = False, verbose=True):
+def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, 
+                           childFraction = 1, ignorePlacement=False, 
+                           ignoreLater = False, parallelize = False, 
+                           verbose=True, power=2, includeCollisionPenalty=True):
     parentIndex = subject.Parents[index]
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
     selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater)
-    def linkLoss(t, link, curveLossFactor = 2):
-        #d = (np.abs(t.Links[index].path.theta1 * curveLossFactor) ** 3 + np.abs(t.Links[index].path.theta2 * curveLossFactor) ** 3) + (np.arccos(np.clip((np.trace(t.Joints[index].ProximalDubinsFrame().R.T @ t.Joints[t.Parents[index]].DistalDubinsFrame().R) - 1) / 2, -1.0, 1.0))) * (1/t.Links[index].path.length + 1)
-        d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
-        childrenLoss = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
-        return t.Links[index].path.length ** 2 + t.getCollisionError(selectedIndices, selectedCapsules) * penaltyScale + childrenLoss# + d * t.r
+    
     def objective(params, returnWhich = False):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
@@ -75,7 +75,11 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, childFrac
 
     #calculate dist
     dist = subject.Links[index].path.length
-    bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
+    dist2 = dist*2
+    #bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
+    positionBound = [min(-dist2, initialPosition - dist2), max(dist2, initialPosition + dist2)]
+    angleBound = [-np.pi*2, np.pi*2]
+    bounds = [positionBound, angleBound]
 
     #initial swarm
     global joint_batch_objective_function
@@ -87,10 +91,10 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, childFrac
     init_pos[1] = np.array([0,0])
     #add random noise
     noise = np.zeros_like(init_pos[2:])
-    noise[:, 0] = np.random.uniform(-dist*2,dist*2, n_particles - 2)
+    noise[:, 0] = np.random.uniform(-dist2,dist2, n_particles - 2)
     noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
     init_pos[2:] += noise
-    init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist*2, dist*2)
+    init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist2, dist2)
     init_pos[2:, 1] = np.clip(init_pos[2:, 1], -np.pi*2, np.pi*2)
 
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
@@ -151,11 +155,6 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError, chil
 
     selectedIndices = [index] if ignorePlacement else ([index] + subject.Children[index])
     selectedCapsules = subject.selectCollisionCapsules(specificJointIndices=selectedIndices, ignoreLater=ignoreLater)
-
-    def linkLoss(t, link, curveLossFactor = np.pi):
-        d = t.Links[index].path.theta1 ** 2 + t.Links[index].path.theta2 ** 2
-        childrenLength = 0 if len(t.Children[index]) == 0 else np.mean([t.Links[idx].path.length ** 2 for idx in t.Children[index]]) * childFraction
-        return t.Links[index].path.length ** 2  + t.getCollisionError(selectedIndices, selectedCapsules) * collisionError + childrenLength# + d * t.r
 
     def objective(params):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
@@ -397,7 +396,11 @@ def squaredOptimize(subject, showSteps=False, childFraction=1, streamline = Fals
     
     return tree
 
-def linearOptimize(subject, showSteps=False, childFraction=1, streamline = False, guarantee=False, parallelize=False, evaluate=False, verbose=True, directory=None):
+def optimizeTree(subject, showSteps=False, childFraction=1, 
+                 streamline = False, guarantee=False, parallelize=False, 
+                 evaluate=False, verbose=True, directory=None, resetOnFail=False,
+                 traversal="dfs", direction="outward", orderBy="longest", power=2):
+    
     times = []
     lengths = []
 
@@ -454,73 +457,64 @@ def linearOptimize(subject, showSteps=False, childFraction=1, streamline = False
         
         for child in subject.Children[index]:
             optimizeFromIndex(child)
+
+    # create the traversal calls
+    treeTraversals = {
+        "dfs": partial(dfs, direction="outward", orderBy="longest"),
+        "bfs": partial(bfs, direction="outward", orderBy="longest"),
+        "randomized": partial(randomized, 
+                            power=power, 
+                            count=len(subject.Joints), 
+                            childFraction=childFraction,
+                            isWeighted=True),
+        # "squared": partial(squared, isOptimized=isOptimized, direction=direction, orderBy=orderBy)
+    }
+
+    print("Doing the optimization:")
+    for index in treeTraversals[traversal](subject):
+        try:
+            optimizeFromIndex(index)
+
+            if tree.detectCollisions(specificJointIndices=[index],
+                                     ignoreLater=False,
+                                     debug=True) > 0:
+                raise Exception("Post-optimization collision detected.")
+            
+            if isOptimized[subject.Parents[index]]:
+                isOptimized[index] = True
+                numOptimized += 1
+
+        except Exception as e:
+            if verbose:
+                print(f"Could not ignore children placement {index}: {e}")
+
+            if index != 0:
+                if isOptimized[tree.Parents[index]]:
+                    isOptimized[tree.Parents[index]] = False
+                    numOptimized -= 1
+
+            if resetOnFail:
+                print(f"Reset on fail occurred: joint {index} time: {time.time() - start}")
+                for idx in range(len(subject.Joints)):
+                    if isOptimized[idx]:
+                        isOptimized[idx] = False
+                        numOptimized -= 1
+
+            # try again
+            if isWaypoint(subject.Joints[index]):
+                tree, loss = optimizeWaypointPlacement(tree,index, maxiter=50, tol=subject.r/10, collisionError=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+            else:
+                tree, loss = optimizeJointPlacement(tree,index, maxiter=50, tol=subject.r/10, penaltyScale=collisionError, childFraction=childFraction, ignorePlacement=True, ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose)
+
+            if verbose:
+                print(tree.detectCollisions(specificJointIndices=[index], ignoreLater=(not guarantee), plot=False, debug=True))
+
+            break
     
-    for child in subject.Children[0]:
-        optimizeFromIndex(child)
-
-    print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
-
-    if directory != None:
-        tree.save(directory + "final", saveDir=False)
-    if (evaluate):
-        return tree, times, lengths
-    
-    return tree
-
-def perpetualOptimize(subject, iterations, weighted = True, showSteps=False, childFraction=1, parallelize=False, evaluate=False, verbose = True, directory = None):
-    def log(t, idx):
-        diff = time.time() - start
-        times.append(diff)
-        lengths.append(t.totalLength())
-        if directory != None:
-            t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
-    
-    times = []
-    lengths = []
-
-    for i in range(0, len(subject.Joints)):
-        subject.Joints[i].recomputeCollisionCapsules()
-
-    if subject.detectCollisions(debug=True) > 0:
-        print("Warning: Initial tree contains collisions.")
-    if showSteps and isinstance(subject.Joints[0], OrigamiJoint):
-        subject.show()
-
-    collisionError = 0
-    for i in range(0, len(subject.Joints)):
-        if len(subject.Children[i]) > 0:
-            continue
-        j = i
-        length = 0
-        while j != 0:
-            length += subject.Links[j].path.length ** 2
-            j = subject.Parents[j]
-        if length > collisionError:
-            collisionError = length
-
-    print(f"Collision error is {collisionError}")
- 
-    start = time.time()
-
-    tree = subject.copyAbbreviatedSelf()
-    log(tree, -1)
-
-    subIters = 50
-    tolerance = subject.r/10
-
-    for _ in range(0, iterations):
-        index = np.random.randint(1, len(tree.Joints))
-        if weighted:
-            weights = weights = [tree.Links[i].path.length for i in range(1,len(tree.Joints))]
-            index = random.choices(range(1,len(tree.Joints)), weights=weights, k=1)[0]
-
-        if isWaypoint(subject.Joints[index]):
-            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=subIters, tol=tolerance, collisionError=collisionError, childFraction=childFraction, ignoreLater = False, parallelize=parallelize, verbose=verbose)
-        else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=subIters, tol=tolerance, penaltyScale=collisionError, childFraction=childFraction, ignoreLater = False, parallelize=parallelize, verbose=verbose)
-        
         log(tree, index)
-        
+
+    if showSteps:
+        tree.show()
 
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
 
@@ -528,7 +522,5 @@ def perpetualOptimize(subject, iterations, weighted = True, showSteps=False, chi
         tree.save(directory + "final", saveDir=False)
     if (evaluate):
         return tree, times, lengths
-
-    return tree
-
     
+    return tree
