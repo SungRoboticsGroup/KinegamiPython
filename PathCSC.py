@@ -58,7 +58,8 @@ def pathErrorCSC(tDirMag, r, startPosition, startDir, endPosition, endDir,
     return PathCSC(tDirMag, r, startPosition, startDir, endPosition, endDir, 
                    circle1sign, circle2sign).error
 
-def shortestCSC(r, startPosition, startDir, endPosition, endDir):
+
+def solveCSC(r, startPosition, startDir, endPosition, endDir):
     startDir = startDir / norm(startDir)
     endDir = endDir / norm(endDir)
     
@@ -90,10 +91,19 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir):
     pathMM = PathCSC(solMM, r, startPosition, startDir, endPosition, endDir, -1, -1)
     
     paths = [pathPP, pathPM, pathMP, pathMM]
+    return paths
+
+
+def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=None, EPSILON=1e-6):
+    paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])
     # exclude invalid paths from length-min selection
     lengths[errorNorms > 0.001*r] = np.inf
+    if turnAngleLimit is not None:
+        for i, path in enumerate(paths):
+            if abs(path.theta1) > turnAngleLimit + EPSILON or abs(path.theta2) > turnAngleLimit + EPSILON:
+                lengths[i] = np.inf
     
     return paths[np.argmin(lengths)]
         
@@ -277,6 +287,60 @@ class PathCSC:
 
         #make a new plot and then call add to plot, then display that plot
         self.add(widget, showCircles, showPoses, startColor, endColor, 
+                       pathColor, cscBoundaryMarker, showTunit)
+        ax.set_aspect('equal')
+        ax.legend()
+        plt.show(block=block)
+
+    # add to existing matplotlib axis ax
+    def addToPlot(self, ax, showCircles=True, showPoses=True, 
+                  startColor='r', endColor='b', pathColor=pathColorDefault,
+                  cscBoundaryMarker='*', showTunit=False):
+        if showPoses:
+            # start pose
+            x1,y1,z1 = self.startPosition
+            u1,v1,w1 = self.startDir
+            ax.quiver(x1,y1,z1,u1,v1,w1,
+                      length=self.r, color=startColor, label='start')
+            # end pose
+            x2,y2,z2 = self.endPosition
+            u2,v2,w2 = self.endDir
+            ax.quiver(x2,y2,z2,u2,v2,w2,
+                      length=self.r, color=endColor, label='end')
+        
+        if showCircles:
+            # circles
+            c1x, c1y, c1z = Circle3D(self.r, 
+                            self.circleCenter1, self.circleNormal1).interpolate().T
+            ax.plot(c1x, c1y, c1z, color = startColor, linestyle='--')
+            c2x, c2y, c2z = Circle3D(self.r, 
+                            self.circleCenter2, self.circleNormal2).interpolate().T
+            ax.plot(c2x, c2y, c2z, color = endColor, linestyle='--')
+
+
+        # path arcs (C components)
+        a1x, a1y, a1z = Arc3D(self.circleCenter1, 
+                self.startPosition, self.startDir, self.theta1).interpolate().T
+        ax.plot(a1x, a1y, a1z, color = pathColor)
+        a2x, a2y, a2z = Arc3D(self.circleCenter2, 
+                self.turn2start, self.tUnit, self.theta2).interpolate().T
+        ax.plot(a2x, a2y, a2z, color = pathColor)
+        
+        # path S component
+        sx,sy,sz = np.array([self.turn1end, self.turn2start]).T
+        ax.plot(sx, sy, sz, color = pathColor, marker=cscBoundaryMarker)
+        
+        if showTunit:
+            x,y,z = self.turn1end
+            u,v,w = self.tUnit
+            ax.quiver(x,y,z,u,v,w,length=1, color='black', label='tUnit')
+    
+    
+    def show(self, showCircles=True, showPoses=True, 
+                  startColor='r', endColor='b', pathColor='g',
+                  cscBoundaryMarker='*', showTunit=False, block=blockDefault):
+        ax = plt.figure().add_subplot(projection='3d')
+        self.addToPlot(ax, showCircles, showPoses, startColor, endColor, 
                        pathColor, cscBoundaryMarker, showTunit)
         ax.set_aspect('equal')
         ax.legend()
