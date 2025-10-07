@@ -810,12 +810,12 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         super().wheelEvent(ev)
         self.parent_window.update_joint()
  
-class PointEditorWindow(QMainWindow):
+class WindowKinegamiGUI(QMainWindow):
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Kinegami Interactive Editor")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(0, 0, 1920, 1080)
 
         self.plot_widget = ClickableGLViewWidget(parent_window=self)
         self.setCentralWidget(self.plot_widget)
@@ -1340,14 +1340,15 @@ class PointEditorWindow(QMainWindow):
         self.mesh_scale = scale
 
     def log_version(self):
-        log_capacity = 100
-        autosave_frequency = 10
+        log_capacity = 100 #this is what's stored in runtime for undo/redo
+        autosave_frequency = 1 #saving everything for analysis: in other circumstances this should be more like 10
 
         # clear redo history on new version (include version index)
         self.versions = self.versions[:self.version_index + 1]
 
         if self.total_version_counter % autosave_frequency == 0 and not self.chain is None:
-            self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
+            #self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
+            self.save_chain(autosave_id=time.time()) #autosave with timestamp (seconds from unix epoch start)
         if len(self.versions) < log_capacity:
             self.versions.append(copy.deepcopy(self.chain))
         else:
@@ -2403,6 +2404,6 @@ class PointEditorWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = PointEditorWindow()
+    window = WindowKinegamiGUI()
     window.show()
     sys.exit(app.exec_())
