@@ -1024,12 +1024,14 @@ class WindowKinegamiGUI(QMainWindow):
         self.rotation_slider.setMaximum(360)
         self.rotation_slider.setValue(0)
         self.rotation_slider.setDisabled(True) 
-        self.rotation_slider.valueChanged.connect(self.adjust_rotation)
+        #self.rotation_slider.valueChanged.connect(self.adjust_rotation)
+        self.rotation_slider.sliderMoved.connect(self.adjust_rotation)
+        self.rotation_slider.sliderReleased.connect(self.rotation_slider_released)
 
         # self. = QLabel('Translate N/A Axis: 0', self)
         self.translation_slider = QSlider(Qt.Horizontal, self)
         self.translation_slider.sliderMoved.connect(self.adjust_translation)
-        self.translation_slider.sliderReleased.connect(self.reset_translation_tools)
+        self.translation_slider.sliderReleased.connect(self.translation_slider_released)
 
         # self.state_label = QLabel('Edit Joint N/A State: 0', self)
         self.state_slider = QSlider(Qt.Horizontal, self)
@@ -1057,11 +1059,11 @@ class WindowKinegamiGUI(QMainWindow):
         rotation_header_layout.addWidget(self.rotate_joint_label)
         rotation_layout.addLayout(rotation_header_layout)
         rotation_slider_layout = QHBoxLayout()
-        self.rotation_input = QLineEdit(self)
-        self.rotation_input.setPlaceholderText("Enter angle in degrees")
-        self.rotation_input.textChanged.connect(self.adjust_rotation)
+        self.rotation_textbox = QLineEdit(self)
+        self.rotation_textbox.setPlaceholderText("Enter angle in degrees")
+        self.rotation_textbox.returnPressed.connect(self.rotation_textbox_return)
         rotation_slider_layout.addWidget(self.rotation_slider)
-        rotation_slider_layout.addWidget(self.rotation_input)
+        rotation_slider_layout.addWidget(self.rotation_textbox)
         rotation_layout.addLayout(rotation_slider_layout)
 
         state_layout = QVBoxLayout()
@@ -1108,11 +1110,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.rotation_slider.setDisabled(True)
         self.translation_slider.setDisabled(True)
         self.state_slider.setDisabled(True)
-        self.rotation_input.setDisabled(True)
+        self.rotation_textbox.setDisabled(True)
         self.translation_textbox.setDisabled(True)
         self.state_input.setDisabled(True)
 
         self.reset_translation_tools()
+        self.reset_rotation_tools()
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
         self.options_dock = QDockWidget("Options", self)
@@ -1667,7 +1670,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.selected_arrow = -1
             self.selected_axis_name = 'N/A'
             self.update_joint()
-            self.update_rotation_slider()
+            self.reset_rotation_tools()
             self.reset_translation_tools()
             min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
             max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
@@ -1689,7 +1692,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.update_joint()
 
             if (self.selected_joint != -1):
-                self.update_rotation_slider()
+                self.reset_rotation_tools()
                 self.reset_translation_tools()
 
     @QtCore.pyqtSlot(int)
@@ -1700,7 +1703,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.selected_arrow = -1
             self.selected_axis_name = 'N/A'
             self.update_joint()
-            self.update_rotation_slider()
+            self.reset_rotation_tools()
             self.reset_translation_tools()
             min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
             max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
@@ -1739,7 +1742,7 @@ class WindowKinegamiGUI(QMainWindow):
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=False):
                 self.update_joint()
 
-            self.update_rotation_slider()
+            self.reset_rotation_tools()
             self.reset_translation_tools()
 
     def done_transforming(self, done):
@@ -1772,13 +1775,13 @@ class WindowKinegamiGUI(QMainWindow):
         else: 
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
                 self.update_joint()
-                self.update_rotation_slider()
+                self.reset_rotation_tools()
                 self.reset_translation_tools()
 
     def update_slider(self, slider_type):
         if (slider_type == "rotation"):
             slider = self.rotation_slider
-            textbox = self.rotation_input
+            textbox = self.rotation_textbox
 
             slider.setMinimum(-360)
             slider.setMaximum(360)
@@ -1835,14 +1838,7 @@ class WindowKinegamiGUI(QMainWindow):
         textbox.blockSignals(True)
         textbox.setText(slider_text)
         textbox.blockSignals(False)
-        textbox.setDisabled(False)
-
-    def update_rotation_slider(self):
-        self.update_slider("rotation")
-
-    def update_translation_slider(self):
-        self.update_slider("translation")       
-
+        textbox.setDisabled(False)    
 
     def update_state_slider(self):
         self.update_slider("state")
@@ -1984,13 +1980,46 @@ class WindowKinegamiGUI(QMainWindow):
             localOrient = self.local_orient_slider_checkbox.isChecked()
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
                 self.update_joint()
-                self.old_rot_val = int(value)
-                self.update_rotation_slider()
+                self.old_rot_val = int(value)             
+                self.rotation_slider.blockSignals(True)
+                self.rotation_slider.setDisabled(False)
+                self.rotation_slider.blockSignals(False)
+                self.rotation_textbox.blockSignals(True)
+                self.rotation_textbox.setText(str(value))
+                self.rotation_textbox.blockSignals(False)
+                self.rotation_textbox.setDisabled(False)
             else:
                 self.rotation_slider.blockSignals(True)
                 self.rotation_slider.setValue(int(self.old_rot_val))
                 self.rotation_slider.blockSignals(False)
 
+    def rotation_textbox_return(self):
+        try:
+            value = float(self.rotation_textbox.text())
+        except ValueError:
+            value = 0
+        self.adjust_rotation(value)
+        self.reset_rotation_tools()
+        self.log_version()
+
+    def rotation_slider_released(self):
+        self.reset_rotation_tools()
+        self.log_version()
+    
+    def reset_rotation_tools(self):
+        r = self.chain.r if self.chain else 1
+        self.rotation_slider.setMinimum(-360)
+        self.rotation_slider.setMaximum(360)
+        self.rotation_slider.setValue(0)
+        self.old_rot_val = 0
+        self.rotation_textbox.setText("0")
+        if self.selected_arrow == -1 or self.selected_joint == -1:
+            self.rotation_slider.setDisabled(True)
+            self.rotation_textbox.setDisabled(True)
+        else:
+            self.rotation_slider.setDisabled(False)
+            self.rotation_textbox.setDisabled(False) 
+    
     def adjust_translation(self, value):
         if not isinstance(value, float) and not isinstance(value, int):
             value = value.strip()
@@ -2028,6 +2057,11 @@ class WindowKinegamiGUI(QMainWindow):
             value = 0
         self.adjust_translation(value)
         self.reset_translation_tools()
+        self.log_version()
+    
+    def translation_slider_released(self):
+        self.reset_translation_tools()
+        self.log_version()
     
     def reset_translation_tools(self):
         r = self.chain.r if self.chain else 1
@@ -2042,7 +2076,6 @@ class WindowKinegamiGUI(QMainWindow):
         else:
             self.translation_slider.setDisabled(False)
             self.translation_textbox.setDisabled(False)
-        self.log_version()
 
     def adjust_state(self, value):
         if not isinstance(value, float) and not isinstance(value, int):
