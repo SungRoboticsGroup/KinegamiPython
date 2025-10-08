@@ -220,7 +220,7 @@ class AddChainWidget(QWidget):
             self.window().add_chain_popup_dock.setVisible(False)
             self.window().add_chain_dock.setVisible(True)
             self.window().radius_slider.setEnabled(True)
-            self.window().joint_range_slider.setEnabled(True)
+            #self.window().joint_range_slider.setEnabled(True)
         except ValueError:
             self.show_error("Please enter valid integers.")
 
@@ -1085,6 +1085,7 @@ class WindowKinegamiGUI(QMainWindow):
         checkbox_layout.addWidget(self.propogate_slider_checkbox)
         checkbox_layout.addWidget(self.local_orient_slider_checkbox)
 
+        """
         joint_range_layout = QHBoxLayout()
         joint_range_label = QLabel("Joint Range of Motion:")
         self.joint_range_slider = QSlider(Qt.Horizontal, self)
@@ -1095,13 +1096,14 @@ class WindowKinegamiGUI(QMainWindow):
         self.joint_range_slider.valueChanged.connect(self.onUpdateJointState)
         joint_range_layout.addWidget(joint_range_label)
         joint_range_layout.addWidget(self.joint_range_slider)
+        """
 
         self.joint_editing_layout.addLayout(state_layout)
         self.joint_editing_layout.addLayout(checkbox_layout)
         self.joint_editing_layout.addLayout(rotation_layout)
         self.joint_editing_layout.addLayout(translation_layout)
         self.joint_editing_layout.addLayout(radius_layout)
-        self.joint_editing_layout.addLayout(joint_range_layout)
+        #self.joint_editing_layout.addLayout(joint_range_layout)
 
         self.old_rot_val = 0
         self.old_trans_val = 0
@@ -1337,7 +1339,8 @@ class WindowKinegamiGUI(QMainWindow):
         value = value / 10.0
         self.radius = value
         self.chain.changeRadius(value)
-        self.update_joint()
+        # self.update_joint() # now called in joint_selection_changed
+        self.joint_selection_changed(self.selected_joint, force=True)
 
     @QtCore.pyqtSlot(float)
     def change_mesh_scale(self, scale):
@@ -1665,8 +1668,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.update_joint()
 
     @QtCore.pyqtSlot(int)
-    def joint_selection_changed(self, index):
-        if index != self.selected_joint:
+    def joint_selection_changed(self, index, force : bool = False):
+        if force or index != self.selected_joint:
             self.selected_joint = index
             self.selected_arrow = -1
             self.selected_axis_name = 'N/A'
@@ -2390,7 +2393,8 @@ class WindowKinegamiGUI(QMainWindow):
             self.selected_joint = 0
 
         self.update_joint()
-        self.log_version()
+        #self.log_version() # now called in joint_selection_changed
+        self.joint_selection_changed(self.selected_joint, force=True)
     
     # def add_joint_func(self, joint_type):
     #     numSides = self.num_sides
