@@ -1029,7 +1029,7 @@ class WindowKinegamiGUI(QMainWindow):
         # self. = QLabel('Translate N/A Axis: 0', self)
         self.translation_slider = QSlider(Qt.Horizontal, self)
         self.translation_slider.sliderMoved.connect(self.adjust_translation)
-        self.translation_slider.sliderReleased.connect(self.reset_translation_slider)
+        self.translation_slider.sliderReleased.connect(self.reset_translation_tools)
 
         # self.state_label = QLabel('Edit Joint N/A State: 0', self)
         self.state_slider = QSlider(Qt.Horizontal, self)
@@ -1046,7 +1046,7 @@ class WindowKinegamiGUI(QMainWindow):
         translation_slider_layout = QHBoxLayout()
         self.translation_textbox = QLineEdit(self)
         self.translation_textbox.setPlaceholderText("Enter distance")
-        self.translation_textbox.textEdited.connect(self.adjust_translation)
+        self.translation_textbox.returnPressed.connect(self.translation_textbox_return)
         translation_slider_layout.addWidget(self.translation_slider)
         translation_slider_layout.addWidget(self.translation_textbox)
         translation_layout.addLayout(translation_slider_layout)
@@ -1112,7 +1112,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.translation_textbox.setDisabled(True)
         self.state_input.setDisabled(True)
 
-        self.reset_translation_slider()
+        self.reset_translation_tools()
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
         self.options_dock = QDockWidget("Options", self)
@@ -1668,7 +1668,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.selected_axis_name = 'N/A'
             self.update_joint()
             self.update_rotation_slider()
-            self.reset_translation_slider()
+            self.reset_translation_tools()
             min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
             max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
             current = math.degrees(self.chain.Joints[self.selected_joint].state)
@@ -1690,7 +1690,7 @@ class WindowKinegamiGUI(QMainWindow):
 
             if (self.selected_joint != -1):
                 self.update_rotation_slider()
-                self.reset_translation_slider()
+                self.reset_translation_tools()
 
     @QtCore.pyqtSlot(int)
     def link_selection_changed(self, index):
@@ -1701,7 +1701,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.selected_axis_name = 'N/A'
             self.update_joint()
             self.update_rotation_slider()
-            self.reset_translation_slider()
+            self.reset_translation_tools()
             min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
             max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
             current = math.degrees(self.chain.Joints[self.selected_joint].state)
@@ -1740,7 +1740,7 @@ class WindowKinegamiGUI(QMainWindow):
                 self.update_joint()
 
             self.update_rotation_slider()
-            self.reset_translation_slider()
+            self.reset_translation_tools()
 
     def done_transforming(self, done):
         if done:
@@ -1773,7 +1773,7 @@ class WindowKinegamiGUI(QMainWindow):
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
                 self.update_joint()
                 self.update_rotation_slider()
-                self.reset_translation_slider()
+                self.reset_translation_tools()
 
     def update_slider(self, slider_type):
         if (slider_type == "rotation"):
@@ -2021,13 +2021,27 @@ class WindowKinegamiGUI(QMainWindow):
                 self.translation_slider.blockSignals(True)
                 self.translation_slider.setValue(int(self.old_trans_val * 10))
     
-    def reset_translation_slider(self):
+    def translation_textbox_return(self):
+        try:
+            value = float(self.translation_textbox.text()) * 10
+        except ValueError:
+            value = 0
+        self.adjust_translation(value)
+        self.reset_translation_tools()
+    
+    def reset_translation_tools(self):
         r = self.chain.r if self.chain else 1
         self.translation_slider.setMinimum(int(-100*r))
         self.translation_slider.setMaximum(int(100*r))
         self.translation_slider.setValue(0)
-        self.translation_textbox.setText("0")
         self.old_trans_val = 0
+        self.translation_textbox.setText("0")
+        if self.selected_arrow == -1 or self.selected_joint == -1:
+            self.translation_slider.setDisabled(True)
+            self.translation_textbox.setDisabled(True)
+        else:
+            self.translation_slider.setDisabled(False)
+            self.translation_textbox.setDisabled(False)
         self.log_version()
 
     def adjust_state(self, value):
