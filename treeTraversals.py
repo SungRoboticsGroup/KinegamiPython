@@ -162,8 +162,6 @@ def squared(subject, isOptimized, direction="outward", orderBy="default"):
             j = subject.Parents[j]
         unoptimized_chain.reverse()
 
-        # print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
-
         # yield one joint at a time
         for node in unoptimized_chain:
             if not isOptimized[node]:

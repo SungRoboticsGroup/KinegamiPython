@@ -12,7 +12,7 @@ import threading
 import os 
 import shutil
 
-jointCount = 2
+jointCount = 3
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -45,15 +45,27 @@ def generateRandomChain(nJoints):
 
 def test():
     optimizations = [
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
     ]
 
     labels = [
-            "Basic Traversal - DFS",
-            "Basic Traversal - BFS",
-            "Basic Traversal - Randomized"
+            # "DFS - Outward Longest",
+            # "DFS - Outward Shortest",
+            # "DFS - Inward Longest",
+            # "DFS - Inward Shortest",
+            # "BFS - Outward Longest",
+            # "BFS - Outward Shortest",
+            # "BFS - Inward Longest",
+            # "BFS - Inward Shortest",
+            "Randomized"
     ]
 
     lowerBounds = []
