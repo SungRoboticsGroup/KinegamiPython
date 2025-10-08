@@ -1024,7 +1024,6 @@ class WindowKinegamiGUI(QMainWindow):
         self.rotation_slider.setMaximum(360)
         self.rotation_slider.setValue(0)
         self.rotation_slider.setDisabled(True) 
-        #self.rotation_slider.valueChanged.connect(self.adjust_rotation)
         self.rotation_slider.sliderMoved.connect(self.adjust_rotation)
         self.rotation_slider.sliderReleased.connect(self.rotation_slider_released)
 
@@ -1038,7 +1037,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.state_slider.setMinimum(-100)
         self.state_slider.setMaximum(100)
         self.state_slider.setValue(0)
-        self.state_slider.valueChanged.connect(self.adjust_state)
+        self.state_slider.sliderMoved.connect(self.state_slider_moved)
+        self.state_slider.sliderReleased.connect(self.state_slider_released)
 
         translation_layout = QVBoxLayout()
         translation_header_layout = QHBoxLayout()
@@ -1069,11 +1069,11 @@ class WindowKinegamiGUI(QMainWindow):
         state_layout = QVBoxLayout()
         state_layout.addWidget(self.current_state_label)
         state_slider_layout = QHBoxLayout()
-        self.state_input = QLineEdit(self)
-        self.state_input.setPlaceholderText("Enter state")
-        self.state_input.textChanged.connect(self.adjust_state)
+        self.state_textbox = QLineEdit(self)
+        self.state_textbox.setPlaceholderText("Enter state")
+        self.state_textbox.returnPressed.connect(self.state_textbox_return)
         state_slider_layout.addWidget(self.state_slider)
-        state_slider_layout.addWidget(self.state_input)
+        state_slider_layout.addWidget(self.state_textbox)
         state_layout.addLayout(state_slider_layout)
 
         checkbox_layout = QHBoxLayout() 
@@ -1105,17 +1105,18 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.old_rot_val = 0
         self.old_trans_val = 0
-        self.old_state_val = 0
+        self.old_state_slider_val = 0
         self.old_radius_val = 1
         self.rotation_slider.setDisabled(True)
         self.translation_slider.setDisabled(True)
         self.state_slider.setDisabled(True)
         self.rotation_textbox.setDisabled(True)
         self.translation_textbox.setDisabled(True)
-        self.state_input.setDisabled(True)
+        self.state_textbox.setDisabled(True)
 
         self.reset_translation_tools()
         self.reset_rotation_tools()
+        self.set_state_tools()
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
         self.options_dock = QDockWidget("Options", self)
@@ -1672,12 +1673,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.update_joint()
             self.reset_rotation_tools()
             self.reset_translation_tools()
-            min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
-            max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
-            current = math.degrees(self.chain.Joints[self.selected_joint].state)
-            self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
-            self.update_state_slider()
-            #self.update_radius_slider()
+            self.set_state_tools()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -1705,11 +1701,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.update_joint()
             self.reset_rotation_tools()
             self.reset_translation_tools()
-            min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
-            max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
-            current = math.degrees(self.chain.Joints[self.selected_joint].state)
-            self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
-            self.update_state_slider()
+            self.set_state_tools()
             #self.update_radius_slider()
 
     @QtCore.pyqtSlot(np.ndarray)
@@ -1778,6 +1770,7 @@ class WindowKinegamiGUI(QMainWindow):
                 self.reset_rotation_tools()
                 self.reset_translation_tools()
 
+    """
     def update_slider(self, slider_type):
         if (slider_type == "rotation"):
             slider = self.rotation_slider
@@ -1825,7 +1818,7 @@ class WindowKinegamiGUI(QMainWindow):
             if (set_slider):
                 self.state_slider.setMinimum(int(min))
                 self.state_slider.setMaximum(int(max))
-                self.old_state_val = current
+                self.old_state_slider_val = current
 
         if not set_slider:
             slider_value = 0
@@ -1842,6 +1835,7 @@ class WindowKinegamiGUI(QMainWindow):
 
     def update_state_slider(self):
         self.update_slider("state")
+    """
 
     def rotation_angle_from_matrix(self, rotation_matrix, axis):
         rot = R.from_matrix(rotation_matrix)
@@ -2077,23 +2071,132 @@ class WindowKinegamiGUI(QMainWindow):
             self.translation_slider.setDisabled(False)
             self.translation_textbox.setDisabled(False)
 
-    def adjust_state(self, value):
-        if not isinstance(value, float) and not isinstance(value, int):
-            value = value.strip()
-        value = float(value) if value else 0
-        actualVal = math.radians(value)
+    
+    def state_slider_moved(self, value):
         if self.chain and self.selected_joint != -1:
-            if self.chain.setJointState(self.selected_joint, actualVal):
+            if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint):
+                # Prismatic joints: slider value is scaled by 100*r
+                actualState = value / (100 * self.chain.r)
+            elif isinstance(self.chain.Joints[self.selected_joint], RevoluteJoint):
+                # Revolute joints: slider value is in degrees, actual state is radians
+                actualState = math.radians(value)
+            else: # Waypoint (but it shouldn't let you move the slider in the first place in that case)
+                print("Warning: Tried to move state slider on a waypoint, which should not be possible.")
+                return
+            if self.chain.setJointState(self.selected_joint, actualState):
                 self.update_joint()
-                self.OldStateVal = value
-                min = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[0])
-                max = math.degrees(self.chain.Joints[self.selected_joint].stateRange()[1])
-                current = math.degrees(self.chain.Joints[self.selected_joint].state)
-                self.current_state_label.setText(f"Min State: {int(min)} ≤ Current State: {int(current)} ≤ Max State: {int(max)}")
-                self.update_state_slider()
+                self.set_state_tools()
             else:
                 self.state_slider.blockSignals(True)
-                self.state_slider.setValue(int(self.old_state_val))
+                self.state_slider.setValue(int(self.old_state_slider_val))
+                self.state_slider.blockSignals(False)
+    
+    """
+    def adjust_state(self, stateTextboxValue):
+        if not isinstance(stateTextboxValue, float) and not isinstance(stateTextboxValue, int):
+            stateTextboxValue = stateTextboxValue.strip()
+        stateFromTextbox = float(stateTextboxValue) if stateTextboxValue else 0
+        scaledInfo = self.scaled_state_info(stateFromTextbox)
+        if not scaledInfo is None:
+            actual, slider, textbox = scaledInfo
+            actualState = actual[2]
+            if self.chain.setJointState(self.selected_joint, actualState):
+                self.update_joint()
+                self.current_state_label.setText(f"Min State: {textbox[0]} ≤ Current State: {textbox[2]} ≤ Max State: {textbox[1]}")
+                self.old_state_slider_val = slider[2]
+                self.state_slider.blockSignals(True)
+                self.state_slider.setValue(slider[2])
+                self.state_slider.setDisabled(False)
+                self.state_slider.blockSignals(False)
+                self.state_textbox.blockSignals(True)
+                self.state_textbox.setText(textbox[2])
+                self.state_textbox.blockSignals(False)
+                self.state_textbox.setDisabled(False)
+            else:
+                self.state_slider.blockSignals(True)
+                self.state_slider.setValue(int(self.old_state_slider_val))
+    """
+
+    def state_textbox_return(self):
+        if self.chain and self.selected_joint != -1:
+            try:
+                value = float(self.state_textbox.text())
+            except ValueError:
+                return #TODO: handle this with QLineEdit class's setValidator method instead
+            if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint):
+                actualState = value
+            elif isinstance(self.chain.Joints[self.selected_joint], RevoluteJoint):
+                actualState = math.radians(value)
+            else:
+                print("Warning: Tried to edit state textbox on a waypoint, which should not be possible.")
+                return
+            if self.chain.setJointState(self.selected_joint, actualState):
+                self.update_joint()
+                self.set_state_tools()
+                self.log_version()
+
+    def state_slider_released(self):
+        self.set_state_tools()
+        self.log_version()
+    
+    # Returns tuple of tuples: each inner tuple is (min, max, and state) values
+    # of a particular version of joint state information: actual, slider, and textbox in that order. 
+    # Revolute joints are actually in radians, but used in degrees in the slider and text box.
+    # Prismatic joints are actually in distance units and displayed as such in the text box, 
+    # but the slider scales it by 100*r because it needs integer values.
+    # Returns None if the joint is a waypoint, no joint is selected, or no chain exists.
+    # The state used is the current joint state unless textboxStateInput is provided
+    # (in which case it is interpreted as degrees for revolute joints and distance units for prismatic joints).
+    def scaled_state_info(self, state=None):
+        if self.chain and self.selected_joint != -1:
+            joint = self.chain.Joints[self.selected_joint]
+            stateRange = self.chain.Joints[self.selected_joint].stateRange()
+            if isinstance(joint, PrismaticJoint):
+                stateActual = self.chain.Joints[self.selected_joint].state if state is None else max(stateRange[0], min(stateRange[1], state))
+                actual = (stateRange[0], stateRange[1], stateActual)
+                scale = 100 * self.chain.r
+                scaled = (int(stateRange[0] * scale), int(stateRange[1] * scale), int(stateActual * scale))
+                actual, slider, textbox = actual, scaled, actual
+                return (actual, slider, textbox)
+            elif isinstance(joint, RevoluteJoint):
+                if state is None:
+                    stateRadians = self.chain.Joints[self.selected_joint].state
+                    stateDegrees = math.degrees(stateRadians)
+                else:
+                    stateDegrees = state
+                    stateRadians = math.radians(stateDegrees)
+                radians = (stateRange[0], stateRange[1], stateRadians)
+                degrees = (int(math.degrees(stateRange[0])), int(math.degrees(stateRange[1])), int(stateDegrees))
+                actual, slider, textbox = radians, degrees, degrees
+                return (actual, slider, textbox)
+            elif isinstance(joint, Waypoint):
+                return None
+        else:
+            return None
+        
+    
+    def set_state_tools(self):
+        scaledInfo = self.scaled_state_info()
+        if scaledInfo is None:
+            self.state_slider.setDisabled(True)
+            self.state_textbox.setDisabled(True)
+            self.state_slider.setMinimum(0)
+            self.state_slider.setMaximum(0)
+            self.state_slider.setValue(0)
+            self.state_textbox.setText("0")
+        else:
+            self.state_slider.setDisabled(False)
+            self.state_textbox.setDisabled(False)
+            actual, slider, textbox = scaledInfo
+            minText, maxText, currentText = textbox
+            minSlider, maxSlider, currentSlider = slider
+            self.state_slider.setMinimum(minSlider)
+            self.state_slider.setMaximum(maxSlider)
+            self.state_slider.setValue(currentSlider)
+            self.old_state_slider_val = currentSlider
+            decimals = 2 if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint) else 0
+            self.state_textbox.setText(str(np.round(currentText, decimals)))
+            self.current_state_label.setText(f"Min State: {np.round(minText, decimals)} ≤ Current State: {np.round(currentText, decimals)} ≤ Max State: {np.round(maxText, decimals)}")
 
     def delete_joint(self):
         # dialog = DeleteDialog(self)

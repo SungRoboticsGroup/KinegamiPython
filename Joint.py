@@ -260,9 +260,7 @@ class Joint(ABC):
         if local:
             axes = [self.Pose.R[:,i] for i in range(3)]
         else:
-            axes = [np.array([1,0,0]),
-                    np.array([0,1,0]),
-                    np.array([0,0,1])]
+            axes = np.eye(3)
         if frame:
             axes = [frame.R[:,i] for i in range(3)]
 
