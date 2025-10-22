@@ -33,6 +33,8 @@ def linkLoss(tree : KinematicTree, index : int, power=2, childFraction=1,
     if len(tree.Children[index]) > 0 and childFraction > 0: 
         loss += np.sum([tree.Links[idx].path.length ** 2 for idx in tree.Children[index]]) * childFraction
 
+    # print("loss (no collision):", loss)
+
     # collision penalty (optional)
     if includeCollisionPenalty:
         for i in range(0, len(configurations)):
@@ -159,10 +161,8 @@ def squared(subject, isOptimized, direction="outward", orderBy="default"):
 
         while not isOptimized[j]:
             unoptimized_chain.append(j)
-            j = subject.Parents[j]
-        unoptimized_chain.reverse()
-
-        # print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
+        
+        print(f"\nNext chain to optimize (leaf {leaf}): {unoptimized_chain}")
 
         # yield one joint at a time
         for node in unoptimized_chain:
@@ -325,3 +325,4 @@ def testRandomTrees():
 # print("\nFinal optimization status:")
 # for i, status in enumerate(isOptimized):
 #     print(f"  Joint {i}: {'YES' if status else 'NO'}")
+

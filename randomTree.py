@@ -11,17 +11,25 @@ import threading
 import os 
 import shutil
 import re
+from datetime import datetime
 
 jointCount = 12
 probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
 title = str(jointCount)+" Joint " + ("Chains" if probabilityOfBranching == 0 else "Trees") + (" Sparse" if sparse else " Dense")
-treeCount = 3
+treeCount = 1
 restartFrom = 0
 multipleIterations=False
 
-os.makedirs("sim_results/" + title, exist_ok=True)
+np.random.seed(44)
+saved_state = np.random.get_state()
+
+timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+base_dir = "Trials Before Experiments"
+experiment_name = f"{timestamp}_Joints{jointCount}_Trees{treeCount}_Seed{44}"
+results_dir = os.path.join(base_dir, experiment_name)
+os.makedirs(results_dir, exist_ok=True)
 
 
 def generateTree(nJoints):
@@ -59,25 +67,29 @@ def generateTree(nJoints):
     return initialTree
 
 def testRandomTrees():
-    optimizations = [partial(squaredOptimize, childFraction=0,streamline=True,guarantee=True),
-                    partial(squaredOptimize, childFraction=0,streamline=True,guarantee=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=False,resetOnFail=False),
-                    partial(squaredOptimize, childFraction=0,streamline=False,guarantee=True),
-                    partial(linearOptimize, childFraction=0, streamline=False,guarantee=False),
-                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=False),
-                    partial(squaredOptimize, childFraction=1,streamline=True,guarantee=True),
-                    partial(perpetualOptimize, iterations=jointCount * 2, childFraction=1)]
+    optimizations = [
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+    ]
 
-    labels = ["Streamline + Guarantee (SG)", 
-            "Streamline No Guarantee (SNG)",
-            "No Streamline No Guarantee (NSNG)",
-            "NSNG, No Reset on Fail",
-            "No Streamline Guarantee (NSG)",
-            "Linear (L)",
-            "Equal Child No Guarantee (ECNG)",
-            "Equal Child Guarantee (ECG)",
-            "Perpetual (P)"]
+    labels = [
+            "DFS - Outward Longest",
+            "DFS - Outward Shortest",
+            "DFS - Inward Longest",
+            "DFS - Inward Shortest",
+            "BFS - Outward Longest",
+            "BFS - Outward Shortest",
+            "BFS - Inward Longest",
+            "BFS - Inward Shortest",
+            "Randomized"
+    ]
 
     lowerBounds = []
     results = []
@@ -89,19 +101,31 @@ def testRandomTrees():
 
     for i in range(restartFrom,treeCount):
         print(f"\n\nConstructing tree {i}")
+        # Reset random state before each trial to ensure deterministic behavior
+        np.random.set_state(saved_state)
         construct = generateTree(jointCount)
-        construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
+        tree_save_path = os.path.join(results_dir, f"{i}.txt")
+        
+        # Save using repr() representation
+        with open(tree_save_path, 'w') as f:
+            f.write(repr(construct))
+            
+        construct.save(os.path.join(results_dir, str(i)), saveDir=False)
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
-            direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
+            direc = os.path.join(results_dir, str(i), labels[no])
             os.makedirs(direc, exist_ok=True)
+            # Reset random state before each optimization to ensure deterministic behavior
+            np.random.set_state(saved_state)
             optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
                     print(f"Trying loss function {no} for the {count}th time")
+                    # Reset random state before each retry
+                    np.random.set_state(saved_state)
                     optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
@@ -131,7 +155,7 @@ def testRandomTrees():
 
         plt.grid(True)
         # save to an image file
-        plt.savefig("sim_results/" + str(title) + "/example" + str(index) + ".png")
+        plt.savefig(os.path.join(results_dir, f"example{index}.png"))
         plt.show()
 
 def generate_colors(x, cmap_name="rainbow"):
@@ -171,3 +195,6 @@ def plotColoredTrees(directory, collection = []):
         trees[-1].show()
     else:
         plotCollection(collection)
+
+
+testRandomTrees()

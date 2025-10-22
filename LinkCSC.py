@@ -92,6 +92,18 @@ class LinkCSC:
             self.elbow2BoundingBall = Ball(self.EndDubinsPose.t, self.r)
 
         self.collisionCapsules = self.getCapsules()
+
+    def __repr__(self):
+        return (
+            "LinkCSC("
+            f"r={repr(self.r)},"
+            f"StartDubinsPose={repr(self.StartDubinsPose)},"
+            f"EndDubinsPose={repr(self.EndDubinsPose)},"
+            f"maxAnglePerElbow={repr(self.maxAnglePerElbow)},"
+            f"path={repr(self.path)},"
+            f"EPSILON={repr(self.EPSILON)},"
+            ")"
+        )
     
     def branchingParameters(self):
         dir1 = self.StartDubinsPose.R[:,0]

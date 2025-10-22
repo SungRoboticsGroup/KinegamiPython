@@ -59,6 +59,22 @@ class KinematicTree(Generic[J]):
         if self.boundingBall.r < self.r:
             self.boundingBall = Ball(root.Pose.t, self.r)
         self.Children = [[]]
+
+    def __repr__(self):
+        numpy_precision = np.get_printoptions()['precision']
+        if numpy_precision < 16:
+            np.set_printoptions(precision=16)
+        output = (
+            f"KinematicTree(root={repr(self.Joints[0])}, "
+            f"maxAnglePerElbow={repr(self.maxAnglePerElbow)}, "
+            f"joints={repr(self.Joints)}, "
+            f"links={repr(self.Links)}, "
+            f"parents={repr(self.Parents)}, "
+            f"children={repr(self.Children)}, "
+            f"boundingBall={repr(self.boundingBall)})"
+        )
+        np.set_printoptions(precision=numpy_precision)
+        return output
     
     def dataDeepCopy(self):
         return copy.deepcopy([self.r, self.Joints, self.Parents, 

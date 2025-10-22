@@ -11,17 +11,24 @@ from functools import partial
 import threading
 import os 
 import shutil
+from datetime import datetime
 
 jointCount = 2
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
-chainCount = 1
+chainCount = 1  
 restartFrom = 0
 multipleIterations=False
-np.random.seed(42)
 
-os.makedirs("sim_results/" + title, exist_ok=True)
+np.random.seed(44)
+saved_state = np.random.get_state()
+
+timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+base_dir = "Trials Before Experiments"
+experiment_name = f"{timestamp}_Joints{jointCount}_Chains{chainCount}_Seed{44}"
+results_dir = os.path.join(base_dir, experiment_name)
+os.makedirs(results_dir, exist_ok=True)
 
 def generateRandomChain(nJoints):
     bounds = (-cubeSize/2, cubeSize/2)
@@ -46,14 +53,26 @@ def generateRandomChain(nJoints):
 def test():
     optimizations = [
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="randomized", power=3)
     ]
 
     labels = [
-            "Basic Traversal - DFS",
-            "Basic Traversal - BFS",
-            "Basic Traversal - Randomized"
+            "DFS - Outward Longest",
+            "DFS - Outward Shortest",
+            "DFS - Inward Longest",
+            "DFS - Inward Shortest",
+            "BFS - Outward Longest",
+            "BFS - Outward Shortest",
+            "BFS - Inward Longest",
+            "BFS - Inward Shortest",
+            "Randomized"
     ]
 
     lowerBounds = []
@@ -66,19 +85,30 @@ def test():
 
     for i in range(restartFrom,chainCount):
         print(f"\n\nConstructing tree {i}")
+        # Reset random state before each trial to ensure deterministic behavior
+        np.random.set_state(saved_state)
         construct = generateRandomChain(jointCount)
-        construct.save("sim_results/" + title + "/" + str(i), saveDir=False)
+        tree_save_path = os.path.join(results_dir, f"{i}.txt")
+        
+        # Save using repr() representation
+        with open(tree_save_path, 'w') as f:
+            f.write(repr(construct))
+
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
-            direc = "sim_results/" + title + "/" + str(i) + "/" + labels[no] + "/"
+            direc = os.path.join(results_dir, str(i), labels[no])
             os.makedirs(direc, exist_ok=True)
+            # Reset random state before each optimization to ensure deterministic behavior
+            np.random.set_state(saved_state)
             optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
                     print(f"Trying loss function {no} for the {count}th time")
+                    # Reset random state before each retry
+                    np.random.set_state(saved_state)
                     optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
@@ -107,9 +137,10 @@ def test():
         plt.legend()
 
         plt.grid(True)
-        # save to an image file
-        plt.savefig("sim_results/" + str(title) + "/example" + str(index) + ".png")
-        plt.show()
+        # save to an image file in the results directory
+        plot_save_path = os.path.join(results_dir, f"plot_{index}.png")
+        plt.savefig(plot_save_path, dpi=300, bbox_inches='tight')
+        plt.close()
 
 def generate_colors(x, cmap_name="rainbow"):
     cmap = plt.get_cmap(cmap_name)
