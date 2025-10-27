@@ -91,6 +91,23 @@ class LinkCSC:
             self.Elbow2StartFrame = self.EndDubinsPose
             self.elbow2BoundingBall = Ball(self.EndDubinsPose.t, self.r)
 
+        # Pre-compute lengths and arcs for interpolation
+        self.lengthC1 = self.r * self.path.theta1 if self.elbow1 else 0
+        self.lengthS = self.path.tMag
+        self.lengthC2 = self.r * self.path.theta2 if self.elbow2 else 0
+        
+        if self.lengthC1 > 0:
+            self.arc1 = Arc3D(self.path.circleCenter1, self.StartDubinsPose.t,
+                             self.StartDubinsPose.R[:,0], self.path.theta1)
+        else:
+            self.arc1 = None
+            
+        if self.lengthC2 > 0:
+            self.arc2 = Arc3D(self.path.circleCenter2, self.path.turn2start,
+                             self.path.tUnit, self.path.theta2)
+        else:
+            self.arc2 = None
+
         self.collisionCapsules = self.getCapsules()
     
     def __repr__(self):
@@ -375,3 +392,37 @@ class LinkCSC:
         faces = mesh_data.tri_verts
         tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
         tri_mesh.export(filename)
+
+
+    def interpolateAt(self, t : float) -> np.ndarray:
+        """
+        Return the 3D position at parameter t in [0, 1] along the CSC path.
+        """
+        assert 0 <= t <= 1, "Parameter t must be in [0, 1]"
+
+        totalLength = self.lengthC1 + self.lengthS + self.lengthC2
+
+        if totalLength < self.DISTANCE_EPSILON:
+            return self.StartDubinsPose.t
+        
+        s = t * totalLength
+
+        if s <= self.lengthC1:
+            if self.arc1:
+                t1 = s / self.lengthC1
+                return self.arc1.interpolateAt(t1)
+            else:
+                return self.StartDubinsPose.t
+        elif s <= self.lengthC1 + self.lengthS:
+            t2 = s - self.lengthC1
+            return self.path.turn1end + t2 * self.path.tUnit
+        else:
+            if self.arc2:
+                localS = s - self.lengthC1 - self.lengthS
+                t3 = localS / self.lengthC2
+                return self.arc2.interpolateAt(t3)
+            else:
+                return self.EndDubinsPose.t
+            
+    def interpolate(self, count=10) -> np.ndarray:
+        return np.array([self.interpolateAt(t) for t in np.linspace(0, 1, count)])

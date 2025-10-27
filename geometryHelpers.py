@@ -829,6 +829,22 @@ class Arc3D:
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
     
+    def interpolateAt(self, t: float) -> np.ndarray:
+        """
+        Return 3D position at parameter t in [0, 1] along the arc
+        """
+        assert 0 <= t <= 1, "Parameter t must be in [0, 1]"
+
+        angle = t * self.theta
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+
+        # construct basis for circle plane
+        uhat = -self.startNormal
+        vhat = cross(self.binormal, uhat)
+
+        return self.circleCenter + u * uhat + v * vhat
+    
     def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
         if showDirections:
