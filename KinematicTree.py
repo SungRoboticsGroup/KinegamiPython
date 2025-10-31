@@ -1012,15 +1012,21 @@ class KinematicTree(Generic[J]):
             return False
             
         minState, maxState = joint.stateRange()
+
+        # no change required, return true
+        if newState == joint.state or np.abs(newState - joint.state) < 1e-8 * (maxState - minState):
+            return True
+
         if newState < minState or newState > maxState:
             # print("WARNING: state out of range in setJointRange, "+
             #         "state unchanged.")
             return False
+        
         Transformation = joint.TransformStateTo(newState)
         for c in self.Children[jointIndex]:
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
-            self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=True,
+            self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=False,
                                 recomputeBoundingBall=False, safe=False)
         self.recomputeBoundingBall()
 

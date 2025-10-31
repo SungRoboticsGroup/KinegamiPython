@@ -21,13 +21,14 @@ chainCount = 1
 restartFrom = 0
 multipleIterations=False
 
-np.random.seed(44)
+seed = 42
+np.random.seed(seed)
 saved_state = np.random.get_state()
 
 timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
 base_dir = "Trials Before Experiments"
-experiment_name = f"{timestamp}_Joints{jointCount}_Chains{chainCount}_Seed{44}"
-results_dir = os.path.join(base_dir, experiment_name)
+experiment_name = f"{timestamp}_Joints{jointCount}_Chains{chainCount}_Seed{seed}"
+results_dir = os.path.join(os.getcwd(), base_dir, experiment_name)
 os.makedirs(results_dir, exist_ok=True)
 
 def generateRandomChain(nJoints):
@@ -139,7 +140,11 @@ def test():
         plt.grid(True)
         # save to an image file in the results directory
         plot_save_path = os.path.join(results_dir, f"plot_{index}.png")
-        plt.savefig(plot_save_path, dpi=300, bbox_inches='tight')
+        try:
+            plt.savefig(plot_save_path, dpi=300, bbox_inches='tight')
+            print(f"Saved plot to: {plot_save_path}")
+        except Exception as e:
+            print(f"Error saving plot: {e}")
         plt.close()
 
 def generate_colors(x, cmap_name="rainbow"):

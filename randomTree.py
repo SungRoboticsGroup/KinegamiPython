@@ -13,7 +13,7 @@ import shutil
 import re
 from datetime import datetime
 
-jointCount = 12
+jointCount = 4
 probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
@@ -22,12 +22,13 @@ treeCount = 1
 restartFrom = 0
 multipleIterations=False
 
-np.random.seed(44)
+seed = 44
+np.random.seed(seed)
 saved_state = np.random.get_state()
 
 timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
 base_dir = "Trials Before Experiments"
-experiment_name = f"{timestamp}_Joints{jointCount}_Trees{treeCount}_Seed{44}"
+experiment_name = f"{timestamp}_Joints{jointCount}_Trees{treeCount}_Seed{seed}"
 results_dir = os.path.join(base_dir, experiment_name)
 os.makedirs(results_dir, exist_ok=True)
 
@@ -68,33 +69,33 @@ def generateTree(nJoints):
 
 def testRandomTrees():
     optimizations = [
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest")
+                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
     ]
 
     labels = [
-            "DFS - Outward Longest",
-            "DFS - Outward Shortest",
-            "DFS - Inward Longest",
-            "DFS - Inward Shortest",
-            "BFS - Outward Longest",
-            "BFS - Outward Shortest",
-            "BFS - Inward Longest",
-            "BFS - Inward Shortest",
-            "Randomized"
+            # "DFS - Outward Longest",
+            # "DFS - Outward Shortest",
+            # "DFS - Inward Longest",
+            # "DFS - Inward Shortest",
+            # "BFS - Outward Longest",
+            # "BFS - Outward Shortest",
+            # "BFS - Inward Longest",
+            "BFS - Inward Shortest"
+            # "Randomized"
     ]
 
     lowerBounds = []
     results = []
 
-    restartDir = "sim_results/" + title + "/" + str(restartFrom)
+    restartDir = os.path.join(results_dir, f"trial_{restartFrom}")
     if os.path.exists(restartDir):
         shutil.rmtree(restartDir)
 
@@ -115,11 +116,14 @@ def testRandomTrees():
         results.append([])
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
-            direc = os.path.join(results_dir, str(i), labels[no])
-            os.makedirs(direc, exist_ok=True)
+            # Create a subdirectory for this trial's results
+            trial_dir = os.path.join(results_dir, f"trial_{i}", labels[no])
+            os.makedirs(trial_dir, exist_ok=True)
+            
             # Reset random state before each optimization to ensure deterministic behavior
             np.random.set_state(saved_state)
-            optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
+            optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=trial_dir)
+            
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
@@ -130,10 +134,15 @@ def testRandomTrees():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
-        with open("sim_results/" + title + "/random_results_chkpt" + str(i) + ".json", "w") as file:
+        
+        # Save checkpoint to results directory
+        checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
+        with open(checkpoint_file, "w") as file:
             json.dump(results, file)
 
-    with open("sim_results/" + title + "/random_results.json", "w") as file:
+    # Save final results to results directory
+    final_results_file = os.path.join(results_dir, "random_results.json")
+    with open(final_results_file, "w") as file:
         json.dump(results, file)
 
 

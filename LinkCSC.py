@@ -35,19 +35,23 @@ class LinkCSC:
                                 self.EndDubinsPose.t, self.EndDubinsPose.R[:,0])
         else:
             self.path = path
-        
+
         if norm(self.path.error) > self.DISTANCE_EPSILON:
+            # print(f"Path details:\n{repr(self.path)}")
             raise ValueError("ERROR: Tried to generate a link for an invalid path")
         if self.path.theta1 < -EPSILON:
+            # print(f"Path details:\n{repr(self.path)}")
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
         if self.path.theta1 >= np.pi:
+            # print(f"Path details:\n{repr(self.path)}")
             raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
         if self.path.theta2 < -EPSILON:
+            # print(f"Path details:\n{repr(self.path)}")
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
         if self.path.theta2 >= np.pi:
+            # print(f"Path details:\n{repr(self.path)}")
             raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
 
-        
         self.rot1AxisDir = np.cross(self.StartDubinsPose.R[:,0], self.path.w1)
         self.rot1AxisAngle = signedAngle(self.StartDubinsPose.R[:,1],
                                           self.rot1AxisDir,

@@ -87,6 +87,10 @@ def solveCSC(r, startPosition, startDir, endPosition, endDir):
     return paths
 
 def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=None, EPSILON=1e-6):
+    # check if start and end positions and directions are identical
+    if norm(startPosition - endPosition) < EPSILON and norm(startDir - endDir) < EPSILON:
+        return emptyCSC(r, startPosition, startDir)
+    
     paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
     errorNorms = np.array([norm(path.error) for path in paths])
     lengths = np.array([path.length for path in paths])

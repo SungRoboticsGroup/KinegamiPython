@@ -10,6 +10,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     # If includeCollisionPenalty is True, first try without it
     if includeCollisionPenalty:
         try:
+            print("Trying optimization without collision penalty...\n")
             # First attempt without collision penalty
             tree, loss = optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                                               childFraction, ignorePlacement, ignoreLater,
@@ -34,10 +35,12 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
             
             if verbose:
                 print(f"Collision detected for joint {index}, retrying with collision penalty")
+            includeCollisionPenalty = True  # Re-enable collision penalty for retry
         
         except Exception as e:
             if verbose:
                 print(f"Optimization without collision penalty failed for joint {index}, retrying with penalty: {str(e)}")
+            includeCollisionPenalty = True  # Re-enable collision penalty after failure
 
     # If we got here, either includeCollisionPenalty was False, or the no-penalty attempt failed/had collisions
     parentIndex = subject.Parents[index]
@@ -241,10 +244,13 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
             
             if verbose:
                 print(f"Collision detected for waypoint {index}, retrying with collision penalty")
+            includeCollisionPenalty = True  # Re-enable collision penalty for retry
+            subject = copy.deepcopy(tree)  # Use previous result as starting point
         
         except Exception as e:
             if verbose:
                 print(f"Optimization without collision penalty failed for waypoint {index}, retrying with penalty: {str(e)}")
+            includeCollisionPenalty = True  # Re-enable collision penalty after failure
 
     # If we got here, either includeCollisionPenalty was False, or the no-penalty attempt failed/had collisions
     start = time.time()
@@ -529,7 +535,29 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
     lengths = []
 
     if configurations == None:
-        configurations = [[0] * len(subject.Joints)]
+        num_joints = len(subject.Joints)
+        random_config = [0] * num_joints
+        
+        # Set non-waypoint joints to random states within their range limits
+        # Add a tolerance margin to avoid getting too close to limits
+        tolerance = 0.02  # 2% margin from limits
+        for i in range(num_joints):
+            if not isWaypoint(subject.Joints[i]):
+                joint = subject.Joints[i]
+                min_state, max_state = joint.stateRange()
+                range_size = max_state - min_state
+                margin = range_size * tolerance
+                random_config[i] = random.uniform(min_state + margin, max_state - margin)
+        
+        neutral_config = [0] * num_joints  
+        configurations = [neutral_config, random_config]
+
+        print("Using random configuration for optimization:")
+        print("Joint states and their limits:")
+        for i in range(num_joints):
+            if not isWaypoint(subject.Joints[i]):
+                min_state, max_state = subject.Joints[i].stateRange()
+                print(f"  Joint {i}: config = {random_config[i]:.3f} (limits: [{min_state:.3f}, {max_state:.3f}])")
 
     for i in range(0, len(subject.Joints)):
         subject.Joints[i].recomputeCollisionCapsules()
