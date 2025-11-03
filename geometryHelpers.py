@@ -845,6 +845,87 @@ class Arc3D:
 
         return self.circleCenter + u * uhat + v * vhat
     
+    def _sdCappedTorus(self, p: np.ndarray, sc: np.ndarray, ra: float, rb: float) -> float:
+        """
+        Signed Distance Function for a capped torus in local coordinates.
+        
+        The torus is in the XY plane with arc extending from X-axis by angle defined by sc.
+        
+        Parameters:
+        -----------
+        p : np.ndarray
+            3D point in local coordinate system (shape (3,))
+        sc : np.ndarray
+            (sin(theta), cos(theta)) where theta is the angular extent (shape (2,))
+        ra : float
+            Major radius (arc radius)
+        rb : float
+            Minor radius (tube radius)
+        
+        Returns:
+        --------
+        float
+            Signed distance (negative inside, positive outside)
+        """
+        px = abs(p[0])
+        py = p[1]
+        pz = p[2]
+        
+        # Determine k: distance to the arc in XY plane
+        if sc[1] * px > sc[0] * py:
+            k = sc[0] * px + sc[1] * py
+        else:
+            k = np.sqrt(px*px + py*py)
+        
+        # Distance to torus surface
+        return np.sqrt(px*px + py*py + pz*pz + ra*ra - 2.0*ra*k) - rb
+    
+    def sdf(self, point: np.ndarray, radius: float) -> float:
+        """
+        Compute the signed distance from a 3D point to this arc's tubular volume.
+        
+        Transforms the point into local arc coordinates where the arc is centered at origin,
+        with the arc in the XY plane, and then applies the capped torus SDF formula.
+        
+        Parameters:
+        -----------
+        point : np.ndarray
+            3D point in world coordinates
+        radius : float
+            Tube radius around the arc
+        
+        Returns:
+        --------
+        float
+            Signed distance (negative inside the tube, positive outside)
+        """
+        # Transform point to local arc coordinate system
+        # Local origin is at circleCenter
+        localPoint = point - self.circleCenter
+        
+        # Build local coordinate frame:
+        # X-axis: pointing from circle center toward start point (-startNormal direction)
+        # Z-axis: binormal (rotation axis of the arc)
+        # Y-axis: cross(Z, X) to complete right-handed frame
+        
+        arcX = -self.startNormal  # Points radially outward from circle center at start
+        arcZ = self.binormal       # Rotation axis
+        arcY = np.cross(arcZ, arcX)
+        
+        # Build transformation matrix (world to local)
+        # Columns are the local basis vectors
+        arcFrame = np.column_stack([arcX, arcY, arcZ])
+        
+        # Transform point to local coordinates
+        localP = arcFrame.T @ localPoint
+        
+        # Apply capped torus SDF
+        sc = np.array([np.sin(self.theta), np.cos(self.theta)])
+        ra = self.r  # arc radius
+        rb = radius   # tube radius
+        
+        return self._sdCappedTorus(localP, sc, ra, rb)
+    
     def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
         if showDirections:

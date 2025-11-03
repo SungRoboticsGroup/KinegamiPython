@@ -433,3 +433,81 @@ class LinkCSC:
         else:
             assert count >= 2, "Count must be at least 2"
         return np.array([self.interpolateAt(t) for t in np.linspace(0, 1, count)])
+    
+    def _sdCapsule(self, p: np.ndarray, a: np.ndarray, b: np.ndarray, r: float) -> float:
+        """
+        Signed Distance Function for a capsule between points a and b.
+        
+        Parameters:
+        -----------
+        p : np.ndarray
+            3D query point
+        a : np.ndarray
+            Start point of capsule
+        b : np.ndarray
+            End point of capsule
+        r : float
+            Radius of capsule
+        
+        Returns:
+        --------
+        float
+            Signed distance (negative inside, positive outside)
+        """
+        pa = p - a
+        ba = b - a
+        h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
+        return np.linalg.norm(pa - ba * h) - r
+    
+    def sdf(self, point: np.ndarray, radius: float = None) -> float:
+        """
+        Compute the signed distance from a 3D point to this link.
+        
+        The SDF is constructed piecewise from the arc and straight segments
+        of the CSC path, returning the minimum distance to any segment.
+        
+        Parameters:
+        -----------
+        point : np.ndarray
+            3D point to query (shape (3,))
+        radius : float, optional
+            Tube radius. If None, uses self.r
+            
+        Returns:
+        --------
+        float
+            Signed distance (negative inside, positive outside)
+        """
+        if radius is None:
+            radius = self.r
+        
+        distances = []
+        
+        # 1. First arc (elbow1)
+        if self.arc1 is not None and self.path.theta1 > self.EPSILON:
+            dist1 = self.arc1.sdf(point, radius)
+            distances.append(dist1)
+        else:
+            # Just a sphere at the start if no arc
+            dist1 = np.linalg.norm(point - self.StartDubinsPose.t) - radius
+            distances.append(dist1)
+        
+        # 2. Straight section
+        if self.path.tMag > self.DISTANCE_EPSILON:
+            # Capsule from turn1end to turn2start
+            dist2 = self._sdCapsule(point, self.path.turn1end, 
+                                   self.path.turn1end + self.path.tMag * self.path.tUnit, 
+                                   radius)
+            distances.append(dist2)
+        
+        # 3. Second arc (elbow2)
+        if self.arc2 is not None and self.path.theta2 > self.EPSILON:
+            dist3 = self.arc2.sdf(point, radius)
+            distances.append(dist3)
+        else:
+            # Just a sphere at the end if no arc
+            dist3 = np.linalg.norm(point - self.EndDubinsPose.t) - radius
+            distances.append(dist3)
+        
+        # Return minimum distance (union of all segments)
+        return min(distances)
