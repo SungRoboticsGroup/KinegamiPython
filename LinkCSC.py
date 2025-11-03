@@ -424,5 +424,12 @@ class LinkCSC:
             else:
                 return self.EndDubinsPose.t
             
-    def interpolate(self, count=10) -> np.ndarray:
+    def interpolate(self, count : int = 10, density: float = None) -> np.ndarray:
+        # density is points per unit length
+        if density:
+            assert density > 0, "Density must be positive"
+            totalLength = self.lengthC1 + self.lengthS + self.lengthC2
+            count = max(2, int(np.ceil(totalLength * density)) + 1)
+        else:
+            assert count >= 2, "Count must be at least 2"
         return np.array([self.interpolateAt(t) for t in np.linspace(0, 1, count)])
