@@ -37,20 +37,15 @@ class LinkCSC:
             self.path = path
 
         if norm(self.path.error) > self.DISTANCE_EPSILON:
-            # print(f"Path details:\n{repr(self.path)}")
-            raise ValueError("ERROR: Tried to generate a link for an invalid path")
+            raise ValueError(f"ERROR: Tried to generate a link for an invalid path\n---\nPath details: {repr(self.path)}")
         if self.path.theta1 < -EPSILON:
-            # print(f"Path details:\n{repr(self.path)}")
-            raise ValueError("ERROR: Tried to generate a link for a path with theta1 < 0")
+            raise ValueError(f"ERROR: Tried to generate a link for a path with theta1 < 0\n---\nPath details: {repr(self.path)}")
         if self.path.theta1 >= np.pi:
-            # print(f"Path details:\n{repr(self.path)}")
-            raise ValueError("ERROR: Tried to generate a link for a path with theta1 >= pi")
+            raise ValueError(f"ERROR: Tried to generate a link for a path with theta1 >= pi\n---\nPath details: {repr(self.path)}")
         if self.path.theta2 < -EPSILON:
-            # print(f"Path details:\n{repr(self.path)}")
-            raise ValueError("ERROR: Tried to generate a link for a path with theta2 < 0")
+            raise ValueError(f"ERROR: Tried to generate a link for a path with theta2 < 0\n---\nPath details: {repr(self.path)}")
         if self.path.theta2 >= np.pi:
-            # print(f"Path details:\n{repr(self.path)}")
-            raise ValueError("ERROR: Tried to generate a link for a path with theta2 >= pi")
+            raise ValueError(f"ERROR: Tried to generate a link for a path with theta2 >= pi\n---\nPath details: {repr(self.path)}")
 
         self.rot1AxisDir = np.cross(self.StartDubinsPose.R[:,0], self.path.w1)
         self.rot1AxisAngle = signedAngle(self.StartDubinsPose.R[:,1],

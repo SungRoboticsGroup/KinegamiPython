@@ -69,27 +69,27 @@ def generateTree(nJoints):
 
 def testRandomTrees():
     optimizations = [
-                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
-                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
-                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
                     # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
-                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
-                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest")
-                    # partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
     ]
 
     labels = [
-            # "DFS - Outward Longest",
-            # "DFS - Outward Shortest",
-            # "DFS - Inward Longest",
+            "DFS - Outward Longest",
+            "DFS - Outward Shortest",
+            "DFS - Inward Longest",
             # "DFS - Inward Shortest",
-            # "BFS - Outward Longest",
-            # "BFS - Outward Shortest",
-            # "BFS - Inward Longest",
-            "BFS - Inward Shortest"
-            # "Randomized"
+            "BFS - Outward Longest",
+            "BFS - Outward Shortest",
+            "BFS - Inward Longest",
+            "BFS - Inward Shortest",
+            "Randomized"
     ]
 
     lowerBounds = []
