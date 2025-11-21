@@ -92,14 +92,20 @@ def shortestCSC(r, startPosition, startDir, endPosition, endDir, turnAngleLimit=
         return emptyCSC(r, startPosition, startDir)
     
     paths = solveCSC(r, startPosition, startDir, endPosition, endDir)
+
     errorNorms = np.array([norm(path.error) for path in paths])
+    
     lengths = np.array([path.length for path in paths])
+    
     # exclude invalid paths from length-min selection
-    lengths[errorNorms > 0.001*r] = np.inf
+    lengths[errorNorms > 0.005*r] = np.inf
+    
+    # exclude paths that exceed turn angle limit
     if turnAngleLimit is not None:
         for i, path in enumerate(paths):
             if abs(path.theta1) > turnAngleLimit + EPSILON or abs(path.theta2) > turnAngleLimit + EPSILON:
                 lengths[i] = np.inf
+    
     return paths[np.argmin(lengths)]
         
 # empty path of radius r at position p in direction d

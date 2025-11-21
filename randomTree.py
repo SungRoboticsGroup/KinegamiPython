@@ -4,6 +4,7 @@ from makeKinematicTree import *
 from KinematicTree import *
 
 import random
+import copy
 from collections import defaultdict, deque
 import json
 from functools import partial
@@ -67,12 +68,35 @@ def generateTree(nJoints):
     assert(abs(specTree.totalLengthLowerBound() - initialTree.totalLengthLowerBound()) < 1e-5)
     return initialTree
 
+def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
+    configs = [[0] * len(tree.Joints)] 
+    
+    for attempt in range(max_attempts):
+        if len(configs) >= num_configs_needed+1:
+            break
+            
+        # Generate random config
+        config = tree.randomConfiguration(realJointsOnly=False).tolist()
+        
+        # Test for collisions
+        test_tree = copy.deepcopy(tree)
+        for i in range(len(test_tree.Joints)):
+            if not isWaypoint(test_tree.Joints[i]):
+                test_tree.setJointState(i, config[i])
+            test_tree.Joints[i].recomputeCollisionCapsules()
+        
+        if test_tree.detectCollisions(debug=False) == 0:
+            configs.append(config)
+    
+    print(f"Using {len(configs)} collision-free configs")
+    return configs
+
 def testRandomTrees():
     optimizations = [
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
-                    # partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
                     partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
@@ -84,7 +108,7 @@ def testRandomTrees():
             "DFS - Outward Longest",
             "DFS - Outward Shortest",
             "DFS - Inward Longest",
-            # "DFS - Inward Shortest",
+            "DFS - Inward Shortest",
             "BFS - Outward Longest",
             "BFS - Outward Shortest",
             "BFS - Inward Longest",
@@ -114,6 +138,10 @@ def testRandomTrees():
         construct.save(os.path.join(results_dir, str(i)), saveDir=False)
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
+        
+        # Generate collision-free configs for this specific tree
+        collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=2)
+        
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
             # Create a subdirectory for this trial's results
@@ -122,7 +150,13 @@ def testRandomTrees():
             
             # Reset random state before each optimization to ensure deterministic behavior
             np.random.set_state(saved_state)
-            optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=trial_dir)
+            optimized, times, losses = f(construct, 
+                                        configurations=collision_free_configs,
+                                        showSteps=False, 
+                                        parallelize=True, 
+                                        evaluate=True, 
+                                        verbose=False, 
+                                        directory=trial_dir)
             
             if multipleIterations:
                 count = 2

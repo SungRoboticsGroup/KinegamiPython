@@ -5,6 +5,7 @@ from KinematicTree import *
 from KinematicChain import *
 
 import random
+import copy
 from collections import defaultdict, deque
 import json
 from functools import partial
@@ -13,7 +14,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 2
+jointCount = 4
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -50,6 +51,29 @@ def generateRandomChain(nJoints):
         chain.appendGeneralizedGimbal(newJoint)
 
     return chain
+
+def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
+    configs = [[0] * len(tree.Joints)] 
+    
+    for attempt in range(max_attempts):
+        if len(configs) >= num_configs_needed+1:
+            break
+            
+        # Generate random config
+        config = tree.randomConfiguration(realJointsOnly=False).tolist()
+        
+        # Test for collisions
+        test_tree = copy.deepcopy(tree)
+        for i in range(len(test_tree.Joints)):
+            if not isWaypoint(test_tree.Joints[i]):
+                test_tree.setJointState(i, config[i])
+            test_tree.Joints[i].recomputeCollisionCapsules()
+        
+        if test_tree.detectCollisions(debug=False) == 0:
+            configs.append(config)
+    
+    print(f"Using {len(configs)} collision-free configs")
+    return configs
 
 def test():
     optimizations = [
@@ -97,13 +121,23 @@ def test():
 
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
+        
+        # Generate collision-free configs for this specific chain
+        collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=2)
+        
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
             direc = os.path.join(results_dir, str(i), labels[no])
             os.makedirs(direc, exist_ok=True)
             # Reset random state before each optimization to ensure deterministic behavior
             np.random.set_state(saved_state)
-            optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=direc)
+            optimized, times, losses = f(construct, 
+                                        configurations=collision_free_configs,
+                                        showSteps=False, 
+                                        parallelize=True, 
+                                        evaluate=True, 
+                                        verbose=False, 
+                                        directory=direc)
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
@@ -114,10 +148,15 @@ def test():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
-        with open("sim_results/" + title + "/random_results_chkpt" + str(i) + ".json", "w") as file:
+        
+        # Save checkpoint to results directory
+        checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
+        with open(checkpoint_file, "w") as file:
             json.dump(results, file)
 
-    with open("sim_results/" + title + "/random_results.json", "w") as file:
+    # Save final results to results directory
+    final_results_file = os.path.join(results_dir, "random_results.json")
+    with open(final_results_file, "w") as file:
         json.dump(results, file)
 
 
@@ -145,6 +184,8 @@ def test():
             print(f"Saved plot to: {plot_save_path}")
         except Exception as e:
             print(f"Error saving plot: {e}")
+
+        plt.show()
         plt.close()
 
 def generate_colors(x, cmap_name="rainbow"):
