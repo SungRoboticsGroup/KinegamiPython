@@ -224,16 +224,52 @@ plotManifold(hollowHull)
 """
 
 
-
+"""
 link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
                EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(3*np.pi/4), 
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(wallThickness=0.1, holeDiameter=0.05, numHoles=4, startRadius=1, endRadius=0.25, hullBends=True)
+module = link.connectableModule(wallThickness=0.1, holeDiameter=0.05, numHoles=4, startRadius=1, endRadius=0.25, hullBends=False)
 #module = link.manifold(startRadius=1, endRadius=0.75, numSides=20, wallThickness=0.1)
 analyzeProperties(module)
 plotManifold(module)
 link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
+"""
+
+def cylinderHoneycombCutter(length, thickness, hole_diameter, start_radius, end_radius, hole_sides=20):
+    packingDiameter = hole_diameter + thickness
+    numLayers = int(np.floor(length / packingDiameter))
+    holesPerLayer = int(np.floor(2*np.pi*min(start_radius, end_radius) / packingDiameter))
+
+    # define a series of n points along the center line of the cylinder
+    centerPoints = np.array([[0,0,z] for z in np.linspace(0, length, numLayers+1, endpoint=False)[1:]])
+    radii = np.linspace(start_radius, end_radius, numLayers+1, endpoint=False)[1:]
+    anglesEvenLayers = np.linspace(0, 360, holesPerLayer, endpoint=False)
+    anglesOddLayers = anglesEvenLayers + 360/(2*holesPerLayer)
+
+    # define a series of cylinders from the center points, facing outwards at the angles, with a given radius and height
+    H = m3d.Manifold()
+    for i, point in enumerate(centerPoints):
+        angles = anglesEvenLayers if i % 2 == 0 else anglesOddLayers
+        for angle in angles:
+            hole = m3d.Manifold.cylinder(height=radii[i]*1.1, radius_low=hole_diameter/2, radius_high=hole_diameter/2, circular_segments=hole_sides)
+            hole = hole.rotate((0,90,0)).rotate((0,0,angle)).translate(point)
+            H += hole
+    
+    return H
+
+   
+
+length = 5.6
+thickness = 0.1
+radius_low = 1.2
+radius_high = 1
+S = m3d.Manifold.cylinder(height=length, radius_low=radius_low, radius_high=radius_high, circular_segments=20)
+S -= m3d.Manifold.cylinder(height=length, radius_low=radius_low-thickness, radius_high=radius_high-thickness, circular_segments=20)
+H = cylinderHoneycombCutter(length, thickness, 0.6, radius_low, radius_high, hole_sides=20)
+S -= H
+plotManifold(H)
+plotManifold(S)
 
 
 """
