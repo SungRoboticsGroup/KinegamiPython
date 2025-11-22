@@ -398,7 +398,7 @@ class TubularPattern():
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
-            plt.show(block=False)
+            plt.show(block=block)
 
         return doc
 
@@ -1313,15 +1313,17 @@ class TwistFittingPattern(TubularPattern):
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
         rightDiagonals = np.vstack((self.proximalBaseIndices,
                                     self.distalBaseIndices)).T
+        self.addMountainEdges(rightDiagonals)
         leftDiagonals = np.vstack((np.roll(self.distalBaseIndices, 1),
                                    self.proximalBaseIndices)).T
-        self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
-
         
-        self.addValleyEdges(np.vstack((np.roll(self.proximalBaseIndices, 1),
-                                       self.proximalBaseIndices)).T)
-        self.addValleyEdges(np.vstack((np.roll(self.distalBaseIndices, 1),
-                                       self.distalBaseIndices)).T)
+        #self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
+        if baseTwist > self.EPSILON:
+            self.addMountainEdges(leftDiagonals)
+            self.addValleyEdges(np.vstack((np.roll(self.proximalBaseIndices, 1),
+                                        self.proximalBaseIndices)).T)
+            self.addValleyEdges(np.vstack((np.roll(self.distalBaseIndices, 1),
+                                        self.distalBaseIndices)).T)
         
         referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) *
                            self.baseSideLength) + baseXshift
