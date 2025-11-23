@@ -91,7 +91,7 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
     print(f"Using {len(configs)} collision-free configs")
     return configs
 
-def testRandomTrees():
+def testRandomTrees(show: bool = False):
     optimizations = [
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
                     partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
@@ -118,6 +118,8 @@ def testRandomTrees():
 
     lowerBounds = []
     results = []
+    outputs = []
+    constructs = []
 
     restartDir = os.path.join(results_dir, f"trial_{restartFrom}")
     if os.path.exists(restartDir):
@@ -138,6 +140,8 @@ def testRandomTrees():
         construct.save(os.path.join(results_dir, str(i)), saveDir=False)
         lowerBounds.append(construct.totalLengthLowerBound())
         results.append([])
+        outputs.append([])
+        constructs.append(construct)
         
         # Generate collision-free configs for this specific tree
         collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=2)
@@ -168,6 +172,7 @@ def testRandomTrees():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
+            outputs[i].append(optimized)
         
         # Save checkpoint to results directory
         checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
@@ -181,6 +186,12 @@ def testRandomTrees():
 
 
     for index, result in enumerate(results):
+        if show:
+            constructs[index].show(block=False)
+            for output in outputs[index]:
+                output.show(block=False)
+
+
         plt.figure(figsize=(8, 5)) 
         
         idx = 0
@@ -240,4 +251,4 @@ def plotColoredTrees(directory, collection = []):
         plotCollection(collection)
 
 
-testRandomTrees()
+testRandomTrees(show=True)

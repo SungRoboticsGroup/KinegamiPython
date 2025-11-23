@@ -422,7 +422,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
     isOptimized = [True] + [False] * (len(subject.Joints) - 1) #isOptimized[i] is True if joint i is optimized
     numOptimized = 1
 
-    def optimizeFromIndex(index):       
+    def optimizeFromIndex(index, recurse : bool = False):       
         nonlocal tree
         nonlocal numOptimized
 
@@ -442,8 +442,9 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
 
         log(tree, index)
         
-        for child in subject.Children[index]:
-            optimizeFromIndex(child)
+        if recurse:
+            for child in subject.Children[index]:
+                optimizeFromIndex(child, recurse=True)
 
     # create the traversal calls
     treeTraversals = {
@@ -458,6 +459,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
 
     print("Doing the optimization:")
     for index in treeTraversals[traversal](subject):
+        print("Optimizing joint index:", index, print(type(subject.Joints[index])))
         try:
             optimizeFromIndex(index)
 
