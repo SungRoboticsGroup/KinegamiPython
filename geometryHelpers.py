@@ -661,6 +661,19 @@ class CompoundElbow:
         ax.set_aspect('equal')
         plt.show(block=block)
         
+def manifoldToTruss(manifold : m3d.Manifold, diameter : float) -> m3d.Manifold:
+   mesh = manifold.to_mesh()
+   vertices = mesh.vert_properties
+   T = m3d.Manifold()
+   nodes = [m3d.Manifold.sphere(radius=diameter/2, circular_segments=3).translate(vertex[:3]) for vertex in vertices]
+   edges = set() # build edges list from triangles, with each edge appearing only once
+   for tri in mesh.tri_verts:
+        edges.add(tuple(sorted((tri[0], tri[1]))))
+        edges.add(tuple(sorted((tri[1], tri[2]))))
+        edges.add(tuple(sorted((tri[2], tri[0]))))
+   for edge in edges:
+        T += (nodes[edge[0]] + nodes[edge[1]]).hull()
+   return T
 
 class Bend:
     def __init__(self, arcRadius : float, StartFrame : SE3, bendingAngle : float, 
@@ -739,36 +752,58 @@ class Bend:
         mesh = trimesh.util.concatenate([mesh, startCap, endCap])
         return mesh
     
-    def manifold(self, hull : bool = False, extendForward : float = 0, extendBackward : float = 0, wallThickness : float = None) -> m3d.Manifold:       
-        if hull:
-            solid = m3d.Manifold.hull_points(self.circles.reshape((-1,3)))
+    def manifold(self, hull : bool = False, extendForward : float = 0, extendBackward : float = 0, thickness : float = None, truss : bool = False,
+                 trussNumSides : int = 6, trussMaxSectionAngle : float = np.pi/4) -> m3d.Manifold:       
+        if truss:
+            if thickness is None:
+                raise ValueError("Must specify wall thickness for truss")
+            inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                                    self.startRadius - thickness/2, self.endRadius - thickness/2,
+                                    trussNumSides, trussMaxSectionAngle, self.EPSILON)
+            innerSolid = inner.manifold(hull)
+            shape = manifoldToTruss(innerSolid, thickness)
+
+        elif hull:
+            shape = m3d.Manifold.hull_points(self.circles.reshape((-1,3)))
         else:
-            solid = m3d.Manifold.hull_points(self.circles[[0,1]].reshape((-1,3)))
+            shape = m3d.Manifold.hull_points(self.circles[[0,1]].reshape((-1,3)))
             for i in range(1, self.numCircles-1):
-                solid += m3d.Manifold.hull_points(self.circles[[i-1, i, i+1]].reshape((-1,3)))
+                shape += m3d.Manifold.hull_points(self.circles[[i-1, i, i+1]].reshape((-1,3)))
         
         if extendBackward != 0:
             startCircle = self.circles[0]
             circleBackward = startCircle - self.poses[0].R[:,0]*extendBackward
-            circleStack = np.vstack((circleBackward, startCircle, self.circles[1])) if self.circles.shape[0] > 1 else np.vstack((circleBackward, startCircle))
+            circleStack = np.vstack((circleBackward, startCircle, self.circles[1])) if (not truss and self.circles.shape[0] > 1) else np.vstack((circleBackward, startCircle))
             startCap = m3d.Manifold.hull_points(circleStack)
-            solid += startCap
+            shape += startCap
         if extendForward != 0:
             endCircle = self.circles[-1]
             circleForward = endCircle + self.poses[-1].R[:,0]*extendForward
-            circleStack = np.vstack((self.circles[-2], endCircle, circleForward)) if self.circles.shape[0] > 1 else np.vstack((endCircle, circleForward))
+            circleStack = np.vstack((self.circles[-2], endCircle, circleForward)) if (not truss and self.circles.shape[0] > 1) else np.vstack((endCircle, circleForward))
             endCap = m3d.Manifold.hull_points(circleStack)
-            solid += endCap
+            shape += endCap
 
-        if wallThickness is not None:
-            assert(wallThickness > 0 and wallThickness < min(self.startRadius, self.endRadius))
+        if thickness is not None:
+            if not (thickness > 0 and thickness < min(self.startRadius, self.endRadius)):
+                raise ValueError("Invalid wall thickness for Bend manifold")
             inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
-                                      self.startRadius - wallThickness, self.endRadius - wallThickness,
+                                      self.startRadius - thickness, self.endRadius - thickness,
                                       self.numSides, self.maxSectionAngle, self.EPSILON)
-            solid -= inner.manifold(hull, extendForward=extendForward+self.DISTANCE_EPSILON,
+            shape -= inner.manifold(hull, extendForward=extendForward+self.DISTANCE_EPSILON,
                                     extendBackward=extendBackward+self.DISTANCE_EPSILON)
         
-        return solid
+        return shape
+        
+    def rediscretize(self, numSides : int = 20, maxSectionAngle : float = np.pi/8) -> Bend:
+        return Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                    self.startRadius, self.endRadius, numSides, maxSectionAngle, self.EPSILON)
+        
+    def truss(self, thickness : float, hull : bool = False, extendForward : float = 0, extendBackward : float = 0) -> m3d.Manifold:
+        inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                                    self.startRadius - thickness/2, self.endRadius - thickness/2,
+                                    self.numSides, self.maxSectionAngle, self.EPSILON)
+        innerSolid = inner.manifold(hull)
+        truss = manifoldToTruss(innerSolid, thickness)
         
 
 

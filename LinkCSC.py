@@ -273,7 +273,9 @@ class LinkCSC:
 
     def manifold(self, startRadius : float = None, endRadius : float = None, numSides : int = 20, 
                  hullBends : bool = False, stabilize : bool = True, wallThickness : float = None,
-                 extendBackward : float = 0, extendForward : float = 0) -> m3d.Manifold:
+                 extendBackward : float = 0, extendForward : float = 0, maxSectionAngle : float = None) -> m3d.Manifold:
+        if maxSectionAngle is None:
+            maxSectionAngle = self.maxAnglePerElbow
         if startRadius is None:
             startRadius = self.r
         if endRadius is None:
@@ -290,15 +292,37 @@ class LinkCSC:
         output = m3d.Manifold() # empty manifold
         innerExtendLength = self.DISTANCE_EPSILON if stabilize else 0
 
+        output = m3d.Manifold() # empty manifold
+
+        print("computing manifold")
         if self.elbow1:
             bend1 = Bend(arcRadius=self.r, StartFrame=self.StartDubinsPose,
                          bendingAngle=self.path.theta1, rotationalAxisAngle=self.rot1AxisAngle,
                          startRadius=rs[0], endRadius=rs[1], 
-                         numSides=numSides, maxSectionAngle=self.maxAnglePerElbow)
+                         numSides=numSides, maxSectionAngle=maxSectionAngle)
             C1 = bend1.manifold(hullBends, extendBackward=extendBackward, extendForward=innerExtendLength)
-            output = C1
-        
+            output += C1
+            startS = bend1.circles[-1]
+        else:
+            startS = Circle3D(radius=rs[1], center=self.StartDubinsPose.t, normal=self.StartDubinsPose.R[:,0], 
+                              radialVector=self.StartDubinsPose.R[:,1]).interpolate(numSides+1)[:-1]
+        if self.elbow2:
+            bend2 = Bend(arcRadius=self.r, StartFrame=self.Elbow2StartFrame,
+                         bendingAngle=self.path.theta2, rotationalAxisAngle=self.rot2AxisAngle,
+                         startRadius=rs[2], endRadius=rs[3], 
+                         numSides=numSides, maxSectionAngle=maxSectionAngle)
+            C2 = bend2.manifold(hullBends, extendBackward=innerExtendLength, extendForward=extendForward)
+            output += C2
+            endS = bend2.circles[0]
+        else:
+            endS = Circle3D(radius=rs[2], center=self.EndDubinsPose.t, normal=self.EndDubinsPose.R[:,0], 
+                           radialVector=self.EndDubinsPose.R[:,1]).interpolate(numSides+1)[:-1]
+            
         if self.path.tMag > self.DISTANCE_EPSILON:
+            S = m3d.Manifold.hull_points(np.vstack((startS, endS)))
+            output += S
+
+            """
             distanceBackward = innerExtendLength if self.elbow1 else extendBackward
             distanceForward = innerExtendLength if self.elbow2 else extendForward
             length = self.path.tMag + distanceBackward + distanceForward
@@ -306,15 +330,7 @@ class LinkCSC:
                                       circular_segments=numSides)
             S = S.translate((0,0,-distanceBackward)).rotate((0,90,0)).transform(self.Elbow1EndFrame.A[:3,:])
             output += S
-        
-        
-        if self.elbow2:
-            bend2 = Bend(arcRadius=self.r, StartFrame=self.Elbow2StartFrame,
-                         bendingAngle=self.path.theta2, rotationalAxisAngle=self.rot2AxisAngle,
-                         startRadius=rs[2], endRadius=rs[3], 
-                         numSides=numSides, maxSectionAngle=self.maxAnglePerElbow)
-            C2 = bend2.manifold(hullBends, extendBackward=innerExtendLength, extendForward=extendForward)
-            output += C2
+            """
 
         
         if not wallThickness is None and wallThickness > 0:
@@ -330,10 +346,34 @@ class LinkCSC:
 
     def connectableModule(self, wallThickness : float, holeDiameter : float, numHoles : int = 4,
                            startRadius : float = None, endRadius : float = None, numSides : int = 20,
-                           hullBends : bool = False) -> m3d.Manifold:
+                           hullBends : bool = False, truss : bool = False, trussNumSides : int = 6, 
+                           trussMaxSectionAngle : float = np.pi/2) -> m3d.Manifold:
         connectionLength = 2 * holeDiameter
-        tube = self.manifold(startRadius, endRadius, numSides, stabilize=True,
-                             wallThickness=wallThickness, hullBends=hullBends)
+        if truss:
+            innerSolid = self.manifold(startRadius-wallThickness/2, endRadius-wallThickness/2, 
+                                  trussNumSides, stabilize=True, wallThickness=None, 
+                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)
+            tube = manifoldToTruss(innerSolid, wallThickness)
+            baseHeight = 1.5*connectionLength
+            baseTopRadius = (startRadius**2 - baseHeight**2)**0.5
+            base = m3d.Manifold.cylinder(height=baseHeight, radius_low=startRadius, 
+                                         radius_high=baseTopRadius, 
+                                         circular_segments=numSides) - \
+                    m3d.Manifold.cylinder(height=baseHeight+self.DISTANCE_EPSILON, 
+                                          radius_low=startRadius-wallThickness,
+                                          radius_high=baseTopRadius-wallThickness, 
+                                          circular_segments=numSides)
+            tube += base.rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
+            trimStart = m3d.Manifold.cylinder(height=connectionLength, radius_low=startRadius+wallThickness/2, 
+                                         radius_high=startRadius+wallThickness/2, circular_segments=numSides)
+            tube -= trimStart.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
+            trimEnd = m3d.Manifold.cylinder(height=connectionLength, radius_low=endRadius+wallThickness/2, 
+                                         radius_high=endRadius+wallThickness/2, circular_segments=numSides)
+            tube -= trimEnd.translate((0,0,0)).rotate((0,90,0)).transform(self.EndDubinsPose.A[:3,:])
+
+        else:
+            tube = self.manifold(startRadius, endRadius, numSides, stabilize=True,
+                                wallThickness=wallThickness, hullBends=hullBends)
         
         holeSlicer = m3d.Manifold()
         holeAnglesDegrees = np.linspace(0, 360, numHoles, endpoint=False)
@@ -345,11 +385,11 @@ class LinkCSC:
             hole = hole.rotate((0,90,0)).rotate((0,0,angle))
             holeSlicer += hole
     
-        inset = m3d.Manifold.cylinder(height=2*connectionLength, 
+        inset = m3d.Manifold.cylinder(height=2*connectionLength+2*self.DISTANCE_EPSILON, 
                                        radius_low=startRadius-wallThickness+self.DISTANCE_EPSILON, 
                                        radius_high=startRadius-wallThickness+self.DISTANCE_EPSILON,
                                        circular_segments=numSides)
-        tube -= inset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
+        tube -= inset.translate((0,0,-connectionLength-self.DISTANCE_EPSILON)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
         tube -= holeSlicer.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
 
         outset = m3d.Manifold.cylinder(height=2*connectionLength, 

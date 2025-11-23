@@ -224,17 +224,17 @@ plotManifold(hollowHull)
 """
 
 
-"""
+
 link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
-               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(3*np.pi/4), 
+               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(np.pi/4), 
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(wallThickness=0.1, holeDiameter=0.05, numHoles=4, startRadius=1, endRadius=0.25, hullBends=False)
-#module = link.manifold(startRadius=1, endRadius=0.75, numSides=20, wallThickness=0.1)
+module = link.connectableModule(wallThickness=0.2, holeDiameter=0.2, numHoles=4, startRadius=1, endRadius=1, hullBends=True, truss=True)
+# module = link.manifold(startRadius=1, endRadius=0.75, numSides=20, wallThickness=0.1)
 analyzeProperties(module)
 plotManifold(module)
-link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
-"""
+#link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
+
 
 def cylinderHoneycombCutter(length, thickness, hole_diameter, start_radius, end_radius, hole_sides=20):
     packingDiameter = hole_diameter + thickness
@@ -258,7 +258,7 @@ def cylinderHoneycombCutter(length, thickness, hole_diameter, start_radius, end_
     
     return H
 
-   
+"""   
 
 length = 5.6
 thickness = 0.1
@@ -270,7 +270,25 @@ H = cylinderHoneycombCutter(length, thickness, 0.6, radius_low, radius_high, hol
 S -= H
 plotManifold(H)
 plotManifold(S)
+"""
 
+"""
+bend = Bend(arcRadius=1, StartFrame=SE3.Rz(np.pi/4)@SE3(1,2,3), bendingAngle=2*np.pi/3, rotationalAxisAngle=np.pi/4,
+            startRadius=1, endRadius=0.75)
+bendModule = bend.manifold()
+#plotManifold(bendModule, block=False)
+coarser = bend.rediscretize(numSides=6, maxSectionAngle=np.pi/3)
+coarserManifold = coarser.manifold(hull=False)
+plotManifold(coarserManifold, block=False)
+#plotManifold(bendModule.refine_to_length(0.1), block=False)
+#plotManifold(coarserManifold.smooth_out(min_smoothness=0.5))
+
+#T = manifoldToTruss(bendModule, truss_diameter=0.1)
+#plotManifold(T, block=True)
+
+truss = bend.manifold(thickness=0.2, truss=True, extendBackward=0.2, extendForward=0.2, hull=False)
+plotManifold(truss)
+"""
 
 """
 
