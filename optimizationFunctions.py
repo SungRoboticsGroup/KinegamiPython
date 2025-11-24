@@ -352,8 +352,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
         raise Exception("Optimization failed dramatically")
 
 
-def optimizeTree(subject, showSteps=False, childFraction=1, 
-                 streamline = False, guarantee=False, parallelize=False, 
+def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None):
     
@@ -419,33 +418,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
     tree = subject.copyAbbreviatedSelf()
     log(tree, -1)
 
-    isOptimized = [True] + [False] * (len(subject.Joints) - 1) #isOptimized[i] is True if joint i is optimized
-    numOptimized = 1
-
-    def optimizeFromIndex(index, recurse : bool = False):       
-        nonlocal tree
-        nonlocal numOptimized
-
-        iters = 50
-        tolerance = subject.r/10
-
-        if isWaypoint(subject.Joints[index]):
-            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                   collisionError=collisionError, childFraction=childFraction, 
-                                                   ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                   configurations=configurations)
-        else:
-            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                penaltyScale=collisionError, childFraction=childFraction, 
-                                                ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                configurations=configurations)
-
-        log(tree, index)
-        
-        if recurse:
-            for child in subject.Children[index]:
-                optimizeFromIndex(child, recurse=True)
-
     # create the traversal calls
     treeTraversals = {
         "dfs": partial(dfs, direction=direction, orderBy=orderBy),
@@ -459,54 +431,22 @@ def optimizeTree(subject, showSteps=False, childFraction=1,
 
     print("Doing the optimization:")
     for index in treeTraversals[traversal](subject):
-        print("Optimizing joint index:", index, print(type(subject.Joints[index])))
-        try:
-            optimizeFromIndex(index)
+        print("Optimizing joint index:", index, subject.Joints[index])
+        iters = 50
+        tolerance = subject.r/10
 
-            if tree.detectCollisions(specificJointIndices=[index],
-                                     ignoreLater=False,
-                                     debug=True) > 0:
-                raise Exception("Post-optimization collision detected.")
-            
-            if isOptimized[subject.Parents[index]]:
-                isOptimized[index] = True
-                numOptimized += 1
-
-        except Exception as e:
-            if verbose:
-                print(f"Could not ignore children placement {index}: {e}")
-
-            if index != 0:
-                if isOptimized[tree.Parents[index]]:
-                    isOptimized[tree.Parents[index]] = False
-                    numOptimized -= 1
-
-            if resetOnFail:
-                print(f"Reset on fail occurred: joint {index} time: {time.time() - start}")
-                for idx in range(len(subject.Joints)):
-                    if isOptimized[idx]:
-                        isOptimized[idx] = False
-                        numOptimized -= 1
-
-            # try again
-            if isWaypoint(subject.Joints[index]):
-                tree, loss = optimizeWaypointPlacement(tree,index, maxiter=50, tol=subject.r/10, 
-                                                       collisionError=collisionError, childFraction=childFraction, 
-                                                       ignorePlacement=True, ignoreLater = (not guarantee), 
-                                                       parallelize=parallelize, verbose=verbose, 
-                                                       configurations=configurations)
-            else:
-                tree, loss = optimizeJointPlacement(tree,index, maxiter=50, tol=subject.r/10, 
-                                                    penaltyScale=collisionError, childFraction=childFraction, 
-                                                    ignorePlacement=True, ignoreLater = (not guarantee), 
-                                                    parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations)
-
-            if verbose:
-                print(tree.detectCollisions(specificJointIndices=[index], ignoreLater=(not guarantee), plot=False, debug=True))
-
-            break
-    
+        if isWaypoint(subject.Joints[index]):
+            tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
+                                                   collisionError=collisionError, childFraction=childFraction, 
+                                                   ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
+                                                   configurations=configurations)
+        else:
+            tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
+                                                penaltyScale=collisionError, childFraction=childFraction, 
+                                                ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
+                                                configurations=configurations)
+        if tree.detectCollisions(specificJointIndices=[index], ignoreLater=False, debug=True) > 0:
+            raise Exception("Post-optimization collision detected.")
         log(tree, index)
 
     if showSteps:

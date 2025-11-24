@@ -93,15 +93,15 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 
 def testRandomTrees(show: bool = False):
     optimizations = [
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=False, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, streamline=True, guarantee=True, traversal="randomized", power=3)
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3)
     ]
 
     labels = [
