@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from IPython.display import display
 from LinkCSC import *
+from pytetwild import *
 
 def plotManifold(manifold, block=True, globalFrame=False):
   # Get mesh representation
@@ -230,9 +231,22 @@ link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3),
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
 module = link.connectableModule(wallThickness=0.2, holeDiameter=0.2, numHoles=4, startRadius=1, endRadius=1, hullBends=True, truss=True)
-# module = link.manifold(startRadius=1, endRadius=0.75, numSides=20, wallThickness=0.1)
 analyzeProperties(module)
-plotManifold(module)
+plotManifold(module, block=False)
+
+module = link.manifold(startRadius=1, endRadius=0.95, numSides=6, wallThickness=None, hullBends=True, maxSectionAngle=np.pi/2)
+refined = module.refine_to_length(1)
+analyzeProperties(refined)
+plotManifold(refined, block=False)
+"""
+refined_mesh = refined.to_mesh()
+print(refined_mesh.vert_properties.shape, refined_mesh.tri_verts.shape)
+print(refined_mesh.vert_properties)
+"""
+#tetVerts, tets = tetrahedralize(refined_mesh.vert_properties, refined_mesh.tri_verts, edge_length_fac=0.75)
+trussManifold = manifoldToTruss(refined, diameter=0.2, infill=True, edgeLength=1)
+plotManifold(trussManifold)
+
 #link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
 
 

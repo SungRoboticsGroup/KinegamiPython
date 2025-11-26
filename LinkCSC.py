@@ -352,7 +352,7 @@ class LinkCSC:
         if truss:
             innerSolid = self.manifold(startRadius-wallThickness/2, endRadius-wallThickness/2, 
                                   trussNumSides, stabilize=True, wallThickness=None, 
-                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)
+                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle).refine_to_length(self.r)
             tube = manifoldToTruss(innerSolid, wallThickness)
             baseHeight = 1.5*connectionLength
             baseTopRadius = (startRadius**2 - baseHeight**2)**0.5

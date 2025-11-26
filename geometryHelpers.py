@@ -17,6 +17,7 @@ from style import *
 from matplotlib import cm
 import manifold3d as m3d
 import trimesh
+from pytetwild import tetrahedralize
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -660,20 +661,84 @@ class CompoundElbow:
                                      showFrames, showBoundingBall)
         ax.set_aspect('equal')
         plt.show(block=block)
-        
-def manifoldToTruss(manifold : m3d.Manifold, diameter : float) -> m3d.Manifold:
-   mesh = manifold.to_mesh()
-   vertices = mesh.vert_properties
-   T = m3d.Manifold()
-   nodes = [m3d.Manifold.sphere(radius=diameter/2, circular_segments=3).translate(vertex[:3]) for vertex in vertices]
-   edges = set() # build edges list from triangles, with each edge appearing only once
-   for tri in mesh.tri_verts:
-        edges.add(tuple(sorted((tri[0], tri[1]))))
-        edges.add(tuple(sorted((tri[1], tri[2]))))
-        edges.add(tuple(sorted((tri[2], tri[0]))))
-   for edge in edges:
+
+def truss(vertices, edges, diameter : float) -> m3d.Manifold:
+    T = m3d.Manifold()
+    nodes = [m3d.Manifold.sphere(radius=diameter/2, circular_segments=3).translate(vertex[:3]) for vertex in vertices]
+    for edge in edges:
         T += (nodes[edge[0]] + nodes[edge[1]]).hull()
-   return T
+    return T
+
+
+def facesToEdges(faces: np.ndarray) -> np.ndarray:
+    """
+    Given an array of faces as triangles, quadrilaterals, etc (by vertex index),
+    Return an array of edges without duplication
+    """
+    n = faces.shape[0]  # number of faces
+    d = faces.shape[1]  # vertices per face
+    
+    # Create all edges by pairing each vertex with the next (wrapping around)
+    edges = np.stack([faces, np.roll(faces, -1, axis=1)], axis=-1)  # shape: (n, d, 2)
+    edges = edges.reshape(-1, 2)  # flatten to (n*d, 2)
+    
+    # Sort each edge so (a,b) and (b,a) are treated the same
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicates
+    edges = np.unique(edges, axis=0)
+    
+    return edges
+
+def tetrahedronsToEdges(tetrahedrons : np.ndarray) -> np.ndarray:
+    """
+    Compute the edges from a list of tetrahedrons specified by vertex index
+    
+    :param tetrahedrons: n x 4 numpy array of integers
+    :return: array of unique edges as pairs of vertex indices
+    :rtype: _ x 2 numpy array of integers
+    """
+    n = tetrahedrons.shape[0]  # number of tetrahedrons
+    
+    # Each tetrahedron has 6 edges: (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
+    edge_pairs = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+    
+    # Create all edges by indexing into tetrahedrons
+    # Shape: (n, 6, 2) where n is number of tetrahedrons
+    edges = tetrahedrons[:, edge_pairs]
+    
+    # Flatten to (n*6, 2)
+    edges = edges.reshape(-1, 2)
+    
+    # Sort each edge so (a,b) and (b,a) are treated the same
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicates
+    edges = np.unique(edges, axis=0)
+    
+    return edges
+
+
+
+def manifoldToTruss(manifold : m3d.Manifold, diameter : float, 
+                    infill : bool = False, edgeLength : float = None) -> m3d.Manifold:
+    mesh = manifold.to_mesh()
+    vertices = mesh.vert_properties
+    faces = mesh.tri_verts
+    if infill:
+        if edgeLength is None:
+            raise ValueError("Must specify edge length for tetrahedralization")
+        xmin, ymin, zmin, xmax, ymax, zmax = manifold.bounding_box() # axis-aligned bounding box
+        # compute diagonal length of bbox (xmin, ymin, zmin, xmax, ymax, zmax)
+        diagLength = np.linalg.norm(np.array([xmax, ymax, zmax]) - np.array([xmin, ymin, zmin]))
+        # tetrahedralization expects edge lengths specified as multiples of diagLength
+        tetVerts, tets = tetrahedralize(vertices, faces,
+                                        edge_length_fac=0.75,
+                                        optimize=True)
+        return truss(tetVerts, tetrahedronsToEdges(tets), diameter)
+    else:
+        edges = facesToEdges(mesh.tri_verts)
+        return truss(vertices, edges, diameter)
 
 class Bend:
     def __init__(self, arcRadius : float, StartFrame : SE3, bendingAngle : float, 
