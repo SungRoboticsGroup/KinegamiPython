@@ -226,27 +226,31 @@ plotManifold(hollowHull)
 
 
 
-link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
-               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(np.pi/4), 
+link = LinkCSC(r=2, StartDubinsPose=SE3.Rz(np.pi/3), 
+               EndDubinsPose=SE3.Tx(7.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(np.pi/4), 
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(wallThickness=0.2, holeDiameter=0.2, numHoles=4, startRadius=1, endRadius=1, hullBends=True, truss=True)
-analyzeProperties(module)
-plotManifold(module, block=False)
+module = link.connectableModule(wallThickness=0.2, holeDiameter=0.2, numHoles=4, 
+                                startRadius=2, endRadius=1, hullBends=True, 
+                                truss=True, trussInfill=True)
+#analyzeProperties(module)
+plotManifold(module, block=True)
 
-module = link.manifold(startRadius=1, endRadius=0.95, numSides=6, wallThickness=None, hullBends=True, maxSectionAngle=np.pi/2)
-refined = module.refine_to_length(1)
+"""
+module = link.manifold(startRadius=1, endRadius=2, numSides=6, 
+                       wallThickness=None, hullBends=True, 
+                       maxSectionAngle=np.pi/2)
+inner = link.manifold(startRadius=0.4, endRadius=0.8, numSides=6, 
+                       wallThickness=None, hullBends=False, 
+                       maxSectionAngle=np.pi/2)
+module = module - inner
+refined = module.refine_to_length(2)
 analyzeProperties(refined)
 plotManifold(refined, block=False)
-"""
-refined_mesh = refined.to_mesh()
-print(refined_mesh.vert_properties.shape, refined_mesh.tri_verts.shape)
-print(refined_mesh.vert_properties)
-"""
 #tetVerts, tets = tetrahedralize(refined_mesh.vert_properties, refined_mesh.tri_verts, edge_length_fac=0.75)
-trussManifold = manifoldToTruss(refined, diameter=0.2, infill=True, edgeLength=1)
+trussManifold = manifoldToTruss(refined, diameter=0.05, infill=True)
 plotManifold(trussManifold)
-
+"""
 #link.saveModule("linkModule.obj", wallThickness=0.05, holeDiameter=0.1, numHoles=4, startRadius=1, endRadius=0.5)
 
 

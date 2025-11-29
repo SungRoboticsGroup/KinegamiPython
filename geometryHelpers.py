@@ -721,19 +721,13 @@ def tetrahedronsToEdges(tetrahedrons : np.ndarray) -> np.ndarray:
 
 
 def manifoldToTruss(manifold : m3d.Manifold, diameter : float, 
-                    infill : bool = False, edgeLength : float = None) -> m3d.Manifold:
+                    infill : bool = False) -> m3d.Manifold:
     mesh = manifold.to_mesh()
     vertices = mesh.vert_properties
     faces = mesh.tri_verts
     if infill:
-        if edgeLength is None:
-            raise ValueError("Must specify edge length for tetrahedralization")
-        xmin, ymin, zmin, xmax, ymax, zmax = manifold.bounding_box() # axis-aligned bounding box
-        # compute diagonal length of bbox (xmin, ymin, zmin, xmax, ymax, zmax)
-        diagLength = np.linalg.norm(np.array([xmax, ymax, zmax]) - np.array([xmin, ymin, zmin]))
-        # tetrahedralization expects edge lengths specified as multiples of diagLength
         tetVerts, tets = tetrahedralize(vertices, faces,
-                                        edge_length_fac=0.75,
+                                        edge_length_fac=1,
                                         optimize=True)
         return truss(tetVerts, tetrahedronsToEdges(tets), diameter)
     else:

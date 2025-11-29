@@ -346,20 +346,29 @@ class LinkCSC:
 
     def connectableModule(self, wallThickness : float, holeDiameter : float, numHoles : int = 4,
                            startRadius : float = None, endRadius : float = None, numSides : int = 20,
-                           hullBends : bool = False, truss : bool = False, trussNumSides : int = 6, 
-                           trussMaxSectionAngle : float = np.pi/2) -> m3d.Manifold:
+                           hullBends : bool = False, truss : bool = False, trussInfill : bool = False, 
+                           trussNumSides : int = 6, trussMaxSectionAngle : float = np.pi/2) -> m3d.Manifold:
         connectionLength = 2 * holeDiameter
         if truss:
-            innerSolid = self.manifold(startRadius-wallThickness/2, endRadius-wallThickness/2, 
+            insetStartRadius = startRadius-wallThickness/2
+            insetEndRadius = endRadius-wallThickness/2
+            insetSolid = self.manifold(insetStartRadius, insetEndRadius,
                                   trussNumSides, stabilize=True, wallThickness=None, 
-                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle).refine_to_length(self.r)
-            tube = manifoldToTruss(innerSolid, wallThickness)
+                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)
+            if trussInfill:
+                insetSolid -= self.manifold(0.4*insetStartRadius, 0.4*insetEndRadius,
+                                  trussNumSides, stabilize=True, wallThickness=None, 
+                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)
+                        
+            insetSolid = insetSolid.refine_to_length(self.r)
+            tube = manifoldToTruss(insetSolid, wallThickness)
             baseHeight = 1.5*connectionLength
             baseTopRadius = (startRadius**2 - baseHeight**2)**0.5
             base = m3d.Manifold.cylinder(height=baseHeight, radius_low=startRadius, 
                                          radius_high=baseTopRadius, 
-                                         circular_segments=numSides) - \
-                    m3d.Manifold.cylinder(height=baseHeight+self.DISTANCE_EPSILON, 
+                                         circular_segments=numSides)
+            if not trussInfill:
+                base -= m3d.Manifold.cylinder(height=baseHeight+self.DISTANCE_EPSILON, 
                                           radius_low=startRadius-wallThickness,
                                           radius_high=baseTopRadius-wallThickness, 
                                           circular_segments=numSides)
@@ -372,6 +381,8 @@ class LinkCSC:
             tube -= trimEnd.translate((0,0,0)).rotate((0,90,0)).transform(self.EndDubinsPose.A[:3,:])
 
         else:
+            if trussInfill:
+                raise ValueError("trussInfill==True only works with truss==True")
             tube = self.manifold(startRadius, endRadius, numSides, stabilize=True,
                                 wallThickness=wallThickness, hullBends=hullBends)
         
