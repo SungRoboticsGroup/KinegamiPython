@@ -867,25 +867,25 @@ class Arc3D:
         
         The local coordinate system is:
         - Origin: at the arc's circle center
-        - X-axis: points radially outward at the arc's midpoint (angle theta/2)
-        - Y-axis: tangent direction at midpoint (perpendicular to X in the arc plane)
+        - Y-axis: points radially outward at the arc's midpoint (IQ's formula expects arc centered on +Y)
+        - X-axis: tangent direction at midpoint (perpendicular to Y in the arc plane)
         - Z-axis: binormal (perpendicular to arc plane)
         """
-        # Compute the midpoint direction: rotate startNormal by theta/2 around -binormal
+        # Compute the midpoint direction: rotate -startNormal by theta/2 around binormal
         # startNormal points INWARD (toward center), so -startNormal points outward at start
         halfTheta = self.theta / 2
-        halfAngleRot = Rotation.from_rotvec(-halfTheta * self.binormal)
+        halfAngleRot = Rotation.from_rotvec(halfTheta * self.binormal)
         centerToMid = halfAngleRot.apply(-self.startNormal)  # radial outward at midpoint
         
-        # X-axis: radial outward at arc midpoint
-        localX = centerToMid / norm(centerToMid)
+        # Y-axis: radial outward at arc midpoint (IQ's formula has arc centered on +Y)
+        localY = centerToMid / norm(centerToMid)
         
         # Z-axis: binormal (perpendicular to arc plane)
         localZ = self.binormal
         
-        # Y-axis: completes right-handed frame, tangent at midpoint
-        # cross(Z, X) gives the tangent direction at the midpoint
-        localY = cross(localZ, localX)
+        # X-axis: completes right-handed frame, tangent at midpoint
+        # cross(Y, Z) gives the tangent direction at the midpoint
+        localX = cross(localY, localZ)
         
         # Build rotation matrix: columns are local basis vectors expressed in world coords
         # To transform world -> local, we use the transpose (inverse for orthonormal basis)
@@ -903,15 +903,15 @@ class Arc3D:
         https://iquilezles.org/articles/distfunctions/
         
         The torus is centered at the origin in the XY plane. The arc is SYMMETRIC
-        about the X-axis, spanning from angle -theta to +theta. The X-axis points
-        radially outward at the arc's midpoint.
+        about the Y-axis (not X-axis!), spanning angles from (90°-halfTheta) to 
+        (90°+halfTheta). With abs(p.x), it handles both sides.
         
         Parameters:
         -----------
         p : np.ndarray
             3D point in local coordinate system (shape (3,))
-            - x: radial direction at arc midpoint (outward from torus center)
-            - y: tangential direction at arc midpoint  
+            - x: tangent direction at arc midpoint
+            - y: radial direction at arc midpoint (outward from torus center)
             - z: axial direction (perpendicular to torus plane)
         sc : np.ndarray
             (sin(halfTheta), cos(halfTheta)) where halfTheta = arcAngle/2
