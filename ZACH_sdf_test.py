@@ -36,21 +36,44 @@ except ImportError:
 # =============================================================================
 
 @njit(fastmath=True)
-def sd_capped_torus(px: float, py: float, pz: float, 
-                    sin_half: float, cos_half: float,
-                    major_r: float, minor_r: float) -> float:
+def sd_flat_ended_torus(px: float, py: float, pz: float, 
+                        sin_half: float, cos_half: float,
+                        major_r: float, minor_r: float) -> float:
     """
-    Capped torus SDF in local coordinates (IQ formula).
-    Arc is symmetric about X-axis, spanning [-halfTheta, +halfTheta].
+    Flat-ended torus SDF in local coordinates.
+    Arc is symmetric about Y-axis, with flat disc ends instead of spherical caps.
     """
     abs_px = abs(px)
     
-    if cos_half * abs_px > sin_half * py:
-        k = sin_half * abs_px + cos_half * py
-    else:
-        k = np.sqrt(abs_px * abs_px + py * py)
+    # Endpoint center on the torus ring
+    endCenter_x = major_r * sin_half
+    endCenter_y = major_r * cos_half
     
-    return np.sqrt(abs_px*abs_px + py*py + pz*pz + major_r*major_r - 2.0*major_r*k) - minor_r
+    # Tangent at endpoint (points past the arc end)
+    tangent_x = cos_half
+    tangent_y = -sin_half
+    
+    # How far past the endpoint are we?
+    toPoint_x = abs_px - endCenter_x
+    toPoint_y = py - endCenter_y
+    pastEnd = toPoint_x * tangent_x + toPoint_y * tangent_y
+    
+    if pastEnd <= 0.0:
+        # Inside or at arc span - standard torus formula
+        if cos_half * abs_px > sin_half * py:
+            k = sin_half * abs_px + cos_half * py
+        else:
+            k = np.sqrt(abs_px * abs_px + py * py)
+        return np.sqrt(abs_px*abs_px + py*py + pz*pz + major_r*major_r - 2.0*major_r*k) - minor_r
+    else:
+        # Past arc endpoint - distance to flat disc
+        # Radial distance from tube axis (in the plane of the disc)
+        radialInPlane = toPoint_x * sin_half + toPoint_y * cos_half
+        discDist = np.sqrt(radialInPlane * radialInPlane + pz * pz)
+        
+        # 2D SDF to a disc
+        outsideDisc = max(discDist - minor_r, 0.0)
+        return np.sqrt(pastEnd * pastEnd + outsideDisc * outsideDisc)
 
 
 @njit(fastmath=True)
@@ -82,7 +105,7 @@ def sdf_arc(px: float, py: float, pz: float,
             frame: np.ndarray,
             sin_half: float, cos_half: float,
             major_r: float, minor_r: float) -> float:
-    """Arc SDF: transform to local coords, then capped torus."""
+    """Arc SDF: transform to local coords, then flat-ended torus."""
     # Translate to center
     dx, dy, dz = px - cx, py - cy, pz - cz
     
@@ -91,7 +114,7 @@ def sdf_arc(px: float, py: float, pz: float,
     ly = frame[1, 0]*dx + frame[1, 1]*dy + frame[1, 2]*dz
     lz = frame[2, 0]*dx + frame[2, 1]*dy + frame[2, 2]*dz
     
-    return sd_capped_torus(lx, ly, lz, sin_half, cos_half, major_r, minor_r)
+    return sd_flat_ended_torus(lx, ly, lz, sin_half, cos_half, major_r, minor_r)
 
 
 @njit(fastmath=True)

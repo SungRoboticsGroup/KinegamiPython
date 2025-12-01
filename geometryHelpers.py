@@ -895,16 +895,16 @@ class Arc3D:
         # The SDF expects the arc to span [-halfTheta, +halfTheta]
         self._sdfSinCos = np.array([np.sin(halfTheta), np.cos(halfTheta)])
     
-    def _sdCappedTorus(self, p: np.ndarray, sc: np.ndarray, ra: float, rb: float) -> float:
+    def _sdFlatEndedTorus(self, p: np.ndarray, sc: np.ndarray, ra: float, rb: float) -> float:
         """
-        Signed Distance Function for a capped torus in local coordinates.
+        Signed Distance Function for a flat-ended torus in local coordinates.
         
-        Reference: Inigo Quilez's capped torus SDF
-        https://iquilezles.org/articles/distfunctions/
+        Modified from Inigo Quilez's capped torus SDF to have flat disc ends
+        instead of spherical caps.
         
         The torus is centered at the origin in the XY plane. The arc is SYMMETRIC
-        about the Y-axis (not X-axis!), spanning angles from (90°-halfTheta) to 
-        (90°+halfTheta). With abs(p.x), it handles both sides.
+        about the Y-axis, spanning angles from (90°-halfTheta) to (90°+halfTheta).
+        With abs(p.x), it handles both sides.
         
         Parameters:
         -----------
@@ -925,31 +925,50 @@ class Arc3D:
         float
             Signed distance (negative inside, positive outside)
         """
-        # Use abs(x) for symmetry about the X-axis
-        # This handles both sides of the arc (angles -theta to 0 and 0 to +theta)
+        # Use abs(x) for symmetry
         px = abs(p[0])
         py = p[1]
         pz = p[2]
         
-        # The condition checks if the point's angle from +X axis is within the arc span
-        # cos(halfTheta) * |x| > sin(halfTheta) * y  means angle < halfTheta
-        if sc[1] * px > sc[0] * py:  # sc[1] = cos(halfTheta), sc[0] = sin(halfTheta)
-            # Point is within the angular span of the arc
-            # Project onto the arc centerline
-            k = sc[0] * px + sc[1] * py
-        else:
-            # Point is outside the angular span - closest point is at arc endpoint (cap)
-            k = np.sqrt(px*px + py*py)
+        # Endpoint center on the torus ring (at angle halfTheta from +Y axis)
+        endCenter_x = ra * sc[0]  # ra * sin(halfTheta)
+        endCenter_y = ra * sc[1]  # ra * cos(halfTheta)
         
-        # Distance to torus surface
-        return np.sqrt(px*px + py*py + pz*pz + ra*ra - 2.0*ra*k) - rb
+        # Tangent at endpoint (points "past" the arc end, away from arc)
+        tangent_x = sc[1]   # cos(halfTheta)
+        tangent_y = -sc[0]  # -sin(halfTheta)
+        
+        # How far past the endpoint are we?
+        toPoint_x = px - endCenter_x
+        toPoint_y = py - endCenter_y
+        pastEnd = toPoint_x * tangent_x + toPoint_y * tangent_y
+        
+        if pastEnd <= 0.0:
+            # Inside or at arc span - standard torus formula
+            if sc[1] * px > sc[0] * py:
+                k = sc[0] * px + sc[1] * py
+            else:
+                k = np.sqrt(px*px + py*py)
+            return np.sqrt(px*px + py*py + pz*pz + ra*ra - 2.0*ra*k) - rb
+        else:
+            # Past arc endpoint - distance to flat disc
+            # The disc is perpendicular to tangent, centered at endCenter, radius rb
+            
+            # Radial distance from tube axis (in the plane of the disc)
+            # sc points radially outward at the endpoint
+            radialInPlane = toPoint_x * sc[0] + toPoint_y * sc[1]
+            discDist = np.sqrt(radialInPlane * radialInPlane + pz * pz)
+            
+            # 2D SDF to a disc: (pastEnd, max(discDist - rb, 0))
+            outsideDisc = max(discDist - rb, 0.0)
+            return np.sqrt(pastEnd * pastEnd + outsideDisc * outsideDisc)
     
     def sdf(self, point: np.ndarray, radius: float) -> float:
         """
         Compute the signed distance from a 3D point to this arc's tubular volume.
         
-        The arc is treated as a "capped torus" - a torus section (tube bent along
-        the arc) with hemispherical caps at both ends.
+        The arc is treated as a torus section (tube bent along the arc) with 
+        flat disc ends instead of spherical caps.
         
         Parameters:
         -----------
@@ -969,11 +988,11 @@ class Arc3D:
         
         # Transform point from world coordinates to local arc coordinates:
         # 1. Translate so circle center is at origin
-        # 2. Rotate so arc midpoint is on +X axis (symmetric about X)
+        # 2. Rotate so arc midpoint is on +Y axis (for IQ's formula)
         localP = self._worldToLocalRotation @ (point - self.circleCenter)
         
-        # Apply the capped torus SDF in local coordinates
-        return self._sdCappedTorus(localP, self._sdfSinCos, self.r, radius)
+        # Apply the flat-ended torus SDF in local coordinates
+        return self._sdFlatEndedTorus(localP, self._sdfSinCos, self.r, radius)
     
     def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
