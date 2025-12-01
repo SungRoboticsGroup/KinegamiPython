@@ -925,43 +925,40 @@ class Arc3D:
         float
             Signed distance (negative inside, positive outside)
         """
-        # Use abs(x) for symmetry
-        px = abs(p[0])
-        py = p[1]
+        # Use abs(x) for symmetry, work in XY plane
+        p_xy = np.array([abs(p[0]), p[1]])
         pz = p[2]
         
         # Endpoint center on the torus ring (at angle halfTheta from +Y axis)
-        endCenter_x = ra * sc[0]  # ra * sin(halfTheta)
-        endCenter_y = ra * sc[1]  # ra * cos(halfTheta)
+        # sc = (sin, cos), so endpoint is at ra * sc
+        endCenter = ra * sc
         
-        # Tangent at endpoint (points "past" the arc end, away from arc)
-        tangent_x = sc[1]   # cos(halfTheta)
-        tangent_y = -sc[0]  # -sin(halfTheta)
+        # Tangent at endpoint: rotate sc by -90° → (cos, -sin)
+        tangent = np.array([sc[1], -sc[0]])
         
-        # How far past the endpoint are we?
-        toPoint_x = px - endCenter_x
-        toPoint_y = py - endCenter_y
-        pastEnd = toPoint_x * tangent_x + toPoint_y * tangent_y
+        # Vector from endpoint to query point
+        toPoint = p_xy - endCenter
+        
+        # How far past the arc endpoint are we?
+        pastEnd = np.dot(toPoint, tangent)
         
         if pastEnd <= 0.0:
-            # Inside or at arc span - standard torus formula
-            if sc[1] * px > sc[0] * py:
-                k = sc[0] * px + sc[1] * py
+            # Inside arc span - standard torus formula
+            p_len = np.linalg.norm(p_xy)
+            if sc[1] * p_xy[0] > sc[0] * p_xy[1]:
+                k = np.dot(sc, p_xy)
             else:
-                k = np.sqrt(px*px + py*py)
-            return np.sqrt(px*px + py*py + pz*pz + ra*ra - 2.0*ra*k) - rb
+                k = p_len
+            return np.sqrt(p_len*p_len + pz*pz + ra*ra - 2.0*ra*k) - rb
         else:
             # Past arc endpoint - distance to flat disc
-            # The disc is perpendicular to tangent, centered at endCenter, radius rb
+            # Radial distance from tube axis (project onto sc which points radially)
+            radialInPlane = np.dot(toPoint, sc)
+            discDist = np.sqrt(radialInPlane*radialInPlane + pz*pz)
             
-            # Radial distance from tube axis (in the plane of the disc)
-            # sc points radially outward at the endpoint
-            radialInPlane = toPoint_x * sc[0] + toPoint_y * sc[1]
-            discDist = np.sqrt(radialInPlane * radialInPlane + pz * pz)
-            
-            # 2D SDF to a disc: (pastEnd, max(discDist - rb, 0))
+            # 2D SDF to disc edge
             outsideDisc = max(discDist - rb, 0.0)
-            return np.sqrt(pastEnd * pastEnd + outsideDisc * outsideDisc)
+            return np.sqrt(pastEnd*pastEnd + outsideDisc*outsideDisc)
     
     def sdf(self, point: np.ndarray, radius: float) -> float:
         """

@@ -567,7 +567,7 @@ def main():
     # Create a random link with variable parameters
     print("\nCreating random Dubins path...")
     # Pass None to randomize, or specify values to test specific cases
-    link = create_random_link(r=.5, maxAngle=None, seed=np.random.seed(492))
+    link = create_random_link(r=.5, maxAngle=None, seed=np.random.seed(494))
     
     print(f"  Turn radius: {link.r:.2f}")
     print(f"  Max elbow angle: {np.rad2deg(link.maxAnglePerElbow):.1f}°")
