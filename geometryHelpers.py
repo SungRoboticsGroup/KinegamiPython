@@ -845,20 +845,78 @@ class Arc3D:
 
         return self.circleCenter + u * uhat + v * vhat
     
+    def _computeLocalFrame(self):
+        """
+        Precompute the transformation matrix from world coordinates to local arc coordinates.
+        
+        The capped torus SDF formula (from Inigo Quilez) assumes:
+        - The torus lies in the XY plane, centered at the origin
+        - The arc is SYMMETRIC about the X-axis, spanning angles [-theta, +theta]
+        - The formula uses abs(x) to exploit this symmetry
+        - The arc "caps" (endpoints) are at angles ±theta from the +X axis
+        
+        For our Arc3D, we have:
+        - startPoint at angle 0 (beginning of arc)
+        - endPoint at angle theta (end of arc)
+        
+        To use the symmetric SDF, we align the LOCAL X-axis with the MIDPOINT
+        of the arc (at angle theta/2). This way:
+        - The arc spans from -theta/2 to +theta/2 in local coordinates
+        - Both endpoints are equidistant from the X-axis
+        - The abs(x) symmetry is correctly utilized
+        
+        The local coordinate system is:
+        - Origin: at the arc's circle center
+        - X-axis: points radially outward at the arc's midpoint (angle theta/2)
+        - Y-axis: tangent direction at midpoint (perpendicular to X in the arc plane)
+        - Z-axis: binormal (perpendicular to arc plane)
+        """
+        # Compute the midpoint direction: rotate startNormal by theta/2 around -binormal
+        # startNormal points INWARD (toward center), so -startNormal points outward at start
+        halfTheta = self.theta / 2
+        halfAngleRot = Rotation.from_rotvec(-halfTheta * self.binormal)
+        centerToMid = halfAngleRot.apply(-self.startNormal)  # radial outward at midpoint
+        
+        # X-axis: radial outward at arc midpoint
+        localX = centerToMid / norm(centerToMid)
+        
+        # Z-axis: binormal (perpendicular to arc plane)
+        localZ = self.binormal
+        
+        # Y-axis: completes right-handed frame, tangent at midpoint
+        # cross(Z, X) gives the tangent direction at the midpoint
+        localY = cross(localZ, localX)
+        
+        # Build rotation matrix: columns are local basis vectors expressed in world coords
+        # To transform world -> local, we use the transpose (inverse for orthonormal basis)
+        self._worldToLocalRotation = np.column_stack([localX, localY, localZ]).T
+        
+        # Precompute sin and cos of HALF the arc angle for the symmetric SDF
+        # The SDF expects the arc to span [-halfTheta, +halfTheta]
+        self._sdfSinCos = np.array([np.sin(halfTheta), np.cos(halfTheta)])
+    
     def _sdCappedTorus(self, p: np.ndarray, sc: np.ndarray, ra: float, rb: float) -> float:
         """
         Signed Distance Function for a capped torus in local coordinates.
         
-        The torus is in the XY plane with arc extending from X-axis by angle defined by sc.
+        Reference: Inigo Quilez's capped torus SDF
+        https://iquilezles.org/articles/distfunctions/
+        
+        The torus is centered at the origin in the XY plane. The arc is SYMMETRIC
+        about the X-axis, spanning from angle -theta to +theta. The X-axis points
+        radially outward at the arc's midpoint.
         
         Parameters:
         -----------
         p : np.ndarray
             3D point in local coordinate system (shape (3,))
+            - x: radial direction at arc midpoint (outward from torus center)
+            - y: tangential direction at arc midpoint  
+            - z: axial direction (perpendicular to torus plane)
         sc : np.ndarray
-            (sin(theta), cos(theta)) where theta is the angular extent (shape (2,))
+            (sin(halfTheta), cos(halfTheta)) where halfTheta = arcAngle/2
         ra : float
-            Major radius (arc radius)
+            Major radius (distance from torus center to tube center)
         rb : float
             Minor radius (tube radius)
         
@@ -867,14 +925,20 @@ class Arc3D:
         float
             Signed distance (negative inside, positive outside)
         """
+        # Use abs(x) for symmetry about the X-axis
+        # This handles both sides of the arc (angles -theta to 0 and 0 to +theta)
         px = abs(p[0])
         py = p[1]
         pz = p[2]
         
-        # Determine k: distance to the arc in XY plane
-        if sc[1] * px > sc[0] * py:
+        # The condition checks if the point's angle from +X axis is within the arc span
+        # cos(halfTheta) * |x| > sin(halfTheta) * y  means angle < halfTheta
+        if sc[1] * px > sc[0] * py:  # sc[1] = cos(halfTheta), sc[0] = sin(halfTheta)
+            # Point is within the angular span of the arc
+            # Project onto the arc centerline
             k = sc[0] * px + sc[1] * py
         else:
+            # Point is outside the angular span - closest point is at arc endpoint (cap)
             k = np.sqrt(px*px + py*py)
         
         # Distance to torus surface
@@ -884,47 +948,32 @@ class Arc3D:
         """
         Compute the signed distance from a 3D point to this arc's tubular volume.
         
-        Transforms the point into local arc coordinates where the arc is centered at origin,
-        with the arc in the XY plane, and then applies the capped torus SDF formula.
+        The arc is treated as a "capped torus" - a torus section (tube bent along
+        the arc) with hemispherical caps at both ends.
         
         Parameters:
         -----------
         point : np.ndarray
             3D point in world coordinates
         radius : float
-            Tube radius around the arc
+            Tube radius around the arc centerline
         
         Returns:
         --------
         float
             Signed distance (negative inside the tube, positive outside)
         """
-        # Transform point to local arc coordinate system
-        # Local origin is at circleCenter
-        localPoint = point - self.circleCenter
+        # Lazy initialization of the precomputed transformation matrix
+        if not hasattr(self, '_worldToLocalRotation'):
+            self._computeLocalFrame()
         
-        # Build local coordinate frame:
-        # X-axis: pointing from circle center toward start point (-startNormal direction)
-        # Z-axis: binormal (rotation axis of the arc)
-        # Y-axis: cross(Z, X) to complete right-handed frame
+        # Transform point from world coordinates to local arc coordinates:
+        # 1. Translate so circle center is at origin
+        # 2. Rotate so arc midpoint is on +X axis (symmetric about X)
+        localP = self._worldToLocalRotation @ (point - self.circleCenter)
         
-        arcX = -self.startNormal  # Points radially outward from circle center at start
-        arcZ = self.binormal       # Rotation axis
-        arcY = np.cross(arcZ, arcX)
-        
-        # Build transformation matrix (world to local)
-        # Columns are the local basis vectors
-        arcFrame = np.column_stack([arcX, arcY, arcZ])
-        
-        # Transform point to local coordinates
-        localP = arcFrame.T @ localPoint
-        
-        # Apply capped torus SDF
-        sc = np.array([np.sin(self.theta), np.cos(self.theta)])
-        ra = self.r  # arc radius
-        rb = radius   # tube radius
-        
-        return self._sdCappedTorus(localP, sc, ra, rb)
+        # Apply the capped torus SDF in local coordinates
+        return self._sdCappedTorus(localP, self._sdfSinCos, self.r, radius)
     
     def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
