@@ -226,15 +226,25 @@ plotManifold(hollowHull)
 
 
 
-link = LinkCSC(r=2, StartDubinsPose=SE3.Rz(np.pi/3), 
-               EndDubinsPose=SE3.Tx(7.0)@SE3.Ry(3*np.pi/4)@SE3.Rz(np.pi/4), 
+link = LinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
+               EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(np.pi/4)@SE3.Rz(np.pi/3), 
                maxAnglePerElbow=np.pi/10)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(wallThickness=0.2, holeDiameter=0.2, numHoles=4, 
-                                startRadius=2, endRadius=1, hullBends=True, 
-                                truss=True, trussInfill=True)
-#analyzeProperties(module)
+module = link.connectableModule(wallThickness=0.1, holeDiameter=0.15, numHoles=4, 
+                                startRadius=1, endRadius=1, hullBends=False, 
+                                trussify=True, trussCenterline=True)
+analyzeProperties(module)
 plotManifold(module, block=True)
+
+# TO TRY:
+# Make outer and inner coarse meshes
+# For each inner vertex, find nearest outer vertex (and vice versa? probably unnecessary)
+# Add those as edges to the truss
+# No need to tetrahedralize???
+# Wait but we would also like the inner layer to be internally connected through the center...
+# Maybe a third layer that's segments just through the center?
+# Or actually we should just use that?
+
 
 """
 module = link.manifold(startRadius=1, endRadius=2, numSides=6, 

@@ -261,6 +261,31 @@ class PathCSC:
         ax.set_aspect('equal')
         ax.legend()
         plt.show(block=block)
+    
+    def interpolate(self, numPoints=50):
+        # determine number of points per section, proportional to length
+        arc1Length = self.r * abs(self.theta1)
+        arc2Length = self.r * abs(self.theta2)
+        sLength = self.tMag
+        totalLength = arc1Length + sLength + arc2Length
+        arc1points = int(np.round(numPoints * arc1Length / totalLength))
+        arc2points = int(np.round(numPoints * arc2Length / totalLength))
+        sPoints = numPoints - arc1points - arc2points
+
+        # interpolate C1
+        arc1 = Arc3D(self.circleCenter1, 
+                self.startPosition, self.startDir, self.theta1)
+        points1 = arc1.interpolate(count=arc1points)
+        
+        # interpolate S
+        pointsS = np.linspace(self.turn1end, self.turn2start, sPoints+2)[1:-1]
+        
+        # interpolate C2
+        arc2 = Arc3D(self.circleCenter2, 
+                self.turn2start, self.tUnit, self.theta2)
+        points2 = arc2.interpolate(count=arc2points)
+        
+        return np.vstack((points1, pointsS, points2))
         
         
         

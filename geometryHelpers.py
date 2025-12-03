@@ -662,13 +662,50 @@ class CompoundElbow:
         ax.set_aspect('equal')
         plt.show(block=block)
 
-def truss(vertices, edges, diameter : float) -> m3d.Manifold:
+def trussManifold(vertices, edges, diameter : float) -> m3d.Manifold:
     T = m3d.Manifold()
     nodes = [m3d.Manifold.sphere(radius=diameter/2, circular_segments=3).translate(vertex[:3]) for vertex in vertices]
     for edge in edges:
         T += (nodes[edge[0]] + nodes[edge[1]]).hull()
     return T
 
+
+def connectOuterToInner(outerVertices : np.ndarray, outerEdges : np.ndarray, 
+                 innerVertices : np.ndarray, innerEdges : np.ndarray, 
+                 nearestCount=1) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Given outer and inner truss specifications (vertices and edges),
+    concatenate them into a single truss specification,
+    with every outer vertex connected to its nearestCount closest inner vertices.
+    
+    :param outerVertices: m x 3 numpy array of outer truss vertex positions
+    :param outerEdges: p x 2 numpy array of outer truss edges by vertex index
+    :param innerVertices: n x 3 numpy array of inner truss vertex positions
+    :param innerEdges: q x 2 numpy array of inner truss edges by vertex index
+    :param nearestCount: number of nearest inner vertices to connect to each outer vertex
+    :return: tuple (vertices, edges) representing the combined truss
+    :rtype: (numpy.ndarray, numpy.ndarray)
+    """
+    if nearestCount <= 0:
+        raise ValueError("nearestCount must be positive")
+    elif nearestCount > innerVertices.shape[0]:
+        raise ValueError("nearestCount cannot exceed number of inner vertices")
+
+    combinedVertices = np.vstack((outerVertices, innerVertices))
+    newEdgesList = []
+    for outerVertexIndex, outerVertex in enumerate(outerVertices):
+        distances = norm(innerVertices - outerVertex.reshape(1,3), axis=1)
+        nearestInnerIndices = np.argsort(distances)[:nearestCount]
+        for innerIndex in nearestInnerIndices:
+            newEdgesList.append([outerVertexIndex, innerIndex + outerVertices.shape[0]])
+            #newEdgesList.append([np.where((outerVertices == outerVertex).all(axis=1))[0][0], 
+            #                     innerIndex + outerVertices.shape[0]])
+
+    combinedEdges = np.vstack((outerEdges, 
+                               innerEdges + outerVertices.shape[0],
+                               np.array(newEdgesList)))
+
+    return combinedVertices, combinedEdges
 
 def facesToEdges(faces: np.ndarray) -> np.ndarray:
     """
@@ -718,7 +755,11 @@ def tetrahedronsToEdges(tetrahedrons : np.ndarray) -> np.ndarray:
     
     return edges
 
-
+def manifoldToGraph(manifold : m3d.Manifold) -> tuple[np.ndarray, np.ndarray]:
+    mesh = manifold.to_mesh()
+    vertices = mesh.vert_properties
+    faces = mesh.tri_verts
+    return vertices, facesToEdges(faces)
 
 def manifoldToTruss(manifold : m3d.Manifold, diameter : float, 
                     infill : bool = False) -> m3d.Manifold:
@@ -729,10 +770,10 @@ def manifoldToTruss(manifold : m3d.Manifold, diameter : float,
         tetVerts, tets = tetrahedralize(vertices, faces,
                                         edge_length_fac=1,
                                         optimize=True)
-        return truss(tetVerts, tetrahedronsToEdges(tets), diameter)
+        return trussManifold(tetVerts, tetrahedronsToEdges(tets), diameter)
     else:
         edges = facesToEdges(mesh.tri_verts)
-        return truss(vertices, edges, diameter)
+        return trussManifold(vertices, edges, diameter)
 
 class Bend:
     def __init__(self, arcRadius : float, StartFrame : SE3, bendingAngle : float, 
@@ -911,7 +952,7 @@ class Arc3D:
         self.endNormal = - self.centerToEnd / self.r
         self.endTangent = cross(self.endNormal, self.binormal)
     
-    def interpolate(self, count=50):
+    def interpolate(self, count=50) -> np.ndarray:
         angle = np.linspace(0, self.theta, count).reshape(-1,1)
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
