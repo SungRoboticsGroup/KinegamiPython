@@ -77,27 +77,27 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 
 def test():
     optimizations = [
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n")
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n")
     ]
 
     labels = [
-            "DFS - Outward Longest",
-            "DFS - Outward Shortest",
+            #"DFS - Outward Longest",
+            #"DFS - Outward Shortest",
             "DFS - Inward Longest",
-            "DFS - Inward Shortest",
-            "BFS - Outward Longest",
-            "BFS - Outward Shortest",
-            "BFS - Inward Longest",
-            "BFS - Inward Shortest",
-            "Randomized Weighted"
+            #"DFS - Inward Shortest",
+            #"BFS - Outward Longest",
+            #"BFS - Outward Shortest",
+            #"BFS - Inward Longest",
+            #"BFS - Inward Shortest",
+            #"Randomized Weighted"
     ]
 
     lowerBounds = []
@@ -125,6 +125,7 @@ def test():
         # Generate collision-free configs for this specific chain
         # This shouldn't be necessary since we're using the gimbal construction...
         collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=2)
+        print("Optimizing for configurations:\n", collision_free_configs)
         
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")

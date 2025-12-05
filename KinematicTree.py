@@ -365,6 +365,7 @@ class KinematicTree(Generic[J]):
         
         return numCollisions
 
+        """
         def posesAreSame(pose1, pose2):
             return np.allclose(pose1.t, pose2.t, rtol=1e-05, atol=1e-08)# and np.allclose(pose1.n, pose2.n, rtol=1e-05, atol=1e-08)
 
@@ -542,6 +543,7 @@ class KinematicTree(Generic[J]):
                         idx1 += 1
         #print(f"link link time: {time.time() - start4}")
         return numCollisions
+        """
 
     def selectCollisionCapsules(self, specificJointIndices = None, ignoreLater = False, ignoreWaypoints=True):
         allCapsules = [[],[]]

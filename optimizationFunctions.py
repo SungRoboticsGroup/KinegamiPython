@@ -34,7 +34,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                 copied_subject.setJointState(i,configuration[i])
                 copied_subject.Joints[i].recomputeCollisionCapsules()
         if copied_subject.detectCollisions(debug=True) > 0:
-            print(f"(placement fn) Warning: Initial tree in optimizeJointPlacement contains collisions.")
+            print(f"(placement fn) Warning: Initial tree in optimizeJointPlacement contains collisions in configuration {configuration}.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
@@ -261,7 +261,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                 copied_subject.setJointState(i,configuration[i])
                 copied_subject.Joints[i].recomputeCollisionCapsules()
         if copied_subject.detectCollisions(debug=True) > 0:
-            print("Warning: Initial tree in optimizeWaypointPlacement contains collisions.")
+            print(f"Warning: Initial tree in optimizeWaypointPlacement contains collisions in configuration {configuration}.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
@@ -451,6 +451,8 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
                                                     configurations=configurations)
             if tree.detectCollisions(specificJointIndices=[index], ignoreLater=False, debug=True) > 0:
+                print(f"Post-optimization collision detected at joint {index}.")
+                print(repr(tree))
                 raise Exception("Post-optimization collision detected.")
             log(tree, index)
 
