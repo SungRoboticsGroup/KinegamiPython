@@ -3,15 +3,15 @@ import random
 from treeTraversals import *
 
 def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, 
-                           childFraction = 1, ignorePlacement=False, 
+                           childFraction = 1, ignorePlacement = False, 
                            ignoreLater = False, parallelize = False, 
                            verbose=True, power=2, includeCollisionPenalty=True, 
-                           configurations=None):
+                           configurations=None, retryingWithPenalty=False):
 
     # If includeCollisionPenalty is True, first try without it
     original_includeCollisionPenalty = includeCollisionPenalty
     verbose = True
-    if original_includeCollisionPenalty:
+    if original_includeCollisionPenalty and not retryingWithPenalty:
         try:
             if verbose:
                 print("Trying optimization without collision penalty...")
@@ -34,7 +34,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                 copied_subject.setJointState(i,state[i])
             copied_subject.Joints[i].recomputeCollisionCapsules()
             if copied_subject.detectCollisions(debug=True) > 0:
-                print("(placement fn) Warning: Initial tree contains collisions.")
+                print(f"(placement fn) Warning: Initial tree in state {i} contains collisions.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
@@ -213,7 +213,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
             return optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                                         childFraction, ignorePlacement, ignoreLater,
                                         parallelize, verbose, power,
-                                        includeCollisionPenalty=True, configurations=configurations)
+                                        includeCollisionPenalty=True, configurations=configurations,
+                                        retryingWithPenalty=True)
         elif verbose:
             print("No collisions detected, using result without penalty")
     
@@ -222,11 +223,11 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
 def optimizeWaypointPlacement(subject, index, maxiter, tol, 
                               collisionError, childFraction = 1, ignorePlacement=False, 
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None, 
-                              includeCollisionPenalty=True):
+                              includeCollisionPenalty=True, retryingWithPenalty=False):
 
     # If includeCollisionPenalty is True, first try without it
     original_includeCollisionPenalty = includeCollisionPenalty
-    if original_includeCollisionPenalty:
+    if original_includeCollisionPenalty and not retryingWithPenalty:
         try:
             if verbose:
                 print("Trying waypoint optimization without collision penalty...")
@@ -343,7 +344,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                 return optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError,
                                                childFraction, ignorePlacement, ignoreLater,
                                                parallelize, verbose, configurations,
-                                               includeCollisionPenalty=True)
+                                               includeCollisionPenalty=True, retryingWithPenalty=True)
             elif verbose:
                 print("No collisions detected, using waypoint result without penalty")
         

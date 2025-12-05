@@ -23,7 +23,7 @@ treeCount = 1
 restartFrom = 0
 multipleIterations=False
 
-seed = 44
+seed = 41
 np.random.seed(seed)
 saved_state = np.random.get_state()
 

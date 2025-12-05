@@ -14,7 +14,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 4
+jointCount = 3
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -22,7 +22,7 @@ chainCount = 1
 restartFrom = 0
 multipleIterations=False
 
-seed = 42
+seed = 41
 np.random.seed(seed)
 saved_state = np.random.get_state()
 
@@ -77,26 +77,26 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 
 def test():
     optimizations = [
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n")
     ]
 
     labels = [
-            #"DFS - Outward Longest",
-            #"DFS - Outward Shortest",
+            "DFS - Outward Longest",
+            "DFS - Outward Shortest",
             "DFS - Inward Longest",
-            #"DFS - Inward Shortest",
-            #"BFS - Outward Longest",
-            #"BFS - Outward Shortest",
+            "DFS - Inward Shortest",
+            "BFS - Outward Longest",
+            "BFS - Outward Shortest",
             "BFS - Inward Longest",
-            #"BFS - Inward Shortest",
+            "BFS - Inward Shortest",
             "Randomized Weighted"
     ]
 
