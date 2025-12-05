@@ -221,7 +221,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     return final_tree, final_loss
 
 def optimizeWaypointPlacement(subject, index, maxiter, tol, 
-                              collisionError, childFraction = 1, ignorePlacement=False, 
+                              collisionPenaltyScale, childFraction = 1, ignorePlacement=False, 
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None, 
                               includeCollisionPenalty=True, retryingWithPenalty=False):
 
@@ -277,7 +277,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
         if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
-            return collisionError * len(subject.Joints) * (len(subject.Children) + 1)
+            return collisionPenaltyScale * len(subject.Joints) * (len(subject.Children) + 1)
         
         return linkLoss(tree, index, includeCollisionPenalty=True, configurations=configurations, 
                         capsuleSelections=capsuleSelections, selectedIndices=selectedIndices) + \
@@ -341,7 +341,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                 if verbose:
                     print(f"Collision detected for waypoint {index}, retrying with collision penalty")
                 # Retry with collision penalty enabled
-                return optimizeWaypointPlacement(subject, index, maxiter, tol, collisionError,
+                return optimizeWaypointPlacement(subject, index, maxiter, tol, collisionPenaltyScale,
                                                childFraction, ignorePlacement, ignoreLater,
                                                parallelize, verbose, configurations,
                                                includeCollisionPenalty=True, retryingWithPenalty=True)
@@ -396,7 +396,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
     if showSteps and isinstance(subject.Joints[0], OrigamiJoint):
         subject.show()
 
-    collisionError = 0
+    collisionPenaltyScale = 0
     for i in range(0, len(subject.Joints)):
         if len(subject.Children[i]) > 0:
             continue
@@ -405,10 +405,10 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         while j != 0:
             length += subject.Links[j].path.length ** 2
             j = subject.Parents[j]
-        if length > collisionError:
-            collisionError = length
+        if length > collisionPenaltyScale:
+            collisionPenaltyScale = length
 
-    print(f"Collision error is {collisionError}")
+    print(f"Collision penalty scale is {collisionPenaltyScale}")
 
     start = time.time()
 
@@ -442,12 +442,12 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
 
             if isWaypoint(subject.Joints[index]):
                 tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    collisionError=collisionError, childFraction=childFraction, 
+                                                    collisionPenaltyScale=collisionPenaltyScale, childFraction=childFraction, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
                                                     configurations=configurations)
             else:
                 tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    penaltyScale=collisionError, childFraction=childFraction, 
+                                                    penaltyScale=collisionPenaltyScale, childFraction=childFraction, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
                                                     configurations=configurations)
             if tree.detectCollisions(specificJointIndices=[index], ignoreLater=False, debug=True) > 0:
