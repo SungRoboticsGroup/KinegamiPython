@@ -22,7 +22,7 @@ chainCount = 1
 restartFrom = 0
 multipleIterations=False
 
-seed = 41
+seed = 42
 np.random.seed(seed)
 saved_state = np.random.get_state()
 

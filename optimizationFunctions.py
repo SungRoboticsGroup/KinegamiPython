@@ -27,14 +27,14 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
 
-    for state in configurations:
+    for configuration in configurations:
         copied_subject = copy.deepcopy(subject)
         for i in range(0, len(copied_subject.Joints)):
             if (not isWaypoint(copied_subject.Joints[i])):
-                copied_subject.setJointState(i,state[i])
-            copied_subject.Joints[i].recomputeCollisionCapsules()
-            if copied_subject.detectCollisions(debug=True) > 0:
-                print(f"(placement fn) Warning: Initial tree in state {i} contains collisions.")
+                copied_subject.setJointState(i,configuration[i])
+                copied_subject.Joints[i].recomputeCollisionCapsules()
+        if copied_subject.detectCollisions(debug=True) > 0:
+            print(f"(placement fn) Warning: Initial tree in optimizeJointPlacement contains collisions.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
@@ -196,12 +196,12 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
         # Check for collisions in all configurations
         has_collisions = False
         if configurations is not None:
-            for state in configurations:
+            for configuration in configurations:
                 test_tree = copy.deepcopy(final_tree)
                 for i in range(len(test_tree.Joints)):
                     if not isWaypoint(test_tree.Joints[i]):
-                        test_tree.setJointState(i, state[i])
-                    test_tree.Joints[i].recomputeCollisionCapsules()  # Fixed: recompute for each joint
+                        test_tree.setJointState(i, configuration[i])
+                        test_tree.Joints[i].recomputeCollisionCapsules()  # Fixed: recompute for each joint
                 if test_tree.detectCollisions(specificJointIndices=[index], debug=False) > 0:
                     has_collisions = True
                     break
@@ -254,14 +254,14 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     initialGuess[0:3] = transform.t
     initialGuess[3:6] = SE3.Rt(transform.R, np.zeros(3)).eul()
 
-    for state in configurations:
+    for configuration in configurations:
         copied_subject = copy.deepcopy(subject)
         for i in range(0, len(copied_subject.Joints)):
             if (not isWaypoint(copied_subject.Joints[i])):
-                copied_subject.setJointState(i,state[i])
-            copied_subject.Joints[i].recomputeCollisionCapsules()
-            if copied_subject.detectCollisions(debug=True) > 0:
-                print("Warning: Initial tree contains collisions.")
+                copied_subject.setJointState(i,configuration[i])
+                copied_subject.Joints[i].recomputeCollisionCapsules()
+        if copied_subject.detectCollisions(debug=True) > 0:
+            print("Warning: Initial tree in optimizeWaypointPlacement contains collisions.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
@@ -327,12 +327,12 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
             # Check for collisions in all configurations
             has_collisions = False
             if configurations is not None:
-                for state in configurations:
+                for configuration in configurations:
                     test_tree = copy.deepcopy(tree)
                     for i in range(len(test_tree.Joints)):
                         if not isWaypoint(test_tree.Joints[i]):
-                            test_tree.setJointState(i, state[i])
-                        test_tree.Joints[i].recomputeCollisionCapsules() 
+                            test_tree.setJointState(i, configuration[i])
+                            test_tree.Joints[i].recomputeCollisionCapsules() 
                     if test_tree.detectCollisions(specificJointIndices=[index], debug=False) > 0:
                         has_collisions = True
                         break
@@ -392,7 +392,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         subject.Joints[i].recomputeCollisionCapsules()
 
     if subject.detectCollisions(debug=True) > 0:
-        print("Warning: Initial tree contains collisions.")
+        print("Warning: initial tree in optimizeTree contains collisions.")
     if showSteps and isinstance(subject.Joints[0], OrigamiJoint):
         subject.show()
 
