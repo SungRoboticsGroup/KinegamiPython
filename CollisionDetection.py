@@ -190,10 +190,11 @@ def vectorized_box_collision(boxes1, boxes2):
     return collisions
 
 class CollisionCapsule:
-    def __init__(self, base : SE3(), radius : float, height : float):
-        self.radius = radius
-        self.height = height
-        self.base = base @ SE3.Ry(np.pi/2)
+    def __init__(self, base : SE3(), radius : float, height : float, epsilon : float = 1e-6):
+        self.EPSILON = epsilon*radius
+        self.radius = radius - self.EPSILON
+        self.height = height - 2*self.EPSILON
+        self.base = base @ SE3.Ry(np.pi/2) @ SE3.Trans([0,0,self.EPSILON])
         self.otherBase = self.base @ SE3.Trans([0,0,self.height])
         self.start = (self.base @ SE3.Trans([0,0,-self.radius])).t
         self.center = (self.base @ SE3.Trans([0,0,self.height/2])).t
