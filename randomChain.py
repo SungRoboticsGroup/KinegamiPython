@@ -124,7 +124,7 @@ def test():
         
         # Generate collision-free configs for this specific chain
         # This shouldn't be necessary since we're using the gimbal construction...
-        collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=2)
+        collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=4)
         print("Optimizing for configurations:\n", collision_free_configs)
         
         for no, f in enumerate(optimizations):

@@ -34,7 +34,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                 copied_subject.setJointState(i,configuration[i])
                 copied_subject.Joints[i].recomputeCollisionCapsules()
         if copied_subject.detectCollisions(debug=True) > 0:
-            print(f"(placement fn) Warning: Initial tree in optimizeJointPlacement contains collisions in configuration {configuration}.")
+            print(f"Warning: Initial tree in optimizeJointPlacement contains collisions in configuration {configuration}.")
 
     subjects = [copy.deepcopy(subject) for _ in configurations]
     for i in range(0,len(configurations)):
