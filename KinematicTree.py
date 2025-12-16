@@ -26,7 +26,6 @@ import logging
 import collections
 import traceback
 import style
-import style
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('pyswarms')
@@ -359,9 +358,12 @@ class KinematicTree(Generic[J]):
     def detectCollisions(self, specificJointIndices = None, plot=False, includeEnds=False, debug=False, ignoreLater=False, ignoreWaypoints=True):
         toCheck = list(range(len(self.Joints))) if specificJointIndices is None else specificJointIndices
         numCollisions = 0
-        for index in toCheck:
-            capsules = self.selectCollisionCapsules(specificJointIndices=[index], ignoreLater=ignoreLater)
-            numCollisions += self.detectCollisionsWithCapsules([index], capsules, debug=debug)
+        # for index in toCheck:
+        #     capsules = self.selectCollisionCapsules(specificJointIndices=[index], ignoreLater=ignoreLater)
+        #     numCollisions += self.detectCollisionsWithCapsules([index], capsules, debug=debug)
+
+        collisionPairDict = self.buildCollisionPairDictionary()
+        numCollisions = self.detectCollisionsWithPairs(toCheck, collisionPairDict, debug=debug)
         
         return numCollisions
 
@@ -535,6 +537,173 @@ class KinematicTree(Generic[J]):
                                 totalError += capsule2.collisionErrorWith(capsule1)
 
         return totalError
+
+    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=False, debug=False):
+        numCollisions = 0
+        
+        for idx in indices:
+            pairs = collisionPairDict.get(idx, [])
+            
+            for (obj1, obj2) in pairs:
+                idx1, type1 = obj1
+                idx2, type2 = obj2
+                
+                # Get capsules for each object
+                capsules1 = self.Joints[idx1].collisionCapsules if type1 == 'joint' else self.Links[idx1].collisionCapsules
+                capsules2 = self.Joints[idx2].collisionCapsules if type2 == 'joint' else self.Links[idx2].collisionCapsules
+                
+                # Check all capsule pairs
+                for capsule1 in capsules1:
+                    for capsule2 in capsules2:
+                        if separatingAxisTheorem(capsule1.box, capsule2.box):
+                            didCollide, pt = capsule1.collidesWith(capsule2)
+                            
+                            if didCollide:
+                                numCollisions += 1
+                                if debug:
+                                    print(f"{type1} {idx1} vs {type2} {idx2}")
+                                if show:
+                                    self.show(addCapsules=[capsule1, capsule2], plotPoint=pt)
+        
+        return numCollisions
+
+    def getCollisionErrorFromDict(self, indices, collisionPairDict):
+        totalError = 0
+        
+        for idx in indices:
+            pairs = collisionPairDict.get(idx, [])
+            
+            for (obj1, obj2) in pairs:
+                idx1, type1 = obj1
+                idx2, type2 = obj2
+                
+                # Get capsules for each object
+                capsules1 = self.Joints[idx1].collisionCapsules if type1 == 'joint' else self.Links[idx1].collisionCapsules
+                capsules2 = self.Joints[idx2].collisionCapsules if type2 == 'joint' else self.Links[idx2].collisionCapsules
+                
+                # Sum collision errors for all capsule pairs
+                for capsule1 in capsules1:
+                    for capsule2 in capsules2:
+                        if separatingAxisTheorem(capsule1.box, capsule2.box):
+                            totalError += capsule1.collisionErrorWith(capsule2)
+        
+        return totalError
+
+    def findWaypointSets(self):
+        # Find clusters of waypoints and their incoming + outgoing links, that are connected without real joints between them
+
+        visited = set()
+        waypoint_sets = []
+        link_sets = []
+        
+        def buildWaypointSet(joint_idx, current_wp_set, current_link_set):
+            if joint_idx in visited or joint_idx is None or joint_idx == -1:
+                return
+            
+            # If not a waypoint, include only the link and return
+            if not isWaypoint(self.Joints[joint_idx]):
+                current_link_set.append(joint_idx)
+                return
+            
+            # Add waypoint to current set and mark as visited
+            current_wp_set.append(joint_idx)
+            visited.add(joint_idx)
+
+            # Add the incoming link to the link set
+            incoming_link_idx = joint_idx
+            if incoming_link_idx is not None and incoming_link_idx != -1:
+                current_link_set.append(incoming_link_idx)
+            
+            # Check parent
+            parent_idx = self.Parents[joint_idx]
+            if parent_idx is not None and parent_idx != -1 and parent_idx not in visited:
+                if isWaypoint(self.Joints[parent_idx]):
+                    buildWaypointSet(parent_idx, current_wp_set, current_link_set)
+            
+            # Check children
+            children_indices = self.Children[joint_idx]
+            for child_idx in children_indices:
+                if child_idx not in visited and isWaypoint(self.Joints[child_idx]):
+                    buildWaypointSet(child_idx, current_wp_set, current_link_set)
+        
+        # Go through all joints and find waypoint sets
+        for joint_idx in range(len(self.Joints)):
+            if joint_idx not in visited and isWaypoint(self.Joints[joint_idx]):
+                current_wp_set = []
+                current_link_set = []
+                buildWaypointSet(joint_idx, current_wp_set, current_link_set)
+                if current_wp_set:
+                    waypoint_sets.append(current_wp_set)
+                    link_sets.append(current_link_set)
+        
+        return link_sets
+    
+    def buildCollisionPairDictionary(self):
+        """
+        Build a dictionary mapping each joint index to collision pairs that need checking.
+        
+        Rules:
+        - Waypoints don't collision check directly
+        - Link/Link: check iff separated by real joint (different waypoint cluster)
+        - Real Joint/Real Joint: always check
+        - Real Joint/Link: always check
+        
+        Returns:
+            dict: Keys are joint indices, values are lists of tuples:
+                  [((idx1, type1), (idx2, type2)), ...]
+                  where type is 'joint' or 'link'
+        """
+        link_sets = self.findWaypointSets()
+        
+        # Pre-classify all joints
+        real_joints = [i for i in range(len(self.Joints)) if not isWaypoint(self.Joints[i])]
+        
+        # Create link-to-set mapping 
+        whichLinkSet = {}
+        for set_idx, link_set in enumerate(link_sets):
+            for link_idx in link_set:
+                whichLinkSet[link_idx] = set_idx
+        
+        collision_pairs = {}
+        
+        for node_idx in range(len(self.Joints)):
+            # Waypoint 
+            if isWaypoint(self.Joints[node_idx]):
+
+                # Don't check for collisions
+                collision_pairs[node_idx] = []
+                continue
+            
+            pairs = []
+            
+            # Real joint
+            for other_idx in real_joints:
+
+                # Against other real joints
+                if other_idx != node_idx:
+                    pairs.append(((node_idx, 'joint'), (other_idx, 'joint')))
+
+                # Against links
+                pairs.append(((node_idx, 'joint'), (other_idx, 'link')))
+            
+            # Link 
+            set_idx = whichLinkSet.get(node_idx)
+            for other_idx in range(len(self.Links)):
+
+                # Skips itself
+                if other_idx == node_idx:
+                    continue
+
+                # If comparing with a different link, check which set that one belongs to
+                other_set = whichLinkSet.get(other_idx)
+
+                # Check if both links are in different sets or the one in question is not in a set at all
+                if set_idx != other_set or set_idx is None:
+                    pairs.append(((node_idx, 'link'), (other_idx, 'link')))
+            
+            collision_pairs[node_idx] = pairs
+        
+        return collision_pairs
 
     
     def branchingParametersFrom(self, parentIndex : int):

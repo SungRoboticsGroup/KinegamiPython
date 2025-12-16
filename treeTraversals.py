@@ -21,7 +21,7 @@ sparse = False
 cubeSize = 100 if sparse else 10
 
 def linkLoss(tree : KinematicTree, index : int, power=2, childFraction=1, 
-             collisionPenaltyScale=1, capsuleSelections=None, selectedIndices=None,
+             collisionPenaltyScale=1, collisionPairDict=None, selectedIndices=None,
              includeCollisionPenalty=False, configurations=None, collisionErrorWeight=1):
     
     assert(childFraction>=0 and power>=0 and index>=0 and collisionPenaltyScale>=0)
@@ -38,9 +38,8 @@ def linkLoss(tree : KinematicTree, index : int, power=2, childFraction=1,
     # collision penalty (optional)
     if includeCollisionPenalty:
         for i in range(0, len(configurations)):
-            selectedCapsules = capsuleSelections[i]
             tree.setConfiguration(configurations[i])
-            loss += tree.getCollisionError(selectedIndices, selectedCapsules) * collisionErrorWeight
+            loss += tree.getCollisionErrorFromDict(selectedIndices, collisionPairDict) * collisionErrorWeight
     
     # print("Loss with collision penalty:", loss)
     return loss 

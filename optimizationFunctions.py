@@ -1,6 +1,7 @@
 from KinematicTree import *
 import random 
 from treeTraversals import *
+from sets import buildCollisionPairDictionary
 
 def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, 
                            childFraction = 1, ignorePlacement = False, 
@@ -42,9 +43,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
 
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
         
-    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices,
-                                                         ignoreLater=False) 
-                                                         for subject in subjects]
+    collisionPairDict = buildCollisionPairDictionary(subject)
     
     def objective(params, returnWhich = False):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
@@ -62,7 +61,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
             linkLossSameZhat = linkLoss(tree, 
                                         index, 
                                         power=power,
-                                        capsuleSelections=capsuleSelections,
+                                        collisionPairDict=collisionPairDict,
                                         selectedIndices=selectedIndices,
                                         includeCollisionPenalty=includeCollisionPenalty, 
                                         configurations=configurations)
@@ -79,7 +78,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
                 linkLossReversedZhat = linkLoss(tree2, 
                                                 index, 
                                                 power=power,
-                                                capsuleSelections=capsuleSelections,
+                                                collisionPairDict=collisionPairDict,
                                                 selectedIndices=selectedIndices,
                                                 includeCollisionPenalty=includeCollisionPenalty,
                                                 configurations=configurations)
@@ -89,7 +88,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
             linkLossReversedZhat = linkLoss(tree, 
                                             index, 
                                             power=power,
-                                            capsuleSelections=capsuleSelections,
+                                            collisionPairDict=collisionPairDict,
                                             selectedIndices=selectedIndices,
                                             includeCollisionPenalty=includeCollisionPenalty, 
                                             configurations=configurations)
@@ -269,9 +268,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
 
     selectedIndices = [index] if ignorePlacement else ([index] + subjects[0].Children[index])
         
-    capsuleSelections = [subject.selectCollisionCapsules(specificJointIndices=selectedIndices,
-                                                         ignoreLater=False) 
-                                                         for subject in subjects]
+    collisionPairDict = buildCollisionPairDictionary(subject)
 
     def objective(params):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
@@ -280,7 +277,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
             return collisionPenaltyScale * len(subject.Joints) * (len(subject.Children) + 1)
         
         return linkLoss(tree, index, includeCollisionPenalty=True, configurations=configurations, 
-                        capsuleSelections=capsuleSelections, selectedIndices=selectedIndices) + \
+                        collisionPairDict=collisionPairDict, selectedIndices=selectedIndices) + \
             np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
 
     if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):

@@ -73,41 +73,121 @@ def findWaypointSets(tree):
 
     visited = set()
     waypoint_sets = []
+    link_sets = []
     
-    def buildWaypointSet(joint_idx, current_set):
+    def buildWaypointSet(joint_idx, current_wp_set, current_link_set):
 
         if joint_idx in visited or joint_idx is None or joint_idx == -1:
             return
         
         # Check if this joint is a waypoint
+        # If it is not a waypoint, include only the link from previous waypoint to here and return
         if not isWaypoint(tree.Joints[joint_idx]):
+            current_link_set.append(joint_idx)
             return
         
-        # Add to current set and mark as visited
-        current_set.append(joint_idx)
+        # Add waypoint to current set and mark as visited
+        current_wp_set.append(joint_idx)
         visited.add(joint_idx)
+
+        # Add the incoming and outgoing links to the link set
+        incoming_link_idx = joint_idx
+        if incoming_link_idx is not None and incoming_link_idx != -1:
+            current_link_set.append(incoming_link_idx)
         
         # Check parent
         parent_idx = tree.Parents[joint_idx]
         if parent_idx is not None and parent_idx != -1 and parent_idx not in visited:
             if isWaypoint(tree.Joints[parent_idx]):
-                buildWaypointSet(parent_idx, current_set)
+                buildWaypointSet(parent_idx, current_wp_set, current_link_set)
         
         # Check children
         children_indices = tree.Children[joint_idx]
         for child_idx in children_indices:
             if child_idx not in visited and isWaypoint(tree.Joints[child_idx]):
-                buildWaypointSet(child_idx, current_set)
+                buildWaypointSet(child_idx, current_wp_set, current_link_set)
     
     # Go through all joints and find waypoint sets
     for joint_idx in range(len(tree.Joints)):
         if joint_idx not in visited and isWaypoint(tree.Joints[joint_idx]):
-            current_set = []
-            buildWaypointSet(joint_idx, current_set)
-            if current_set:
-                waypoint_sets.append(current_set)
+            current_wp_set = []
+            current_link_set = []
+            buildWaypointSet(joint_idx, current_wp_set, current_link_set)
+            if current_wp_set:
+                waypoint_sets.append(current_wp_set)
+                link_sets.append(current_link_set)
     
-    return waypoint_sets
+    return link_sets
+
+
+def buildCollisionPairDictionary(tree):
+    """
+    Build a dictionary mapping each joint/waypoint index to the set of collision pairs
+    that need to be checked when that joint/waypoint moves.
+    
+    Rules:
+    - Waypoints don't collision check directly
+    - Link/Link: check iff links are separated by a real joint (not in same waypoint cluster)
+    - Real Joint / Real Joint: always check
+    - Real Joint / Link: always check
+    
+    Returns:
+        dict: Keys are joint indices, values are lists of tuples:
+              [((idx1, type1), (idx2, type2)), ...]
+              where type is 'joint' or 'link'
+    """
+    link_sets = findWaypointSets(tree)
+    
+    # Pre-classify all joints
+    real_joints = [i for i in range(len(tree.Joints)) if not isWaypoint(tree.Joints[i])]
+    
+    # Create link-to-set mapping 
+    whichLinkSet = {}
+    for set_idx, link_set in enumerate(link_sets):
+        for link_idx in link_set:
+            whichLinkSet[link_idx] = set_idx
+    
+    collision_pairs = {}
+    
+    for node_idx in range(len(tree.Joints)):
+
+        # Waypoint
+        if isWaypoint(tree.Joints[node_idx]):
+
+            # Doesn't need collision checking with anything
+            collision_pairs[node_idx] = []
+            continue
+        
+        pairs = []
+        
+        # Real joint
+        for other_idx in real_joints:
+
+            # Against other real joints
+            if other_idx != node_idx:
+                pairs.append(((node_idx, 'joint'), (other_idx, 'joint')))
+
+            # Against links, including the ones it's adjacent to
+            pairs.append(((node_idx, 'joint'), (other_idx, 'link')))
+        
+        # Link
+        set_idx = whichLinkSet.get(node_idx)
+        for other_idx in range(len(tree.Links)):
+
+            # Skip itself
+            if other_idx == node_idx:
+                continue
+
+            # If comparing with a different link, check which set that one belongs to
+            other_set = whichLinkSet.get(other_idx)
+
+            # Check if both links are in different sets or the one in question is not in a set at all
+            if set_idx != other_set or set_idx is None:
+                pairs.append(((node_idx, 'link'), (other_idx, 'link')))
+        
+        collision_pairs[node_idx] = pairs
+    
+    return collision_pairs
 
 
 def generate_colors(x, cmap_name="rainbow"):
@@ -169,11 +249,13 @@ for parent in range(len(construct.Children)):
     print("")
 
 # Find sets of adjacent waypoints
-waypoint_sets = findWaypointSets(construct)
+waypoint_sets, link_sets = findWaypointSets(construct)
 
 print(f"\nFound {len(waypoint_sets)} waypoint sets:")
 for set_idx, waypoint_set in enumerate(waypoint_sets):
     print(f"  Set {set_idx}: {waypoint_set}")
+    print(f"  Links: {link_sets[set_idx]}")
+
 
 # Visualize the tree
 print("\nVisualizing tree...")
