@@ -526,7 +526,7 @@ def create_random_link(r=None, maxAngle=None, seed=None):
     
     # Randomize max elbow angle if not specified
     if maxAngle is None:
-        maxAngle = np.random.uniform(np.pi/6, np.pi/2)
+        maxAngle = np.pi/12
     
     for _ in range(20):
         try:
@@ -552,7 +552,7 @@ def create_random_link(r=None, maxAngle=None, seed=None):
             end = SE3.Rt(SO3(np.column_stack([v1, v2, v3])), end_pos)
             
             # Let LinkCSC use shortestCSC to find a valid path
-            link = LinkCSC(r, start, end, maxAnglePerElbow=maxAngle)
+            link = LinkCSC(0.5, start, end, maxAnglePerElbow=maxAngle)
             return link
         except:
             continue
@@ -567,7 +567,7 @@ def main():
     # Create a random link with variable parameters
     print("\nCreating random Dubins path...")
     # Pass None to randomize, or specify values to test specific cases
-    link = create_random_link(r=.5, maxAngle=None, seed=np.random.seed(494))
+    link = create_random_link(r=1.0, maxAngle=None, seed=np.random.seed(8))
     
     print(f"  Turn radius: {link.r:.2f}")
     print(f"  Max elbow angle: {np.rad2deg(link.maxAnglePerElbow):.1f}°")
