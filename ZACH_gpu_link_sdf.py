@@ -217,7 +217,7 @@ def _sd_arc_cupy(p, center, R_w2l, sc, ra, rb):
 
 
 def distances_points_to_links_cupy(points, packed, chunk_points=2048, dtype="float32"):
-    """Returns (P,L) signed distances (can be huge)."""
+    """Returns (N,L) signed distances"""
     p = cp.asarray(points, dtype=dtype)
     L = packed.arc1_enabled.shape[0]
 
@@ -245,14 +245,16 @@ def distances_points_to_links_cupy(points, packed, chunk_points=2048, dtype="flo
     seg_b = cp.asarray(packed.seg_b, dtype=dtype)
     seg_r = cp.asarray(packed.seg_r, dtype=dtype)
 
-    P = p.shape[0]
-    out = cp.empty((P, L), dtype=dtype)
+    # num points (N)
+    N = p.shape[0]
+    # out is our signed distance from point to sdf dubins (N, L)
+    out = cp.empty((N, L), dtype=dtype)
 
-    for s in range(0, P, chunk_points):
-        e = min(P, s + chunk_points)
-        pp = p[s:e]
+    for st in range(0, N, chunk_points):
+        ed = min(N, st + chunk_points) # to handle last case when P is not multiple of 2048
+        pp = p[st:ed]
 
-        dist = cp.full((e - s, L), cp.inf, dtype=dtype)
+        dist = cp.full((ed - st, L), cp.inf, dtype=dtype)
 
         if has_arc1:
             d1 = _sd_arc_cupy(pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
@@ -266,17 +268,18 @@ def distances_points_to_links_cupy(points, packed, chunk_points=2048, dtype="flo
             d3 = _sd_arc_cupy(pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
             dist = cp.minimum(dist, cp.where(arc2_enabled[None, :], d3, cp.inf))
 
-        out[s:e] = dist
+        out[st:ed] = dist
 
     return out
 
 
 def min_distance_to_other_links_cupy(points, point_link_ids, packed, chunk_points=2048, dtype="float32"):
     """For each point: min signed distance to any other link."""
+    """Returns (N) minimum signed distances and link id"""
     p = cp.asarray(points, dtype=dtype)
     ids = cp.asarray(point_link_ids, dtype=cp.int32)
 
-    L = packed.arc1_enabled.shape[0]
+    L = packed.arc1_enabled.shape[0] # num links
 
     has_arc1 = bool(np.any(packed.arc1_enabled))
     has_arc2 = bool(np.any(packed.arc2_enabled))
@@ -302,12 +305,12 @@ def min_distance_to_other_links_cupy(points, point_link_ids, packed, chunk_point
     seg_b = cp.asarray(packed.seg_b, dtype=dtype)
     seg_r = cp.asarray(packed.seg_r, dtype=dtype)
 
-    P = p.shape[0]
-    min_other = cp.empty((P,), dtype=dtype)
-    argmin_other = cp.empty((P,), dtype=cp.int32)
+    N = p.shape[0]
+    min_other = cp.empty((N,), dtype=dtype)
+    argmin_other = cp.empty((N,), dtype=cp.int32)
 
-    for s in range(0, P, chunk_points):
-        e = min(P, s + chunk_points)
+    for s in range(0, N, chunk_points):
+        e = min(N, s + chunk_points)
         pp = p[s:e]
         own = ids[s:e]
 
@@ -328,19 +331,10 @@ def min_distance_to_other_links_cupy(points, point_link_ids, packed, chunk_point
         # Mask out same-link distances
         dist[cp.arange(e - s), own] = cp.inf
 
-        arg = cp.argmin(dist, axis=1)
-        dmin = dist[cp.arange(e - s), arg]
+        arg = cp.argmin(dist, axis=1) # id of closest link for N points
+        dmin = dist[cp.arange(e - s), arg] # the actual signed distance for the N points
 
         min_other[s:e] = dmin
         argmin_other[s:e] = arg.astype(cp.int32)
 
     return min_other, argmin_other
-
-
-def collision_error_from_min_dist(min_other, margin=0.0, power=2.0):
-    """Signed distance -> penalty. Negative means penetration."""
-    # If margin=0: penalty = relu(-d)^power
-    x = cp.maximum(margin - min_other, 0.0)
-    if power == 1.0:
-        return x
-    return x**power
