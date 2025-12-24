@@ -10,7 +10,7 @@ import numpy as np
 from spatialmath import SE3, SO3
 
 from LinkCSC import LinkCSC
-from ZACH_gpu_link_sdf import (
+from ZACH_vectorized_link_sdf import (
     collision_error_from_min_dist,
     min_distance_to_other_links_cupy,
     pack_links,

@@ -398,7 +398,7 @@ class LinkCSC:
         """
         Return the 3D position at parameter t in [0, 1] along the CSC path.
         """
-        assert 0 <= t <= 1, "Parameter t must be in [0, 1]"
+        t = max(0.0, min(t, 1.0))
 
         totalLength = self.lengthC1 + self.lengthS + self.lengthC2
 

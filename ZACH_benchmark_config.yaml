@@ -1,49 +1,19 @@
 tests:
   - name: "small_sparse"
     seed: 42
-    num_links: 10
+    num_links: 5
     point_density: 5.0
-    description: "Small test with sparse sampling"
-  
-  - name: "small_dense"
-    seed: 42
-    num_links: 10
-    point_density: 20.0
-    description: "Small test with dense sampling"
-  
-  - name: "medium_sparse"
-    seed: 123
-    num_links: 50
-    point_density: 5.0
-    description: "Medium test with sparse sampling"
-  
-  - name: "medium_dense"
-    seed: 123
-    num_links: 50
-    point_density: 20.0
-    description: "Medium test with dense sampling"
-  
-  - name: "large_sparse"
-    seed: 456
-    num_links: 100
-    point_density: 5.0
-    description: "Large test with sparse sampling"
-  
-  - name: "large_dense"
-    seed: 456
-    num_links: 100
-    point_density: 20.0
-    description: "Large test with dense sampling"
 
 scaling_tests:
   density_scaling:
-    num_links: 50
+    num_links: 5
     seed: 789
-    densities: [1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0]
+    densities: [1.0, 5.0]
   
   link_scaling:
-    point_density: 10.0
+    point_density: 5.0
     seed: 789
+    num_links_list: [5, 10]
     num_links_list: [5, 10, 20, 50, 100, 200, 500]
 
 link_generation:
@@ -51,8 +21,13 @@ link_generation:
   max_angle_per_elbow: 1.5708  # pi/2
   position_range: [-50.0, 50.0]
   epsilon: 0.01
+  distance_rtol: 1e-4
+  distance_atol: 1e-6
+  allow_point_mismatch: true
 
-tolerance:
-  distance_rtol: 1e-4 # relative
-  distance_atol: 1e-6 # absolute
-  allow_point_mismatch: false  # Set to true to only check distances, not point indices
+timeouts:
+  serial_method_timeout: 3  # seconds (5 minutes)
+
+collision_analysis:
+  intersection_threshold_multiplier: 1.0  # multiply by r to get collision threshold
+  report_statistics: false

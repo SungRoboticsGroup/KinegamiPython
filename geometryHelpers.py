@@ -833,7 +833,7 @@ class Arc3D:
         """
         Return 3D position at parameter t in [0, 1] along the arc
         """
-        assert 0 <= t <= 1, "Parameter t must be in [0, 1]"
+        t = max(0.0, min(t, 1.0))
 
         angle = t * self.theta
         u = self.r * np.cos(angle)
