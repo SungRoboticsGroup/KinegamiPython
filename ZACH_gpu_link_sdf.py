@@ -338,3 +338,79 @@ def min_distance_to_other_links_cupy(points, point_link_ids, packed, chunk_point
         argmin_other[s:e] = arg.astype(cp.int32)
 
     return min_other, argmin_other
+
+def pairwise_link_distances_cupy(points, point_link_ids, packed, chunk_points=2048, dtype="float32"):
+    """Pairwise minimum distances between all link pairs."""
+    """Returns (L,L) distances, (L,L) point indices that achieve them, (L,L) link IDs"""
+    p = cp.asarray(points, dtype=dtype)
+    ids = cp.asarray(point_link_ids, dtype=cp.int32)
+
+    L = packed.arc1_enabled.shape[0]
+
+    has_arc1 = bool(np.any(packed.arc1_enabled))
+    has_arc2 = bool(np.any(packed.arc2_enabled))
+    has_seg = True
+
+    arc1_enabled = cp.asarray(packed.arc1_enabled)
+    arc1_center = cp.asarray(packed.arc1_center, dtype=dtype)
+    arc1_R_w2l = cp.asarray(packed.arc1_R_w2l, dtype=dtype)
+    arc1_sc = cp.asarray(packed.arc1_sc, dtype=dtype)
+    arc1_ra = cp.asarray(packed.arc1_ra, dtype=dtype)
+    arc1_rb = cp.asarray(packed.arc1_rb, dtype=dtype)
+
+    arc2_enabled = cp.asarray(packed.arc2_enabled)
+    arc2_center = cp.asarray(packed.arc2_center, dtype=dtype)
+    arc2_R_w2l = cp.asarray(packed.arc2_R_w2l, dtype=dtype)
+    arc2_sc = cp.asarray(packed.arc2_sc, dtype=dtype)
+    arc2_ra = cp.asarray(packed.arc2_ra, dtype=dtype)
+    arc2_rb = cp.asarray(packed.arc2_rb, dtype=dtype)
+
+    seg_enabled = cp.asarray(packed.seg_enabled)
+    seg_a = cp.asarray(packed.seg_a, dtype=dtype)
+    seg_b = cp.asarray(packed.seg_b, dtype=dtype)
+    seg_r = cp.asarray(packed.seg_r, dtype=dtype)
+
+    # (L,L) output: pairwise_dist[i,j] = min distance from link i to link j
+    pairwise_dist = cp.full((L, L), cp.inf, dtype=dtype)
+    # (L,L) output: point_idx[i,j] = global point index on link i that achieves min to link j
+    point_idx = cp.full((L, L), -1, dtype=cp.int32)
+
+    N = p.shape[0]
+
+    for s in range(0, N, chunk_points):
+        e = min(N, s + chunk_points)
+        pp = p[s:e]
+        own = ids[s:e]
+
+        dist = cp.full((e - s, L), cp.inf, dtype=dtype)
+
+        if has_arc1:
+            d1 = _sd_arc_cupy(pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
+            dist = cp.minimum(dist, cp.where(arc1_enabled[None, :], d1, cp.inf))
+
+        if has_seg:
+            d2 = _sd_capsule_cupy(pp, seg_a, seg_b, seg_r)
+            dist = cp.minimum(dist, cp.where(seg_enabled[None, :], d2, cp.inf))
+
+        if has_arc2:
+            d3 = _sd_arc_cupy(pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
+            dist = cp.minimum(dist, cp.where(arc2_enabled[None, :], d3, cp.inf))
+
+        # For each point in chunk, update pairwise distances
+        for i in range(e - s):
+            link_i = int(own[i])
+            global_idx = s + i
+            
+            # dist[i, :] is distance from this point to all links
+            # Set same-link to inf
+            dist_from_point = dist[i, :].copy()
+            dist_from_point[link_i] = cp.inf
+            
+            # Update pairwise matrix where this point achieves better distance
+            for link_j in range(L):
+                if link_j != link_i:
+                    if dist_from_point[link_j] < pairwise_dist[link_i, link_j]:
+                        pairwise_dist[link_i, link_j] = dist_from_point[link_j]
+                        point_idx[link_i, link_j] = global_idx
+
+    return pairwise_dist, point_idx
