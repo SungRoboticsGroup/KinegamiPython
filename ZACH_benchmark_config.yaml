@@ -3,17 +3,21 @@ tests:
     seed: 42
     num_links: 5
     point_density: 5.0
+    
+  - name: "medium_dense"
+    seed: 67
+    num_links: 10
+    point_density: 15.0
 
 scaling_tests:
   density_scaling:
     num_links: 5
     seed: 789
-    densities: [1.0, 5.0]
+    densities: [1.0, 10.0, 100.0, 1000.0, 10000.0]
   
   link_scaling:
     point_density: 5.0
     seed: 789
-    num_links_list: [5, 10]
     num_links_list: [5, 10, 20, 50, 100, 200, 500]
 
 link_generation:
@@ -26,7 +30,7 @@ link_generation:
   allow_point_mismatch: true
 
 timeouts:
-  serial_method_timeout: 3  # seconds (5 minutes)
+  serial_method_timeout: 3 # seconds
 
 collision_analysis:
   intersection_threshold_multiplier: 1.0  # multiply by r to get collision threshold

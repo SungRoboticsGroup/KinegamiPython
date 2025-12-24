@@ -53,6 +53,7 @@ class BenchmarkResult:
     pairwise_point_indices: np.ndarray
     collisions: List
     collision_stats: object
+    points: np.ndarray = None  # Points array for witness verification
     success: bool = True
     error_message: str = ""
     timed_out: bool = False
@@ -167,6 +168,7 @@ def run_gpu_method(links: List[LinkCSC], density: float, collision_config: Dict)
             pairwise_point_indices=point_idx_cpu,
             collisions=collisions,
             collision_stats=collision_stats,
+            points=points,
             success=True
         )
     except Exception as e:
@@ -224,6 +226,7 @@ def run_cpu_vectorized_method(links: List[LinkCSC], density: float, collision_co
             pairwise_point_indices=point_idx,
             collisions=collisions,
             collision_stats=collision_stats,
+            points=points,
             success=True
         )
     except Exception as e:
@@ -277,6 +280,7 @@ def run_cpu_serial_method(links: List[LinkCSC], density: float,
             pairwise_point_indices=point_idx,
             collisions=collisions,
             collision_stats=collision_stats,
+            points=points,
             success=True
         )
     except TimeoutException:
@@ -313,7 +317,7 @@ def run_cpu_serial_method(links: List[LinkCSC], density: float,
 
 
 def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, str]:
-    """Verify that all methods produce the same results"""
+    """Verify that all methods produce the same minimum distances and witness positions"""
     if len(results) < 2:
         return True, "Not enough results to compare"
     
@@ -321,33 +325,34 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     if len(successful_results) < 2:
         return False, "Not enough successful results to compare"
     
-    rtol = float(config['distance_rtol'])
-    atol = float(config['distance_atol'])
-    allow_point_mismatch = config['allow_point_mismatch']
+    link_config = config.get('link_generation', config)
+    rtol = float(link_config['distance_rtol'])
+    atol = float(link_config['distance_atol'])
+    allow_point_mismatch = link_config.get('allow_point_mismatch', False)
     
     base_result = successful_results[0]
     
-    # Debug: Print distance statistics for all methods
-    print(f"  Distance Statistics:")
+    # Print minimum distances and witness positions for all methods
+    print(f"  Minimum Distances and Witness Positions:")
     for r in successful_results:
-        nan_count = np.sum(np.isnan(r.pairwise_distances))
-        inf_count = np.sum(np.isinf(r.pairwise_distances))
         valid_mask = ~(np.isnan(r.pairwise_distances) | np.isinf(r.pairwise_distances))
         if np.any(valid_mask):
-            valid_dists = r.pairwise_distances[valid_mask]
-            print(f"    {r.method}: min={np.min(valid_dists):.6f}, max={np.max(valid_dists):.6f}, " +
-                  f"mean={np.mean(valid_dists):.6f}, NaN={nan_count}, Inf={inf_count}")
+            min_dist = np.min(r.pairwise_distances[valid_mask])
+            # Find location of minimum distance
+            min_idx = np.unravel_index(np.argmin(r.pairwise_distances), r.pairwise_distances.shape)
+            point_idx = r.pairwise_point_indices[min_idx]
+            if point_idx >= 0 and r.points is not None and point_idx < len(r.points):
+                witness_pos = r.points[int(point_idx)]
+                print(f"    {r.method}: min_dist={min_dist:.6f}, witness=[{witness_pos[0]:.4f}, {witness_pos[1]:.4f}, {witness_pos[2]:.4f}]")
+            else:
+                print(f"    {r.method}: min_dist={min_dist:.6f}, witness=unknown")
         else:
-            print(f"    {r.method}: All NaN or Inf! (NaN={nan_count}, Inf={inf_count})")
+            print(f"    {r.method}: All distances are NaN or Inf")
     
     for result in successful_results[1:]:
         # Check distances match (ignore NaN/Inf locations)
         base_valid = ~(np.isnan(base_result.pairwise_distances) | np.isinf(base_result.pairwise_distances))
         result_valid = ~(np.isnan(result.pairwise_distances) | np.isinf(result.pairwise_distances))
-        
-        # Both should have valid values in same locations
-        if not np.array_equal(base_valid, result_valid):
-            print(f"    Warning: NaN/Inf locations differ between {base_result.method} and {result.method}")
         
         # Compare only valid entries
         common_valid = base_valid & result_valid
@@ -356,8 +361,22 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
             result_valid_vals = result.pairwise_distances[common_valid]
             if not np.allclose(base_valid_vals, result_valid_vals, rtol=rtol, atol=atol, equal_nan=True):
                 max_diff = np.max(np.abs(base_valid_vals - result_valid_vals))
-                print(f"    Distance mismatch in valid entries: max diff = {max_diff}")
                 return False, f"Distance mismatch between {base_result.method} and {result.method}: max diff = {max_diff}"
+            
+            # Compare witness positions for common valid pairs
+            common_valid_indices = np.where(common_valid)
+            for i, j in zip(common_valid_indices[0], common_valid_indices[1]):
+                base_pt_idx = base_result.pairwise_point_indices[i, j]
+                result_pt_idx = result.pairwise_point_indices[i, j]
+                
+                if (base_pt_idx >= 0 and result_pt_idx >= 0 and
+                    base_result.points is not None and result.points is not None and
+                    base_pt_idx < len(base_result.points) and result_pt_idx < len(result.points)):
+                    base_witness = base_result.points[int(base_pt_idx)]
+                    result_witness = result.points[int(result_pt_idx)]
+                    # Witness positions should be the same regardless of point index
+                    if not np.allclose(base_witness, result_witness, rtol=rtol, atol=atol):
+                        return False, f"Witness position mismatch between {base_result.method} and {result.method}"
         else:
             print(f"    No common valid entries to compare!")
         
@@ -404,8 +423,6 @@ def run_single_test(test_config: Dict, link_config: Dict,
     results.append(gpu_result)
     if gpu_result.success:
         print(f"    Time: {gpu_result.execution_time:.4f}s, Points: {gpu_result.num_points}")
-        if collision_config['report_statistics']:
-            print(f"    Collisions: {gpu_result.collision_stats.collision_pairs}")
     else:
         print(f"    Failed: {gpu_result.error_message}")
     
@@ -415,8 +432,6 @@ def run_single_test(test_config: Dict, link_config: Dict,
     results.append(cpu_vec_result)
     if cpu_vec_result.success:
         print(f"    Time: {cpu_vec_result.execution_time:.4f}s, Points: {cpu_vec_result.num_points}")
-        if collision_config['report_statistics']:
-            print(f"    Collisions: {cpu_vec_result.collision_stats.collision_pairs}")
     else:
         print(f"    Failed: {cpu_vec_result.error_message}")
     
@@ -427,8 +442,6 @@ def run_single_test(test_config: Dict, link_config: Dict,
     results.append(cpu_serial_result)
     if cpu_serial_result.success:
         print(f"    Time: {cpu_serial_result.execution_time:.4f}s, Points: {cpu_serial_result.num_points}")
-        if collision_config['report_statistics']:
-            print(f"    Collisions: {cpu_serial_result.collision_stats.collision_pairs}")
     elif cpu_serial_result.timed_out:
         print(f"    Timed out after {timeout}s")
     else:
@@ -609,12 +622,6 @@ def main():
         else:
             print(f"  ✗ FAILED: {message}")
             all_passed = False
-        
-        # Print collision statistics if enabled
-        if config['collision_analysis']['report_statistics'] and results:
-            for result in results:
-                if result.success and result.collision_stats:
-                    print_collision_report(result.method, result.collision_stats, show_worst=3)
     
     if all_passed:
         print("\n✓ All verification tests passed!")
