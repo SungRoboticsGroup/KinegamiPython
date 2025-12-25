@@ -86,7 +86,7 @@ def identify_collisions(
             
             # Check if this is a collision
             # Distance should be less than the radius of the link
-            # (negative distance means penetration)
+            # (negative distance means overlap)
             threshold = threshold_multiplier * links[i].r
             
             if dist < threshold and not np.isinf(dist):

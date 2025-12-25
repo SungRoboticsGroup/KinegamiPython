@@ -335,7 +335,7 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     # Print minimum distances and witness positions for all methods
     print(f"  Minimum Distances and Witness Positions:")
     for r in successful_results:
-        valid_mask = ~(np.isnan(r.pairwise_distances) | np.isinf(r.pairwise_distances))
+        valid_mask = ~(np.isinf(r.pairwise_distances))
         if np.any(valid_mask):
             min_dist = np.min(r.pairwise_distances[valid_mask])
             # Find location of minimum distance
@@ -351,8 +351,8 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     
     for result in successful_results[1:]:
         # Check distances match (ignore NaN/Inf locations)
-        base_valid = ~(np.isnan(base_result.pairwise_distances) | np.isinf(base_result.pairwise_distances))
-        result_valid = ~(np.isnan(result.pairwise_distances) | np.isinf(result.pairwise_distances))
+        base_valid = ~(np.isinf(base_result.pairwise_distances))
+        result_valid = ~(np.isinf(result.pairwise_distances))
         
         # Compare only valid entries
         common_valid = base_valid & result_valid
@@ -374,6 +374,7 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
                     base_pt_idx < len(base_result.points) and result_pt_idx < len(result.points)):
                     base_witness = base_result.points[int(base_pt_idx)]
                     result_witness = result.points[int(result_pt_idx)]
+
                     # Witness positions should be the same regardless of point index
                     if not np.allclose(base_witness, result_witness, rtol=rtol, atol=atol):
                         return False, f"Witness position mismatch between {base_result.method} and {result.method}"
