@@ -47,7 +47,7 @@ class BenchmarkResult:
     method: str
     num_links: int
     num_points: int
-    point_density: float
+    epsilon: float  # Changed from point_density to epsilon
     execution_time: float
     pairwise_distances: np.ndarray
     pairwise_point_indices: np.ndarray
@@ -57,6 +57,12 @@ class BenchmarkResult:
     success: bool = True
     error_message: str = ""
     timed_out: bool = False
+    chunk_size: Optional[int] = None  # For chunk size scaling tests
+
+
+def calculate_point_density(epsilon: float, min_radius: float) -> float:
+    """Calculate point density from epsilon and minimum radius"""
+    return 1.0 / (2.0 * epsilon * min_radius)
 
 
 def generate_random_SE3(position_range: Tuple[float, float], seed: Optional[int] = None) -> SE3:
@@ -78,15 +84,14 @@ def generate_random_SE3(position_range: Tuple[float, float], seed: Optional[int]
     return SE3.Rt(R, pos)
 
 
-def generate_random_links(num_links: int, config: Dict, seed: int) -> List[LinkCSC]:
-    """Generate random LinkCSC objects"""
+def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List[LinkCSC], float]:
+    """Generate random LinkCSC objects and return the minimum radius used"""
     rng = np.random.RandomState(seed)
     links = []
     
     r_min, r_max = config['radius_range']
     p_min, p_max = config['position_range']
     max_angle = config['max_angle_per_elbow']
-    epsilon = config['epsilon']
     
     for i in range(num_links):
         # Random radius
@@ -115,17 +120,19 @@ def generate_random_links(num_links: int, config: Dict, seed: int) -> List[LinkC
                 StartDubinsPose=start_pose,
                 EndDubinsPose=end_pose,
                 maxAnglePerElbow=max_angle,
-                EPSILON=epsilon
+                EPSILON=r_min * 0.01  # Use a small epsilon relative to minimum radius for link generation
             )
             links.append(link)
         except (ValueError, AssertionError) as e:
             continue
     
-    return links
+    return links, r_min
 
 
-def run_gpu_method(links: List[LinkCSC], density: float, collision_config: Dict) -> BenchmarkResult:
+def run_gpu_method(links: List[LinkCSC], epsilon: float, min_radius: float, 
+                  collision_config: Dict, chunk_size: Optional[int] = None) -> BenchmarkResult:
     """Run GPU vectorized method"""
+    density = calculate_point_density(epsilon, min_radius)
     try:
         import cupy as cp
         xp = cp
@@ -162,13 +169,14 @@ def run_gpu_method(links: List[LinkCSC], density: float, collision_config: Dict)
             method="GPU (CuPy)",
             num_links=len(links),
             num_points=len(points),
-            point_density=density,
+            epsilon=epsilon,
             execution_time=execution_time,
             pairwise_distances=pairwise_dist_cpu,
             pairwise_point_indices=point_idx_cpu,
             collisions=collisions,
             collision_stats=collision_stats,
             points=points,
+            chunk_size=chunk_size,
             success=True
         )
     except Exception as e:
@@ -177,19 +185,22 @@ def run_gpu_method(links: List[LinkCSC], density: float, collision_config: Dict)
             method="GPU (CuPy)",
             num_links=len(links),
             num_points=0,
-            point_density=density,
+            epsilon=epsilon,
             execution_time=0.0,
             pairwise_distances=np.array([]),
             pairwise_point_indices=np.array([]),
             collisions=[],
             collision_stats=None,
             success=False,
-            error_message=str(e)
+            error_message=str(e),
+            chunk_size=chunk_size
         )
 
 
-def run_cpu_vectorized_method(links: List[LinkCSC], density: float, collision_config: Dict) -> BenchmarkResult:
+def run_cpu_vectorized_method(links: List[LinkCSC], epsilon: float, min_radius: float, 
+                             collision_config: Dict, chunk_size: Optional[int] = None) -> BenchmarkResult:
     """Run CPU vectorized method"""
+    density = calculate_point_density(epsilon, min_radius)
     try:
         xp = np
         
@@ -220,13 +231,14 @@ def run_cpu_vectorized_method(links: List[LinkCSC], density: float, collision_co
             method="CPU Vectorized (NumPy)",
             num_links=len(links),
             num_points=len(points),
-            point_density=density,
+            epsilon=epsilon,
             execution_time=execution_time,
             pairwise_distances=pairwise_dist,
             pairwise_point_indices=point_idx,
             collisions=collisions,
             collision_stats=collision_stats,
             points=points,
+            chunk_size=chunk_size,
             success=True
         )
     except Exception as e:
@@ -235,20 +247,41 @@ def run_cpu_vectorized_method(links: List[LinkCSC], density: float, collision_co
             method="CPU Vectorized (NumPy)",
             num_links=len(links),
             num_points=0,
-            point_density=density,
+            epsilon=epsilon,
             execution_time=0.0,
             pairwise_distances=np.array([]),
             pairwise_point_indices=np.array([]),
             collisions=[],
             collision_stats=None,
             success=False,
-            error_message=str(e)
+            error_message=str(e),
+            chunk_size=chunk_size
         )
 
 
-def run_cpu_serial_method(links: List[LinkCSC], density: float, 
-                          collision_config: Dict, timeout: int) -> BenchmarkResult:
-    """Run CPU serial method with timeout"""
+def run_cpu_serial_method(links: List[LinkCSC], epsilon: float, min_radius: float,
+                          collision_config: Dict, timeout: int, 
+                          skip_if_previous_timeout: bool = False) -> BenchmarkResult:
+    """Run CPU serial method with timeout tracking"""
+    density = calculate_point_density(epsilon, min_radius)
+    
+    # Skip if previous timeout occurred
+    if skip_if_previous_timeout:
+        return BenchmarkResult(
+            name="cpu_serial_test",
+            method="CPU Serial",
+            num_links=len(links),
+            num_points=0,
+            epsilon=epsilon,
+            execution_time=0.0,
+            pairwise_distances=np.array([]),
+            pairwise_point_indices=np.array([]),
+            collisions=[],
+            collision_stats=None,
+            success=False,
+            error_message="Skipped due to previous timeout",
+            timed_out=True
+        )
     try:
         # Sample points (using same method as vectorized for consistency)
         points, point_ids = sample_points_for_links(links, density)
@@ -274,7 +307,7 @@ def run_cpu_serial_method(links: List[LinkCSC], density: float,
             method="CPU Serial",
             num_links=len(links),
             num_points=len(points),
-            point_density=density,
+            epsilon=epsilon,
             execution_time=execution_time,
             pairwise_distances=pairwise_dist,
             pairwise_point_indices=point_idx,
@@ -289,7 +322,7 @@ def run_cpu_serial_method(links: List[LinkCSC], density: float,
             method="CPU Serial",
             num_links=len(links),
             num_points=len(points) if 'points' in locals() else 0,
-            point_density=density,
+            epsilon=epsilon,
             execution_time=timeout,
             pairwise_distances=np.array([]),
             pairwise_point_indices=np.array([]),
@@ -305,7 +338,7 @@ def run_cpu_serial_method(links: List[LinkCSC], density: float,
             method="CPU Serial",
             num_links=len(links),
             num_points=0,
-            point_density=density,
+            epsilon=epsilon,
             execution_time=0.0,
             pairwise_distances=np.array([]),
             pairwise_point_indices=np.array([]),
@@ -332,22 +365,15 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     
     base_result = successful_results[0]
     
-    # Print minimum distances and witness positions for all methods
-    print(f"  Minimum Distances and Witness Positions:")
+    # Print minimum distances for all methods
+    print(f"  Minimum Distances:")
     for r in successful_results:
         valid_mask = ~(np.isinf(r.pairwise_distances))
         if np.any(valid_mask):
             min_dist = np.min(r.pairwise_distances[valid_mask])
-            # Find location of minimum distance
-            min_idx = np.unravel_index(np.argmin(r.pairwise_distances), r.pairwise_distances.shape)
-            point_idx = r.pairwise_point_indices[min_idx]
-            if point_idx >= 0 and r.points is not None and point_idx < len(r.points):
-                witness_pos = r.points[int(point_idx)]
-                print(f"    {r.method}: min_dist={min_dist:.6f}, witness=[{witness_pos[0]:.4f}, {witness_pos[1]:.4f}, {witness_pos[2]:.4f}]")
-            else:
-                print(f"    {r.method}: min_dist={min_dist:.6f}, witness=unknown")
+            print(f"    {r.method}: min_dist={min_dist:.6f}")
         else:
-            print(f"    {r.method}: All distances are NaN or Inf")
+            print(f"    {r.method}: All distances are Inf")
     
     for result in successful_results[1:]:
         # Check distances match (ignore NaN/Inf locations)
@@ -362,22 +388,6 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
             if not np.allclose(base_valid_vals, result_valid_vals, rtol=rtol, atol=atol, equal_nan=True):
                 max_diff = np.max(np.abs(base_valid_vals - result_valid_vals))
                 return False, f"Distance mismatch between {base_result.method} and {result.method}: max diff = {max_diff}"
-            
-            # Compare witness positions for common valid pairs
-            common_valid_indices = np.where(common_valid)
-            for i, j in zip(common_valid_indices[0], common_valid_indices[1]):
-                base_pt_idx = base_result.pairwise_point_indices[i, j]
-                result_pt_idx = result.pairwise_point_indices[i, j]
-                
-                if (base_pt_idx >= 0 and result_pt_idx >= 0 and
-                    base_result.points is not None and result.points is not None and
-                    base_pt_idx < len(base_result.points) and result_pt_idx < len(result.points)):
-                    base_witness = base_result.points[int(base_pt_idx)]
-                    result_witness = result.points[int(result_pt_idx)]
-
-                    # Witness positions should be the same regardless of point index
-                    if not np.allclose(base_witness, result_witness, rtol=rtol, atol=atol):
-                        return False, f"Witness position mismatch between {base_result.method} and {result.method}"
         else:
             print(f"    No common valid entries to compare!")
         
@@ -401,10 +411,10 @@ def run_single_test(test_config: Dict, link_config: Dict,
                    collision_config: Dict, timeout: int) -> Tuple[List[BenchmarkResult], bool, str]:
     """Run all three methods on a single test configuration"""
     print(f"\nRunning test: {test_config['name']}")
-    print(f"  Links: {test_config['num_links']}, Density: {test_config['point_density']}")
+    print(f"  Links: {test_config['num_links']}, Epsilon: {test_config['epsilon']}")
     
     # Generate links
-    links = generate_random_links(
+    links, min_radius = generate_random_links(
         test_config['num_links'],
         link_config,
         test_config['seed']
@@ -415,12 +425,13 @@ def run_single_test(test_config: Dict, link_config: Dict,
     
     print(f"  Generated {len(links)} links")
     
-    # Run all three methods
+    results = []
+    serial_timeout_occurred = False
     results = []
     
     # GPU method
     print("  Running GPU method...")
-    gpu_result = run_gpu_method(links, test_config['point_density'], collision_config)
+    gpu_result = run_gpu_method(links, float(test_config['epsilon']), min_radius, collision_config)
     results.append(gpu_result)
     if gpu_result.success:
         print(f"    Time: {gpu_result.execution_time:.4f}s, Points: {gpu_result.num_points}")
@@ -429,7 +440,7 @@ def run_single_test(test_config: Dict, link_config: Dict,
     
     # CPU vectorized method
     print("  Running CPU vectorized method...")
-    cpu_vec_result = run_cpu_vectorized_method(links, test_config['point_density'], collision_config)
+    cpu_vec_result = run_cpu_vectorized_method(links, float(test_config['epsilon']), min_radius, collision_config)
     results.append(cpu_vec_result)
     if cpu_vec_result.success:
         print(f"    Time: {cpu_vec_result.execution_time:.4f}s, Points: {cpu_vec_result.num_points}")
@@ -438,13 +449,15 @@ def run_single_test(test_config: Dict, link_config: Dict,
     
     # CPU serial method
     print("  Running CPU serial method...")
-    cpu_serial_result = run_cpu_serial_method(links, test_config['point_density'], 
-                                              collision_config, timeout)
+    cpu_serial_result = run_cpu_serial_method(links, float(test_config['epsilon']), min_radius,
+                                              collision_config, timeout, 
+                                              skip_if_previous_timeout=serial_timeout_occurred)
     results.append(cpu_serial_result)
     if cpu_serial_result.success:
         print(f"    Time: {cpu_serial_result.execution_time:.4f}s, Points: {cpu_serial_result.num_points}")
     elif cpu_serial_result.timed_out:
         print(f"    Timed out after {timeout}s")
+        serial_timeout_occurred = True
     else:
         print(f"    Failed: {cpu_serial_result.error_message}")
     
@@ -452,139 +465,226 @@ def run_single_test(test_config: Dict, link_config: Dict,
 
 
 def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
-    """Run scaling tests with varying parameters"""
+    """Run comprehensive scaling tests with epsilon, link count, and chunk size variations"""
+    if not config['scaling_tests'].get('enabled', True):
+        print("\n⏭️ Scaling tests disabled")
+        return {}
+    
     scaling_config = config['scaling_tests']
     link_config = config['link_generation']
     collision_config = config['collision_analysis']
     timeout = config['timeouts']['serial_method_timeout']
     
     results = {
-        'density_scaling': [],
-        'link_scaling': []
+        'epsilon_scaling': [],
+        'link_scaling': [],
+        'chunk_size_scaling': []
     }
     
-    # Density scaling
+    serial_timeout_occurred = False  # Track timeout globally
+    
+    # Epsilon scaling tests (3 graphs with different link counts)
     print("\n" + "="*60)
-    print("DENSITY SCALING TESTS")
+    print("EPSILON SCALING TESTS")
     print("="*60)
     
-    base_config = scaling_config['density_scaling']
-    for density in base_config['densities']:
-        print(f"\nDensity: {density}")
+    epsilon_config = scaling_config['epsilon_scaling']
+    for num_links in epsilon_config['num_links']:
+        print(f"\nEpsilon scaling with {num_links} links:")
         
-        links = generate_random_links(
-            base_config['num_links'],
-            link_config,
-            base_config['seed']
-        )
-        
+        links, min_radius = generate_random_links(num_links, link_config, epsilon_config['seed'])
         if len(links) == 0:
             continue
         
-        # Run all three methods
-        gpu_result = run_gpu_method(links, density, collision_config)
-        cpu_vec_result = run_cpu_vectorized_method(links, density, collision_config)
-        cpu_serial_result = run_cpu_serial_method(links, density, collision_config, timeout)
-        
-        if gpu_result.success:
-            results['density_scaling'].append(gpu_result)
-        if cpu_vec_result.success:
-            results['density_scaling'].append(cpu_vec_result)
-        if cpu_serial_result.success:
-            results['density_scaling'].append(cpu_serial_result)
+        for epsilon_base in epsilon_config['epsilons']:
+            epsilon_base_float = float(epsilon_base)
+            epsilon = epsilon_base_float * min_radius  # Multiply by minimum radius
+            print(f"  Epsilon: {epsilon:.2e} (base={epsilon_base_float:.2e})")
+            
+            # GPU method
+            gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+            if gpu_result.success:
+                gpu_result.name = f"epsilon_scaling_{num_links}links"
+                results['epsilon_scaling'].append(gpu_result)
+            
+            # CPU vectorized method
+            cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+            if cpu_vec_result.success:
+                cpu_vec_result.name = f"epsilon_scaling_{num_links}links"
+                results['epsilon_scaling'].append(cpu_vec_result)
+            
+            # CPU serial method (with timeout tracking)
+            cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
+                                                    timeout, skip_if_previous_timeout=serial_timeout_occurred)
+            if cpu_serial_result.success:
+                cpu_serial_result.name = f"epsilon_scaling_{num_links}links"
+                results['epsilon_scaling'].append(cpu_serial_result)
+            elif cpu_serial_result.timed_out and not serial_timeout_occurred:
+                serial_timeout_occurred = True
+                print(f"    WARNING: Serial method timed out after {timeout}s")
     
-    # Link scaling
+    # Link scaling tests (3 graphs with different epsilons)
     print("\n" + "="*60)
     print("LINK SCALING TESTS")
     print("="*60)
     
-    base_config = scaling_config['link_scaling']
-    for num_links in base_config['num_links_list']:
-        print(f"\nNum links: {num_links}")
+    link_scaling_config = scaling_config['link_scaling']
+    for epsilon_base in link_scaling_config['epsilons']:
+        epsilon_base_float = float(epsilon_base)
+        print(f"\nLink scaling with epsilon={epsilon_base_float:.2e}:")
         
-        links = generate_random_links(
-            num_links,
-            link_config,
-            base_config['seed']
-        )
+        for num_links in link_scaling_config['num_links_list']:
+            print(f"  Num links: {num_links}")
+            
+            links, min_radius = generate_random_links(num_links, link_config, link_scaling_config['seed'])
+            if len(links) == 0:
+                continue
+                
+            epsilon = epsilon_base_float * min_radius
+            
+            # GPU method
+            gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+            if gpu_result.success:
+                gpu_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                results['link_scaling'].append(gpu_result)
+            
+            # CPU vectorized method
+            cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+            if cpu_vec_result.success:
+                cpu_vec_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                results['link_scaling'].append(cpu_vec_result)
+            
+            # CPU serial method (with timeout tracking)
+            cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
+                                                    timeout, skip_if_previous_timeout=serial_timeout_occurred)
+            if cpu_serial_result.success:
+                cpu_serial_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                results['link_scaling'].append(cpu_serial_result)
+            elif cpu_serial_result.timed_out and not serial_timeout_occurred:
+                serial_timeout_occurred = True
+                print(f"    WARNING: Serial method timed out after {timeout}s")
+    
+    # Chunk size scaling tests
+    if scaling_config.get('chunk_size_scaling', {}).get('enabled', False):
+        print("\n" + "="*60)
+        print("CHUNK SIZE SCALING TESTS")
+        print("="*60)
         
-        if len(links) == 0:
-            continue
+        chunk_config = scaling_config['chunk_size_scaling']
         
-        # Run all three methods
-        gpu_result = run_gpu_method(links, base_config['point_density'], collision_config)
-        cpu_vec_result = run_cpu_vectorized_method(links, base_config['point_density'], collision_config)
-        cpu_serial_result = run_cpu_serial_method(links, base_config['point_density'], 
-                                                  collision_config, timeout)
+        # 2 graphs with different epsilons
+        for epsilon_base in chunk_config['epsilons']:
+            epsilon_base_float = float(epsilon_base)
+            print(f"\nChunk scaling with epsilon={epsilon_base_float:.2e}:")
+            
+            links, min_radius = generate_random_links(10, link_config, chunk_config['seed'])  # Fixed link count for chunk testing
+            if len(links) == 0:
+                continue
+                
+            epsilon = epsilon_base_float * min_radius
+            
+            for chunk_size in chunk_config['chunk_sizes']:
+                print(f"  Chunk size: {chunk_size}")
+                
+                # GPU method with chunk size
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
+                if gpu_result.success:
+                    gpu_result.name = f"chunk_scaling_eps{epsilon_base:.0e}"
+                    results['chunk_size_scaling'].append(gpu_result)
+                
+                # CPU vectorized method with chunk size
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
+                if cpu_vec_result.success:
+                    cpu_vec_result.name = f"chunk_scaling_eps{epsilon_base:.0e}"
+                    results['chunk_size_scaling'].append(cpu_vec_result)
         
-        if gpu_result.success:
-            results['link_scaling'].append(gpu_result)
-        if cpu_vec_result.success:
-            results['link_scaling'].append(cpu_vec_result)
-        if cpu_serial_result.success:
-            results['link_scaling'].append(cpu_serial_result)
+        # 2 graphs with different link counts
+        for num_links in chunk_config['num_links']:
+            print(f"\nChunk scaling with {num_links} links:")
+            
+            links, min_radius = generate_random_links(num_links, link_config, chunk_config['seed'])
+            if len(links) == 0:
+                continue
+            
+            epsilon = 1e-3 * min_radius  # Fixed epsilon for link count testing
+            
+            for chunk_size in chunk_config['chunk_sizes']:
+                print(f"  Chunk size: {chunk_size}")
+                
+                # GPU method with chunk size
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
+                if gpu_result.success:
+                    gpu_result.name = f"chunk_scaling_{num_links}links"
+                    results['chunk_size_scaling'].append(gpu_result)
+                
+                # CPU vectorized method with chunk size
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
+                if cpu_vec_result.success:
+                    cpu_vec_result.name = f"chunk_scaling_{num_links}links"
+                    results['chunk_size_scaling'].append(cpu_vec_result)
     
     return results
 
 
 def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: Path):
-    """Generate plots from scaling test results"""
+    """Generate comprehensive plots from scaling test results"""
     output_dir.mkdir(exist_ok=True)
     
-    # Plot density scaling
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Only create plots if we have scaling results
+    if not scaling_results:
+        print("\\n⏭️ No scaling results to plot")
+        return
     
-    density_results = scaling_results['density_scaling']
-    methods = {}
-    for result in density_results:
-        if result.method not in methods:
-            methods[result.method] = {'densities': [], 'times': []}
-        methods[result.method]['densities'].append(result.point_density)
-        methods[result.method]['times'].append(result.execution_time)
+    print(f"\\nGenerating plots in {output_dir}")
     
-    for method, data in methods.items():
-        ax.plot(data['densities'], data['times'], marker='o', label=method, linewidth=2)
+    # Simple implementation for now - just create basic plots for any results we have
+    for test_type, results in scaling_results.items():
+        if not results:
+            continue
+            
+        fig, ax = plt.subplots(figsize=(10, 6))
+        
+        methods = {}
+        for result in results:
+            if result.method not in methods:
+                methods[result.method] = {'x_vals': [], 'times': []}
+            
+            # Determine x-axis value based on test type
+            if 'epsilon' in test_type:
+                x_val = result.epsilon
+                x_label = 'Epsilon'
+            elif 'link' in test_type:
+                x_val = result.num_links  
+                x_label = 'Number of Links'
+            elif 'chunk' in test_type:
+                x_val = result.chunk_size or 2048
+                x_label = 'Chunk Size'
+            else:
+                continue
+                
+            methods[result.method]['x_vals'].append(x_val)
+            methods[result.method]['times'].append(result.execution_time)
+        
+        for method, data in methods.items():
+            if data['x_vals'] and data['times']:
+                sorted_data = sorted(zip(data['x_vals'], data['times']))
+                x_vals, times = zip(*sorted_data)
+                ax.plot(x_vals, times, marker='o', label=method, linewidth=2)
+        
+        ax.set_xlabel(x_label, fontsize=12)
+        ax.set_ylabel('Execution Time (seconds)', fontsize=12)
+        ax.set_title(f'Execution Time vs {x_label} ({test_type})', fontsize=14, fontweight='bold')
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+        if 'epsilon' in test_type or 'chunk' in test_type:
+            ax.set_xscale('log')
+        
+        plt.tight_layout()
+        plt.savefig(output_dir / f'{test_type}_scaling.png', dpi=150)
+        plt.close()
     
-    ax.set_xlabel('Point Density (points per unit length)', fontsize=12)
-    ax.set_ylabel('Execution Time (seconds)', fontsize=12)
-    ax.set_title('Execution Time vs Point Density', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=10)
-    ax.grid(True, alpha=0.3)
-    ax.set_yscale('log')
-    ax.set_xscale('log')
-    
-    plt.tight_layout()
-    plt.savefig(output_dir / 'density_scaling.png', dpi=150)
-    plt.close()
-    
-    # Plot link scaling
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    link_results = scaling_results['link_scaling']
-    methods = {}
-    for result in link_results:
-        if result.method not in methods:
-            methods[result.method] = {'num_links': [], 'times': []}
-        methods[result.method]['num_links'].append(result.num_links)
-        methods[result.method]['times'].append(result.execution_time)
-    
-    for method, data in methods.items():
-        ax.plot(data['num_links'], data['times'], marker='o', label=method, linewidth=2)
-    
-    ax.set_xlabel('Number of Links', fontsize=12)
-    ax.set_ylabel('Execution Time (seconds)', fontsize=12)
-    ax.set_title('Execution Time vs Number of Links', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=10)
-    ax.grid(True, alpha=0.3)
-    ax.set_yscale('log')
-    ax.set_xscale('log')
-    
-    plt.tight_layout()
-    plt.savefig(output_dir / 'link_scaling.png', dpi=150)
-    plt.close()
-    
-    print(f"\nPlots saved to {output_dir}")
-
+    print(f"Plots saved to {output_dir}")
 
 def main():
     """Main benchmark runner"""

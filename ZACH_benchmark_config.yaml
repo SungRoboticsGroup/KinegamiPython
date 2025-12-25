@@ -2,29 +2,37 @@ tests:
   - name: "small_sparse"
     seed: 42
     num_links: 5
-    point_density: 5.0
+    epsilon: 1e-2  # Point density will be calculated as 1/(2*epsilon*r)
     
   - name: "medium_dense"
     seed: 67
     num_links: 10
-    point_density: 15.0
+    epsilon: 1e-3
 
 scaling_tests:
-  density_scaling:
-    num_links: 5
+  enabled: true
+  
+  epsilon_scaling:
+    num_links: [5, 10, 20]  # Generate 3 graphs with different link counts
     seed: 789
-    densities: [1.0, 10.0, 100.0, 1000.0, 10000.0]
+    epsilons: [1e-3, 1e-4, 1e-5, 1e-6]  # Will be multiplied by min radius
   
   link_scaling:
-    point_density: 5.0
+    epsilons: [1e-3, 1e-4, 1e-5]  # Generate 3 graphs with different epsilons
     seed: 789
     num_links_list: [5, 10, 20, 50, 100, 200, 500]
+    
+  chunk_size_scaling:
+    enabled: true
+    epsilons: [1e-3, 1e-4]  # Generate 2 graphs with different epsilons
+    num_links: [10, 50]  # Generate 2 graphs with different link counts
+    chunk_sizes: [256, 512, 1024, 2048, 4096, 8192, 16384]
+    seed: 789
 
 link_generation:
   radius_range: [0.5, 2.0]
   max_angle_per_elbow: 1.5708  # pi/2
   position_range: [-50.0, 50.0]
-  epsilon: 0.01
   distance_rtol: 1e-4
   distance_atol: 1e-6
   allow_point_mismatch: true
