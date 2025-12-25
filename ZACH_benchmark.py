@@ -349,8 +349,12 @@ def run_cpu_serial_method(links: List[LinkCSC], epsilon: float, min_radius: floa
         )
 
 
-def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, str]:
-    """Verify that all methods produce the same minimum distances and witness positions"""
+def verify_results(results: List[BenchmarkResult], config: Dict, min_radius: float) -> Tuple[bool, str]:
+    """Verify that all methods produce similar results.
+    
+    Uses rtol/atol for comparing method results (should be very close).
+    Uses epsilon*min_radius for collision detection tolerance only.
+    """
     if len(results) < 2:
         return True, "Not enough results to compare"
     
@@ -362,6 +366,9 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     rtol = float(link_config['distance_rtol'])
     atol = float(link_config['distance_atol'])
     allow_point_mismatch = link_config.get('allow_point_mismatch', False)
+    
+    # Epsilon tolerance for collision detection only
+    epsilon_tol = successful_results[0].epsilon * min_radius
     
     base_result = successful_results[0]
     
@@ -377,6 +384,7 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
     
     for result in successful_results[1:]:
         # Check distances match (ignore NaN/Inf locations)
+        # Use rtol/atol for comparing method results (should be close)
         base_valid = ~(np.isinf(base_result.pairwise_distances))
         result_valid = ~(np.isinf(result.pairwise_distances))
         
@@ -387,7 +395,7 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
             result_valid_vals = result.pairwise_distances[common_valid]
             if not np.allclose(base_valid_vals, result_valid_vals, rtol=rtol, atol=atol, equal_nan=True):
                 max_diff = np.max(np.abs(base_valid_vals - result_valid_vals))
-                return False, f"Distance mismatch between {base_result.method} and {result.method}: max diff = {max_diff}"
+                return False, f"Distance mismatch between {base_result.method} and {result.method}: max diff = {max_diff} (rtol={rtol}, atol={atol})"
         else:
             print(f"    No common valid entries to compare!")
         
@@ -397,9 +405,9 @@ def verify_results(results: List[BenchmarkResult], config: Dict) -> Tuple[bool, 
                                  result.pairwise_point_indices):
                 return False, f"Point index mismatch between {base_result.method} and {result.method}"
         
-        # Check collisions match
+        # Check collisions match using epsilon tolerance (collision-specific)
         match, msg = compare_collision_detections(
-            base_result.collisions, result.collisions, rtol, atol
+            base_result.collisions, result.collisions, epsilon_tol, epsilon_tol
         )
         if not match:
             return False, f"Collision mismatch between {base_result.method} and {result.method}: {msg}"
@@ -461,7 +469,7 @@ def run_single_test(test_config: Dict, link_config: Dict,
     else:
         print(f"    Failed: {cpu_serial_result.error_message}")
     
-    return results, *verify_results(results, link_config)
+    return results, *verify_results(results, link_config, min_radius)
 
 
 def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:

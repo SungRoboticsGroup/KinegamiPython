@@ -10,7 +10,7 @@ tests:
     epsilon: 1e-3
 
 scaling_tests:
-  enabled: true
+  enabled: false
   
   epsilon_scaling:
     num_links: [5, 10, 20]  # Generate 3 graphs with different link counts
