@@ -410,6 +410,7 @@ def pairwise_link_distances(xp, points, point_link_ids, packed, chunk_points=204
         # Convert to CPU arrays for loop processing (avoid GPU-CPU sync per iteration)
         # If xp is CuPy, use .get() for explicit conversion
         # If xp is NumPy, arrays are already on CPU
+        
         if xp != np:
             # CuPy path: use .get() for explicit GPU->CPU transfer
             dist_cpu = dist.get()

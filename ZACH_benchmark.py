@@ -553,20 +553,20 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
             # GPU method
             gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
             if gpu_result.success:
-                gpu_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                gpu_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
                 results['link_scaling'].append(gpu_result)
             
             # CPU vectorized method
             cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
             if cpu_vec_result.success:
-                cpu_vec_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                cpu_vec_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
                 results['link_scaling'].append(cpu_vec_result)
             
             # CPU serial method (with timeout tracking)
             cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
                                                     timeout, skip_if_previous_timeout=serial_timeout_occurred)
             if cpu_serial_result.success:
-                cpu_serial_result.name = f"link_scaling_eps{epsilon_base:.0e}"
+                cpu_serial_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
                 results['link_scaling'].append(cpu_serial_result)
             elif cpu_serial_result.timed_out and not serial_timeout_occurred:
                 serial_timeout_occurred = True
@@ -597,13 +597,13 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
                 # GPU method with chunk size
                 gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
                 if gpu_result.success:
-                    gpu_result.name = f"chunk_scaling_eps{epsilon_base:.0e}"
+                    gpu_result.name = f"chunk_scaling_eps{epsilon_base_float:.0e}"
                     results['chunk_size_scaling'].append(gpu_result)
                 
                 # CPU vectorized method with chunk size
                 cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config, chunk_size=chunk_size)
                 if cpu_vec_result.success:
-                    cpu_vec_result.name = f"chunk_scaling_eps{epsilon_base:.0e}"
+                    cpu_vec_result.name = f"chunk_scaling_eps{epsilon_base_float:.0e}"
                     results['chunk_size_scaling'].append(cpu_vec_result)
         
         # 2 graphs with different link counts
