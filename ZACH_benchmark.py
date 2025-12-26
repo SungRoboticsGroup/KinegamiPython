@@ -98,7 +98,6 @@ def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List
     max_angle = config['max_angle_per_elbow']
     max_link_length = config.get('max_link_length', 10.0)
     
-    total_link_length = 0.0
     link_attempt_count = 0
     max_total_attempts = num_links * 100  # Prevent infinite loops
     
@@ -117,8 +116,7 @@ def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List
         # Compute the distance between start and end poses
         link_length = np.linalg.norm(end_pose.t - start_pose.t)
         
-        # Check if adding this link would exceed the total length limit
-        if total_link_length + link_length > max_link_length:
+        if link_length > max_link_length:
             continue
         
         # Ensure poses are not too close
@@ -134,7 +132,6 @@ def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List
                 EPSILON=r_min * 0.01  # Use a small epsilon relative to minimum radius for link generation
             )
             links.append(link)
-            total_link_length += link_length
         except (ValueError, AssertionError) as e:
             continue
     

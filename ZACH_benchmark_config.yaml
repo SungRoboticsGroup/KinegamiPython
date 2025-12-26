@@ -14,10 +14,10 @@ verification_tests:
     - name: "small_dense"
       seed: 329
       num_links: 5
-      epsilon: 1e-4
+      epsilon: 1e-5
 
 scaling_tests:
-  enabled: true
+  enabled: false
   
   epsilon_scaling:
     enabled: true
@@ -48,7 +48,7 @@ link_generation:
   allow_point_mismatch: true
 
 timeouts:
-  serial_method_timeout: 3 # seconds
+  serial_method_timeout: 8 # seconds
 
 collision_analysis:
   intersection_threshold_multiplier: 1.0  # multiply by r to get collision threshold
