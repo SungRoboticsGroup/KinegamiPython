@@ -86,33 +86,43 @@ def generate_random_SE3(position_range: Tuple[float, float], seed: Optional[int]
 
 
 def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List[LinkCSC], float]:
-    """Generate random LinkCSC objects and return the minimum radius used"""
+    """Generate random LinkCSC objects with total length bounded by max_link_length.
+    
+    Returns the list of links and the minimum radius from config (for epsilon calculations).
+    """
     rng = np.random.RandomState(seed)
     links = []
     
     r_min, r_max = config['radius_range']
     p_min, p_max = config['position_range']
     max_angle = config['max_angle_per_elbow']
+    max_link_length = config.get('max_link_length', 10.0)
     
-    for i in range(num_links):
+    total_link_length = 0.0
+    link_attempt_count = 0
+    max_total_attempts = num_links * 100  # Prevent infinite loops
+    
+    while len(links) < num_links and link_attempt_count < max_total_attempts:
+        link_attempt_count += 1
+        
         # Random radius
         r = rng.uniform(r_min, r_max)
         
         # Random start and end poses
-        start_seed = seed + i * 2
-        end_seed = seed + i * 2 + 1
+        start_seed = seed + len(links) * 2 + link_attempt_count
+        end_seed = seed + len(links) * 2 + 1 + link_attempt_count
         start_pose = generate_random_SE3((p_min, p_max), start_seed)
         end_pose = generate_random_SE3((p_min, p_max), end_seed)
         
-        # Ensure poses are not too close
-        max_attempts = 10
-        attempts = 0
-        while np.linalg.norm(end_pose.t - start_pose.t) < 2 * r and attempts < max_attempts:
-            end_seed += num_links * 2
-            end_pose = generate_random_SE3((p_min, p_max), end_seed)
-            attempts += 1
+        # Compute the distance between start and end poses
+        link_length = np.linalg.norm(end_pose.t - start_pose.t)
         
-        if attempts >= max_attempts:
+        # Check if adding this link would exceed the total length limit
+        if total_link_length + link_length > max_link_length:
+            continue
+        
+        # Ensure poses are not too close
+        if link_length < 2 * r:
             continue
         
         try:
@@ -124,6 +134,7 @@ def generate_random_links(num_links: int, config: Dict, seed: int) -> Tuple[List
                 EPSILON=r_min * 0.01  # Use a small epsilon relative to minimum radius for link generation
             )
             links.append(link)
+            total_link_length += link_length
         except (ValueError, AssertionError) as e:
             continue
     
