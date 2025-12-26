@@ -13,6 +13,7 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 from spatialmath import SE3, SO3
+from collections import defaultdict
 
 # Import the vectorized methods
 from ZACH_vectorized_link_sdf import (
@@ -152,6 +153,8 @@ def run_gpu_method(links: List[LinkCSC], epsilon: float, min_radius: float,
         # Convert to CPU
         pairwise_dist_cpu = cp.asnumpy(pairwise_dist)
         point_idx_cpu = cp.asnumpy(point_idx)
+
+        cp.cuda.Stream.null.synchronize()
         
         execution_time = time.time() - start_time
         
@@ -491,86 +494,88 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
     
     serial_timeout_occurred = False  # Track timeout globally
     
-    # Epsilon scaling tests (3 graphs with different link counts)
-    print("\n" + "="*60)
-    print("EPSILON SCALING TESTS")
-    print("="*60)
-    
-    epsilon_config = scaling_config['epsilon_scaling']
-    for num_links in epsilon_config['num_links']:
-        print(f"\nEpsilon scaling with {num_links} links:")
+    if scaling_config.get('epsilon_scaling', {}).get('enabled', False):
+        # Epsilon scaling tests (3 graphs with different link counts)
+        print("\n" + "="*60)
+        print("EPSILON SCALING TESTS")
+        print("="*60)
         
-        links, min_radius = generate_random_links(num_links, link_config, epsilon_config['seed'])
-        if len(links) == 0:
-            continue
-        
-        for epsilon_base in epsilon_config['epsilons']:
-            epsilon_base_float = float(epsilon_base)
-            epsilon = epsilon_base_float * min_radius  # Multiply by minimum radius
-            print(f"  Epsilon: {epsilon:.2e} (base={epsilon_base_float:.2e})")
+        epsilon_config = scaling_config['epsilon_scaling']
+        for num_links in epsilon_config['num_links']:
+            print(f"\nEpsilon scaling with {num_links} links:")
             
-            # GPU method
-            gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
-            if gpu_result.success:
-                gpu_result.name = f"epsilon_scaling_{num_links}links"
-                results['epsilon_scaling'].append(gpu_result)
-            
-            # CPU vectorized method
-            cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
-            if cpu_vec_result.success:
-                cpu_vec_result.name = f"epsilon_scaling_{num_links}links"
-                results['epsilon_scaling'].append(cpu_vec_result)
-            
-            # CPU serial method (with timeout tracking)
-            cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
-                                                    timeout, skip_if_previous_timeout=serial_timeout_occurred)
-            if cpu_serial_result.success:
-                cpu_serial_result.name = f"epsilon_scaling_{num_links}links"
-                results['epsilon_scaling'].append(cpu_serial_result)
-            elif cpu_serial_result.timed_out and not serial_timeout_occurred:
-                serial_timeout_occurred = True
-                print(f"    WARNING: Serial method timed out after {timeout}s")
-    
-    # Link scaling tests (3 graphs with different epsilons)
-    print("\n" + "="*60)
-    print("LINK SCALING TESTS")
-    print("="*60)
-    
-    link_scaling_config = scaling_config['link_scaling']
-    for epsilon_base in link_scaling_config['epsilons']:
-        epsilon_base_float = float(epsilon_base)
-        print(f"\nLink scaling with epsilon={epsilon_base_float:.2e}:")
-        
-        for num_links in link_scaling_config['num_links_list']:
-            print(f"  Num links: {num_links}")
-            
-            links, min_radius = generate_random_links(num_links, link_config, link_scaling_config['seed'])
+            links, min_radius = generate_random_links(num_links, link_config, epsilon_config['seed'])
             if len(links) == 0:
                 continue
+            
+            for epsilon_base in epsilon_config['epsilons']:
+                epsilon_base_float = float(epsilon_base)
+                epsilon = epsilon_base_float * min_radius  # Multiply by minimum radius
+                print(f"  Epsilon: {epsilon:.2e} (base={epsilon_base_float:.2e})")
                 
-            epsilon = epsilon_base_float * min_radius
+                # GPU method
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+                if gpu_result.success:
+                    gpu_result.name = f"epsilon_scaling_{num_links}links"
+                    results['epsilon_scaling'].append(gpu_result)
+                
+                # CPU vectorized method
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+                if cpu_vec_result.success:
+                    cpu_vec_result.name = f"epsilon_scaling_{num_links}links"
+                    results['epsilon_scaling'].append(cpu_vec_result)
+                
+                # CPU serial method (with timeout tracking)
+                cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
+                                                        timeout, skip_if_previous_timeout=serial_timeout_occurred)
+                if cpu_serial_result.success:
+                    cpu_serial_result.name = f"epsilon_scaling_{num_links}links"
+                    results['epsilon_scaling'].append(cpu_serial_result)
+                elif cpu_serial_result.timed_out and not serial_timeout_occurred:
+                    serial_timeout_occurred = True
+                    print(f"    WARNING: Serial method timed out after {timeout}s")
+
+    if scaling_config.get('link_scaling', {}).get('enabled', False):
+        # Link scaling tests (3 graphs with different epsilons)
+        print("\n" + "="*60)
+        print("LINK SCALING TESTS")
+        print("="*60)
+        
+        link_scaling_config = scaling_config['link_scaling']
+        for epsilon_base in link_scaling_config['epsilons']:
+            epsilon_base_float = float(epsilon_base)
+            print(f"\nLink scaling with epsilon={epsilon_base_float:.2e}:")
             
-            # GPU method
-            gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
-            if gpu_result.success:
-                gpu_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
-                results['link_scaling'].append(gpu_result)
-            
-            # CPU vectorized method
-            cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
-            if cpu_vec_result.success:
-                cpu_vec_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
-                results['link_scaling'].append(cpu_vec_result)
-            
-            # CPU serial method (with timeout tracking)
-            cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
-                                                    timeout, skip_if_previous_timeout=serial_timeout_occurred)
-            if cpu_serial_result.success:
-                cpu_serial_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
-                results['link_scaling'].append(cpu_serial_result)
-            elif cpu_serial_result.timed_out and not serial_timeout_occurred:
-                serial_timeout_occurred = True
-                print(f"    WARNING: Serial method timed out after {timeout}s")
+            for num_links in link_scaling_config['num_links_list']:
+                print(f"  Num links: {num_links}")
+                
+                links, min_radius = generate_random_links(num_links, link_config, link_scaling_config['seed'])
+                if len(links) == 0:
+                    continue
+                    
+                epsilon = epsilon_base_float * min_radius
+                
+                # GPU method
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+                if gpu_result.success:
+                    gpu_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
+                    results['link_scaling'].append(gpu_result)
+                
+                # CPU vectorized method
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+                if cpu_vec_result.success:
+                    cpu_vec_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
+                    results['link_scaling'].append(cpu_vec_result)
+                
+                # CPU serial method (with timeout tracking)
+                cpu_serial_result = run_cpu_serial_method(links, epsilon, min_radius, collision_config, 
+                                                        timeout, skip_if_previous_timeout=serial_timeout_occurred)
+                if cpu_serial_result.success:
+                    cpu_serial_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
+                    results['link_scaling'].append(cpu_serial_result)
+                elif cpu_serial_result.timed_out and not serial_timeout_occurred:
+                    serial_timeout_occurred = True
+                    print(f"    WARNING: Serial method timed out after {timeout}s")
     
     # Chunk size scaling tests
     if scaling_config.get('chunk_size_scaling', {}).get('enabled', False):
@@ -634,65 +639,143 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
     return results
 
 
-def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: Path):
-    """Generate comprehensive plots from scaling test results"""
+def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: Path, config: Dict):
+    """Generate comprehensive multi-subplot plots from scaling test results"""
+    from collections import defaultdict
     output_dir.mkdir(exist_ok=True)
-    
-    # Only create plots if we have scaling results
+
     if not scaling_results:
-        print("\\n⏭️ No scaling results to plot")
+        print("\n⏭️ No scaling results to plot")
         return
-    
-    print(f"\\nGenerating plots in {output_dir}")
-    
-    # Simple implementation for now - just create basic plots for any results we have
-    for test_type, results in scaling_results.items():
-        if not results:
-            continue
+
+    scaling_config = config.get('scaling_tests', {})
+
+    # Plot epsilon scaling: 3 subplots (one for each link count)
+    if scaling_results.get('epsilon_scaling') and scaling_config.get('epsilon_scaling', {}).get('enabled', True):
+        print("\nGenerating epsilon_scaling plot...")
+        epsilon_config = scaling_config.get('epsilon_scaling', {})
+        num_links_list = epsilon_config.get('num_links', [5, 10, 20])
+        
+        fig, axes = plt.subplots(1, len(num_links_list), figsize=(6*len(num_links_list), 5))
+        if len(num_links_list) == 1:
+            axes = [axes]
+        
+        for idx, num_links in enumerate(num_links_list):
+            ax = axes[idx]
+            methods_data = defaultdict(lambda: {'epsilons': [], 'times': []})
             
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        methods = {}
-        for result in results:
-            if result.method not in methods:
-                methods[result.method] = {'x_vals': [], 'times': []}
+            # Filter results for this num_links
+            for result in scaling_results['epsilon_scaling']:
+                if result.num_links == num_links:
+                    methods_data[result.method]['epsilons'].append(result.epsilon)
+                    methods_data[result.method]['times'].append(result.execution_time)
             
-            # Determine x-axis value based on test type
-            if 'epsilon' in test_type:
-                x_val = result.epsilon
-                x_label = 'Epsilon'
-            elif 'link' in test_type:
-                x_val = result.num_links  
-                x_label = 'Number of Links'
-            elif 'chunk' in test_type:
-                x_val = result.chunk_size or 2048
-                x_label = 'Chunk Size'
-            else:
-                continue
-                
-            methods[result.method]['x_vals'].append(x_val)
-            methods[result.method]['times'].append(result.execution_time)
-        
-        for method, data in methods.items():
-            if data['x_vals'] and data['times']:
-                sorted_data = sorted(zip(data['x_vals'], data['times']))
-                x_vals, times = zip(*sorted_data)
-                ax.plot(x_vals, times, marker='o', label=method, linewidth=2)
-        
-        ax.set_xlabel(x_label, fontsize=12)
-        ax.set_ylabel('Execution Time (seconds)', fontsize=12)
-        ax.set_title(f'Execution Time vs {x_label} ({test_type})', fontsize=14, fontweight='bold')
-        ax.legend(fontsize=10)
-        ax.grid(True, alpha=0.3)
-        ax.set_yscale('log')
-        if 'epsilon' in test_type or 'chunk' in test_type:
+            # Plot each method
+            for method in sorted(methods_data.keys()):
+                data = methods_data[method]
+                if data['epsilons']:
+                    sorted_data = sorted(zip(data['epsilons'], data['times']))
+                    epsilons, times = zip(*sorted_data)
+                    ax.plot(epsilons, times, marker='o', label=method, linewidth=2, markersize=6)
+            
+            ax.set_xlabel('Epsilon', fontsize=11)
+            ax.set_ylabel('Total Execution Time (s)', fontsize=11)
+            ax.set_title(f'Epsilon Scaling (N_links={num_links})', fontsize=12, fontweight='bold')
+            ax.legend(fontsize=9)
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('log')
             ax.set_xscale('log')
         
         plt.tight_layout()
-        plt.savefig(output_dir / f'{test_type}_scaling.png', dpi=150)
+        filename = output_dir / 'epsilon_scaling.png'
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
         plt.close()
-    
-    print(f"Plots saved to {output_dir}")
+        print(f"Saved plot: {filename}")
+
+    # Plot link scaling: subplots for each epsilon
+    if scaling_results.get('link_scaling') and scaling_config.get('link_scaling', {}).get('enabled', True):
+        print("\nGenerating link_scaling plot...")
+        link_config = scaling_config.get('link_scaling', {})
+        epsilons_list = link_config.get('epsilons', [1e-2])
+        
+        fig, axes = plt.subplots(1, len(epsilons_list), figsize=(6*len(epsilons_list), 5))
+        if len(epsilons_list) == 1:
+            axes = [axes]
+        
+        for idx, epsilon_base in enumerate(epsilons_list):
+            ax = axes[idx]
+            methods_data = defaultdict(lambda: {'num_links': [], 'times': []})
+            epsilon_base_float = float(epsilon_base)
+            
+            # Collect all data for this epsilon
+            for result in scaling_results['link_scaling']:
+                methods_data[result.method]['num_links'].append(result.num_links)
+                methods_data[result.method]['times'].append(result.execution_time)
+            
+            # Plot each method
+            for method in sorted(methods_data.keys()):
+                data = methods_data[method]
+                if data['num_links']:
+                    sorted_data = sorted(zip(data['num_links'], data['times']))
+                    num_links_vals, times = zip(*sorted_data)
+                    ax.plot(num_links_vals, times, marker='s', label=method, linewidth=2, markersize=6)
+            
+            ax.set_xlabel('Number of Links', fontsize=11)
+            ax.set_ylabel('Total Execution Time (s)', fontsize=11)
+            ax.set_title(f'Link Scaling (ε_base={epsilon_base_float:.0e})', fontsize=12, fontweight='bold')
+            ax.legend(fontsize=9)
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+        
+        plt.tight_layout()
+        filename = output_dir / 'link_scaling.png'
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot: {filename}")
+
+    # Plot chunk size scaling: subplots for each epsilon
+    if scaling_results.get('chunk_size_scaling') and scaling_config.get('chunk_size_scaling', {}).get('enabled', False):
+        print("\nGenerating chunk_size_scaling plot...")
+        chunk_config = scaling_config.get('chunk_size_scaling', {})
+        epsilons_list = chunk_config.get('epsilons', [1e-2])
+        
+        fig, axes = plt.subplots(1, len(epsilons_list), figsize=(6*len(epsilons_list), 5))
+        if len(epsilons_list) == 1:
+            axes = [axes]
+        
+        for idx, epsilon_base in enumerate(epsilons_list):
+            ax = axes[idx]
+            methods_data = defaultdict(lambda: {'chunk_sizes': [], 'times': []})
+            epsilon_base_float = float(epsilon_base)
+            
+            # Filter results for this epsilon
+            for result in scaling_results['chunk_size_scaling']:
+                if f'eps{epsilon_base_float:.0e}' in result.name:
+                    methods_data[result.method]['chunk_sizes'].append(result.chunk_size or 2048)
+                    methods_data[result.method]['times'].append(result.execution_time)
+            
+            # Plot each method
+            for method in sorted(methods_data.keys()):
+                data = methods_data[method]
+                if data['chunk_sizes']:
+                    sorted_data = sorted(zip(data['chunk_sizes'], data['times']))
+                    chunk_sizes, times = zip(*sorted_data)
+                    ax.plot(chunk_sizes, times, marker='^', label=method, linewidth=2, markersize=6)
+            
+            ax.set_xlabel('Chunk Size', fontsize=11)
+            ax.set_ylabel('Total Execution Time (s)', fontsize=11)
+            ax.set_title(f'Chunk Size Scaling (ε_base={epsilon_base_float:.0e})', fontsize=12, fontweight='bold')
+            ax.legend(fontsize=9)
+            ax.grid(True, alpha=0.3)
+            ax.set_yscale('log')
+            ax.set_xscale('log')
+        
+        plt.tight_layout()
+        filename = output_dir / 'chunk_size_scaling.png'
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot: {filename}")
 
 def main():
     """Main benchmark runner"""
@@ -712,37 +795,38 @@ def main():
     print("LINK DISTANCE BENCHMARK")
     print("="*60)
     
-    # Run verification tests
-    print("\n" + "="*60)
-    print("VERIFICATION TESTS")
-    print("="*60)
-    
-    all_passed = True
-    for test_config in config['tests']:
-        results, passed, message = run_single_test(
-            test_config, 
-            config['link_generation'],
-            config['collision_analysis'],
-            config['timeouts']['serial_method_timeout']
-        )
+    if config['tests'].get('enabled', True):
+        # Run verification tests
+        print("\n" + "="*60)
+        print("VERIFICATION TESTS")
+        print("="*60)
         
-        if passed:
-            print(f"  ✓ PASSED: {message}")
+        all_passed = True
+        for test_config in config['tests']:
+            results, passed, message = run_single_test(
+                test_config, 
+                config['link_generation'],
+                config['collision_analysis'],
+                config['timeouts']['serial_method_timeout']
+            )
+            
+            if passed:
+                print(f"  ✓ PASSED: {message}")
+            else:
+                print(f"  ✗ FAILED: {message}")
+                all_passed = False
+        
+        if all_passed:
+            print("\n✓ All verification tests passed!")
         else:
-            print(f"  ✗ FAILED: {message}")
-            all_passed = False
-    
-    if all_passed:
-        print("\n✓ All verification tests passed!")
-    else:
-        print("\n✗ Some verification tests failed")
+            print("\n✗ Some verification tests failed")
     
     # Run scaling tests
     scaling_results = run_scaling_tests(config)
     
     # Generate plots
     output_dir = Path('benchmark_results')
-    plot_results(scaling_results, output_dir)
+    plot_results(scaling_results, output_dir, config)
     
     print("\n" + "="*60)
     print("BENCHMARK COMPLETE")

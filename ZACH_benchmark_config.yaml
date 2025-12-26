@@ -1,4 +1,6 @@
 tests:
+  enabled: false
+
   - name: "small_sparse"
     seed: 42
     num_links: 5
@@ -9,26 +11,28 @@ tests:
     num_links: 10
     epsilon: 1e-3
 
-  - name: "small_dense"
-    seed: 329
-    num_links: 5
-    epsilon: 1e-4
+  # - name: "small_dense"
+  #   seed: 329
+  #   num_links: 5
+  #   epsilon: 1e-4
 
 scaling_tests:
-  enabled: false
+  enabled: true
   
   epsilon_scaling:
-    num_links: [5, 10, 20]  # Generate 3 graphs with different link counts
+    enabled: true
+    num_links: [5]  # Generate 3 graphs with different link counts
     seed: 789
-    epsilons: [1e-2, 1e-3, 1e-4]  # Will be multiplied by min radius
+    epsilons: [1e-2, 1e-3, 1e-4, 1e-5]  # Will be multiplied by min radius
   
   link_scaling:
+    enabled: false
     epsilons: [1e-2]  # Generate 3 graphs with different epsilons
     seed: 789
-    num_links_list: [5, 10, 20, 50, 100, 200, 500]
+    num_links_list: [5, 10, 20, 50]
     
   chunk_size_scaling:
-    enabled: true
+    enabled: false
     epsilons: [1e-2]  # Generate 2 graphs with different epsilons
     num_links: [10]  # Generate 2 graphs with different link counts
     chunk_sizes: [256, 512, 1024, 2048, 4096, 8192]
