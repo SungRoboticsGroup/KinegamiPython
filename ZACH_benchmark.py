@@ -156,7 +156,7 @@ def run_gpu_method(links: List[LinkCSC], epsilon: float, min_radius: float,
         points, point_ids = sample_points_for_links(links, density)
         
         # Time the pairwise computation
-        start_time = time.time()
+        start_time = time.perf_counter()
         pairwise_dist, point_idx = pairwise_link_distances(
             xp, points, point_ids, packed, chunk_points=2048, dtype="float32"
         )
@@ -167,7 +167,7 @@ def run_gpu_method(links: List[LinkCSC], epsilon: float, min_radius: float,
 
         cp.cuda.Stream.null.synchronize()
         
-        execution_time = time.time() - start_time
+        execution_time = time.perf_counter() - start_time
         
         # Collision analysis
         collisions = identify_collisions(
@@ -225,11 +225,11 @@ def run_cpu_vectorized_method(links: List[LinkCSC], epsilon: float, min_radius: 
         points, point_ids = sample_points_for_links(links, density)
         
         # Time the pairwise computation
-        start_time = time.time()
+        start_time = time.perf_counter()
         pairwise_dist, point_idx = pairwise_link_distances(
             xp, points, point_ids, packed, chunk_points=2048, dtype="float32"
         )
-        execution_time = time.time() - start_time
+        execution_time = time.perf_counter() - start_time
         
         # Collision analysis
         collisions = identify_collisions(
@@ -301,11 +301,11 @@ def run_cpu_serial_method(links: List[LinkCSC], epsilon: float, min_radius: floa
         points, point_ids = sample_points_for_links(links, density)
         
         # Time the pairwise computation with timeout
-        start_time = time.time()
+        start_time = time.perf_counter()
         pairwise_dist, point_idx = pairwise_link_distances_serial(
             links, points, point_ids, timeout_seconds=timeout
         )
-        execution_time = time.time() - start_time
+        execution_time = time.perf_counter() - start_time
         
         # Collision analysis
         collisions = identify_collisions(
