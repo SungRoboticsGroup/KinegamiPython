@@ -432,7 +432,70 @@ class LinkCSC:
             count = max(2, int(np.ceil(totalLength * density)) + 1)
         else:
             assert count >= 2, "Count must be at least 2"
-        return np.array([self.interpolateAt(t) for t in np.linspace(0, 1, count)])
+        return self.interpolate_vectorized(np.linspace(0, 1, count))
+    
+    def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
+        """
+        Vectorized interpolation: compute 3D positions for multiple t values at once.
+        
+        Parameters:
+        -----------
+        t_array : np.ndarray
+            Array of parameter values in [0, 1] (shape (n,))
+            
+        Returns:
+        --------
+        np.ndarray
+            Array of 3D positions (shape (n, 3))
+        """
+        # Clamp t values
+        t_array = np.clip(t_array, 0.0, 1.0)
+        
+        totalLength = self.lengthC1 + self.lengthS + self.lengthC2
+        if totalLength < self.DISTANCE_EPSILON:
+            return np.tile(self.StartDubinsPose.t, (len(t_array), 1))
+        
+        # Convert t to arc length s
+        s_array = t_array * totalLength
+        
+        # Partition t_array indices by segment
+        arc1_mask = s_array <= self.lengthC1
+        straight_mask = (s_array > self.lengthC1) & (s_array <= self.lengthC1 + self.lengthS)
+        arc2_mask = s_array > self.lengthC1 + self.lengthS
+        
+        # Initialize output array
+        points = np.zeros((len(t_array), 3), dtype=np.float64)
+        
+        # Arc 1 segment
+        if np.any(arc1_mask):
+            if self.arc1:
+                arc1_indices = np.where(arc1_mask)[0]
+                arc1_t = s_array[arc1_indices] / self.lengthC1
+                points[arc1_indices] = self.arc1.interpolate_vectorized(arc1_t)
+            else:
+                arc1_indices = np.where(arc1_mask)[0]
+                points[arc1_indices] = np.tile(self.StartDubinsPose.t, (len(arc1_indices), 1))
+        
+        # Straight segment
+        if np.any(straight_mask):
+            straight_indices = np.where(straight_mask)[0]
+            t2_array = s_array[straight_indices] - self.lengthC1
+            # Straight line: start + t2 * direction
+            points[straight_indices] = (self.path.turn1end[np.newaxis, :] + 
+                                       t2_array[:, np.newaxis] * self.path.tUnit[np.newaxis, :])
+        
+        # Arc 2 segment
+        if np.any(arc2_mask):
+            if self.arc2:
+                arc2_indices = np.where(arc2_mask)[0]
+                localS = s_array[arc2_indices] - self.lengthC1 - self.lengthS
+                arc2_t = localS / self.lengthC2
+                points[arc2_indices] = self.arc2.interpolate_vectorized(arc2_t)
+            else:
+                arc2_indices = np.where(arc2_mask)[0]
+                points[arc2_indices] = np.tile(self.EndDubinsPose.t, (len(arc2_indices), 1))
+        
+        return points
     
     def _sdCapsule(self, p: np.ndarray, a: np.ndarray, b: np.ndarray, r: float) -> float:
         """

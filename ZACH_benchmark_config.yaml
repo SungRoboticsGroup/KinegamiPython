@@ -42,7 +42,7 @@ link_generation:
   radius_range: [1.0, 3.0]
   max_angle_per_elbow: 1.5708  # pi/2
   position_range: [-50.0, 50.0]
-  max_link_length: 20.0  # Maximum total length for generated links
+  max_link_length: 40.0  # Maximum total length for generated links
   distance_rtol: 1e-4
   distance_atol: 1e-6
   allow_point_mismatch: true

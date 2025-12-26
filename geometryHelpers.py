@@ -829,6 +829,35 @@ class Arc3D:
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
     
+    def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
+        """
+        Vectorized interpolation: compute 3D positions for multiple t values at once.
+        
+        Parameters:
+        -----------
+        t_array : np.ndarray
+            Array of parameter values in [0, 1] (shape (n,))
+            
+        Returns:
+        --------
+        np.ndarray
+            Array of 3D positions (shape (n, 3))
+        """
+        # Clamp t values to [0, 1]
+        t_array = np.clip(t_array, 0.0, 1.0)
+        
+        # Convert t to angle values: angle = t * theta
+        angle = (t_array * self.theta).reshape(-1, 1)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        
+        # Construct basis for circle plane
+        uhat = -self.startNormal.reshape(1, 3)
+        vhat = cross(self.binormal, uhat).reshape(1, 3)
+        
+        # 3D circle points
+        return self.circleCenter + u @ uhat + v @ vhat
+    
     def interpolateAt(self, t: float) -> np.ndarray:
         """
         Return 3D position at parameter t in [0, 1] along the arc
