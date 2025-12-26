@@ -1,5 +1,5 @@
 verification_tests:
-  enabled: true
+  enabled: false
   tests:
     - name: "small_sparse"
       seed: 42
@@ -17,13 +17,13 @@ verification_tests:
       epsilon: 1e-5
 
 scaling_tests:
-  enabled: false
+  enabled: true
   
   epsilon_scaling:
     enabled: true
     num_links: [5, 10]  # Generate 3 graphs with different link counts
     seed: 789
-    epsilons: [1e-2, 1e-3, 1e-4, 1e-5]  # Will be multiplied by min radius
+    epsilons: [1e-2, 1e-3, 1e-4]  # Will be multiplied by min radius
   
   link_scaling:
     enabled: true
@@ -42,7 +42,7 @@ link_generation:
   radius_range: [1.0, 3.0]
   max_angle_per_elbow: 1.5708  # pi/2
   position_range: [-50.0, 50.0]
-  max_link_length: 40.0  # Maximum total length for generated links
+  max_link_length: 50.0  # Maximum total length for generated links
   distance_rtol: 1e-4
   distance_atol: 1e-6
   allow_point_mismatch: true

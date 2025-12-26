@@ -486,7 +486,7 @@ def run_single_test(test_config: Dict, link_config: Dict,
 def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
     """Run comprehensive scaling tests with epsilon, link count, and chunk size variations"""
     if not config['scaling_tests'].get('enabled', True):
-        print("\n⏭️ Scaling tests disabled")
+        print("\n Scaling tests disabled")
         return {}
     
     scaling_config = config['scaling_tests']
@@ -500,8 +500,6 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
         'chunk_size_scaling': []
     }
     
-    serial_timeout_occurred = False  # Track timeout globally
-    
     if scaling_config.get('epsilon_scaling', {}).get('enabled', False):
         # Epsilon scaling tests (3 graphs with different link counts)
         print("\n" + "="*60)
@@ -511,6 +509,8 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
         epsilon_config = scaling_config['epsilon_scaling']
         for num_links in epsilon_config['num_links']:
             print(f"\nEpsilon scaling with {num_links} links:")
+
+            serial_timeout_occurred = False
             
             links, min_radius = generate_random_links(num_links, link_config, epsilon_config['seed'])
             if len(links) == 0:
@@ -551,6 +551,7 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
         
         link_scaling_config = scaling_config['link_scaling']
         for epsilon_base in link_scaling_config['epsilons']:
+            serial_timeout_occurred = False
             epsilon_base_float = float(epsilon_base)
             print(f"\nLink scaling with epsilon={epsilon_base_float:.2e}:")
             
@@ -595,6 +596,7 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
         
         # 2 graphs with different epsilons
         for epsilon_base in chunk_config['epsilons']:
+            serial_timeout_occurred = False
             epsilon_base_float = float(epsilon_base)
             print(f"\nChunk scaling with epsilon={epsilon_base_float:.2e}:")
             
@@ -621,6 +623,7 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
         
         # 2 graphs with different link counts
         for num_links in chunk_config['num_links']:
+            serial_timeout_occurred = False
             print(f"\nChunk scaling with {num_links} links:")
             
             links, min_radius = generate_random_links(num_links, link_config, chunk_config['seed'])
@@ -653,7 +656,7 @@ def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: 
     output_dir.mkdir(exist_ok=True)
 
     if not scaling_results:
-        print("\n⏭️ No scaling results to plot")
+        print("\nNo scaling results to plot")
         return
 
     scaling_config = config.get('scaling_tests', {})
@@ -717,8 +720,9 @@ def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: 
             
             # Collect all data for this epsilon
             for result in scaling_results['link_scaling']:
-                methods_data[result.method]['num_links'].append(result.num_links)
-                methods_data[result.method]['times'].append(result.execution_time)
+                if np.isclose(result.epsilon, epsilon_base_float):
+                    methods_data[result.method]['num_links'].append(result.num_links)
+                    methods_data[result.method]['times'].append(result.execution_time)
             
             # Plot each method
             for method in sorted(methods_data.keys()):
