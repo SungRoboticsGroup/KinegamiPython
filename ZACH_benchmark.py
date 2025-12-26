@@ -795,14 +795,14 @@ def main():
     print("LINK DISTANCE BENCHMARK")
     print("="*60)
     
-    if config['tests'].get('enabled', True):
+    if config['verification_tests'].get('enabled', False):
         # Run verification tests
         print("\n" + "="*60)
         print("VERIFICATION TESTS")
         print("="*60)
         
         all_passed = True
-        for test_config in config['tests']:
+        for test_config in config['verification_tests']['tests']:
             results, passed, message = run_single_test(
                 test_config, 
                 config['link_generation'],
