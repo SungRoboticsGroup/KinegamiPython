@@ -1,5 +1,5 @@
 verification_tests:
-  enabled: false
+  enabled: true
   tests:
     - name: "small_sparse"
       seed: 42
@@ -17,7 +17,7 @@ verification_tests:
       epsilon: 1e-5
 
 scaling_tests:
-  enabled: true
+  enabled: false
   
   epsilon_scaling:
     enabled: true
@@ -46,6 +46,7 @@ link_generation:
   distance_rtol: 1e-4
   distance_atol: 1e-6
   allow_point_mismatch: true
+  chunk_size: 2048
 
 timeouts:
   serial_method_timeout: 8 # seconds

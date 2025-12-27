@@ -448,9 +448,12 @@ def run_single_test(test_config: Dict, link_config: Dict,
     serial_timeout_occurred = False
     results = []
     
+    # Get default chunk size from config
+    chunk_size = link_config.get('chunk_size', 1024)
+    
     # GPU method
     print("  Running GPU method...")
-    gpu_result = run_gpu_method(links, float(test_config['epsilon']), min_radius, collision_config)
+    gpu_result = run_gpu_method(links, float(test_config['epsilon']), min_radius, collision_config, chunk_size=chunk_size)
     results.append(gpu_result)
     if gpu_result.success:
         print(f"    Time: {gpu_result.execution_time:.4f}s, Points: {gpu_result.num_points}")
@@ -459,7 +462,7 @@ def run_single_test(test_config: Dict, link_config: Dict,
     
     # CPU vectorized method
     print("  Running CPU vectorized method...")
-    cpu_vec_result = run_cpu_vectorized_method(links, float(test_config['epsilon']), min_radius, collision_config)
+    cpu_vec_result = run_cpu_vectorized_method(links, float(test_config['epsilon']), min_radius, collision_config, chunk_size=chunk_size)
     results.append(cpu_vec_result)
     if cpu_vec_result.success:
         print(f"    Time: {cpu_vec_result.execution_time:.4f}s, Points: {cpu_vec_result.num_points}")
@@ -494,6 +497,9 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
     collision_config = config['collision_analysis']
     timeout = config['timeouts']['serial_method_timeout']
     
+    # Get default chunk size from config for non-chunk-scaling tests
+    default_chunk_size = link_config.get('chunk_size', 1024)
+    
     results = {
         'epsilon_scaling': [],
         'link_scaling': [],
@@ -522,13 +528,13 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
                 print(f"  Epsilon: {epsilon:.2e} (base={epsilon_base_float:.2e})")
                 
                 # GPU method
-                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config, chunk_size=default_chunk_size)
                 if gpu_result.success:
                     gpu_result.name = f"epsilon_scaling_{num_links}links"
                     results['epsilon_scaling'].append(gpu_result)
                 
                 # CPU vectorized method
-                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config, chunk_size=default_chunk_size)
                 if cpu_vec_result.success:
                     cpu_vec_result.name = f"epsilon_scaling_{num_links}links"
                     results['epsilon_scaling'].append(cpu_vec_result)
@@ -565,13 +571,13 @@ def run_scaling_tests(config: Dict) -> Dict[str, List[BenchmarkResult]]:
                 epsilon = epsilon_base_float * min_radius
                 
                 # GPU method
-                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config)
+                gpu_result = run_gpu_method(links, epsilon, min_radius, collision_config, chunk_size=default_chunk_size)
                 if gpu_result.success:
                     gpu_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
                     results['link_scaling'].append(gpu_result)
                 
                 # CPU vectorized method
-                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config)
+                cpu_vec_result = run_cpu_vectorized_method(links, epsilon, min_radius, collision_config, chunk_size=default_chunk_size)
                 if cpu_vec_result.success:
                     cpu_vec_result.name = f"link_scaling_eps{epsilon_base_float:.0e}"
                     results['link_scaling'].append(cpu_vec_result)
@@ -806,6 +812,11 @@ def main():
     print("="*60)
     print("LINK DISTANCE BENCHMARK")
     print("="*60)
+
+    # Dummy run to initialize GPU and avoid first-run overheads
+    print("Initializing GPU with dummy call to run_gpu_method, to avoid first-run overheads...")
+    dummy_links, _ = generate_random_links(2, config['link_generation'], seed=0)
+    _ = run_gpu_method(dummy_links, 1e-3, 0.1, config['collision_analysis'])
     
     if config['verification_tests'].get('enabled', False):
         # Run verification tests
