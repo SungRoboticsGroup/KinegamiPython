@@ -17,7 +17,7 @@ verification_tests:
       epsilon: 1e-5
 
 scaling_tests:
-  enabled: false
+  enabled: true
   
   epsilon_scaling:
     enabled: true
@@ -27,9 +27,9 @@ scaling_tests:
   
   link_scaling:
     enabled: true
-    epsilons: [1e-2, 1e-3]  # Generate 2 graphs with different epsilons
+    epsilons: [1e-3]  # Generate 2 graphs with different epsilons
     seed: 789
-    num_links_list: [5, 10, 20]
+    num_links_list: [5, 10, 20, 50]
     
   chunk_size_scaling:
     enabled: true
@@ -46,7 +46,7 @@ link_generation:
   distance_rtol: 1e-4
   distance_atol: 1e-6
   allow_point_mismatch: true
-  chunk_size: 2048
+  chunk_size: 1024
 
 timeouts:
   serial_method_timeout: 8 # seconds
