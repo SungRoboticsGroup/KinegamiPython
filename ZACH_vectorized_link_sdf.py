@@ -378,14 +378,6 @@ def pairwise_link_distances(xp, points, point_link_ids, packed, chunk_points=204
     # (L,L) output: point_idx[i,j] = global point index on link i that achieves min to link j
     point_idx = xp.full((L, L), -1, dtype=xp.int32)
 
-    # For GPU execution, keep results on CPU to avoid repeated transfers
-    if xp != np:
-        pairwise_dist_cpu = np.full((L, L), np.inf, dtype=dtype)
-        point_idx_cpu = np.full((L, L), -1, dtype=np.int32)
-    else:
-        pairwise_dist_cpu = pairwise_dist
-        point_idx_cpu = point_idx
-
     N = p.shape[0]
 
     for s in range(0, N, chunk_points):
@@ -407,58 +399,34 @@ def pairwise_link_distances(xp, points, point_link_ids, packed, chunk_points=204
             d3 = _sd_arc(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
             dist = xp.minimum(dist, xp.where(arc2_enabled[None, :], d3, xp.inf))
 
-        # Convert to CPU arrays for loop processing (avoid GPU-CPU sync per iteration)
-        # If xp is CuPy, use .get() for explicit conversion
-        # If xp is NumPy, arrays are already on CPU
-        
-        if xp != np:
-            # CuPy path: use .get() for explicit GPU->CPU transfer
-            dist_cpu = dist.get()
-            own_cpu = own.get()
-        else:
-            # NumPy path: arrays already on CPU
-            dist_cpu = dist
-            own_cpu = own
-        
-        # VECTORIZED update: eliminate nested Python loops
-        # For each unique link in this chunk, find which points originate from it
-        unique_links = np.unique(own_cpu)
-        for link_i in unique_links:
-            link_i = int(link_i)
-            # Find all points from this link
-            point_indices_in_chunk = np.where(own_cpu == link_i)[0]
-            global_indices = s + point_indices_in_chunk
-            
-            if len(point_indices_in_chunk) == 0:
-                continue
-            
-            # Get distances for all these points to all links
-            dist_subset = dist_cpu[point_indices_in_chunk, :]  # (num_points, L)
-            
-            # For each target link j (j != link_i), find best point
-            for link_j in range(L):
-                if link_j == link_i:
-                    continue
-                
-                # Get distances from link_i points to link_j
-                dists_to_j = dist_subset[:, link_j]  # (num_points,)
-                
-                # Find minimum distance, ignoring NaN/Inf values
-                valid_mask = ~(np.isnan(dists_to_j) | np.isinf(dists_to_j))
-                if np.any(valid_mask):
-                    valid_indices = np.where(valid_mask)[0]
-                    valid_dists = dists_to_j[valid_indices]
-                    best_valid_idx = np.argmin(valid_dists)
-                    best_idx_in_subset = valid_indices[best_valid_idx]
-                    best_dist = valid_dists[best_valid_idx]
-                else:
-                    # All values are NaN/Inf, skip
-                    continue
-                
-                # Update if better
-                if best_dist < pairwise_dist_cpu[link_i, link_j]:
-                    pairwise_dist_cpu[link_i, link_j] = best_dist
-                    point_idx_cpu[link_i, link_j] = global_indices[best_idx_in_subset]
+        # vectorized creation pairwise_dist and point_idx
+        # owns[i, j] = (ids[i] == j) for any point i and link j (True if point i belongs to link j)
+        owns = (own[:, None] == xp.arange(L)[None, :])   # (N, L)
 
+        # expanded distances and own
+        dist_exp = dist[:, None, :]    # (N, 1, L)
+        owns_exp = owns[:, :, None]    # (N, L, 1)
+
+        # masked_dist[n, i, j] = dist[n, j] if ids[n] == i and j != i, +inf otherwise
+        masked_dist = xp.where(
+            owns_exp,
+            dist_exp,
+            xp.inf
+        )
+
+        # arg_n[i, j] = global index of point that gives the minimum dist from point on i to link j
+        chunk_idx = xp.argmin(masked_dist, axis=0) + s  # (L, L)
+        chunk_dist = xp.min(masked_dist, axis=0)
+
+        # set point idx if chunk min dist is less than global dist
+        point_idx = xp.where(chunk_dist < pairwise_dist, chunk_idx, point_idx)
+
+        # collapse point axis and min globally
+        pairwise_dist = xp.minimum(pairwise_dist, chunk_dist)
+
+    # mask out same link comparisons
+    not_self = xp.arange(L)[:, None] != xp.arange(L)[None, :]
+    pairwise_dist = xp.where(not_self, pairwise_dist, xp.inf)
+    point_idx = xp.where(not_self, point_idx, -1)
     # Return CPU arrays
-    return pairwise_dist_cpu, point_idx_cpu
+    return pairwise_dist, point_idx
