@@ -21,15 +21,15 @@ scaling_tests:
   
   epsilon_scaling:
     enabled: true
-    num_links: [5, 10]  # Generate 3 graphs with different link counts
+    num_links: [5, 10, 20, 50]  # Generate 3 graphs with different link counts
     seed: 789
     epsilons: [1e-2, 1e-3, 1e-4]  # Will be multiplied by min radius
   
   link_scaling:
     enabled: true
-    epsilons: [1e-2, 1e-3]  # Generate 3 graphs with different epsilons
+    epsilons: [1e-2, 1e-3]  # Generate 2 graphs with different epsilons
     seed: 789
-    num_links_list: [5, 10, 20, 50]
+    num_links_list: [5, 10, 20]
     
   chunk_size_scaling:
     enabled: true
