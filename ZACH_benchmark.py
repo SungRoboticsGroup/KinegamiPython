@@ -795,6 +795,163 @@ def plot_results(scaling_results: Dict[str, List[BenchmarkResult]], output_dir: 
         plt.close()
         print(f"Saved plot: {filename}")
 
+    # Plot epsilon scaling with number of points on x-axis, showing both epsilon and link count scaling
+    if scaling_results.get('epsilon_scaling') and scaling_config.get('epsilon_scaling', {}).get('enabled', True):
+        print("\nGenerating epsilon_scaling_by_points plot...")
+        epsilon_config = scaling_config.get('epsilon_scaling', {})
+        num_links_list = epsilon_config.get('num_links', [5, 10, 20])
+        epsilons_list = epsilon_config.get('epsilons', [])
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        # Define colors and markers for each method
+        method_styles = {
+            'GPU (CuPy)': {'color': 'C0', 'marker': 'o'},
+            'CPU Vectorized (NumPy)': {'color': 'C1', 'marker': 's'},
+            'CPU Serial': {'color': 'C2', 'marker': '^'}
+        }
+        
+        # Organize data by method and num_links
+        data_by_method_links = defaultdict(lambda: defaultdict(lambda: {'num_points': [], 'times': [], 'epsilons': []}))
+        
+        for result in scaling_results['epsilon_scaling']:
+            data_by_method_links[result.method][result.num_links]['num_points'].append(result.num_points)
+            data_by_method_links[result.method][result.num_links]['times'].append(result.execution_time)
+            data_by_method_links[result.method][result.num_links]['epsilons'].append(result.epsilon)
+        
+        # Plot solid lines connecting points with same num_links (varying epsilon)
+        for method in sorted(data_by_method_links.keys()):
+            style = method_styles.get(method, {'color': 'gray', 'marker': 'x'})
+            
+            for num_links in sorted(data_by_method_links[method].keys()):
+                data = data_by_method_links[method][num_links]
+                if data['num_points']:
+                    sorted_data = sorted(zip(data['num_points'], data['times']))
+                    num_points, times = zip(*sorted_data)
+                    
+                    ax.plot(num_points, times,
+                           marker=style['marker'],
+                           color=style['color'],
+                           linestyle='-',
+                           label=f"{method}, N_links={num_links}",
+                           linewidth=2,
+                           markersize=6,
+                           alpha=0.8)
+        
+        # Plot dashed lines connecting points with same epsilon (varying num_links)
+        # Organize data by method and epsilon
+        data_by_method_epsilon = defaultdict(lambda: defaultdict(lambda: {'num_points': [], 'times': [], 'num_links': []}))
+        
+        for result in scaling_results['epsilon_scaling']:
+            # Round epsilon to avoid floating point comparison issues
+            epsilon_key = f"{result.epsilon:.2e}"
+            data_by_method_epsilon[result.method][epsilon_key]['num_points'].append(result.num_points)
+            data_by_method_epsilon[result.method][epsilon_key]['times'].append(result.execution_time)
+            data_by_method_epsilon[result.method][epsilon_key]['num_links'].append(result.num_links)
+        
+        for method in sorted(data_by_method_epsilon.keys()):
+            style = method_styles.get(method, {'color': 'gray', 'marker': 'x'})
+            
+            for epsilon_key in sorted(data_by_method_epsilon[method].keys()):
+                data = data_by_method_epsilon[method][epsilon_key]
+                if len(data['num_points']) > 1:  # Only plot if we have multiple link counts
+                    sorted_data = sorted(zip(data['num_points'], data['times']))
+                    num_points, times = zip(*sorted_data)
+                    
+                    ax.plot(num_points, times,
+                           color=style['color'],
+                           linestyle='--',
+                           linewidth=1.5,
+                           alpha=0.5)  # More transparent, no markers or labels
+        
+        ax.set_xlabel('Number of Points', fontsize=12)
+        ax.set_ylabel('Total Execution Time (s)', fontsize=12)
+        ax.set_title('Epsilon Scaling: Execution Time vs Number of Points\n(Solid: varying ε, Dashed: varying N_links)', fontsize=13, fontweight='bold')
+        ax.legend(fontsize=9, loc='best', ncol=1)
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+        
+        plt.tight_layout()
+        filename = output_dir / 'epsilon_scaling_by_points.png'
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot: {filename}")
+
+    # Plot unified scaling by number of points
+    if (scaling_results.get('epsilon_scaling') or scaling_results.get('link_scaling')):
+        print("\nGenerating unified points_scaling plot...")
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        # Collect all data organized by (method, parameter_label)
+        # parameter_label describes what was held constant (e.g., "N_links=10", "ε_base=1e-2")
+        unified_data = defaultdict(lambda: {'num_points': [], 'times': []})
+        
+        # Add epsilon scaling results (parameter = number of links held constant)
+        if scaling_results.get('epsilon_scaling'):
+            for result in scaling_results['epsilon_scaling']:
+                label = f"{result.method}, N_links={result.num_links}"
+                unified_data[label]['num_points'].append(result.num_points)
+                unified_data[label]['times'].append(result.execution_time)
+        
+        # Add link scaling results (parameter = epsilon held constant)
+        if scaling_results.get('link_scaling'):
+            for result in scaling_results['link_scaling']:
+                # Extract epsilon_base from the name or calculate it
+                epsilon_base = result.epsilon / 1.0  # Approximate, since we don't store min_radius
+                label = f"{result.method}, ε={result.epsilon:.1e}"
+                unified_data[label]['num_points'].append(result.num_points)
+                unified_data[label]['times'].append(result.execution_time)
+        
+        # Define colors and markers for each method
+        method_styles = {
+            'GPU (CuPy)': {'color': 'C0', 'marker': 'o'},
+            'CPU Vectorized (NumPy)': {'color': 'C1', 'marker': 's'},
+            'CPU Serial': {'color': 'C2', 'marker': '^'}
+        }
+        
+        # Plot each series
+        for label in sorted(unified_data.keys()):
+            data = unified_data[label]
+            if data['num_points']:
+                sorted_data = sorted(zip(data['num_points'], data['times']))
+                num_points, times = zip(*sorted_data)
+                
+                # Determine style based on method name in label
+                style = {'color': 'gray', 'marker': 'x'}
+                for method_name, method_style in method_styles.items():
+                    if method_name in label:
+                        style = method_style
+                        break
+                
+                # Use different line styles for different parameter configurations
+                # Solid for epsilon scaling (fixed links), dashed for link scaling (fixed epsilon)
+                linestyle = '--' if 'ε=' in label else '-'
+                
+                ax.plot(num_points, times, 
+                       marker=style['marker'], 
+                       color=style['color'],
+                       linestyle=linestyle,
+                       label=label, 
+                       linewidth=2, 
+                       markersize=6,
+                       alpha=0.8)
+        
+        ax.set_xlabel('Number of Points', fontsize=12)
+        ax.set_ylabel('Total Execution Time (s)', fontsize=12)
+        ax.set_title('Unified Scaling: Execution Time vs Number of Points', fontsize=14, fontweight='bold')
+        ax.legend(fontsize=8, loc='best', ncol=1)
+        ax.grid(True, alpha=0.3)
+        ax.set_yscale('log')
+        ax.set_xscale('log')
+        
+        plt.tight_layout()
+        filename = output_dir / 'unified_points_scaling.png'
+        plt.savefig(filename, dpi=150, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot: {filename}")
+
 def main():
     """Main benchmark runner"""
     # Load configuration
@@ -818,6 +975,11 @@ def main():
     dummy_links, _ = generate_random_links(2, config['link_generation'], seed=0)
     _ = run_gpu_method(dummy_links, 1e-3, 0.1, config['collision_analysis'])
     
+    # Dummy run to initialize GPU and avoid first-run overheads
+    print("Initializing GPU with dummy call to run_gpu_method, to avoid first-run overheads...")
+    dummy_links, _ = generate_random_links(2, config['link_generation'], seed=0)
+    _ = run_gpu_method(dummy_links, 1e-3, 0.1, config['collision_analysis'])
+
     if config['verification_tests'].get('enabled', False):
         # Run verification tests
         print("\n" + "="*60)
