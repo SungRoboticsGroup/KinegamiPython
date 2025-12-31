@@ -14,7 +14,7 @@ import shutil
 import re
 from datetime import datetime
 
-jointCount = 20
+jointCount = 12
 probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
@@ -69,56 +69,61 @@ def generateTree(nJoints):
     return initialTree
 
 
-def findWaypointSets(tree):
 
-    visited = set()
+def findWaypointSets(tree : KinematicTree):
+    """
+    Find sets of waypoints that are adjacent to each other without any real joints in between,
+    the corresponding sets of links adjacent to those waypoints (both incoming and outgoing), 
+    and a dictionary mapping each link index to the set it belongs to.
+    
+    Example: a tree has a joint at index 3 which branches out into two chains:
+        waypoint at index 4, waypoint at index 5, real joint at index 6
+        waypoint at index 7, real joint at index 8
+    This would yield waypoint set {4, 5, 7} and link set {4, 5, 6, 7, 8}
+    
+    :param tree: KinematicTree to analyze
+    :return: (two lists, one dictionary)
+             - List of waypoint sets (each set is a set of joint indices)
+             - List of link sets (each set is a set of link indices)
+             - Dictionary mapping each link index to the set it belongs to
+    """
+    # visited = [False] * len(tree.Joints)
     waypoint_sets = []
     link_sets = []
+    link_dictionary = {}
     
-    def buildWaypointSet(joint_idx, current_wp_set, current_link_set):
 
-        if joint_idx in visited or joint_idx is None or joint_idx == -1:
-            return
-        
-        # Check if this joint is a waypoint
-        # If it is not a waypoint, include only the link from previous waypoint to here and return
-        if not isWaypoint(tree.Joints[joint_idx]):
-            current_link_set.append(joint_idx)
-            return
-        
-        # Add waypoint to current set and mark as visited
-        current_wp_set.append(joint_idx)
-        visited.add(joint_idx)
-
-        # Add the incoming and outgoing links to the link set
-        incoming_link_idx = joint_idx
-        if incoming_link_idx is not None and incoming_link_idx != -1:
-            current_link_set.append(incoming_link_idx)
-        
-        # Check parent
-        parent_idx = tree.Parents[joint_idx]
-        if parent_idx is not None and parent_idx != -1 and parent_idx not in visited:
-            if isWaypoint(tree.Joints[parent_idx]):
-                buildWaypointSet(parent_idx, current_wp_set, current_link_set)
-        
-        # Check children
-        children_indices = tree.Children[joint_idx]
-        for child_idx in children_indices:
-            if child_idx not in visited and isWaypoint(tree.Joints[child_idx]):
-                buildWaypointSet(child_idx, current_wp_set, current_link_set)
+    def addToWaypointCluster(joint_idx : int, set_idx : int):
+        if set_idx == -1:
+            set_idx = len(waypoint_sets)
+            waypoint_sets.append(set())
+            link_sets.append(set())
+        waypoint_sets[set_idx].add(joint_idx)
+        return set_idx
     
-    # Go through all joints and find waypoint sets
-    for joint_idx in range(len(tree.Joints)):
-        if joint_idx not in visited and isWaypoint(tree.Joints[joint_idx]):
-            current_wp_set = []
-            current_link_set = []
-            buildWaypointSet(joint_idx, current_wp_set, current_link_set)
-            if current_wp_set:
-                waypoint_sets.append(current_wp_set)
-                link_sets.append(current_link_set)
-    
-    return link_sets
+    def addToLinkCluster(link_idx : int, set_idx : int):
+        if set_idx == -1:
+            set_idx = len(link_sets)
+            waypoint_sets.append(set())
+            link_sets.append(set())
+        link_sets[set_idx].add(link_idx)
+        link_dictionary[link_idx] = set_idx
+        return set_idx
 
+    def findSetsFromJoint(joint_idx : int, set_idx : int = -1):
+        if isWaypoint(tree.Joints[joint_idx]):
+            set_idx = addToWaypointCluster(joint_idx, set_idx)
+
+        for c in tree.Children[joint_idx]:
+            set_idx = addToLinkCluster(c, set_idx)
+            findSetsFromJoint(c, set_idx if isWaypoint(tree.Joints[c]) else -1)
+            
+    findSetsFromJoint(0)
+
+    return waypoint_sets, link_sets, link_dictionary
+
+
+    
 
 def buildCollisionPairDictionary(tree):
     """
@@ -236,27 +241,35 @@ construct = generateTree(jointCount)
 
 # Print structure with link lengths
 print("\n=== Tree Structure with Link Lengths ===\n")
-for parent in range(len(construct.Children)):
-    children = construct.Children[parent]
-    if not children:
-        continue
-
-    print(f"- Joint {parent} -> {"Waypoint" if isWaypoint(construct.Joints[parent]) else "Joint"}")
-    for child in children:
-        link = construct.Links[child]
+# Function to recursively print the tree structure,
+# broken down into sub-chains between wherever it branches
+def printTreeStructure(tree, joint_idx, indent=""):
+    joint = tree.Joints[joint_idx]
+    children = tree.Children[joint_idx]
+    
+    print(f"{indent}- Joint {joint_idx} ({'Waypoint' if isWaypoint(joint) else 'Joint'})")
+    
+    for child_idx in children:
+        link = tree.Links[child_idx]
         path = link.path
-        print(f"   ---> Joint {child} | Length: {path.length:.2f}")
-    print("")
+        print(f"{indent}   ---> Link to Joint {child_idx} | Length: {path.length:.2f}")
+        printTreeStructure(tree, child_idx, indent + "\t")
+
+printTreeStructure(construct, 0)
 
 # Find sets of adjacent waypoints
-waypoint_sets, link_sets = findWaypointSets(construct)
+waypoint_sets, link_sets, link_to_set = findWaypointSets(construct)
 
-print(f"\nFound {len(waypoint_sets)} waypoint sets:")
-for set_idx, waypoint_set in enumerate(waypoint_sets):
-    print(f"  Set {set_idx}: {waypoint_set}")
-    print(f"  Links: {link_sets[set_idx]}")
+# Each link set should have a corresponding color for visualization
+colors = generate_colors(len(link_sets))
+linkColorList = [colors[link_to_set[i]] if i in link_to_set else (0.5,0.5,0.5) for i in range(len(construct.Links))]
+
+
+print(f"Waypoint Sets: {waypoint_sets}")
+print(f"Link Sets: {link_sets}")
+print(f"Link to Set Mapping: {link_to_set}")
 
 
 # Visualize the tree
 print("\nVisualizing tree...")
-construct.show(block=True)
+construct.show(block=True, linkColor=linkColorList)

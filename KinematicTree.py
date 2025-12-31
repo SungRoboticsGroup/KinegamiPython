@@ -238,7 +238,8 @@ class KinematicTree(Generic[J]):
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, showCollisionBoxes=False, showSpecificCapsules = ([],[]), plotPoint=None, addCapsules = []):
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, 
+                  showCollisionBoxes=False, showSpecificCapsules = ([],[]), plotPoint=None, addCapsules = []):
         xyzHandles = []
         abcHandles = []
         
@@ -260,10 +261,12 @@ class KinematicTree(Generic[J]):
                 xyzHandles.append(handles)
 
 
-        for link in self.Links:
+        for i, link in enumerate(self.Links):
             if link is None:
                 continue
-            handles = link.addToPlot(ax, color=linkColor, 
+
+            color = linkColor[i] if isinstance(linkColor, list) or isinstance(linkColor, np.ndarray) else linkColor
+            handles = link.addToPlot(ax, color=color, 
                                    alpha=surfaceOpacity, 
                                    showPath=showLinkPath, 
                                    pathColor=pathColor,
