@@ -541,7 +541,7 @@ class KinematicTree(Generic[J]):
 
         return totalError
 
-    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=False, debug=False):
+    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=True, debug=True):
         numCollisions = 0
         
         for idx in indices:
@@ -563,10 +563,11 @@ class KinematicTree(Generic[J]):
                             
                             if didCollide:
                                 numCollisions += 1
+                                if show:
+                                    self.show(addCapsules=[capsule1, capsule2], plotPoint=pt, block=False)
+                                    placeholder = 42
                                 if debug:
                                     print(f"{type1} {idx1} vs {type2} {idx2}")
-                                if show:
-                                    self.show(addCapsules=[capsule1, capsule2], plotPoint=pt)
         
         return numCollisions
 

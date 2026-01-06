@@ -14,62 +14,6 @@ import shutil
 import re
 from datetime import datetime
 
-jointCount = 12
-probabilityOfBranching = 0.5
-sparse = False
-cubeSize = 100 if sparse else 10
-title = str(jointCount)+" Joint " + ("Chains" if probabilityOfBranching == 0 else "Trees") + (" Sparse" if sparse else " Dense")
-treeCount = 1
-restartFrom = 0
-multipleIterations=False
-
-seed = 42
-np.random.seed(seed)
-saved_state = np.random.get_state()
-
-timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
-base_dir = "Trials Before Experiments"
-experiment_name = f"{timestamp}_Joints{jointCount}_Trees{treeCount}_Seed{seed}"
-results_dir = os.path.join(base_dir, experiment_name)
-os.makedirs(results_dir, exist_ok=True)
-
-
-def generateTree(nJoints):
-    bounds = (-cubeSize/2, cubeSize/2)
-    poses = [ SE3.Rand(xrange=bounds, yrange=bounds, zrange=bounds)
-                for _ in range(nJoints) ]
-
-    r = 1
-    numSides = 4
-    neutralLength = 3
-
-    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
-
-    specTree = JointSpecificationTree(root)
-
-    for i in range(1,nJoints):
-        #parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
-        branching = np.random.rand() < probabilityOfBranching and i > 1
-        if branching:
-            # randomly select a parent from among the non-leaves
-            nonLeaves = specTree.nonLeaves()
-            parent = nonLeaves[np.random.randint(0,len(nonLeaves))]
-        else:
-            # randomly select a parent from among the leaves
-            leaves = specTree.leaves()
-            parent = leaves[np.random.randint(0,len(leaves))]
-        
-        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
-        specTree.addJoint(parent, newJoint)
-
-    initialTree = makeTubularKinematicTree(specTree)
-    assert(abs(specTree.totalLengthLowerBound() - initialTree.totalLengthLowerBound()) < 1e-5)
-    return initialTree
-
-
-
 def findWaypointSets(tree : KinematicTree):
     """
     Find sets of waypoints that are adjacent to each other without any real joints in between,
@@ -141,16 +85,10 @@ def buildCollisionPairDictionary(tree):
               [((idx1, type1), (idx2, type2)), ...]
               where type is 'joint' or 'link'
     """
-    link_sets = findWaypointSets(tree)
+    waypoint_sets, link_sets, whichLinkSet = findWaypointSets(tree)
     
     # Pre-classify all joints
     real_joints = [i for i in range(len(tree.Joints)) if not isWaypoint(tree.Joints[i])]
-    
-    # Create link-to-set mapping 
-    whichLinkSet = {}
-    for set_idx, link_set in enumerate(link_sets):
-        for link_idx in link_set:
-            whichLinkSet[link_idx] = set_idx
     
     collision_pairs = {}
     
@@ -233,8 +171,64 @@ def plotColoredTrees(directory, collection = []):
     else:
         plotCollection(collection)
 
+"""
+# Setup for testing
+jointCount = 12
+probabilityOfBranching = 0.5
+sparse = False
+cubeSize = 100 if sparse else 10
+title = str(jointCount)+" Joint " + ("Chains" if probabilityOfBranching == 0 else "Trees") + (" Sparse" if sparse else " Dense")
+treeCount = 1
+restartFrom = 0
+multipleIterations=False
 
-# Main execution
+seed = 42
+np.random.seed(seed)
+saved_state = np.random.get_state()
+
+timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+base_dir = "Trials Before Experiments"
+experiment_name = f"{timestamp}_Joints{jointCount}_Trees{treeCount}_Seed{seed}"
+results_dir = os.path.join(base_dir, experiment_name)
+os.makedirs(results_dir, exist_ok=True)
+
+
+def generateTree(nJoints):
+    bounds = (-cubeSize/2, cubeSize/2)
+    poses = [ SE3.Rand(xrange=bounds, yrange=bounds, zrange=bounds)
+                for _ in range(nJoints) ]
+
+    r = 1
+    numSides = 4
+    neutralLength = 3
+
+    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
+            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+
+    specTree = JointSpecificationTree(root)
+
+    for i in range(1,nJoints):
+        #parent = np.random.randint(int((i - 1) * (1 - branchingRatio)), i)
+        branching = np.random.rand() < probabilityOfBranching and i > 1
+        if branching:
+            # randomly select a parent from among the non-leaves
+            nonLeaves = specTree.nonLeaves()
+            parent = nonLeaves[np.random.randint(0,len(nonLeaves))]
+        else:
+            # randomly select a parent from among the leaves
+            leaves = specTree.leaves()
+            parent = leaves[np.random.randint(0,len(leaves))]
+        
+        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
+            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+        specTree.addJoint(parent, newJoint)
+
+    initialTree = makeTubularKinematicTree(specTree)
+    assert(abs(specTree.totalLengthLowerBound() - initialTree.totalLengthLowerBound()) < 1e-5)
+    return initialTree
+
+
+# Main execution for testing
 print(f"\n\nConstructing tree...")
 np.random.set_state(saved_state)
 construct = generateTree(jointCount)
@@ -273,3 +267,4 @@ print(f"Link to Set Mapping: {link_to_set}")
 # Visualize the tree
 print("\nVisualizing tree...")
 construct.show(block=True, linkColor=linkColorList)
+"""

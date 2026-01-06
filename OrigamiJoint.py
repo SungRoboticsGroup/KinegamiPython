@@ -369,7 +369,7 @@ class PrismaticJoint(OrigamiJoint):
         return PrintedPrismaticJoint(self.r, self.maxLength - self.minLength, self.Pose, screwRadius, initialState=self.initialState)
     
     def getCapsules(self):
-        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.minLength)]
+        return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.length())]
 
     def copy(self):
         return PrismaticJoint(self.numSides, self.r, self.neutralLength, self.numLayers, self.coneAngle, self.Pose, self.initialState)

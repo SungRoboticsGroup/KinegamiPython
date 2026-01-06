@@ -191,9 +191,15 @@ def vectorized_box_collision(boxes1, boxes2):
 
 class CollisionCapsule:
     def __init__(self, base : SE3(), radius : float, height : float, epsilon : float = 1e-6):
+        if radius <= 0:
+            raise ValueError("Radius must be positive")
+        # if height < 0: # reverse direction of base
+        #     base = base @ SE3.Ry(np.pi)
+        #     height = -height
+
         self.EPSILON = epsilon*radius
-        self.radius = radius - self.EPSILON
-        self.height = height - 2*self.EPSILON
+        self.radius = max(radius, self.EPSILON) - self.EPSILON
+        self.height = max(height, 2*self.EPSILON) - 2*self.EPSILON
         self.base = base @ SE3.Ry(np.pi/2) @ SE3.Trans([0,0,self.EPSILON])
         self.otherBase = self.base @ SE3.Trans([0,0,self.height])
         self.start = (self.base @ SE3.Trans([0,0,-self.radius])).t
@@ -204,7 +210,7 @@ class CollisionCapsule:
         self.box = CollisionBox(startDubinsFrame=self.base, endDubinsFrame=self.otherBase, r=self.radius)
 
     
-    def addToPlot(self, ax, color='r', alpha=0.25):
+    def addToPlot(self, ax, color='r', alpha=0.25, edgeColor=None):
         def createCirclePoints(center, radius, normal, num_points=50):
             """Generate points on a circle in 3D."""
             angles = np.linspace(0, 2 * np.pi, num_points)
@@ -245,7 +251,7 @@ class CollisionCapsule:
 
             # for simplex in hull.simplices:
             #     ax.plot(allPoints[simplex, 0], allPoints[simplex, 1], allPoints[simplex, 2], 'k-')
-            ax.add_collection3d(Poly3DCollection(allPoints[hull.simplices], facecolors=color, linewidths=1, edgecolors=None, alpha=alpha))
+            ax.add_collection3d(Poly3DCollection(allPoints[hull.simplices], facecolors=color, linewidths=1, edgecolors=edgeColor, alpha=alpha))
 
             # Plot bottom and top circles
             # ax.plot(bottomCirclePoints[:, 0], bottomCirclePoints[:, 1], bottomCirclePoints[:, 2], 'b-')
@@ -284,6 +290,7 @@ def pointInCapsuleHemisphere(point, capsule):
     axis = end - start
     axis_length = np.linalg.norm(axis)
 
+
     # Check distance from point to start and end
     distToStart = np.linalg.norm(point - start)
     distToEnd = np.linalg.norm(point - end)
@@ -314,7 +321,9 @@ def capsuleCollision(capsule1, capsule2):
     if distance < sumRadii:
         collisionPoint = p1 + vector * 0.5
         
-        if distance > sumRadii/10000 and (pointInCapsuleHemisphere(collisionPoint, (capsule1.start, capsule1.end, capsule1.radius)) or pointInCapsuleHemisphere(collisionPoint, (capsule2.start, capsule2.end, capsule2.radius))):
+        if distance > sumRadii/10000 and \
+        (pointInCapsuleHemisphere(collisionPoint, (capsule1.start, capsule1.end, capsule1.radius)) or 
+         pointInCapsuleHemisphere(collisionPoint, (capsule2.start, capsule2.end, capsule2.radius))):
             if not separatingAxisTheorem(CollisionBox(startDubinsFrame=capsule1.base, endDubinsFrame=capsule1.otherBase, r = capsule1.radius/(2**0.5) - capsule1.radius/1000), CollisionBox(startDubinsFrame=capsule2.base, endDubinsFrame=capsule2.otherBase, r = capsule2.radius/(2**0.5) - capsule2.radius/1000)):
                 return False, None
 
@@ -394,3 +403,16 @@ def closestPointsBetweenLineSegments(a1, a2, b1, b2):
     point_on_segment_b = b1 + t * d2
     
     return point_on_segment_a, point_on_segment_b
+
+def plotCapsules(capsules, block=True):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # make each capsule a different color
+    cmap = plt.get_cmap("rainbow")
+    colors = [cmap(i / (len(capsules) - 1))[:3] for i in range(len(capsules))]
+    for capsule, color in zip(capsules, colors):
+        capsule.addToPlot(ax, color=color, edgeColor='k', alpha=0.6)
+
+    ax.set_aspect('equal')
+    plt.show(block=block)
