@@ -1,0 +1,56 @@
+verification_tests:
+  enabled: true
+  tests:
+    - name: "small_sparse"
+      seed: 42
+      num_links: 5
+      epsilon: 1e-2  # Point density will be calculated as 1/(2*epsilon*r)
+      
+    - name: "medium_dense"
+      seed: 67
+      num_links: 10
+      epsilon: 1e-3
+
+    - name: "small_dense"
+      seed: 329
+      num_links: 5
+      epsilon: 1e-5
+
+scaling_tests:
+  enabled: true
+  
+  epsilon_scaling:
+    enabled: true
+    num_links: [5, 10, 20, 50]  # Generate 3 graphs with different link counts
+    seed: 789
+    epsilons: [1e-2, 1e-3, 1e-4]  # Will be multiplied by min radius
+  
+  link_scaling:
+    enabled: true
+    epsilons: [1e-3]  # Generate 2 graphs with different epsilons
+    seed: 789
+    num_links_list: [5, 10, 20, 50]
+    
+  chunk_size_scaling:
+    enabled: true
+    epsilons: [1e-2, 1e-3]  # Generate 2 graphs with different epsilons
+    num_links: [10]  # Generate 2 graphs with different link counts
+    chunk_sizes: [256, 512, 1024, 2048, 4096, 8192]
+    seed: 789
+
+link_generation:
+  radius_range: [1.0, 3.0]
+  max_angle_per_elbow: 1.5708  # pi/2
+  position_range: [-50.0, 50.0]
+  max_link_length: 50.0  # Maximum total length for generated links
+  distance_rtol: 1e-4
+  distance_atol: 1e-6
+  allow_point_mismatch: true
+  chunk_size: 1024
+
+timeouts:
+  serial_method_timeout: 8 # seconds
+
+collision_analysis:
+  intersection_threshold_multiplier: 1.0  # multiply by r to get collision threshold
+  report_statistics: false

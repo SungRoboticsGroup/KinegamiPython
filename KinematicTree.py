@@ -45,19 +45,45 @@ class KinematicTree(Generic[J]):
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2):
-        self.r = root.r
-        self.Joints = [root]
-        self.Parents = [-1]     # root has no parent
-        self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
-                                      root.ProximalDubinsFrame(),
-                                      maxAnglePerElbow)]
-        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
-        self.maxAnglePerElbow = maxAnglePerElbow 
-        self.boundingBall = root.boundingBall()
-        if self.boundingBall.r < self.r:
-            self.boundingBall = Ball(root.Pose.t, self.r)
-        self.Children = [[]]
+    def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None,
+                    links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None, boundingBall : Ball = None):
+            self.r = root.r
+
+            saveParamsAreNone = np.array([joints is None, links is None, parents is None, children is None, boundingBall is None])
+            assert(np.all(saveParamsAreNone) or np.all(np.logical_not(saveParamsAreNone)))
+
+            try:
+                self.numSides = root.numSides
+            except:
+                self.numSides = 4
+            if joints:
+                self.Joints = joints
+            else:
+                self.Joints = [root]
+            if parents:
+                self.Parents = parents
+            else:
+                self.Parents = [-1]     # root has no parent
+            if links:
+                self.Links = links
+            else:
+                self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
+                                        root.ProximalDubinsFrame(),
+                                        maxAnglePerElbow)]
+            assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
+            self.maxAnglePerElbow = maxAnglePerElbow
+
+            if boundingBall:
+                self.boundingBall = boundingBall
+            else:
+                self.boundingBall = root.boundingBall()
+                if self.boundingBall.r < self.r:
+                    self.boundingBall = Ball(root.Pose.t, self.r)
+                
+            if children:
+                self.Children = children
+            else:
+                self.Children = [[]]
 
     def __repr__(self):
         numpy_precision = np.get_printoptions()['precision']

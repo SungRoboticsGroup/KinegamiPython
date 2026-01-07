@@ -291,19 +291,23 @@ def planeFromThreePoints(p1, p2, p3):
     return Plane(p1, normal)
 
 class Circle3D:
-    def __init__(self, radius, center, normal):
+    def __init__(self, radius, center, normal, radialVector=None):
         assert(norm(normal)>0)
         self.r = radius
         self.c = center
         self.n = normal / norm(normal)
-    
+        if radialVector is None:
+            self.radialVector = unitNormalToBoth(self.n, self.n).reshape(1,3)
+        else:
+            self.radialVector = radialVector / norm(radialVector)
+
     def interpolate(self, count=50):
         angle = np.linspace(0, 2*np.pi, count).reshape(-1,1)
         u = self.r * np.cos(angle)
         v = self.r * np.sin(angle)
         
         # construct basis for circle plane
-        uhat = unitNormalToBoth(self.n, self.n).reshape(1,3)
+        uhat = self.radialVector.reshape(1,3)
         vhat = cross(self.n, uhat).reshape(1,3)
         
         # 3d circle points
@@ -315,6 +319,13 @@ class Ball:
     def __init__(self, center, radius):
         self.c = center
         self.r = radius
+
+    def __repr__(self):
+        return (
+            "Ball("
+            f"center={repr(self.c)},"
+            f"radius={repr(self.r)})"
+        )
     
     def containsPoint(self, point):
         return norm(self.c - point) <= self.r
@@ -678,6 +689,197 @@ class Arc3D:
         
         # 3d circle points
         return self.circleCenter + u @ uhat + v @ vhat
+    
+    def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
+        """
+        Vectorized interpolation: compute 3D positions for multiple t values at once.
+        
+        Parameters:
+        -----------
+        t_array : np.ndarray
+            Array of parameter values in [0, 1] (shape (n,))
+            
+        Returns:
+        --------
+        np.ndarray
+            Array of 3D positions (shape (n, 3))
+        """
+        # Clamp t values to [0, 1]
+        t_array = np.clip(t_array, 0.0, 1.0)
+        
+        # Convert t to angle values: angle = t * theta
+        angle = (t_array * self.theta).reshape(-1, 1)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        
+        # Construct basis for circle plane
+        uhat = -self.startNormal.reshape(1, 3)
+        vhat = cross(self.binormal, uhat).reshape(1, 3)
+        
+        # 3D circle points
+        return self.circleCenter + u @ uhat + v @ vhat
+    
+    def interpolateAt(self, t: float) -> np.ndarray:
+        """
+        Return 3D position at parameter t in [0, 1] along the arc
+        """
+        t = max(0.0, min(t, 1.0))
+
+        angle = t * self.theta
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+
+        # construct basis for circle plane
+        uhat = -self.startNormal
+        vhat = cross(self.binormal, uhat)
+
+        return self.circleCenter + u * uhat + v * vhat
+    
+    def _computeLocalFrame(self):
+        """
+        Precompute the transformation matrix from world coordinates to local arc coordinates.
+        
+        The capped torus SDF formula (from Inigo Quilez) assumes:
+        - The torus lies in the XY plane, centered at the origin
+        - The arc is SYMMETRIC about the X-axis, spanning angles [-theta, +theta]
+        - The formula uses abs(x) to exploit this symmetry
+        - The arc "caps" (endpoints) are at angles ±theta from the +X axis
+        
+        For our Arc3D, we have:
+        - startPoint at angle 0 (beginning of arc)
+        - endPoint at angle theta (end of arc)
+        
+        To use the symmetric SDF, we align the LOCAL X-axis with the MIDPOINT
+        of the arc (at angle theta/2). This way:
+        - The arc spans from -theta/2 to +theta/2 in local coordinates
+        - Both endpoints are equidistant from the X-axis
+        - The abs(x) symmetry is correctly utilized
+        
+        The local coordinate system is:
+        - Origin: at the arc's circle center
+        - Y-axis: points radially outward at the arc's midpoint (IQ's formula expects arc centered on +Y)
+        - X-axis: tangent direction at midpoint (perpendicular to Y in the arc plane)
+        - Z-axis: binormal (perpendicular to arc plane)
+        """
+        # Compute the midpoint direction: rotate -startNormal by theta/2 around binormal
+        # startNormal points INWARD (toward center), so -startNormal points outward at start
+        halfTheta = self.theta / 2
+        halfAngleRot = Rotation.from_rotvec(halfTheta * self.binormal)
+        centerToMid = halfAngleRot.apply(-self.startNormal)  # radial outward at midpoint
+        
+        # Y-axis: radial outward at arc midpoint (IQ's formula has arc centered on +Y)
+        localY = centerToMid / norm(centerToMid)
+        
+        # Z-axis: binormal (perpendicular to arc plane)
+        localZ = self.binormal
+        
+        # X-axis: completes right-handed frame, tangent at midpoint
+        # cross(Y, Z) gives the tangent direction at the midpoint
+        localX = cross(localY, localZ)
+        
+        # Build rotation matrix: columns are local basis vectors expressed in world coords
+        # To transform world -> local, we use the transpose (inverse for orthonormal basis)
+        self._worldToLocalRotation = np.column_stack([localX, localY, localZ]).T
+        
+        # Precompute sin and cos of HALF the arc angle for the symmetric SDF
+        # The SDF expects the arc to span [-halfTheta, +halfTheta]
+        self._sdfSinCos = np.array([np.sin(halfTheta), np.cos(halfTheta)])
+    
+    def _sdFlatEndedTorus(self, p: np.ndarray, sc: np.ndarray, ra: float, rb: float) -> float:
+        """
+        Signed Distance Function for a flat-ended torus in local coordinates.
+        
+        Modified from Inigo Quilez's capped torus SDF to have flat disc ends
+        instead of spherical caps.
+        
+        The torus is centered at the origin in the XY plane. The arc is SYMMETRIC
+        about the Y-axis, spanning angles from (90°-halfTheta) to (90°+halfTheta).
+        With abs(p.x), it handles both sides.
+        
+        Parameters:
+        -----------
+        p : np.ndarray
+            3D point in local coordinate system (shape (3,))
+            - x: tangent direction at arc midpoint
+            - y: radial direction at arc midpoint (outward from torus center)
+            - z: axial direction (perpendicular to torus plane)
+        sc : np.ndarray
+            (sin(halfTheta), cos(halfTheta)) where halfTheta = arcAngle/2
+        ra : float
+            Major radius (distance from torus center to tube center)
+        rb : float
+            Minor radius (tube radius)
+        
+        Returns:
+        --------
+        float
+            Signed distance (negative inside, positive outside)
+        """
+        # Use abs(x) for symmetry, work in XY plane
+        p_xy = np.array([abs(p[0]), p[1]])
+        pz = p[2]
+        
+        # Endpoint center on the torus ring (at angle halfTheta from +Y axis)
+        # sc = (sin, cos), so endpoint is at ra * sc
+        endCenter = ra * sc
+        
+        # Tangent at endpoint: rotate sc by -90° → (cos, -sin)
+        tangent = np.array([sc[1], -sc[0]])
+        
+        # Vector from endpoint to query point
+        toPoint = p_xy - endCenter
+        
+        # How far past the arc endpoint are we?
+        pastEnd = np.dot(toPoint, tangent)
+        
+        if pastEnd <= 0.0:
+            # Inside arc span - standard torus formula
+            p_len = np.linalg.norm(p_xy)
+            if sc[1] * p_xy[0] > sc[0] * p_xy[1]:
+                k = np.dot(sc, p_xy)
+            else:
+                k = p_len
+            return np.sqrt(p_len*p_len + pz*pz + ra*ra - 2.0*ra*k) - rb
+        else:
+            # Past arc endpoint - distance to flat disc
+            # Radial distance from tube axis (project onto sc which points radially)
+            radialInPlane = np.dot(toPoint, sc)
+            discDist = np.sqrt(radialInPlane*radialInPlane + pz*pz)
+            
+            # 2D SDF to disc edge
+            outsideDisc = max(discDist - rb, 0.0)
+            return np.sqrt(pastEnd*pastEnd + outsideDisc*outsideDisc)
+    
+    def sdf(self, point: np.ndarray, radius: float) -> float:
+        """
+        Compute the signed distance from a 3D point to this arc's tubular volume.
+        
+        The arc is treated as a torus section (tube bent along the arc) with 
+        flat disc ends instead of spherical caps.
+        
+        Parameters:
+        -----------
+        point : np.ndarray
+            3D point in world coordinates
+        radius : float
+            Tube radius around the arc centerline
+        
+        Returns:
+        --------
+        float
+            Signed distance (negative inside the tube, positive outside)
+        """
+        # Lazy initialization of the precomputed transformation matrix
+        if not hasattr(self, '_worldToLocalRotation'):
+            self._computeLocalFrame()
+        
+        # Transform point from world coordinates to local arc coordinates:
+        # 1. Translate so circle center is at origin
+        # 2. Rotate so arc midpoint is on +Y axis (for IQ's formula)
+        localP = self._worldToLocalRotation @ (point - self.circleCenter)
+        
+        # Apply the flat-ended torus SDF in local coordinates
+        return self._sdFlatEndedTorus(localP, self._sdfSinCos, self.r, radius)
     
     def addToPlot(self, ax, color='black', alpha=1, showDirections=False):
         X,Y,Z = self.interpolate().T
