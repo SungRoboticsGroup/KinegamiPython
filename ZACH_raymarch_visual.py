@@ -100,7 +100,7 @@ def sd_capsule(px: float, py: float, pz: float,
 
 
 @njit(fastmath=True)
-def sdf_arc(px: float, py: float, pz: float,
+def sdf_torus_section_flat_ended(px: float, py: float, pz: float,
             cx: float, cy: float, cz: float,
             frame: np.ndarray,
             sin_half: float, cos_half: float,
@@ -133,7 +133,7 @@ def sdf_link(px: float, py: float, pz: float,
     min_dist = 1e10
     
     if has_arc1:
-        d = sdf_arc(px, py, pz, arc1_cx, arc1_cy, arc1_cz, arc1_frame,
+        d = sdf_torus_section_flat_ended(px, py, pz, arc1_cx, arc1_cy, arc1_cz, arc1_frame,
                     arc1_sin, arc1_cos, arc1_r, tube_r)
         min_dist = min(min_dist, d)
     else:
@@ -146,7 +146,7 @@ def sdf_link(px: float, py: float, pz: float,
         min_dist = min(min_dist, d)
     
     if has_arc2:
-        d = sdf_arc(px, py, pz, arc2_cx, arc2_cy, arc2_cz, arc2_frame,
+        d = sdf_torus_section_flat_ended(px, py, pz, arc2_cx, arc2_cy, arc2_cz, arc2_frame,
                     arc2_sin, arc2_cos, arc2_r, tube_r)
         min_dist = min(min_dist, d)
     else:

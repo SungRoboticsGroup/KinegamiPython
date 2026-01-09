@@ -4,6 +4,7 @@ Created on Fri Jun 23 23:13:27 2023
 
 @author: Daniel Feshbach
 """
+from ast import Raise
 import Joint
 from Joint import *
 from OrigamiJoint import *
@@ -567,8 +568,11 @@ class KinematicTree(Generic[J]):
 
         return totalError
 
-    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=True, debug=True):
+    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=True, debug=True,
+                                  coarseDistanceThreshold=0.5, fineDistanceThreshold=0.001):
         numCollisions = 0
+        coarseDensity = 1 / coarseDistanceThreshold
+        fineDensity = 1 / fineDistanceThreshold
         
         for idx in indices:
             pairs = collisionPairDict.get(idx, [])
@@ -576,7 +580,66 @@ class KinematicTree(Generic[J]):
             for (obj1, obj2) in pairs:
                 idx1, type1 = obj1
                 idx2, type2 = obj2
+
+                tube1 = self.Joints[idx1] if type1 == 'joint' else self.Links[idx1]
+                tube2 = self.Joints[idx2] if type2 == 'joint' else self.Links[idx2]
                 
+                # Filter out if either tube is empty (no length)
+                epsilon = 1e-2 * fineDistanceThreshold
+                if tube1.length() > epsilon and tube2.length() > epsilon:
+                    # Filter based on distance between bounding boxes
+                    min1, max1 = tube1.boundingBox()
+                    min2, max2 = tube2.boundingBox()
+                    if sdf_aabb(min1, max1, min2, max2) < 0: # bounding boxes overlap
+                        # Check SDF values at coarse density to see if close enough to consider collision
+                        if np.min(tube2.sdf(tube1.interpolate(density = coarseDensity))) < coarseDistanceThreshold or \
+                        np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < coarseDistanceThreshold:
+                            # Finer check
+                            points1 = tube1.interpolate(density = fineDensity)
+                            dists1to2 = tube2.sdf(points1)
+                            minIdx1to2 = np.argmin(dists1to2)
+                            minDist1to2 = dists1to2[minIdx1to2]
+                            points2 = tube2.interpolate(density = fineDensity)
+                            dists2to1 = tube1.sdf(points2)
+                            minIdx2to1 = np.argmin(dists2to1)
+                            minDist2to1 = dists2to1[minIdx2to1]
+                            if minDist1to2 < tube1.r and minDist2to1 < tube2.r:
+                                # Filter out collisions that are solely in the hemispherical end caps
+                                # Check if both closest points are at endpoints
+                                isEndpoint1 = (minIdx1to2 == 0 or minIdx1to2 == len(points1) - 1)
+                                isEndpoint2 = (minIdx2to1 == 0 or minIdx2to1 == len(points2) - 1)
+                                
+                                isTrueCollision = True
+                                if isEndpoint1 and isEndpoint2:
+                                    # Both closest points are endpoints - need to check disc intersection
+                                    # Get the circles at the relevant endpoints
+                                    circle1 = tube1.startCircle(forward=False) if (minIdx1to2 == 0) else tube1.endCircle(forward=True)
+                                    circle2 = tube2.startCircle(forward=False) if (minIdx2to1 == 0) else tube2.endCircle(forward=True)
+                                    
+                                    # It's definitely a true collision if it's on the inside side of either disc's plane
+                                    # Otherwise, check if the discs cross
+                                    isTrueCollision = Plane(circle1.c, circle1.n).signedDistanceToPoint(points2[minIdx2to1]) < 0\
+                                                or Plane(circle2.c, circle2.n).signedDistanceToPoint(points1[minIdx1to2]) < 0\
+                                                or discs_cross(circle1, circle2)
+                                
+                                if isTrueCollision:
+                                    numCollisions += 1
+                                    if show:
+                                        if minDist1to2 < minDist2to1:
+                                            pt = points1[minIdx1to2]
+                                        else:
+                                            pt = points2[minIdx2to1]
+                                        self.show(plotPoint=pt, block=False)
+                                        placeholder = 42
+                                    if debug:
+                                        print(f"{type1} {idx1} vs {type2} {idx2}")
+
+
+
+                
+
+
+                """
                 # Get capsules for each object
                 capsules1 = self.Joints[idx1].collisionCapsules if type1 == 'joint' else self.Links[idx1].collisionCapsules
                 capsules2 = self.Joints[idx2].collisionCapsules if type2 == 'joint' else self.Links[idx2].collisionCapsules
@@ -594,6 +657,7 @@ class KinematicTree(Generic[J]):
                                     placeholder = 42
                                 if debug:
                                     print(f"{type1} {idx1} vs {type2} {idx2}")
+                """
         
         return numCollisions
 

@@ -15,6 +15,9 @@ import math
 from math import remainder
 from style import *
 from matplotlib import cm
+from typing import Optional, Union
+from numpy.typing import ArrayLike, NDArray
+from types import ModuleType
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -312,6 +315,146 @@ class Circle3D:
         
         # 3d circle points
         return self.c + u @ uhat + v @ vhat
+
+
+def line_sphere_intersection(line_point: np.ndarray, line_dir: np.ndarray, 
+                             sphere_center: np.ndarray, sphere_radius: float,
+                             epsilon: float = 1e-8) -> Optional[tuple]:
+    """
+    Find intersection of a line with a sphere.
+    
+    Args:
+        line_point: A point on the line
+        line_dir: Direction vector of the line (should be normalized)
+        sphere_center: Center of the sphere
+        sphere_radius: Radius of the sphere
+        epsilon: Numerical tolerance
+        
+    Returns:
+        Tuple (t1, t2) of parameter values where line intersects sphere,
+        where line is parameterized as p(t) = line_point + t * line_dir.
+        Returns None if no intersection.
+        For tangent intersection, t1 == t2.
+        
+    Reference:
+        https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+    """
+    oc = line_point - sphere_center
+    
+    a = np.dot(line_dir, line_dir)  # Should be 1 if normalized
+    b = 2.0 * np.dot(oc, line_dir)
+    c = np.dot(oc, oc) - sphere_radius**2
+    
+    discriminant = b**2 - 4*a*c
+    
+    if discriminant < -epsilon:
+        return None  # No intersection
+    elif abs(discriminant) < epsilon:
+        # One intersection (tangent)
+        t = -b / (2*a)
+        return (t, t)
+    else:
+        # Two intersections
+        sqrt_disc = np.sqrt(discriminant)
+        t1 = (-b - sqrt_disc) / (2*a)
+        t2 = (-b + sqrt_disc) / (2*a)
+        return (min(t1, t2), max(t1, t2))
+
+
+def discs_cross(disc1: Circle3D, disc2: Circle3D, epsilon: float = 1e-8) -> bool:
+    """
+    Check if two 3D discs (filled circles) cross through each other
+    (i.e., intersect along a line segment of nonzero length).
+    
+    Args:
+        disc1: First disc
+        disc2: Second disc
+        epsilon: Numerical tolerance
+        
+    Returns:
+        True if discs cross (penetrate), False if separated or just tangent
+    """
+    # Step 1: Find intersection of the two planes
+    plane1 = Plane(disc1.c, disc1.n, EPSILON=epsilon)
+    plane2 = Plane(disc2.c, disc2.n, EPSILON=epsilon)
+    
+    # Check if planes are parallel (or coincident)
+    if abs(abs(np.dot(disc1.n, disc2.n)) - 1.0) < epsilon:
+        # Planes are parallel or anti-parallel
+        return False # If they are coplanar, the discs can press together but not cross
+        """
+        if plane1.containsPoint(disc2.c):
+            # Coplanar: check distance between centers (strictly less than sum of radii to cross)
+            center_dist = norm(disc1.c - disc2.c)
+            return center_dist < disc1.r + disc2.r - epsilon
+        else:
+            # Parallel but not coplanar: no intersection
+            return False
+        """
+    
+    # Planes intersect in a line
+    # Find line direction (perpendicular to both normals)
+    line_dir = cross(disc1.n, disc2.n)
+    line_dir = line_dir / norm(line_dir)
+    
+    # Find a point on the line of intersection
+    # We solve for a point that lies on both planes
+    # Use the method from Plane.intersectionWithLine but in reverse
+    # Pick a point on plane1, project to find point on both planes
+    # Actually, we can use a more direct approach:
+    
+    # The line of intersection lies on both planes, so we can find it by
+    # solving the system of equations. A simple approach:
+    # Find a point on both planes by choosing a convenient coordinate
+    n1, n2 = disc1.n, disc2.n
+    c1, c2 = disc1.c, disc2.c
+    
+    # Find largest component of line_dir to avoid division by small numbers
+    max_idx = np.argmax(np.abs(line_dir))
+    if max_idx == 0:
+        # Fix x=0, solve for y,z
+        # n1·(p-c1) = 0 and n2·(p-c2) = 0 with p_x = 0
+        # This gives us two equations in two unknowns (y, z)
+        A = np.array([[n1[1], n1[2]], [n2[1], n2[2]]])
+        b = np.array([np.dot(n1, c1), np.dot(n2, c2)])
+        if abs(np.linalg.det(A)) > epsilon:
+            yz = np.linalg.solve(A, b)
+            line_point = np.array([0, yz[0], yz[1]])
+        else:
+            return False
+    elif max_idx == 1:
+        # Fix y=0
+        A = np.array([[n1[0], n1[2]], [n2[0], n2[2]]])
+        b = np.array([np.dot(n1, c1), np.dot(n2, c2)])
+        if abs(np.linalg.det(A)) > epsilon:
+            xz = np.linalg.solve(A, b)
+            line_point = np.array([xz[0], 0, xz[1]])
+        else:
+            return False
+    else:
+        # Fix z=0
+        A = np.array([[n1[0], n1[1]], [n2[0], n2[1]]])
+        b = np.array([np.dot(n1, c1), np.dot(n2, c2)])
+        if abs(np.linalg.det(A)) > epsilon:
+            xy = np.linalg.solve(A, b)
+            line_point = np.array([xy[0], xy[1], 0])
+        else:
+            return False
+    
+    # Step 2: Find intersection of line with each sphere
+    seg1 = line_sphere_intersection(line_point, line_dir, disc1.c, disc1.r, epsilon)
+    seg2 = line_sphere_intersection(line_point, line_dir, disc2.c, disc2.r, epsilon)
+    
+    if seg1 is None or seg2 is None:
+        return False
+    
+    # Step 3: Check if line segments overlap (strictly, not just tangent)
+    # Segments are [seg1[0], seg1[1]] and [seg2[0], seg2[1]]
+    # They cross if: max(seg1[0], seg2[0]) < min(seg1[1], seg2[1])
+    overlap_start = max(seg1[0], seg2[0])
+    overlap_end = min(seg1[1], seg2[1])
+    
+    return overlap_start < overlap_end - epsilon
 
 
 class Ball:
@@ -678,17 +821,17 @@ class Arc3D:
         self.endNormal = - self.centerToEnd / self.r
         self.endTangent = cross(self.endNormal, self.binormal)
     
-    def interpolate(self, count=50):
-        angle = np.linspace(0, self.theta, count).reshape(-1,1)
-        u = self.r * np.cos(angle)
-        v = self.r * np.sin(angle)
+    def interpolate(self, count=50, xp : ModuleType = np) -> ArrayLike:
+        angle = xp.linspace(0, self.theta, count).reshape(-1,1)
+        u = self.r * xp.cos(angle)
+        v = self.r * xp.sin(angle)
         
         # construct basis for circle plane
-        uhat = -self.startNormal.reshape(1,3)
-        vhat = cross(self.binormal, uhat).reshape(1,3)
+        uhat = xp.asarray(-self.startNormal).reshape(1,3)
+        vhat = xp.cross(self.binormal, uhat).reshape(1,3)
         
         # 3d circle points
-        return self.circleCenter + u @ uhat + v @ vhat
+        return xp.asarray(self.circleCenter) + u @ uhat + v @ vhat
     
     def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
         """
@@ -734,6 +877,24 @@ class Arc3D:
         vhat = cross(self.binormal, uhat)
 
         return self.circleCenter + u * uhat + v * vhat
+    
+    def localOrientation(self) -> np.ndarray:
+        """
+        Return the precomputed transformation matrix from world coordinates
+        to local arc coordinates.
+        """
+        if not hasattr(self, '_worldToLocalRotation'):
+            self._computeLocalFrame()
+        return self._worldToLocalRotation
+
+    def sdfSinCos(self) -> np.ndarray:
+        """
+        Return the precomputed (sin(halfTheta), cos(halfTheta)) for the arc SDF.
+        """
+        if not hasattr(self, '_sdfSinCos'):
+            self._computeLocalFrame()
+        return self._sdfSinCos
+    
     
     def _computeLocalFrame(self):
         """
@@ -1042,3 +1203,50 @@ class Torus:
 class HornTorus(Torus):
     def __init__(self, radius, center, axisDirection):
         super().__init__(radius, radius, center, axisDirection)
+
+
+def sdf_aabb(
+    min1: ArrayLike,
+    max1: ArrayLike,
+    min2: ArrayLike,
+    max2: ArrayLike,
+    xp: ModuleType = np,
+) -> Union[float, ArrayLike]:
+    """
+    Signed distance between axis-aligned bounding boxes.
+    
+    Args:
+        min1: Bottom-left corner(s), shape (3,) or (N, 3)
+        max1: Top-right corner(s), shape (3,) or (N, 3)
+        min2: Bottom-left corner(s), shape (3,) or (N, 3)
+        max2: Top-right corner(s), shape (3,) or (N, 3)
+        xp: Array module (np for numpy or cp for cupy)
+    
+    Returns:
+        Signed distance(s). Negative if overlapping, positive if separated.
+        Scalar for single box pair, (N,) array for N box pairs.
+    """
+    min1 = xp.atleast_2d(xp.asarray(min1))
+    max1 = xp.atleast_2d(xp.asarray(max1))
+    min2 = xp.atleast_2d(xp.asarray(min2))
+    max2 = xp.atleast_2d(xp.asarray(max2))
+    
+    # For each axis: gap = max(0, max(min1, min2) - min(max1, max2))
+    lower = xp.maximum(min1, min2)  # (N, 3)
+    upper = xp.minimum(max1, max2)  # (N, 3)
+    gaps = xp.maximum(0.0, lower - upper)  # (N, 3)
+    
+    # If separated: distance is L2 norm of gaps
+    separated_dist = xp.sqrt(xp.sum(gaps * gaps, axis=-1))
+    
+    # If overlapping: penetration is smallest overlap
+    overlaps = upper - lower  # (N, 3), positive when overlapping
+    min_overlap = xp.min(overlaps, axis=-1)
+    
+    # Return separation distance if separated, else negative penetration
+    is_separated = xp.any(gaps > 0, axis=-1)
+    result = xp.where(is_separated, separated_dist, -min_overlap)
+    
+    return float(result[0]) if result.shape[0] == 1 else result
+
+

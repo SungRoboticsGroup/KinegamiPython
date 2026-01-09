@@ -9,6 +9,8 @@ import Joint
 from Joint import *
 from CollisionDetection import *
 import style
+from ZACH_vectorized_link_sdf import *
+
 
 class OrigamiJoint(Joint):
     def __init__(self, numSides : int, r : float, neutralLength : float, Pose : SE3(), 
@@ -128,6 +130,18 @@ class RevoluteJoint(OrigamiJoint):
     def copy(self):
         return RevoluteJoint(self.numSides, self.r, self.totalBendingAngle, self.Pose, self.numSinkLayers, self.initialState)
     
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        # Compute the min of the SDFs of the proximal and distal capsules
+        # a and b are the capsule starts and ends respectively, so each are (2,3) arrays
+        dists = sdf_capsule(xp, point, 
+                            a = xp.vstack((self.ProximalDubinsFrame().t, self.DistalDubinsFrame().t)), 
+                            b = xp.vstack((self.Pose.t, self.Pose.t)), 
+                            r = self.r)
+        # dists is (N,2) where N is the number of query points
+        return xp.min(dists, axis=1)
+
+
 class ExtendedRevoluteJoint(OrigamiJoint):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
                  tubeLength: float, Pose : SE3, numSinkLayers : int = 1,
@@ -374,7 +388,14 @@ class PrismaticJoint(OrigamiJoint):
     def copy(self):
         return PrismaticJoint(self.numSides, self.r, self.neutralLength, self.numLayers, self.coneAngle, self.Pose, self.initialState)
         
-    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        return sdf_capsule(xp, point, 
+                            a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
+                            b = xp.asarray([self.DistalDubinsFrame().t]).reshape(1,3),
+                            r = self.r).flatten()
+
+
 class Waypoint(OrigamiJoint):
     # path direction through a waypoint defaults to zhat
     def __init__(self, numSides : int, r : float, Pose : SE3, pathIndex : int = 2):
@@ -433,6 +454,12 @@ class Waypoint(OrigamiJoint):
 
     def copy(self):
         return Waypoint(self.numSides, self.r, self.Pose, self.pidx)
+    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        center = xp.asarray(self.Pose.t).reshape(3)
+        # SDF of a sphere centered at Pose.t with radius r
+        return xp.linalg.norm(point - center, axis=1) - self.r
 
 class Tip(OrigamiJoint):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -536,6 +563,13 @@ class Tip(OrigamiJoint):
 
     def copy(self):
         return Tip(self.numSides, self.r, self.Pose, self.neutralLength, self.forward, self.pidx)
+    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        return sdf_capsule(xp, point, 
+                            a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
+                            b = xp.asarray([self.DistalDubinsFrame().t]).reshape(1,3),
+                            r = self.r).flatten()
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):

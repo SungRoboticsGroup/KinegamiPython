@@ -150,11 +150,12 @@ def sample_points_for_links(links, density):
     return points, ids
 
 
-def _sd_capsule(xp, p, a, b, r):
-    # p: (N,3)
-    # a,b: (L,3)
-    # r: (L,)
+def sdf_capsule(xp, p, a, b, r):
+    # p: (N,3) query points
+    # a,b: (L,3) segment endpoints
+    # r: float or (L,) radii
     # return: (N,L)
+    r = xp.atleast_1d(xp.asarray(r))
 
     pa = p[:, None, :] - a[None, :, :] # (N,L,3)
     ba = b - a # (L,3)
@@ -169,7 +170,7 @@ def _sd_capsule(xp, p, a, b, r):
     return xp.sqrt(xp.sum(closest * closest, axis=2)) - r[None, :]  # (N,L)
 
 
-def _sd_flat_ended_torus(xp, localP, sc, ra, rb):
+def sdf_torus_section_flat_ended_local(xp, localP, sc, ra, rb):
     # localP: (N,L,3)
     # sc: (L,2)
     # ra, rb: (L,)
@@ -208,15 +209,17 @@ def _sd_flat_ended_torus(xp, localP, sc, ra, rb):
     return xp.where(pastEnd <= 0.0, base, disc)
 
 
-def _sd_arc(xp, p, center, R_w2l, sc, ra, rb):
+def sdf_torus_section_flat_ended(xp, p, center, R_w2l, sc, ra, rb):
     # localP[n,l,:] = R[l] @ (p[n] - center[l])
     # p: (N,3)
     # center: (L,3)
-    # R_w2l: (L,3,3)
+    # R_w2l: (L,3,3) world to local rotation matrices
+    # sc: (L,2) sine/cosine of torus section angles
+    # ra, rb: (L,) torus major/minor radii
     dp = p[:, None, :] - center[None, :, :]          # (N,L,3)
     # matrix multiplication for each N, L pair
     localP = xp.einsum("lij,nlj->nli", R_w2l, dp)   # (N,L,3)
-    return _sd_flat_ended_torus(xp, localP, sc, ra, rb)
+    return sdf_torus_section_flat_ended_local(xp, localP, sc, ra, rb)
 
 
 def distances_points_to_links(xp, points, packed, chunk_points=2048, dtype="float32"):
@@ -260,15 +263,15 @@ def distances_points_to_links(xp, points, packed, chunk_points=2048, dtype="floa
         dist = xp.full((ed - st, L), xp.inf, dtype=dtype)
 
         if has_arc1:
-            d1 = _sd_arc(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
+            d1 = sdf_torus_section_flat_ended(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
             dist = xp.minimum(dist, xp.where(arc1_enabled[None, :], d1, xp.inf))
 
         if has_seg:
-            d2 = _sd_capsule(xp, pp, seg_a, seg_b, seg_r)
+            d2 = sdf_capsule(xp, pp, seg_a, seg_b, seg_r)
             dist = xp.minimum(dist, xp.where(seg_enabled[None, :], d2, xp.inf))
 
         if has_arc2:
-            d3 = _sd_arc(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
+            d3 = sdf_torus_section_flat_ended(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
             dist = xp.minimum(dist, xp.where(arc2_enabled[None, :], d3, xp.inf))
 
         out[st:ed] = dist
@@ -320,15 +323,15 @@ def min_distance_to_other_links(xp, points, point_link_ids, packed, chunk_points
         dist = xp.full((e - s, L), xp.inf, dtype=dtype)
 
         if has_arc1:
-            d1 = _sd_arc(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
+            d1 = sdf_torus_section_flat_ended(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
             dist = xp.minimum(dist, xp.where(arc1_enabled[None, :], d1, xp.inf))
 
         if has_seg:
-            d2 = _sd_capsule(xp, pp, seg_a, seg_b, seg_r)
+            d2 = sdf_capsule(xp, pp, seg_a, seg_b, seg_r)
             dist = xp.minimum(dist, xp.where(seg_enabled[None, :], d2, xp.inf))
 
         if has_arc2:
-            d3 = _sd_arc(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
+            d3 = sdf_torus_section_flat_ended(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
             dist = xp.minimum(dist, xp.where(arc2_enabled[None, :], d3, xp.inf))
 
         # Mask out same-link distances
@@ -388,15 +391,15 @@ def pairwise_link_distances(xp, points, point_link_ids, packed, chunk_points=204
         dist = xp.full((e - s, L), xp.inf, dtype=dtype)
 
         if has_arc1:
-            d1 = _sd_arc(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
+            d1 = sdf_torus_section_flat_ended(xp, pp, arc1_center, arc1_R_w2l, arc1_sc, arc1_ra, arc1_rb)
             dist = xp.minimum(dist, xp.where(arc1_enabled[None, :], d1, xp.inf))
 
         if has_seg:
-            d2 = _sd_capsule(xp, pp, seg_a, seg_b, seg_r)
+            d2 = sdf_capsule(xp, pp, seg_a, seg_b, seg_r)
             dist = xp.minimum(dist, xp.where(seg_enabled[None, :], d2, xp.inf))
 
         if has_arc2:
-            d3 = _sd_arc(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
+            d3 = sdf_torus_section_flat_ended(xp, pp, arc2_center, arc2_R_w2l, arc2_sc, arc2_ra, arc2_rb)
             dist = xp.minimum(dist, xp.where(arc2_enabled[None, :], d3, xp.inf))
 
         # vectorized creation pairwise_dist and point_idx

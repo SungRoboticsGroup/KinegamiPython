@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 from TubularPattern import *
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.spatial import ConvexHull
+from typing import Union, Any
+from numpy.typing import ArrayLike, NDArray
+from types import ModuleType
 
 class Joint(ABC):
     """
@@ -52,6 +55,35 @@ class Joint(ABC):
     @abstractmethod
     def boundingBall(self) -> Ball:
         pass
+    
+    @abstractmethod
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        pass
+    
+    def boundingBox(self, xp: ModuleType = np) -> ArrayLike:
+        """
+        Potentially overestimated axis-aligned bounding box of the joint,
+        computed based on the spheres at the proximal, center, and distal positions.
+        
+        Parameters:
+        -----------
+        xp : ModuleType
+            Numerical module (e.g., numpy or cupy)
+            
+        Returns:
+        --------
+        np.ndarray
+            Bounding box as [(min_x, min_y, min_z), 
+                             (max_x, max_y, max_z)]
+        """
+        # The number of points sampled along each arc is chosen to ensure they are spaced by at most tolerance*r
+        points = xp.vstack((xp.asarray(self.proximalPosition()).reshape(1,3),
+                            xp.asarray(self.Pose.t).reshape(1,3),
+                            xp.asarray(self.distalPosition()).reshape(1,3)))
+        min_corner = xp.min(points, axis=0) - self.r
+        max_corner = xp.max(points, axis=0) + self.r
+        return xp.vstack((min_corner, max_corner))
+
     
     def copy(self):
         return Joint(self.r, self.neutralLength, self.Pose, self.initialState)
@@ -196,3 +228,65 @@ class Joint(ABC):
 
     def recomputeCollisionCapsules(self):
         self.collisionCapsules = self.getCapsules()
+    
+    def interpolate(self, density: float, xp : ModuleType = np) -> ArrayLike:
+        """
+        Sample points along the joint centerline.
+        
+        Parameters:
+        -----------
+        density : float
+            Number of points per unit length
+            
+        Returns:
+        --------
+        np.ndarray
+            Sampled points, shape (N, 3)
+        """
+        v1 = xp.asarray(self.Pose.t - self.proximalPosition())
+        v2 = xp.asarray(self.distalPosition() - self.Pose.t)
+        n1 = max(2, int(xp.ceil(density * xp.linalg.norm(v1))))
+        n2 = max(2, int(xp.ceil(density * xp.linalg.norm(v2))))
+        result = xp.empty((n1 + n2 - 1, 3))
+        result[:n1] = xp.linspace(0, 1, n1).reshape(-1, 1) * v1.reshape(1, 3) + xp.asarray(self.proximalPosition()).reshape(1, 3)
+        result[n1:] = (xp.linspace(0, 1, n2).reshape(-1, 1) * v2.reshape(1, 3) + xp.asarray(self.Pose.t).reshape(1, 3))[1:]
+        return result
+    
+    def startCircle(self, forward : bool = True) -> Circle3D:
+        """
+        Return the circular face at the proximal end of the joint.
+        
+        Returns:
+        --------
+        Circle3D
+            The circular disc at the proximal position, oriented with normal
+            pointing along the path direction
+        """
+        return Circle3D(
+            radius=self.r,
+            center=self.proximalPosition(),
+            normal=self.pathDirection() if forward else -self.pathDirection(),
+            radialVector=self.ProximalFrame().R[:,1]
+        )
+    
+    def endCircle(self, forward : bool = True) -> Circle3D:
+        """
+        Return the circular face at the distal end of the joint.
+        
+        Returns:
+        --------
+        Circle3D
+            The circular disc at the distal position, oriented with normal
+            pointing along the path direction
+        """
+        return Circle3D(
+            radius=self.r,
+            center=self.distalPosition(),
+            normal=self.pathDirection() if forward else -self.pathDirection(),
+            radialVector=self.DistalFrame().R[:,1]
+        )
+
+    def length(self) -> np.floating[Any]:
+        """Return the current length of the joint from proximal to center to distal."""
+        return np.linalg.norm(self.Pose.t - self.proximalPosition()) +\
+               np.linalg.norm(self.distalPosition() - self.Pose.t)

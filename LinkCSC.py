@@ -15,8 +15,7 @@ import TubularPattern
 from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 from CollisionDetection import *
-
-
+from ZACH_vectorized_link_sdf import *
 
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
@@ -263,6 +262,11 @@ class LinkCSC:
     def recomputeCollisionCapsules(self):
         self.collisionCapsules = self.getCapsules()
 
+    def length(self) -> float:
+        """Return the total length of the CSC link."""
+        return self.lengthC1 + self.lengthS + self.lengthC2
+    
+    
     def interpolateAt(self, t : float) -> np.ndarray:
         """
         Return the 3D position at parameter t in [0, 1] along the CSC path.
@@ -366,32 +370,7 @@ class LinkCSC:
         
         return points
     
-    def _sdCapsule(self, p: np.ndarray, a: np.ndarray, b: np.ndarray, r: float) -> float:
-        """
-        Signed Distance Function for a capsule between points a and b.
-        
-        Parameters:
-        -----------
-        p : np.ndarray
-            3D query point
-        a : np.ndarray
-            Start point of capsule
-        b : np.ndarray
-            End point of capsule
-        r : float
-            Radius of capsule
-        
-        Returns:
-        --------
-        float
-            Signed distance (negative inside, positive outside)
-        """
-        pa = p - a
-        ba = b - a
-        h = np.clip(np.dot(pa, ba) / np.dot(ba, ba), 0.0, 1.0)
-        return np.linalg.norm(pa - ba * h) - r
-    
-    def sdf(self, point: np.ndarray, radius: float = None) -> float:
+    def sdf(self, point: ArrayLike, radius: Optional[float] = None, xp: ModuleType = np) -> Union[float, ArrayLike]:
         """
         Compute the signed distance from a 3D point to this link.
         
@@ -401,7 +380,7 @@ class LinkCSC:
         Parameters:
         -----------
         point : np.ndarray
-            3D point to query (shape (3,))
+            3D points (shape (3,) or (N, 3)) at which to evaluate the SDF
         radius : float, optional
             Tube radius. If None, uses self.r
             
@@ -413,33 +392,96 @@ class LinkCSC:
         if radius is None:
             radius = self.r
         
-        distances = []
+        point = xp.asarray(point).reshape(-1, 3)
+        N = xp.shape(point)[0]
+        distances = xp.full((3,N), xp.inf, dtype=xp.float64)
         
         # 1. First arc (elbow1)
         if self.arc1 is not None and self.path.theta1 > self.EPSILON:
-            dist1 = self.arc1.sdf(point, radius)
-            distances.append(dist1)
-        else:
-            # Just a sphere at the start if no arc
-            dist1 = np.linalg.norm(point - self.StartDubinsPose.t) - radius
-            distances.append(dist1)
-        
+            distances[0,:] = sdf_torus_section_flat_ended(xp, point, 
+                                    center=xp.asarray(self.arc1.circleCenter).reshape(1, 3),
+                                    R_w2l=xp.asarray(self.arc1.localOrientation()).reshape(1, 3, 3),
+                                    sc=xp.asarray(self.arc1.sdfSinCos()).reshape(1, 2),
+                                    ra=xp.asarray([self.arc1.r]), # arc radius
+                                    rb=xp.asarray([radius])).flatten() # tube radius
+            
         # 2. Straight section
         if self.path.tMag > self.DISTANCE_EPSILON:
             # Capsule from turn1end to turn2start
-            dist2 = self._sdCapsule(point, self.path.turn1end, 
-                                   self.path.turn1end + self.path.tMag * self.path.tUnit, 
-                                   radius)
-            distances.append(dist2)
+            distances[1,:] = sdf_capsule(xp, point,
+                                xp.asarray(self.path.turn1end).reshape(1,3), # (L,3)
+                                xp.asarray(self.path.turn2start).reshape(1,3), # (L,3)
+                                radius).flatten() # r: float or (L,)
         
         # 3. Second arc (elbow2)
         if self.arc2 is not None and self.path.theta2 > self.EPSILON:
-            dist3 = self.arc2.sdf(point, radius)
-            distances.append(dist3)
-        else:
-            # Just a sphere at the end if no arc
-            dist3 = np.linalg.norm(point - self.EndDubinsPose.t) - radius
-            distances.append(dist3)
+            distances[2,:] = sdf_torus_section_flat_ended(xp, point, 
+                                    center=xp.asarray(self.arc2.circleCenter).reshape(1, 3),
+                                    R_w2l=xp.asarray(self.arc2.localOrientation()).reshape(1, 3, 3),
+                                    sc=xp.asarray(self.arc2.sdfSinCos()).reshape(1, 2),
+                                    ra=xp.asarray([self.arc2.r]), # arc radius
+                                    rb=xp.asarray([radius])).flatten() # tube radius
         
-        # Return minimum distance (union of all segments)
-        return min(distances)
+        # Return minimum distance to any section
+        return xp.min(distances, axis=0)
+
+    def boundingBox(self, xp: ModuleType = np, tolerance: float = 0.1) -> ArrayLike:
+        """
+        Compute axis-aligned bounding box of the link, possibly overestimated tolerance*r.
+        
+        Parameters:
+        -----------
+        xp : ModuleType
+            Numerical module (e.g., numpy or cupy)
+            
+        Returns:
+        --------
+        np.ndarray
+            Bounding box as [(min_x, min_y, min_z), 
+                             (max_x, max_y, max_z)]
+        """
+        #points = self.interpolate(density=20.0)
+
+        # The number of points sampled along each arc is chosen to ensure they are spaced by at most tolerance*r
+        points = xp.vstack((
+            self.arc1.interpolate(int(xp.ceil(self.arc1.theta / tolerance)) + 1, xp=xp) if self.arc1 else xp.asarray(self.StartDubinsPose.t).reshape(1,3),
+            self.arc2.interpolate(int(xp.ceil(self.arc2.theta / tolerance)) + 1, xp=xp) if self.arc2 else xp.asarray(self.EndDubinsPose.t).reshape(1,3)
+            ))
+        
+        min_corner = xp.min(points, axis=0) - (1 + tolerance)*self.r
+        max_corner = xp.max(points, axis=0) + (1 + tolerance)*self.r
+        return xp.vstack((min_corner, max_corner))
+    
+    def startCircle(self, forward : bool = True) -> Circle3D:
+        """
+        Return the circular face at the start of the link.
+        
+        Returns:
+        --------
+        Circle3D
+            The circular disc at the starting position (proximal end of the link),
+            oriented with normal pointing along the link direction
+        """
+        return Circle3D(
+            radius=self.r,
+            center=self.StartDubinsPose.t,
+            normal=self.StartDubinsPose.R[:,0] if forward else -self.StartDubinsPose.R[:,0],
+            radialVector=self.StartDubinsPose.R[:,1]
+        )
+    
+    def endCircle(self, forward : bool = True) -> Circle3D:
+        """
+        Return the circular face at the end of the link.
+        
+        Returns:
+        --------
+        Circle3D
+            The circular disc at the ending position (distal end of the link),
+            oriented with normal pointing along the link direction
+        """
+        return Circle3D(
+            radius=self.r,
+            center=self.EndDubinsPose.t,
+            normal=self.EndDubinsPose.R[:,0] if forward else -self.EndDubinsPose.R[:,0],
+            radialVector=self.EndDubinsPose.R[:,1]
+        )
