@@ -192,7 +192,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -280,7 +280,7 @@ class PrintedInAxisRevoluteJoint(PrintedJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -426,7 +426,7 @@ class PrintedPrismaticJoint(PrintedJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=prismaticColorDefault, edgeColor=prismaticEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -532,7 +532,7 @@ class PrintedTip(PrintedJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=linkColorDefault, edgeColor=linkColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -609,7 +609,7 @@ class PrintedWaypoint(PrintedJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=linkColorDefault, edgeColor=linkColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:

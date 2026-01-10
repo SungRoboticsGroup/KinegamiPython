@@ -6,6 +6,7 @@ Created on Fri Jun 23 21:54:54 2023
 """
 from spatialmath import SE3
 from abc import ABC, abstractmethod
+from TubularPattern import jointAxisScaleDefault, jointColorDefault, jointEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
 from geometryHelpers import *
 import matplotlib.pyplot as plt
 from TubularPattern import *
@@ -14,6 +15,8 @@ from scipy.spatial import ConvexHull
 from typing import Union, Any
 from numpy.typing import ArrayLike, NDArray
 from types import ModuleType
+from ZACH_vectorized_link_sdf import *
+from geometryHelpers import jointAxisScaleDefault, jointColorDefault, jointEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
 
 class Joint(ABC):
     """
@@ -49,7 +52,7 @@ class Joint(ABC):
         pass
     
     @abstractmethod
-    def boundingRadius(self) -> float:
+    def boundingRadius(self) -> float | np.floating[Any]:
         pass
     
     @abstractmethod
@@ -185,9 +188,9 @@ class Joint(ABC):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault,
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
-             axisScale=10, showPoses=True):
+             axisScale=jointAxisScaleDefault, showPoses=True):
         if showAxis:
             zhat = self.Pose.R[:,2]
             JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
@@ -208,15 +211,17 @@ class Joint(ABC):
     
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             sphereColor=sphereColorDefault, showSphere=False, surfaceColor='m',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
              axisScale=jointAxisScaleDefault, showPoses=True, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
-        plotHandles = self.addToPlot(ax, xColor, yColor, zColor,
-                                     proximalColor, centerColor, distalColor,
-                                     sphereColor, showSphere, surfaceColor,
-                                     surfaceOpacity, showSurface, showAxis,
-                                     axisScale, showPoses)
+        plotHandles = self.addToPlot(ax=ax, xColor=xColor, yColor=yColor, zColor=zColor,
+                                     proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                                     sphereColor=sphereColor, showSphere=showSphere, 
+                                     surfaceColor=surfaceColor, edgeColor=edgeColor,
+                                     surfaceOpacity=surfaceOpacity, showSurface=showSurface, showAxis=showAxis,
+                                     axisScale=axisScale, showPoses=showPoses)
         if showPoses:
             xHats, yHats, zHats, origins = plotHandles
             ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
@@ -286,7 +291,348 @@ class Joint(ABC):
             radialVector=self.DistalFrame().R[:,1]
         )
 
-    def length(self) -> np.floating[Any]:
+    def length(self) -> float | np.floating[Any]:
         """Return the current length of the joint from proximal to center to distal."""
         return np.linalg.norm(self.Pose.t - self.proximalPosition()) +\
                np.linalg.norm(self.distalPosition() - self.Pose.t)
+
+
+class Prismatic(Joint):
+    def __init__(self, r : float, neutralLength : float, minLength : float, maxLength : float, Pose : SE3, initialState : float = 0):        
+        # Validity checks
+        if minLength < 0 or maxLength < 0:
+            raise ValueError("Prismatic joint lengths must be non-negative")
+        if minLength >= maxLength:
+            raise ValueError("Prismatic joint minLength must be less than maxLength")
+        if neutralLength + initialState < minLength or neutralLength + initialState > maxLength:
+            raise ValueError("Prismatic joint neutralLength + initialState must be within [minLength, maxLength]")
+        if neutralLength < minLength or neutralLength > maxLength:
+            raise ValueError("Prismatic joint neutralLength must be within [minLength, maxLength]")
+
+        super().__init__(r, neutralLength, Pose, initialState)
+        self.minLength = minLength
+        self.maxLength = maxLength
+
+    def pathIndex(self) -> int:
+        return 2 # zhat
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3.Trans(stateChange * self.pathDirection())
+    
+    def stateRange(self) -> list:
+        return [self.minLength - self.neutralLength, self.maxLength - self.neutralLength]
+    
+    def length(self) -> float | np.floating[Any]:
+        return self.neutralLength + self.state
+    
+    def boundingRadius(self) -> float | np.floating[Any]:
+        return np.linalg.norm([self.r, self.length() / 2])
+    
+    def center(self) -> np.ndarray:
+        return self.Pose.t + (self.state/2) * self.pathDirection()
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.center(), self.boundingRadius())
+    
+    def boundingCylinder(self) -> Cylinder:
+        uhat = (self.Pose @ SE3.Rz(np.pi/self.numSides)).R[:,1]
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
+                        self.length(), uhat)
+    
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=prismaticColorDefault, edgeColor=prismaticEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
+             axisScale=10, showPoses=True):
+        plotHandles = super().addToPlot(ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, edgeColor=edgeColor,
+                          surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses)
+        if showSurface:
+            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
+                                              alpha=surfaceOpacity, 
+                                              edgeColor=edgeColor)            
+        return plotHandles
+    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        return sdf_capsule(xp, point, 
+                            a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
+                            b = xp.asarray([self.DistalDubinsFrame().t]).reshape(1,3),
+                            r = self.r).flatten()
+
+class Revolute(Joint):
+    """
+    Docstring for Revolute
+    A revolute joint that rotates about a specified axis.
+    Attributes:
+        r (float): Radius of the joint.
+        Pose (SE3): The pose of the joint.
+        pathIndex (int): The index of the axis of rotation (0 for x, 1 for y, 2 for z).
+        neutralLength (float): The length of the joint.
+        minAngle (float): Minimum angle of rotation in radians. Can be None or -np.inf for no limit.
+        maxAngle (float): Maximum angle of rotation in radians. Can be None or np.inf for no limit.
+        initialState (float): Initial angle of rotation in radians.
+    """
+    def __init__(self, r : float, Pose : SE3, pathIndex : int, neutralLength : float,
+                 minAngle : Optional[float], maxAngle : Optional[float], initialState : float = 0.0):
+        if minAngle is None:
+            minAngle = -np.inf
+        if maxAngle is None:
+            maxAngle = np.inf
+        if initialState < -np.pi or initialState > np.pi:
+            raise ValueError("Revolute joint initialState must be within [-pi, pi]")
+        if not pathIndex in [0, 1, 2]:
+            raise ValueError("pathIndex must be 0 (x), 1 (y), or 2 (z)")
+        if initialState < minAngle or initialState > maxAngle:
+            raise ValueError("Revolute joint initialState must be within [minAngle, maxAngle]")
+        
+        super().__init__(r, neutralLength, Pose, initialState)
+        self.minAngle = minAngle
+        self.maxAngle = maxAngle
+        self.pidx = pathIndex
+
+    def pathIndex(self) -> int:
+        return self.pidx
+    
+    def stateRange(self) -> list:
+        return [self.minAngle, self.maxAngle]
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return RotationAboutLine(rotAxisDir=self.Pose.R[:,2],
+                              rotAxisPoint=self.Pose.t,
+                              angle=stateChange)
+    
+    def boundingRadius(self) -> float | np.floating[Any]:
+        return np.linalg.norm([self.r, self.neutralLength / 2])
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+    
+    def proximalCylinder(self) -> Cylinder:
+        return Cylinder(self.r, self.proximalPosition(), self.pathDirection(), 
+                            self.neutralLength/2, self.ProximalDubinsFrame().R[:,1])
+    
+    def distalCylinder(self) -> Cylinder:
+        return Cylinder(self.r, self.distalPosition(), -self.pathDirection(), 
+                            self.neutralLength/2, self.DistalDubinsFrame().R[:,1])
+    
+    def centerSphere(self) -> Ball:
+        return Ball(self.Pose.t, self.r)
+    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        # Compute the min of the SDFs of the proximal and distal capsules
+        # Cut off the outer hemisphere caps by maxing with signed distances to planes
+        # a and b are the capsule starts and ends respectively, so each are (2,3) arrays
+        capsule_sdfs = sdf_capsule(xp, point, 
+                a = xp.vstack((self.proximalPosition(), self.distalPosition())), 
+                b = xp.vstack((self.Pose.t, self.Pose.t)), 
+                r = self.r)  # (N, 2)
+        plane_sdfs = xp.stack([
+            sdf_plane(xp, point, self.proximalPosition(), -self.pathDirection()),
+            sdf_plane(xp, point, self.distalPosition(), self.pathDirection())
+        ], axis=1)  # (N, 2)
+        return xp.min(xp.maximum(capsule_sdfs, plane_sdfs), axis=1)  # (N,)
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
+             axisScale=10, showPoses=True):
+        plotHandles = super().addToPlot(ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, edgeColor=edgeColor,
+                          surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses)
+        if showSurface:
+            self.proximalCylinder().addToPlot(ax, color=surfaceColor, edgeColor=edgeColor, alpha=surfaceOpacity)
+            self.distalCylinder().addToPlot(ax, color=surfaceColor, edgeColor=edgeColor, alpha=surfaceOpacity)
+            self.centerSphere().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
+        return plotHandles
+
+
+class Waypoint(Joint):
+    # path direction through a waypoint defaults to zhat
+    def __init__(self, r : float, Pose : SE3, pathIndex : int = 2):
+        assert(pathIndex in [0,1,2])
+        self.pidx = pathIndex
+        super().__init__(r, 0, Pose, 0)
+    
+    def pathIndex(self) -> int:
+        return self.pidx
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3()
+    
+    def stateRange(self) -> list:
+        return [0,0]
+    
+    def boundingRadius(self) -> float:
+        return self.r
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=linkColorDefault, edgeColor=linkColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
+             axisScale=10, showPoses=True):
+        if showAxis:
+            zhat = self.Pose.R[:,2]
+            JointAxis = np.array([self.Pose.t - axisScale*self.r*zhat,
+                                  self.Pose.t + axisScale*self.r*zhat])
+            ax.plot(JointAxis[:,0], JointAxis[:,1], JointAxis[:,2], 
+                    linestyle='--', color='silver')
+        if showSphere:
+            self.boundingBall().addToPlot(ax, color=sphereColor, alpha=0.05)
+        if showPoses:
+            Poses = np.array([self.Pose])
+            oColors = np.array([centerColor])
+            plotHandles = addPosesToPlot(Poses, ax, self.r, 
+                                         xColor, yColor, zColor, oColors)
+        else:
+            plotHandles = None
+        return plotHandles
+
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        center = xp.asarray(self.Pose.t).reshape(3)
+        # SDF of a sphere centered at Pose.t with radius r
+        return xp.linalg.norm(point - center, axis=1) - self.r
+
+class Tip(Joint):
+    def __init__(self, r : float, Pose : SE3, length : float, 
+                 closesForward : bool = True, pathIndex : int = 2):
+        if not pathIndex in [0,1,2]:
+            raise ValueError("pathIndex must be 0 (x), 1 (y), or 2 (z)")
+        self.pidx = pathIndex
+        super().__init__(r, length, Pose, 0)
+        self.forward = closesForward
+    
+    def pathIndex(self) -> int:
+        return self.pidx
+    
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3()
+    
+    def stateRange(self) -> list:
+        return [0,0]
+    
+    def boundingRadius(self) -> float | np.floating[Any]:
+        return np.linalg.norm([self.r, self.neutralLength/2])
+    
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+    
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        point = xp.asarray(point).reshape(-1,3)
+        return xp.maximum(
+            sdf_capsule(xp, point, 
+                            a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
+                            b = xp.asarray([self.DistalDubinsFrame().t]).reshape(1,3),
+                            r = self.r).flatten(),
+            sdf_plane(xp, point, 
+                            self.DistalDubinsFrame().t if self.forward else self.ProximalDubinsFrame().t,
+                            self.pathDirection() if self.forward else -self.pathDirection())
+        )
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                  proximalColor='c', centerColor='m', distalColor='y', 
+                  sphereColor=sphereColorDefault, showSphere=False, 
+                  surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault, 
+                  surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
+                  axisScale=jointAxisScaleDefault, showPoses=True):
+        plotHandles = super().addToPlot(ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                                 proximalColor=proximalColor, centerColor=centerColor, 
+                                 distalColor=distalColor, sphereColor=sphereColor, showSphere=showSphere, 
+                                 surfaceColor=surfaceColor, edgeColor=edgeColor, 
+                                 surfaceOpacity=surfaceOpacity, showSurface=False, 
+                                 showAxis=showAxis, axisScale=axisScale, showPoses=showPoses)
+        
+        if showSurface:
+            # Plot the tip as a stretched hemisphere
+            # Generate hemisphere on unit sphere
+            n_lat = 20  # latitude divisions
+            n_lon = 32  # longitude divisions
+            
+            # Hemisphere goes from 0 to pi/2 in latitude (or -pi/2 to 0 if closing backward)
+            if self.forward:
+                theta = np.linspace(0, np.pi/2, n_lat)  # 0 at pole (distal end)
+            else:
+                theta = np.linspace(np.pi/2, np.pi, n_lat)  # pi at pole (proximal end)
+            
+            phi = np.linspace(0, 2*np.pi, n_lon)
+            theta_grid, phi_grid = np.meshgrid(theta, phi)
+            
+            # Unit hemisphere points
+            x_sphere = np.sin(theta_grid) * np.cos(phi_grid)
+            y_sphere = np.sin(theta_grid) * np.sin(phi_grid)
+            z_sphere = np.cos(theta_grid)
+            
+            # Stretch hemisphere: radial (x,y) by self.r, axial (z) by self.neutralLength
+            # The hemisphere naturally goes from z=0 to z=1 (or z=0 to z=-1)
+            # We need it to span from proximal to distal
+            if self.forward:
+                # z goes from 1 (at theta=0) to 0 (at theta=pi/2)
+                # Map to go from proximalPosition (z=1) to distalPosition (z=0)
+                scale_z = self.neutralLength
+            else:
+                # z goes from 0 (at theta=pi/2) to -1 (at theta=pi)
+                # Map to go from distalPosition (z=0) to proximalPosition (z=-1)
+                scale_z = self.neutralLength
+            
+            # Scale the hemisphere
+            x_scaled = self.r * x_sphere
+            y_scaled = self.r * y_sphere
+            z_scaled = scale_z * (z_sphere if self.forward else -z_sphere)
+            
+            # Transform to world coordinates based on path direction
+            if self.forward:
+                base_frame = self.ProximalFrame()
+            else:
+                base_frame = self.DistalFrame()
+            
+            # Get basis vectors - need to align z_scaled with path direction
+            path_dir = self.pathDirection()
+            # Create rotation matrix with path_dir as z-axis
+            R = base_frame.R
+            
+            # Reorder to match pathIndex
+            if self.pidx == 0:  # xhat is path direction
+                # x_scaled -> path, y_scaled -> y, z_scaled -> z
+                x_world = base_frame.t[0] + z_scaled * R[0, 0] + x_scaled * R[0, 1] + y_scaled * R[0, 2]
+                y_world = base_frame.t[1] + z_scaled * R[1, 0] + x_scaled * R[1, 1] + y_scaled * R[1, 2]
+                z_world = base_frame.t[2] + z_scaled * R[2, 0] + x_scaled * R[2, 1] + y_scaled * R[2, 2]
+            elif self.pidx == 1:  # yhat is path direction
+                # x_scaled -> x, y_scaled -> path, z_scaled -> z
+                x_world = base_frame.t[0] + x_scaled * R[0, 0] + z_scaled * R[0, 1] + y_scaled * R[0, 2]
+                y_world = base_frame.t[1] + x_scaled * R[1, 0] + z_scaled * R[1, 1] + y_scaled * R[1, 2]
+                z_world = base_frame.t[2] + x_scaled * R[2, 0] + z_scaled * R[2, 1] + y_scaled * R[2, 2]
+            else:  # pidx == 2, zhat is path direction
+                # x_scaled -> x, y_scaled -> y, z_scaled -> path
+                x_world = base_frame.t[0] + x_scaled * R[0, 0] + y_scaled * R[0, 1] + z_scaled * R[0, 2]
+                y_world = base_frame.t[1] + x_scaled * R[1, 0] + y_scaled * R[1, 1] + z_scaled * R[1, 2]
+                z_world = base_frame.t[2] + x_scaled * R[2, 0] + y_scaled * R[2, 1] + z_scaled * R[2, 2]
+            
+            ax.plot_surface(x_world, y_world, z_world, color=surfaceColor, 
+                          alpha=surfaceOpacity, edgecolor=edgeColor if edgeColor else None,
+                          linewidth=0.5 if edgeColor else 0)
+        
+        return plotHandles
+        
+
+class StartTip(Tip):
+    def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
+        super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)
+
+class EndTip(Tip):
+    def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
+        super().__init__(r, Pose, length, closesForward=False, pathIndex=pathIndex)

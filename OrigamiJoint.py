@@ -74,13 +74,12 @@ class RevoluteJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
-             axisScale=10, showPoses=True):
+             axisScale=jointAxisScaleDefault, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
+                          showAxis, axisScale, showPoses)
         if showSurface:
             scale = self.pattern.baseSideLength / 2
             CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
@@ -133,13 +132,17 @@ class RevoluteJoint(OrigamiJoint):
     def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
         point = xp.asarray(point).reshape(-1,3)
         # Compute the min of the SDFs of the proximal and distal capsules
+        # Cut off the outer hemisphere caps by maxing with signed distances to planes
         # a and b are the capsule starts and ends respectively, so each are (2,3) arrays
-        dists = sdf_capsule(xp, point, 
-                            a = xp.vstack((self.ProximalDubinsFrame().t, self.DistalDubinsFrame().t)), 
-                            b = xp.vstack((self.Pose.t, self.Pose.t)), 
-                            r = self.r)
-        # dists is (N,2) where N is the number of query points
-        return xp.min(dists, axis=1)
+        capsule_sdfs = sdf_capsule(xp, point, 
+                a = xp.vstack((self.proximalPosition(), self.distalPosition())), 
+                b = xp.vstack((self.Pose.t, self.Pose.t)), 
+                r = self.r)  # (N, 2)
+        plane_sdfs = xp.stack([
+            sdf_plane(xp, point, self.proximalPosition(), -self.pathDirection()),
+            sdf_plane(xp, point, self.distalPosition(), self.pathDirection())
+        ], axis=1)  # (N, 2)
+        return xp.min(xp.maximum(capsule_sdfs, plane_sdfs), axis=1)  # (N,)
 
 
 class ExtendedRevoluteJoint(OrigamiJoint):
@@ -206,13 +209,12 @@ class ExtendedRevoluteJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, surfaceOpacity, showSurface, showAxis,
-                          axisScale, showPoses)
+                          showAxis, axisScale, showPoses)
         if showSurface:
             scale = self.pattern.baseSideLength / 2
             CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
@@ -262,7 +264,7 @@ class ExtendedRevoluteJoint(OrigamiJoint):
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
@@ -363,7 +365,7 @@ class PrismaticJoint(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=prismaticColorDefault, edgeColor=prismaticEdgeColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True, 
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -428,7 +430,7 @@ class Waypoint(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=jointColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=linkColorDefault, edgeColor=linkColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False, 
              axisScale=10, showPoses=True):
         if showAxis:
@@ -495,7 +497,7 @@ class Tip(OrigamiJoint):
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
-             surfaceColor=linkColorDefault, edgeColor=jointEdgeColorDefault,
+             surfaceColor=linkColorDefault, edgeColor=linkColorDefault,
              surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
              axisScale=10, showPoses=True):
         plotHandles = super().addToPlot(ax, xColor, yColor, zColor, proximalColor,
@@ -566,10 +568,15 @@ class Tip(OrigamiJoint):
     
     def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
         point = xp.asarray(point).reshape(-1,3)
-        return sdf_capsule(xp, point, 
+        return xp.maximum(
+            sdf_capsule(xp, point, 
                             a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
                             b = xp.asarray([self.DistalDubinsFrame().t]).reshape(1,3),
-                            r = self.r).flatten()
+                            r = self.r).flatten(),
+            sdf_plane(xp, point, 
+                            self.DistalDubinsFrame().t if self.forward else self.ProximalDubinsFrame().t,
+                            self.pathDirection() if self.forward else -self.pathDirection())
+        )
     
 class StartTip(Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, pathIndex = 2):

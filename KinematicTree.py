@@ -260,8 +260,7 @@ class KinematicTree(Generic[J]):
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
-                  showJointSurface=True, jointColor=jointColorDefault, jointEdgeColor=jointEdgeColorDefault,
-                  jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+                  showJointSurface=True, jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
@@ -278,10 +277,11 @@ class KinematicTree(Generic[J]):
         for joint in self.Joints:
             if joint is None:
                 continue
-            handles = joint.addToPlot(ax, xColor, yColor, zColor, 
-                                    proximalColor, centerColor, distalColor, 
+            handles = joint.addToPlot(ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                                    proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
                                     sphereColor=sphereColor, showSphere=showSpheres, 
-                                    surfaceColor=jointColor, edgeColor=jointEdgeColor, surfaceOpacity=surfaceOpacity,
+                                    surfaceColor=jointColor, edgeColor=jointEdgeColor,
+                                    surfaceOpacity=surfaceOpacity,
                                     showSurface=showJointSurface, axisScale=jointAxisScale,
                                     showPoses=showJointPoses)
             if not handles is None:
@@ -592,8 +592,8 @@ class KinematicTree(Generic[J]):
                     min2, max2 = tube2.boundingBox()
                     if sdf_aabb(min1, max1, min2, max2) < 0: # bounding boxes overlap
                         # Check SDF values at coarse density to see if close enough to consider collision
-                        if np.min(tube2.sdf(tube1.interpolate(density = coarseDensity))) < coarseDistanceThreshold or \
-                        np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < coarseDistanceThreshold:
+                        if np.min(tube2.sdf(tube1.interpolate(density = coarseDensity))) < tube1.r + coarseDistanceThreshold or \
+                        np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < tube2.r + coarseDistanceThreshold:
                             # Finer check
                             points1 = tube1.interpolate(density = fineDensity)
                             dists1to2 = tube2.sdf(points1)
@@ -603,7 +603,7 @@ class KinematicTree(Generic[J]):
                             dists2to1 = tube1.sdf(points2)
                             minIdx2to1 = np.argmin(dists2to1)
                             minDist2to1 = dists2to1[minIdx2to1]
-                            if minDist1to2 < tube1.r and minDist2to1 < tube2.r:
+                            if minDist1to2 < tube1.r + fineDistanceThreshold and minDist2to1 < tube2.r + fineDistanceThreshold:
                                 # Filter out collisions that are solely in the hemispherical end caps
                                 # Check if both closest points are at endpoints
                                 isEndpoint1 = (minIdx1to2 == 0 or minIdx1to2 == len(points1) - 1)
@@ -938,8 +938,7 @@ class KinematicTree(Generic[J]):
 
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
-             showJointSurface=True, jointColor=jointColorDefault, jointEdgeColor = jointEdgeColorDefault, 
-             jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
+             showJointSurface=True, jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
              linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
              showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
              showPathCircles=False, sphereColor=sphereColorDefault,
@@ -961,8 +960,7 @@ class KinematicTree(Generic[J]):
                 
         xyzHandles, abcHandles = self.addToPlot(ax, xColor=xColor, yColor=yColor, zColor=zColor,
                                                 proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
-                                                showJointSurface=showJointSurface, jointColor=jointColor,
-                                                jointAxisScale=jointAxisScale, showJointPoses=showJointPoses,
+                                                showJointSurface=showJointSurface, jointAxisScale=jointAxisScale, showJointPoses=showJointPoses,
                                                 linkColor=linkColor, surfaceOpacity=surfaceOpacity, showLinkSurface=showLinkSurface,
                                                 showLinkPoses=showLinkPoses, showLinkPath=showLinkPath, pathColor=pathColor,
                                                 showPathCircles=showPathCircles, sphereColor=sphereColor,

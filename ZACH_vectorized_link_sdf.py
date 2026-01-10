@@ -169,6 +169,14 @@ def sdf_capsule(xp, p, a, b, r):
     closest = pa - ba[None, :, :] * h[:, :, None] # (N,L,3)
     return xp.sqrt(xp.sum(closest * closest, axis=2)) - r[None, :]  # (N,L)
 
+def sdf_plane(xp, p, plane_point, plane_normal):
+    # p: (N,3) query points
+    # plane_point: (3,) point on the plane
+    # plane_normal: (3,) normal vector of the plane (should be normalized)
+    # return: (N,) signed distances
+    dp = p - plane_point[None, :]  # (N,3)
+    return xp.sum(dp * plane_normal[None, :], axis=1)  # (N,)
+
 
 def sdf_torus_section_flat_ended_local(xp, localP, sc, ra, rb):
     # localP: (N,L,3)

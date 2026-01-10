@@ -10,8 +10,12 @@ sphereColorDefault='black'
 
 linkColorDefault='lightgray'
 surfaceOpacityDefault= 0.5
-jointColorDefault='darkblue'
-jointEdgeColorDefault='darkblue'
+jointColorDefault='darkgreen'
+jointEdgeColorDefault='darkgreen'
+prismaticColorDefault='darkblue'
+prismaticEdgeColorDefault='darkblue'
+revoluteColorDefault='darkred'
+revoluteEdgeColorDefault='darkred'
 groundPlaneColorDefault='black'
 
 jointAxisScaleDefault=10
