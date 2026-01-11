@@ -456,6 +456,30 @@ class Revolute(Joint):
             self.centerSphere().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
         return plotHandles
 
+class OrthogonalRevolute(Revolute):
+    def __init__(self, r : float, Pose : SE3, minAngle : float, maxAngle : float, 
+                 neutralLength : Optional[float] = None, initialState : float = 0.0):
+        if minAngle is None or maxAngle is None:
+            raise ValueError("OrthogonalRevolute joints must have both minAngle and maxAngle specified")
+        if neutralLength is None: 
+            # compute neutralLength to achieve min and max angles
+            # without the end circles overlapping
+            largerAngle = max(abs(minAngle), abs(maxAngle))
+            neutralLength = 2*r*np.tan(largerAngle/2)
+        else:
+            # check that the provided neutralLength is sufficient
+            angleAtWhichCirclesTouch = 2 * np.arctan(neutralLength / (2*r))
+            if minAngle < -angleAtWhichCirclesTouch-1e-6 or maxAngle > angleAtWhichCirclesTouch+1e-6:
+                raise Warning("Provided neutralLength is too small to prevent end circle overlap for the given minAngle and maxAngle")
+        super().__init__(r, Pose, pathIndex=0, neutralLength=neutralLength, 
+                         minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
+
+class InAxisRevolute(Revolute):
+    def __init__(self, r : float, Pose : SE3, neutralLength : float, minAngle : Optional[float], 
+                 maxAngle : Optional[float], initialState : float = 0.0):
+        super().__init__(r, Pose, pathIndex=2, neutralLength=neutralLength, 
+                         minAngle=minAngle, maxAngle=maxAngle, initialState=initialState) 
+        
 
 class Waypoint(Joint):
     # path direction through a waypoint defaults to zhat

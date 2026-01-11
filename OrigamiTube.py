@@ -8,44 +8,62 @@ class OrigamiTube(ABC):
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
 
-class OrigamiExtendedRevolute(OrigamiTube, Revolute):
+class OrigamiExtendedRevolute(OrigamiTube, OrthogonalRevolute):
+    """
+    An origami revolute joint with tubular extensions on both sides.
+    The revolute joint is defined by a total bending angle and the tube length on each side.
+    If outerLength is set to None, it is computed to ensure that the end circles do not intersect
+    at the specified bending angle range.
+
+    Attributes:
+        numSides (int): Number of sides of the origami tube (must be even and >= 4).
+        r (float): Radius of the tube.
+        totalBendingAngle (float): Total bending angle of the revolute joint in radians.
+        outerLength (Optional[float]): Length of the tubular extension on each side of the revolute joint. 
+                            If None, it is computed automatically to avoid intersection of end circles.
+        numSinkLayers (int): Number of sink layers in the revolute joint pattern.
+        initialAngle (float): Initial angle of the revolute joint in radians. Defaults to 0. 
+    """
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
-                 tubeLength: float, Pose : SE3, numSinkLayers : int = 1,
+                 outerLength: Optional[float], Pose : SE3, numSinkLayers : int = 1,
                  initialState : float = 0):
-        if tubeLength < 0:
-            raise ValueError("OrigamiExtendedRevolute requires tubeLength >= 0")
-        OrigamiTube.__init__(self, numSides)
-        self.revoluteLength = 2*r*np.sin(self.polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
-        self.tubeLength = tubeLength
-        neutralLength = self.revoluteLength + 2*tubeLength
+        if not (totalBendingAngle > 0 and totalBendingAngle < np.pi):
+            raise ValueError("OrigamiExtendedRevolute requires totalBendingAngle to be in (0, pi) radians")
         self.totalBendingAngle = totalBendingAngle
         self.numSinkLayers = numSinkLayers
+        OrigamiTube.__init__(self, numSides)
+        self.revoluteLength = 2*r*np.sin(self.polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
+        OrthogonalRevolute.__init__(self, r, Pose, minAngle=-totalBendingAngle/2, 
+                                    maxAngle=totalBendingAngle/2, 
+                                    neutralLength=None if outerLength is None else self.revoluteLength + 2*outerLength, 
+                                    initialState=initialState)
+        self.outerLength = (self.neutralLength - self.revoluteLength) / 2
         revolutePattern = RevoluteJointPattern(self.numSides, self.r, 
                                             totalBendingAngle, numSinkLayers)
-        if tubeLength > 0:
-            self.pattern = TubeFittingPattern(numSides, r, tubeLength).append(revolutePattern).append(TubeFittingPattern(numSides, r, tubeLength))
+        if self.outerLength > 0:
+            self.pattern = TubeFittingPattern(numSides, r, outerLength).append(revolutePattern).append(TubeFittingPattern(numSides, r, outerLength))
         else:
             self.pattern = revolutePattern
     
     def RevoluteProximalFrame(self) -> SE3:
         PF = self.ProximalFrame()
-        return SE3.Trans(self.tubeLength*PF.R[:,0]) @ PF
+        return SE3.Trans(self.outerLength*PF.R[:,0]) @ PF
     
     def RevoluteDistalFrame(self) -> SE3:
         DF = self.DistalFrame()
-        return SE3.Trans(-self.tubeLength*DF.R[:,0]) @ DF
+        return SE3.Trans(-self.outerLength*DF.R[:,0]) @ DF
     
     def proximalExtension(self) -> Cylinder:
         PF = self.ProximalFrame()
         uhat = (PF @ SE3.Rx(np.pi/self.numSides)).R[:,1]
         return Cylinder(self.r, PF.t, PF.R[:,0], 
-                        self.tubeLength, uhat)
+                        self.outerLength, uhat)
     
     def distalExtension(self) -> Cylinder:
         DF = self.DistalFrame()
         uhat = (DF @ SE3.Rx(np.pi/self.numSides)).R[:,1]
         return Cylinder(self.r, DF.t, -DF.R[:,0], 
-                        self.tubeLength, uhat)
+                        self.outerLength, uhat)
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
