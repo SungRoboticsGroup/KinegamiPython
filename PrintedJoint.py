@@ -60,7 +60,7 @@ class PrintedJoint(Joint):
     def extendSegment(self, amount):
         pass
 
-class PrintedOrthogonalRevoluteJoint(PrintedJoint):
+class PrintedTransverseRevoluteJoint(PrintedJoint):
     def __init__(self, r : float, startBendingAngle : float, endBendingAngle : float, Pose : SE3, screwRadius : float, printParameters: PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)
@@ -245,7 +245,7 @@ class PrintedOrthogonalRevoluteJoint(PrintedJoint):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.bottomLength),
                 CollisionCapsule(base=self.DistalDubinsFrame(), radius=self.r, height = -self.topLength)]
 
-class PrintedInAxisRevoluteJoint(PrintedJoint):
+class PrintedCoaxialRevoluteJoint(PrintedJoint):
     def __init__(self, r: float, neutralLength : float, Pose : SE3, screwRadius : float, printParameters : PrintParameters = None, initialState : float = 0):
         if printParameters == None:
             printParameters = PrintParameters.default(r, screwRadius)

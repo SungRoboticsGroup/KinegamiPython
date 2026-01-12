@@ -119,8 +119,8 @@ class RevoluteJoint(OrigamiJoint):
         return plotHandles
     
     def toPrinted(self, screwRadius):
-        from PrintedJoint import PrintedOrthogonalRevoluteJoint
-        return PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
+        from PrintedJoint import PrintedTransverseRevoluteJoint
+        return PrintedTransverseRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
 
     def getCapsules(self):
         return [CollisionCapsule(base=self.ProximalDubinsFrame(), radius=self.r, height=self.neutralLength/2),
@@ -281,9 +281,9 @@ class ExtendedRevoluteJoint(OrigamiJoint):
         plt.show(block=block)
 
     def toPrinted(self, screwRadius):
-        from PrintedJoint import PrintedOrthogonalRevoluteJoint
+        from PrintedJoint import PrintedTransverseRevoluteJoint
 
-        joint = PrintedOrthogonalRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
+        joint = PrintedTransverseRevoluteJoint(self.r, -self.totalBendingAngle/2, self.totalBendingAngle/2, self.Pose, screwRadius, initialState=self.initialState)
         if joint.neutralLength < self.neutralLength:
             amount = (self.neutralLength - joint.neutralLength)/2
             joint.extendBottomSegment(amount)

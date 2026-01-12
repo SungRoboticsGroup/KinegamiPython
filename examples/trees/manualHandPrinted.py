@@ -22,17 +22,17 @@ multiplier = 1
 screwRadius = 0.05*multiplier
 
 tree = KinematicTree(PrintedWaypoint(r, SE3(), screwRadius))
-palmJoint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(2.5*multiplier,0,3*multiplier)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4), screwRadius)
+palmJoint = PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(2.5*multiplier,0,3*multiplier)@SE3.Ry(-np.pi/4)@SE3.Rx(np.pi/4), screwRadius)
 palm = tree.addJoint(0, palmJoint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-thumb0Joint = PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(palmJoint.neutralLength,0,0)@SE3.Rx(np.pi/2), screwRadius)
+thumb0Joint = PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2, SE3.Trans(palmJoint.neutralLength,0,0)@SE3.Rx(np.pi/2), screwRadius)
 thumb0 = tree.addJoint(palm, thumb0Joint,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-thumb1 = tree.addJoint(thumb0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+thumb1 = tree.addJoint(thumb0, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
                                            SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -43,12 +43,12 @@ thumbEnd = tree.addJoint(thumb1, PrintedTip(r,
               fixedPosition=True, fixedOrientation=True)
 
 
-pointer1 = tree.addJoint(0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+pointer1 = tree.addJoint(0, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
             SE3.Trans(0,0,8*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-pointer2 = tree.addJoint(pointer1, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+pointer2 = tree.addJoint(pointer1, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
                         SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
@@ -58,17 +58,17 @@ pointerEnd = tree.addJoint(pointer2, PrintedTip(r,
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle0 = tree.addJoint(0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+middle0 = tree.addJoint(0, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
         SE3.Trans(-2.25*multiplier,0,4*multiplier)@SE3.Ry(-np.pi/2)@SE3.Rx(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle1 = tree.addJoint(middle0, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+middle1 = tree.addJoint(middle0, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
                         SE3.Trans(4*multiplier,0,0)@SE3.Rx(np.pi/2), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)
 
-middle2 = tree.addJoint(middle1, PrintedOrthogonalRevoluteJoint(r, -np.pi/2, np.pi/2,
+middle2 = tree.addJoint(middle1, PrintedTransverseRevoluteJoint(r, -np.pi/2, np.pi/2,
                         SE3.Trans(4*multiplier,0,0), screwRadius),
               relative=True, safe=False, 
               fixedPosition=True, fixedOrientation=True)

@@ -1209,10 +1209,10 @@ class KinematicTree(Generic[J]):
                     save += "PrintedWaypoint " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedPrismaticJoint):
                     save += "PrintedPrismaticJoint " + str(joint.r) + " " + str(joint.extensionLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.minLength) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedOrthogonalRevoluteJoint):
-                    save += "PrintedOrthogonalRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.bottomLength) + " " + str(joint.topLength) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedInAxisRevoluteJoint):
-                    save += "PrintedInAxisRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString() + " "
+                elif isinstance(joint, PrintedTransverseRevoluteJoint):
+                    save += "PrintedTransverseRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.bottomLength) + " " + str(joint.topLength) + " " + joint.printParameters.toString() + " "
+                elif isinstance(joint, PrintedCoaxialRevoluteJoint):
+                    save += "PrintedCoaxialRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString() + " "
                 elif isinstance(joint, PrintedTip):
                     save += "PrintedTip " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
                 else:
@@ -1361,7 +1361,7 @@ def loadKinematicTree(filename : str):
                 newJoint = PrintedPrismaticJoint(r, extensionLength, pose, screwRadius, printParameters, initialState)
                 newJoint.extendSegment(minLength - newJoint.minLength)
                 return newJoint
-            case "PrintedOrthogonalRevoluteJoint":
+            case "PrintedTransverseRevoluteJoint":
                 r = float(first[2])
                 startAngle = float(first[3])
                 endAngle = float(first[4])
@@ -1370,17 +1370,17 @@ def loadKinematicTree(filename : str):
                 bottomLength = float(first[7])
                 topLength = float(first[8])
                 printParameters = PrintParameters.fromString(first[9])
-                newJoint = PrintedOrthogonalRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
+                newJoint = PrintedTransverseRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
                 newJoint.extendSegment(topLength - newJoint.topLength)
                 newJoint.extendBottomSegment(bottomLength - newJoint.bottomLength)
                 return newJoint
-            case "PrintedInAxisRevoluteJoint":
+            case "PrintedCoaxialRevoluteJoint":
                 r = float(first[2])
                 neutralLength = float(first[3])
                 screwRadius = float(first[4])
                 initialState = float(first[5])
                 printParameters = PrintParameters.fromString(first[6])
-                return PrintedInAxisRevoluteJoint(r, neutralLength, pose, screwRadius, printParameters, initialState)
+                return PrintedCoaxialRevoluteJoint(r, neutralLength, pose, screwRadius, printParameters, initialState)
             case "PrintedTip":
                 r = float(first[2])
                 screwRadius = float(first[3])

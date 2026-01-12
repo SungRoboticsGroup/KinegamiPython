@@ -7,8 +7,13 @@ class OrigamiTube(ABC):
             raise ValueError("OrigamiTube requires numSides to be an even integer >= 4")
         self.numSides = numSides
         self.polygonInnerAngle = np.pi * (numSides-2)/(2*numSides)
+        self._pattern = None
+    
+    @abstractmethod
+    def creasePattern(self) -> TubularPattern:
+        pass
 
-class OrigamiExtendedRevolute(OrigamiTube, OrthogonalRevolute):
+class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
     """
     An origami revolute joint with tubular extensions on both sides.
     The revolute joint is defined by a total bending angle and the tube length on each side.
@@ -33,17 +38,21 @@ class OrigamiExtendedRevolute(OrigamiTube, OrthogonalRevolute):
         self.numSinkLayers = numSinkLayers
         OrigamiTube.__init__(self, numSides)
         self.revoluteLength = 2*r*np.sin(self.polygonInnerAngle)*np.tan(totalBendingAngle/4) #2*delta from paper
-        OrthogonalRevolute.__init__(self, r, Pose, minAngle=-totalBendingAngle/2, 
+        TransverseRevolute.__init__(self, r, Pose, minAngle=-totalBendingAngle/2, 
                                     maxAngle=totalBendingAngle/2, 
                                     neutralLength=None if outerLength is None else self.revoluteLength + 2*outerLength, 
                                     initialState=initialState)
         self.outerLength = (self.neutralLength - self.revoluteLength) / 2
-        revolutePattern = RevoluteJointPattern(self.numSides, self.r, 
-                                            totalBendingAngle, numSinkLayers)
-        if self.outerLength > 0:
-            self.pattern = TubeFittingPattern(numSides, r, outerLength).append(revolutePattern).append(TubeFittingPattern(numSides, r, outerLength))
-        else:
-            self.pattern = revolutePattern
+    
+    def creasePattern(self) -> TubularPattern:
+        if self._pattern is None:
+            revolutePattern = RevoluteJointPattern(self.numSides, self.r, 
+                                                self.totalBendingAngle, self.numSinkLayers)
+            if self.outerLength > 0:
+                self._pattern = TubeFittingPattern(self.numSides, self.r, self.outerLength).append(revolutePattern).append(TubeFittingPattern(self.numSides, self.r, self.outerLength))
+            else:
+                self._pattern = revolutePattern
+        return self._pattern
     
     def RevoluteProximalFrame(self) -> SE3:
         PF = self.ProximalFrame()
@@ -75,7 +84,7 @@ class OrigamiExtendedRevolute(OrigamiTube, OrthogonalRevolute):
                           centerColor, distalColor, sphereColor, showSphere,
                           showAxis, axisScale, showPoses)
         if showSurface:
-            scale = self.pattern.baseSideLength / 2
+            scale = self.creasePattern().baseSideLength / 2
             CenterSegment = np.array([self.Pose.t - scale * self.Pose.R[:,2],
                                       self.Pose.t + scale * self.Pose.R[:,2]])
             #https://stackoverflow.com/questions/63207496/how-to-visualize-polyhedrons-defined-by-their-vertices-in-3d-with-matplotlib-or
@@ -140,6 +149,12 @@ class OrigamiPrismatic(OrigamiTube, Prismatic):
         self.coneAngle = coneAngle
         Prismatic.__init__(self, r, neutralLength, minLength, maxLength, Pose, initialState)
     
+    def creasePattern(self) -> TubularPattern:
+        if self._pattern is None:
+            self._pattern = PrismaticJointPattern(self.numSides, self.r, self.neutralLength, 
+                                                 self.numLayers, self.coneAngle)
+        return self._pattern
+    
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
@@ -164,7 +179,11 @@ class OrigamiTip(OrigamiTube, Tip):
                  closesForward : bool = True, pathIndex : int = 2):
         OrigamiTube.__init__(self, numSides)
         Tip.__init__(self, r, Pose, length, closesForward, pathIndex)
-        self.pattern = TipPattern(numSides, r, length, closesForward)
+    
+    def creasePattern(self) -> TubularPattern:
+        if self._pattern is None:
+            self._pattern = TipPattern(self.numSides, self.r, self.length, self.forward)
+        return self._pattern
     
     def pathIndex(self) -> int:
         return self.pidx
@@ -186,7 +205,7 @@ class OrigamiTip(OrigamiTube, Tip):
             angle = np.linspace(0, 2*np.pi, radialCount) + np.pi/self.numSides
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
-            scale = self.pattern.baseSideLength / 2
+            scale = self.creasePattern().baseSideLength / 2
             
             match self.pidx:
                 case 0: tipSegmentIndex, uhatIndex, vhatIndex = 2,1,2

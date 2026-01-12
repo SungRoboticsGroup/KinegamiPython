@@ -456,11 +456,11 @@ class Revolute(Joint):
             self.centerSphere().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
         return plotHandles
 
-class OrthogonalRevolute(Revolute):
+class TransverseRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, minAngle : float, maxAngle : float, 
                  neutralLength : Optional[float] = None, initialState : float = 0.0):
         if minAngle is None or maxAngle is None:
-            raise ValueError("OrthogonalRevolute joints must have both minAngle and maxAngle specified")
+            raise ValueError("TransverseRevolute joints must have both minAngle and maxAngle specified")
         if neutralLength is None: 
             # compute neutralLength to achieve min and max angles
             # without the end circles overlapping
@@ -474,7 +474,7 @@ class OrthogonalRevolute(Revolute):
         super().__init__(r, Pose, pathIndex=0, neutralLength=neutralLength, 
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
 
-class InAxisRevolute(Revolute):
+class CoaxialRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, neutralLength : float, minAngle : Optional[float], 
                  maxAngle : Optional[float], initialState : float = 0.0):
         super().__init__(r, Pose, pathIndex=2, neutralLength=neutralLength, 
