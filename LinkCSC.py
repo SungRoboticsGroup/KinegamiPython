@@ -20,10 +20,20 @@ from ZACH_vectorized_link_sdf import *
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, 
-                 path : PathCSC = None, EPSILON : float = 0.01):
-        assert(r>0)
-        assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
+                 path : Optional[PathCSC] = None, EPSILON : float = 0.01,
+                 startRadius : Optional[float] = None, endRadius : Optional[float] = None):
+        if r <= 0:
+            raise ValueError("ERROR: Tried to create a LinkCSC with non-positive radius")
+        if not (maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi):
+            raise ValueError("ERROR: maxAnglePerElbow must be in [0, pi]")
+        if not startRadius is None and startRadius <= 0:
+            raise ValueError("ERROR: Tried to create a LinkCSC with non-positive startRadius")
+        if not endRadius is None and endRadius <= 0:
+            raise ValueError("ERROR: Tried to create a LinkCSC with non-positive endRadius")
+
         self.r = r
+        self.startRadius = startRadius if startRadius is not None else r
+        self.endRadius = endRadius if endRadius is not None else r
         self.maxAnglePerElbow = maxAnglePerElbow
         self.EPSILON = EPSILON
         self.DISTANCE_EPSILON = self.r * self.EPSILON
@@ -37,11 +47,11 @@ class LinkCSC:
 
         if norm(self.path.error) > self.DISTANCE_EPSILON:
             raise ValueError(f"ERROR: Tried to generate a link for an invalid path\n---\nPath details: {repr(self.path)}")
-        if self.path.theta1 < -EPSILON:
+        if self.path.theta1 < -self.EPSILON:
             raise ValueError(f"ERROR: Tried to generate a link for a path with theta1 < 0\n---\nPath details: {repr(self.path)}")
         if self.path.theta1 >= np.pi:
             raise ValueError(f"ERROR: Tried to generate a link for a path with theta1 >= pi\n---\nPath details: {repr(self.path)}")
-        if self.path.theta2 < -EPSILON:
+        if self.path.theta2 < -self.EPSILON:
             raise ValueError(f"ERROR: Tried to generate a link for a path with theta2 < 0\n---\nPath details: {repr(self.path)}")
         if self.path.theta2 >= np.pi:
             raise ValueError(f"ERROR: Tried to generate a link for a path with theta2 >= pi\n---\nPath details: {repr(self.path)}")
@@ -271,41 +281,10 @@ class LinkCSC:
         """
         Return the 3D position at parameter t in [0, 1] along the CSC path.
         """
-        t = max(0.0, min(t, 1.0))
-
-        totalLength = self.lengthC1 + self.lengthS + self.lengthC2
-
-        if totalLength < self.DISTANCE_EPSILON:
-            return self.StartDubinsPose.t
-        
-        s = t * totalLength
-
-        if s <= self.lengthC1:
-            if self.arc1:
-                t1 = s / self.lengthC1
-                return self.arc1.interpolateAt(t1)
-            else:
-                return self.StartDubinsPose.t
-        elif s <= self.lengthC1 + self.lengthS:
-            t2 = s - self.lengthC1
-            return self.path.turn1end + t2 * self.path.tUnit
-        else:
-            if self.arc2:
-                localS = s - self.lengthC1 - self.lengthS
-                t3 = localS / self.lengthC2
-                return self.arc2.interpolateAt(t3)
-            else:
-                return self.EndDubinsPose.t
+        return self.path.interpolateAt(t)
             
-    def interpolate(self, count : int = 10, density: float = None) -> np.ndarray:
-        # density is points per unit length
-        if density:
-            assert density > 0, "Density must be positive"
-            totalLength = self.lengthC1 + self.lengthS + self.lengthC2
-            count = max(2, int(np.ceil(totalLength * density)) + 1)
-        else:
-            assert count >= 2, "Count must be at least 2"
-        return self.interpolate_vectorized(np.linspace(0, 1, count))
+    def interpolate(self, count : Optional[int] = None, density: Optional[float] = None) -> np.ndarray:
+        self.path.interpolate(count=count, density=density)
     
     def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
         """
@@ -321,54 +300,7 @@ class LinkCSC:
         np.ndarray
             Array of 3D positions (shape (n, 3))
         """
-        # Clamp t values
-        t_array = np.clip(t_array, 0.0, 1.0)
-        
-        totalLength = self.lengthC1 + self.lengthS + self.lengthC2
-        if totalLength < self.DISTANCE_EPSILON:
-            return np.tile(self.StartDubinsPose.t, (len(t_array), 1))
-        
-        # Convert t to arc length s
-        s_array = t_array * totalLength
-        
-        # Partition t_array indices by segment
-        arc1_mask = s_array <= self.lengthC1
-        straight_mask = (s_array > self.lengthC1) & (s_array <= self.lengthC1 + self.lengthS)
-        arc2_mask = s_array > self.lengthC1 + self.lengthS
-        
-        # Initialize output array
-        points = np.zeros((len(t_array), 3), dtype=np.float64)
-        
-        # Arc 1 segment
-        if np.any(arc1_mask):
-            if self.arc1:
-                arc1_indices = np.where(arc1_mask)[0]
-                arc1_t = s_array[arc1_indices] / self.lengthC1
-                points[arc1_indices] = self.arc1.interpolate_vectorized(arc1_t)
-            else:
-                arc1_indices = np.where(arc1_mask)[0]
-                points[arc1_indices] = np.tile(self.StartDubinsPose.t, (len(arc1_indices), 1))
-        
-        # Straight segment
-        if np.any(straight_mask):
-            straight_indices = np.where(straight_mask)[0]
-            t2_array = s_array[straight_indices] - self.lengthC1
-            # Straight line: start + t2 * direction
-            points[straight_indices] = (self.path.turn1end[np.newaxis, :] + 
-                                       t2_array[:, np.newaxis] * self.path.tUnit[np.newaxis, :])
-        
-        # Arc 2 segment
-        if np.any(arc2_mask):
-            if self.arc2:
-                arc2_indices = np.where(arc2_mask)[0]
-                localS = s_array[arc2_indices] - self.lengthC1 - self.lengthS
-                arc2_t = localS / self.lengthC2
-                points[arc2_indices] = self.arc2.interpolate_vectorized(arc2_t)
-            else:
-                arc2_indices = np.where(arc2_mask)[0]
-                points[arc2_indices] = np.tile(self.EndDubinsPose.t, (len(arc2_indices), 1))
-        
-        return points
+        return self.path.interpolate_vectorized(t_array)
     
     def sdf(self, point: ArrayLike, radius: Optional[float] = None, xp: ModuleType = np) -> Union[float, ArrayLike]:
         """

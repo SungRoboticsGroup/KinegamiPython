@@ -18,6 +18,9 @@ from matplotlib import cm
 from typing import Optional, Union
 from numpy.typing import ArrayLike, NDArray
 from types import ModuleType
+import manifold3d as m3d
+import trimesh
+from pytetwild.pytetwild import tetrahedralize
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -867,16 +870,7 @@ class Arc3D:
         Return 3D position at parameter t in [0, 1] along the arc
         """
         t = max(0.0, min(t, 1.0))
-
-        angle = t * self.theta
-        u = self.r * np.cos(angle)
-        v = self.r * np.sin(angle)
-
-        # construct basis for circle plane
-        uhat = -self.startNormal
-        vhat = cross(self.binormal, uhat)
-
-        return self.circleCenter + u * uhat + v * vhat
+        return self.interpolate_vectorized(np.array([t]))[0]
     
     def localOrientation(self) -> np.ndarray:
         """
@@ -1054,7 +1048,277 @@ class Arc3D:
         plotHandle = self.addToPlot(ax, color, alpha, showDirections)
         ax.set_aspect('equal')
         plt.show(block=block)
+
+
+def trussManifold(vertices, edges, diameter : float) -> m3d.Manifold:
+    T = m3d.Manifold()
+    nodes = [m3d.Manifold.sphere(radius=diameter/2, circular_segments=3).translate(vertex[:3]) for vertex in vertices]
+    for edge in edges:
+        T += (nodes[edge[0]] + nodes[edge[1]]).hull()
+    return T
+
+
+def connectOuterToInner(outerVertices : np.ndarray, outerEdges : np.ndarray, 
+                 innerVertices : np.ndarray, innerEdges : np.ndarray, 
+                 nearestCount=1) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Given outer and inner truss specifications (vertices and edges),
+    concatenate them into a single truss specification,
+    with every outer vertex connected to its nearestCount closest inner vertices.
+    
+    :param outerVertices: m x 3 numpy array of outer truss vertex positions
+    :param outerEdges: p x 2 numpy array of outer truss edges by vertex index
+    :param innerVertices: n x 3 numpy array of inner truss vertex positions
+    :param innerEdges: q x 2 numpy array of inner truss edges by vertex index
+    :param nearestCount: number of nearest inner vertices to connect to each outer vertex
+    :return: tuple (vertices, edges) representing the combined truss
+    :rtype: (numpy.ndarray, numpy.ndarray)
+    """
+    if nearestCount <= 0:
+        raise ValueError("nearestCount must be positive")
+    elif nearestCount > innerVertices.shape[0]:
+        raise ValueError("nearestCount cannot exceed number of inner vertices")
+
+    combinedVertices = np.vstack((outerVertices, innerVertices))
+    newEdgesList = []
+    for outerVertexIndex, outerVertex in enumerate(outerVertices):
+        distances = norm(innerVertices - outerVertex.reshape(1,3), axis=1)
+        nearestInnerIndices = np.argsort(distances)[:nearestCount]
+        for innerIndex in nearestInnerIndices:
+            newEdgesList.append([outerVertexIndex, innerIndex + outerVertices.shape[0]])
+            #newEdgesList.append([np.where((outerVertices == outerVertex).all(axis=1))[0][0], 
+            #                     innerIndex + outerVertices.shape[0]])
+
+    combinedEdges = np.vstack((outerEdges, 
+                               innerEdges + outerVertices.shape[0],
+                               np.array(newEdgesList)))
+
+    return combinedVertices, combinedEdges
+
+def facesToEdges(faces: np.ndarray) -> np.ndarray:
+    """
+    Given an array of faces as triangles, quadrilaterals, etc (by vertex index),
+    Return an array of edges without duplication
+    """
+    n = faces.shape[0]  # number of faces
+    d = faces.shape[1]  # vertices per face
+    
+    # Create all edges by pairing each vertex with the next (wrapping around)
+    edges = np.stack([faces, np.roll(faces, -1, axis=1)], axis=-1)  # shape: (n, d, 2)
+    edges = edges.reshape(-1, 2)  # flatten to (n*d, 2)
+    
+    # Sort each edge so (a,b) and (b,a) are treated the same
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicates
+    edges = np.unique(edges, axis=0)
+    
+    return edges
+
+def tetrahedronsToEdges(tetrahedrons : np.ndarray) -> np.ndarray:
+    """
+    Compute the edges from a list of tetrahedrons specified by vertex index
+    
+    :param tetrahedrons: n x 4 numpy array of integers
+    :return: array of unique edges as pairs of vertex indices
+    :rtype: _ x 2 numpy array of integers
+    """
+    n = tetrahedrons.shape[0]  # number of tetrahedrons
+    
+    # Each tetrahedron has 6 edges: (0,1), (0,2), (0,3), (1,2), (1,3), (2,3)
+    edge_pairs = np.array([[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]])
+    
+    # Create all edges by indexing into tetrahedrons
+    # Shape: (n, 6, 2) where n is number of tetrahedrons
+    edges = tetrahedrons[:, edge_pairs]
+    
+    # Flatten to (n*6, 2)
+    edges = edges.reshape(-1, 2)
+    
+    # Sort each edge so (a,b) and (b,a) are treated the same
+    edges = np.sort(edges, axis=1)
+    
+    # Remove duplicates
+    edges = np.unique(edges, axis=0)
+    
+    return edges
+
+def manifoldToGraph(manifold : m3d.Manifold) -> tuple[np.ndarray, np.ndarray]:
+    mesh = manifold.to_mesh()
+    vertices = mesh.vert_properties
+    faces = mesh.tri_verts
+    return vertices, facesToEdges(faces)
+
+def manifoldToTruss(manifold : m3d.Manifold, diameter : float, 
+                    infill : bool = False) -> m3d.Manifold:
+    mesh = manifold.to_mesh()
+    vertices = mesh.vert_properties
+    faces = mesh.tri_verts
+    if infill:
+        tetVerts, tets = tetrahedralize(vertices, faces,
+                                        edge_length_fac=1,
+                                        optimize=True)
+        return trussManifold(tetVerts, tetrahedronsToEdges(tets), diameter)
+    else:
+        edges = facesToEdges(mesh.tri_verts)
+        return trussManifold(vertices, edges, diameter)
+
+class Bend:
+    def __init__(self, arcRadius : float, StartFrame : SE3, bendingAngle : float, 
+                 rotationalAxisAngle : float, startRadius : float = None,
+                 endRadius : float = None, numSides : int = 20, 
+                 maxSectionAngle : float = np.pi/8, EPSILON : float = 0.0001):     
+        self.rotationalAxisAngle = np.mod(rotationalAxisAngle, 2*np.pi)
+        bendingAngle = math.remainder(bendingAngle, 2*np.pi) #wrap to [-pi,pi]
+        assert(abs(bendingAngle) <= np.pi)
+        assert(abs(bendingAngle) > EPSILON)
+        if bendingAngle < 0:
+            bendingAngle = abs(bendingAngle)
+            self.rotationalAxisAngle = np.mod(self.rotationalAxisAngle+np.pi, 2*np.pi)
+
+        self.StartFrame = StartFrame
+        self.arcRadius = arcRadius
+        self.startRadius = self.arcRadius if startRadius is None else startRadius
+        self.endRadius = self.arcRadius if endRadius is None else endRadius
+        self.rotAxisDirLocal = SO3.Rx(self.rotationalAxisAngle) * np.array([0,1,0])
+        self.bendingAngle = bendingAngle
+        self.numSides = numSides
+        self.EPSILON = EPSILON
+        self.DISTANCE_EPSILON = self.arcRadius * self.EPSILON
+        self.maxSectionAngle = maxSectionAngle
+
+        self.numSections = 2 * math.ceil(abs(bendingAngle) / self.maxSectionAngle)
+        self.numCircles = self.numSections + 1
+        self.anglePerSection = bendingAngle / self.numSections
+        self.dwPerSection = self.arcRadius * np.tan(self.anglePerSection / 2)
         
+        Forward = SE3.Tx(self.dwPerSection)
+        Rotate = SE3.AngleAxis(self.anglePerSection, self.rotAxisDirLocal)
+        self.TransformPerSection = Forward @ Rotate @ Forward
+
+        self.poses = [self.StartFrame]
+        for i in range(1, self.numCircles):
+            self.poses.append(self.poses[-1] @ self.TransformPerSection)
+        circles = []
+        self.radii = np.linspace(self.startRadius, self.endRadius, self.numCircles)
+        for i in range(self.numCircles):
+            pose = self.poses[i]
+            circles.append(Circle3D(radius=self.radii[i], center=pose.t, normal=pose.R[:,0], radialVector=pose.R[:,1]))
+        self.circles = np.array([c.interpolate(self.numSides+1) for c in circles])
+
+    def plotCircles(self, ax):
+        for i in range(self.numCircles):
+            ax.plot(self.circles[i,:,0], self.circles[i,:,1], self.circles[i,:,2], marker='o')
+        addPosesToPlot(np.array(self.poses), ax, axisLength=0.2)
+    
+    def trimesh(self):
+        # Create a mesh by connecting the circles
+        vertices = self.circles.reshape((-1, 3))
+        faces = []
+        for i in range(self.numCircles-1):
+            for j in range(self.numSides):
+                p0 = i * (self.numSides + 1) + j
+                p1 = p0 + 1
+                p2 = p0 + (self.numSides + 1)
+                p3 = p2 + 1
+                faces.append([p0, p2, p1])
+                faces.append([p1, p2, p3])
+        faces = np.array(faces)
+        mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        return mesh
+    
+    def solid_trimesh(self):
+        # Create a solid mesh by capping the ends
+        mesh = self.trimesh()
+        startCircle = self.circles[0]
+        endCircle = self.circles[-1]
+        startCap = trimesh.Trimesh(vertices=startCircle, 
+                                   faces=[[0,i+1,(i+1)%self.numSides+1] for i in range(self.numSides)])
+        endCap = trimesh.Trimesh(vertices=endCircle, 
+                                 faces=[[0,i+1,(i+1)%self.numSides+1] for i in range(self.numSides)])
+        #endCap.apply_translation(endCircle.c - endCap.vertices[0])
+        mesh = trimesh.util.concatenate([mesh, startCap, endCap])
+        return mesh
+    
+    def manifold(self, hull : bool = False, extendForward : float = 0, extendBackward : float = 0, thickness : float = None, truss : bool = False,
+                 trussNumSides : int = 6, trussMaxSectionAngle : float = np.pi/4) -> m3d.Manifold:       
+        if truss:
+            if thickness is None:
+                raise ValueError("Must specify wall thickness for truss")
+            inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                                    self.startRadius - thickness/2, self.endRadius - thickness/2,
+                                    trussNumSides, trussMaxSectionAngle, self.EPSILON)
+            innerSolid = inner.manifold(hull)
+            shape = manifoldToTruss(innerSolid, thickness)
+
+        elif hull:
+            shape = m3d.Manifold.hull_points(self.circles.reshape((-1,3)))
+        else:
+            shape = m3d.Manifold.hull_points(self.circles[[0,1]].reshape((-1,3)))
+            for i in range(1, self.numCircles-1):
+                shape += m3d.Manifold.hull_points(self.circles[[i-1, i, i+1]].reshape((-1,3)))
+        
+        if extendBackward != 0:
+            startCircle = self.circles[0]
+            circleBackward = startCircle - self.poses[0].R[:,0]*extendBackward
+            circleStack = np.vstack((circleBackward, startCircle, self.circles[1])) if (not truss and self.circles.shape[0] > 1) else np.vstack((circleBackward, startCircle))
+            startCap = m3d.Manifold.hull_points(circleStack)
+            shape += startCap
+        if extendForward != 0:
+            endCircle = self.circles[-1]
+            circleForward = endCircle + self.poses[-1].R[:,0]*extendForward
+            circleStack = np.vstack((self.circles[-2], endCircle, circleForward)) if (not truss and self.circles.shape[0] > 1) else np.vstack((endCircle, circleForward))
+            endCap = m3d.Manifold.hull_points(circleStack)
+            shape += endCap
+
+        if thickness is not None:
+            if not (thickness > 0 and thickness < min(self.startRadius, self.endRadius)):
+                raise ValueError("Invalid wall thickness for Bend manifold")
+            inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                                      self.startRadius - thickness, self.endRadius - thickness,
+                                      self.numSides, self.maxSectionAngle, self.EPSILON)
+            shape -= inner.manifold(hull, extendForward=extendForward+self.DISTANCE_EPSILON,
+                                    extendBackward=extendBackward+self.DISTANCE_EPSILON)
+        
+        return shape
+        
+    def rediscretize(self, numSides : int = 20, maxSectionAngle : float = np.pi/8) -> Bend:
+        return Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                    self.startRadius, self.endRadius, numSides, maxSectionAngle, self.EPSILON)
+        
+    def truss(self, thickness : float, hull : bool = False, extendForward : float = 0, extendBackward : float = 0) -> m3d.Manifold:
+        inner = Bend(self.arcRadius, self.StartFrame, self.bendingAngle, self.rotationalAxisAngle,
+                                    self.startRadius - thickness/2, self.endRadius - thickness/2,
+                                    self.numSides, self.maxSectionAngle, self.EPSILON)
+        innerSolid = inner.manifold(hull)
+        truss = manifoldToTruss(innerSolid, thickness)
+        
+
+
+
+class HollowBend(Bend):
+    def __init__(self, arcRadius : float, StartFrame : SE3, bendingAngle : float, 
+                 rotationalAxisAngle : float, wallThickness : float,
+                 startRadius : float = None, endRadius : float = None, 
+                 numSides : int = 20, maxSectionAngle : float = np.pi/8, EPSILON : float = 0.0001):
+        super().__init__(arcRadius, StartFrame, bendingAngle, rotationalAxisAngle,
+                         startRadius, endRadius, numSides, maxSectionAngle, EPSILON)
+        assert(wallThickness > 0 and wallThickness < min(self.startRadius, self.endRadius))
+        self.wallThickness = wallThickness
+        
+        self.inner = Bend(arcRadius, StartFrame, bendingAngle, rotationalAxisAngle,
+                                      self.startRadius - wallThickness,
+                                      self.endRadius - wallThickness,
+                                      numSides, maxSectionAngle, EPSILON)
+
+    def manifold(self, hull : bool = False, extendForward : float = 0, extendBackward : float = 0) -> m3d.Manifold:
+        outerHull = super().manifold(hull, extendForward=extendForward, extendBackward=extendBackward)
+        innerHull = self.inner.manifold(hull, extendForward=extendForward+self.DISTANCE_EPSILON,
+                                        extendBackward=extendBackward+self.DISTANCE_EPSILON)
+        return outerHull - innerHull
+
+
+
 # arc from a given starting point+direction to a given ending direction 
 # (which cannot be parallel to the starting direction)
 def arcToDirection(startPoint, startDir, endDir, r) -> Arc3D:

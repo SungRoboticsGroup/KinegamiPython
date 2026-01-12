@@ -180,12 +180,6 @@ class PathCSC:
         
         
         # Measure turning angles along each circle
-        """
-        self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
-                                unitNormalToBoth(self.startDir, self.tUnit)))
-        self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
-                                unitNormalToBoth(self.tUnit, self.endDir)))
-        """
         self.theta1 = wrapAngle(signedAngle(self.startDir, self.tUnit, 
                                 cross(self.startDir, self.w1)))
         self.theta2 = wrapAngle(signedAngle(self.tUnit, self.endDir, 
@@ -277,12 +271,91 @@ class PathCSC:
                        pathColor, cscBoundaryMarker, showTunit)
         ax.set_aspect('equal')
         ax.legend()
-        plt.show(block=block)
+        plt.show(block=block)  
         
+    def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
+        """
+        Vectorized interpolation: compute 3D positions for multiple t values at once.
         
+        Parameters:
+        -----------
+        t_array : np.ndarray
+            Array of parameter values in [0, 1] (shape (n,))
+            
+        Returns:
+        --------
+        np.ndarray
+            Array of 3D positions (shape (n, 3))
+        """
+        # Clamp t values
+        t_array = np.clip(t_array, 0.0, 1.0)
         
+        lengthC1 = self.r * self.theta1
+        lengthC2 = self.r * self.theta2
+
+        if self.length < 1e-6*self.r:
+            return np.tile(self.startPosition, (len(t_array), 1))
         
+        # Convert t to arc length s
+        s_array = t_array * self.length
         
+        # Partition t_array indices by segment
+        arc1_mask = s_array <= lengthC1
+        straight_mask = (s_array > lengthC1) & (s_array <= lengthC1 + self.tMag)
+        arc2_mask = s_array > lengthC1 + self.tMag
         
+        # Initialize output array
+        points = np.zeros((len(t_array), 3), dtype=np.float64)
         
+        # Arc 1 segment
+        if np.any(arc1_mask):
+            if self.theta1 > 1e-6:
+                arc1_indices = np.where(arc1_mask)[0]
+                arc1_t = s_array[arc1_indices] / lengthC1
+                points[arc1_indices] = Arc3D(self.circleCenter1, self.startPosition,
+                             self.startDir, self.theta1).interpolate_vectorized(arc1_t)
+            else:
+                arc1_indices = np.where(arc1_mask)[0]
+                points[arc1_indices] = np.tile(self.startPosition, (len(arc1_indices), 1))
+        
+        # Straight segment
+        if np.any(straight_mask):
+            straight_indices = np.where(straight_mask)[0]
+            t2_array = s_array[straight_indices] - lengthC1
+            # Straight line: start + t2 * direction
+            points[straight_indices] = (self.turn1end[np.newaxis, :] + 
+                                       t2_array[:, np.newaxis] * self.tUnit[np.newaxis, :])
+        
+        # Arc 2 segment
+        if np.any(arc2_mask):
+            if self.theta2 > 1e-6:
+                arc2_indices = np.where(arc2_mask)[0]
+                localS = s_array[arc2_indices] - lengthC1 - self.tMag
+                arc2_t = localS / lengthC2
+                points[arc2_indices] = Arc3D(self.circleCenter2, self.turn2start,
+                             self.tUnit, self.theta2).interpolate_vectorized(arc2_t)
+            else:
+                arc2_indices = np.where(arc2_mask)[0]
+                points[arc2_indices] = np.tile(self.endPosition, (len(arc2_indices), 1))
+        
+        return points
+    
+    def interpolateAt(self, t : float) -> np.ndarray:
+        """
+        Return the 3D position at parameter t in [0, 1] along the CSC path.
+        """
+        t = np.clip(t, 0.0, 1.0)
+        return self.interpolate_vectorized(np.array([t]))[0]
+    
+    def interpolate(self, count : Optional[int] = None, density: Optional[float] = None) -> np.ndarray:
+        # density is points per unit length
+        if count is None and density is None or (count is not None and density is not None):
+            raise ValueError("Must specify exactly one of count or density")
+        if not density is None:
+            if density <= 0:
+                raise ValueError("Density must be positive")
+            count = max(2, int(np.ceil(self.length() * density)) + 1)
+        elif count < 2:
+            raise ValueError("Count must be at least 2")
+        return self.interpolate_vectorized(np.linspace(0, 1, count))
         
