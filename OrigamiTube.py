@@ -1,5 +1,6 @@
 from Joint import *
 from TubularPattern import *
+from LinkCSC import *
 
 class OrigamiTube(ABC):
     def __init__(self, numSides : int):
@@ -249,3 +250,48 @@ class OrigamiTip(OrigamiTube, Tip):
                     ax.add_collection3d(tri)
             
         return plotHandles
+
+
+class OrigamiLinkCSC(OrigamiTube, LinkCSC):
+    def __init__(self, numSides : int, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
+                 maxAnglePerElbow : float = np.pi/2, path : Optional[PathCSC] = None, 
+                 EPSILON : float = 0.01):
+        OrigamiTube.__init__(self, numSides)
+        LinkCSC.__init__(self, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
+    
+    def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
+        assert(self.numSides >= 4 and self.numSides%2==0)
+        assert(twistPortion > 0)
+        
+        composed = TubularPattern(self.numSides, self.r)
+        
+        if self.path.theta1 > self.EPSILON:
+            numElbows1 = (int)(np.ceil(self.path.theta1 / self.maxAnglePerElbow)) 
+            elbow1PartPattern = ElbowFittingPattern(self.numSides, self.r, 
+                                    bendingAngle=self.path.theta1 / numElbows1, 
+                                    rotationalAxisAngle=self.rot1AxisAngle)
+            for i in range(numElbows1):
+                composed.append(elbow1PartPattern)
+        
+        twistAngle = signedAngle(self.Elbow1EndFrame.R[:,1], 
+                                 self.Elbow2StartFrame.R[:,1], 
+                                 self.path.tUnit)
+        twistLen = 0
+        if abs(twistAngle) > self.EPSILON:
+            twistLen = twistPortion * self.path.tMag
+            twistPattern = TwistFittingPattern(self.numSides, self.r, twistAngle, twistLen)
+            composed.append(twistPattern)
+        
+        tubeLen = self.path.tMag - twistLen
+        tubePattern = TubeFittingPattern(self.numSides, self.r, tubeLen)
+        composed.append(tubePattern)
+        
+        if self.path.theta2 > self.EPSILON:
+            numElbows2 = (int)(np.ceil(self.path.theta2 / self.maxAnglePerElbow)) 
+            elbow2PartPattern = ElbowFittingPattern(self.numSides, self.r, 
+                                    bendingAngle=self.path.theta2 / numElbows2, 
+                                    rotationalAxisAngle=self.rot2AxisAngle)
+            for i in range(numElbows2):
+                composed.append(elbow2PartPattern)
+        
+        return composed

@@ -204,45 +204,7 @@ class LinkCSC:
                                      showFrames, showPath, pathColor, showPathCircles,
                                      showBoundary, showElbowBoundingBalls)
         ax.set_aspect('equal')
-        plt.show(block=block)
-    
-    def creasePattern(self, numSides : int, twistPortion : float = 0.2) -> TubularPattern:
-        assert(numSides >= 4 and numSides%2==0)
-        assert(twistPortion > 0)
-        
-        composed = TubularPattern(numSides, self.r)
-        
-        if self.path.theta1 > self.EPSILON:
-            numElbows1 = (int)(np.ceil(self.path.theta1 / self.maxAnglePerElbow)) 
-            elbow1PartPattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta1 / numElbows1, 
-                                    rotationalAxisAngle=self.rot1AxisAngle)
-            for i in range(numElbows1):
-                composed.append(elbow1PartPattern)
-        
-        twistAngle = signedAngle(self.Elbow1EndFrame.R[:,1], 
-                                 self.Elbow2StartFrame.R[:,1], 
-                                 self.path.tUnit)
-        twistLen = 0
-        if abs(twistAngle) > self.EPSILON:
-            twistLen = twistPortion * self.path.tMag
-            twistPattern = TwistFittingPattern(numSides, self.r, twistAngle, twistLen)
-            composed.append(twistPattern)
-        
-        tubeLen = self.path.tMag - twistLen
-        tubePattern = TubeFittingPattern(numSides, self.r, tubeLen)
-        composed.append(tubePattern)
-        
-        if self.path.theta2 > self.EPSILON:
-            numElbows2 = (int)(np.ceil(self.path.theta2 / self.maxAnglePerElbow)) 
-            elbow2PartPattern = ElbowFittingPattern(numSides, self.r, 
-                                    bendingAngle=self.path.theta2 / numElbows2, 
-                                    rotationalAxisAngle=self.rot2AxisAngle)
-            for i in range(numElbows2):
-                composed.append(elbow2PartPattern)
-        
-        return composed
-    
+        plt.show(block=block)    
 
     def collisionBoxes(self):
         return [CollisionBox(startDubinsFrame=self.StartDubinsPose, endDubinsFrame=self.Elbow1EndFrame, r=self.r),
