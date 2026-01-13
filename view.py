@@ -6,15 +6,16 @@ from numpy import array
 
 #init_path="/home/daniel/KinegamiPython/Trials Before Experiments/2025.12.05_12.03.23_Joints3_Chains1_Seed42/0.txt"
 # final_path="/home/daniel/KinegamiPython/Trials Before Experiments/2025.12.05_12.03.23_Joints3_Chains1_Seed42/0/DFS - Inward Longest184.94166469573975_7.tree"
-final_path = "/home/samhitha/code/Trials Before Experiments/2025.12.09_12.47.59_Joints3_Chains1_Seed42/0/DFS - Inward Longest149.83452987670898_3.tree"
+# final_path = "/home/samhitha/code/Trials Before Experiments/2025.12.09_12.47.59_Joints3_Chains1_Seed42/0/DFS - Inward Longest149.83452987670898_3.tree"
+final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.12_23.40.05_Joints3_Chains1_Seed42/0/DFS - Inward Longestfinal.tree"
 
-"""
+
 # read initial_path contents to string init_repr
-with open(init_path, 'r') as f:
-    init_repr = f.read()
+with open(final_path, 'r') as f:
+    final_path = f.read()
 
-init = eval(init_repr)
-init.show(block=False)
+final = eval(final_path)
+final.show(block=True)
 """
 
 final = loadKinematicTree(final_path)
@@ -36,3 +37,4 @@ for config in configs:
 
 
 final.show(block=True)
+"""

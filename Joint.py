@@ -312,7 +312,9 @@ class Prismatic(Joint):
         self.minLength = minLength
         self.maxLength = maxLength
         super().__init__(r, neutralLength, Pose, initialState)
-        
+    
+    def __repr__(self):
+        return f"Prismatic(r={repr(self.r)}, neutralLength={repr(self.neutralLength)}, minLength={repr(self.minLength)}, maxLength={repr(self.maxLength)}, Pose={repr(self.Pose)}, initialState={repr(self.initialState)})"
 
     def pathIndex(self) -> int:
         return 2 # zhat
@@ -475,13 +477,18 @@ class TransverseRevolute(Revolute):
                 raise Warning("Provided neutralLength is too small to prevent end circle overlap for the given minAngle and maxAngle")
         Revolute.__init__(self, r, Pose, pathIndex=0, neutralLength=neutralLength, 
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
+    
+    def __repr__(self):
+        return f"TransverseRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, neutralLength={repr(self.neutralLength)}, initialState={repr(self.initialState)})"
 
 class CoaxialRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, neutralLength : float, minAngle : Optional[float], 
                  maxAngle : Optional[float], initialState : float = 0.0):
         super().__init__(r, Pose, pathIndex=2, neutralLength=neutralLength, 
-                         minAngle=minAngle, maxAngle=maxAngle, initialState=initialState) 
-        
+                         minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
+    
+    def __repr__(self):
+        return f"CoaxialRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, neutralLength={repr(self.neutralLength)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, initialState={repr(self.initialState)})"
 
 class Waypoint(Joint):
     # path direction through a waypoint defaults to zhat
@@ -489,6 +496,9 @@ class Waypoint(Joint):
         assert(pathIndex in [0,1,2])
         self.pidx = pathIndex
         super().__init__(r, 0, Pose, 0)
+    
+    def __repr__(self):
+        return f"Waypoint(r={repr(self.r)}, Pose={repr(self.Pose)}, pathIndex={repr(self.pidx)})"
     
     def pathIndex(self) -> int:
         return self.pidx
@@ -542,6 +552,9 @@ class Tip(Joint):
         self.pidx = pathIndex
         super().__init__(r, length, Pose, 0)
         self.forward = closesForward
+    
+    def __repr__(self):
+        return f"Tip(r={repr(self.r)}, Pose={repr(self.Pose)}, length={repr(self.neutralLength)}, closesForward={repr(self.forward)}, pathIndex={repr(self.pidx)})"
     
     def pathIndex(self) -> int:
         return self.pidx

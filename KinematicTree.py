@@ -588,7 +588,7 @@ class KinematicTree(Generic[F]):
                     minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
                     numCollisions += 1
                     if show:
-                        self.show(plotPoint=np.vstack([minPoint1to2, minPoint2to1]), block=False)
+                        self.show(block=False)
                     if debug:
                         print(f"{type1} {idx1} vs {type2} {idx2}")
         return numCollisions
@@ -1257,15 +1257,35 @@ def optimizationLoss(tree):
     return loss
 
 def loadKinematicTree(filename : str): 
+    from numpy import array
+    from geometryHelpers import Ball, Cylinder, Plane, Circle3D, Arc3D
     try:
         with open(filename) as f:
             data = f.read()
-            tree = eval(data)
+            # Provide necessary imports for eval
+            eval_namespace = {
+                'KinematicTree': KinematicTree,
+                'LinkCSC': LinkCSC,
+                'PathCSC': PathCSC,
+                'SE3': SE3,
+                'array': array,
+                'Ball': Ball,
+                'Cylinder': Cylinder,
+                'Plane': Plane,
+                'Circle3D': Circle3D,
+                'Arc3D': Arc3D,
+                'Prismatic': Prismatic,
+                'TransverseRevolute': TransverseRevolute,
+                'CoaxialRevolute': CoaxialRevolute,
+                'Waypoint': Waypoint,
+                'Tip': Tip,
+            }
+            tree = eval(data, eval_namespace)
             f.close()
             return tree
     except Exception as e:
         print(e)
-        raise Exception(f"file {filename} doesnt exist")
+        raise Exception(f"Could not load file {filename}: {e}")
 
 def isWaypoint(joint):
     if joint is None:

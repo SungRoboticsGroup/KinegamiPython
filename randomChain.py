@@ -121,6 +121,7 @@ def test():
         construct = generateRandomChain(jointCount)
         tree_save_path = os.path.join(results_dir, f"{i}.txt")
         
+        construct.show(block=False)
         # Save using repr() representation
         with open(tree_save_path, 'w') as f:
             f.write(repr(construct))
@@ -156,6 +157,7 @@ def test():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
+            optimized.show(block=False)
         
         # Save checkpoint to results directory
         checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
