@@ -1,7 +1,5 @@
-from testqtgraph import *
 from makeKinematicTree import *
 from KinematicTree import *
-from OrigamiJoint import *
 
 import random
 from collections import defaultdict, deque

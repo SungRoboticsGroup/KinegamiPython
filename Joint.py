@@ -309,9 +309,10 @@ class Prismatic(Joint):
         if neutralLength < minLength or neutralLength > maxLength:
             raise ValueError("Prismatic joint neutralLength must be within [minLength, maxLength]")
 
-        super().__init__(r, neutralLength, Pose, initialState)
         self.minLength = minLength
         self.maxLength = maxLength
+        super().__init__(r, neutralLength, Pose, initialState)
+        
 
     def pathIndex(self) -> int:
         return 2 # zhat
@@ -335,7 +336,7 @@ class Prismatic(Joint):
         return Ball(self.center(), self.boundingRadius())
     
     def boundingCylinder(self) -> Cylinder:
-        uhat = (self.Pose @ SE3.Rz(np.pi/self.numSides)).R[:,1]
+        uhat = (self.Pose @ SE3.Rz(np.pi/2)).R[:,1]
         return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
                         self.length(), uhat)
     
@@ -390,10 +391,11 @@ class Revolute(Joint):
         if initialState < minAngle or initialState > maxAngle:
             raise ValueError("Revolute joint initialState must be within [minAngle, maxAngle]")
         
-        super().__init__(r, neutralLength, Pose, initialState)
         self.minAngle = minAngle
         self.maxAngle = maxAngle
         self.pidx = pathIndex
+        super().__init__(r, neutralLength, Pose, initialState)
+        
 
     def pathIndex(self) -> int:
         return self.pidx
@@ -471,7 +473,7 @@ class TransverseRevolute(Revolute):
             angleAtWhichCirclesTouch = 2 * np.arctan(neutralLength / (2*r))
             if minAngle < -angleAtWhichCirclesTouch-1e-6 or maxAngle > angleAtWhichCirclesTouch+1e-6:
                 raise Warning("Provided neutralLength is too small to prevent end circle overlap for the given minAngle and maxAngle")
-        super().__init__(r, Pose, pathIndex=0, neutralLength=neutralLength, 
+        Revolute.__init__(self, r, Pose, pathIndex=0, neutralLength=neutralLength, 
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
 
 class CoaxialRevolute(Revolute):

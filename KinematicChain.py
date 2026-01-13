@@ -4,19 +4,17 @@ Created on Wed Dec  6 14:07:27 2023
 
 @author: Daniel Feshbach
 """
-from Joint import *
-from OrigamiJoint import *
 from KinematicTree import *
-from TubularPattern import *
-from LinkCSC import LinkCSC
-from PrintedJoint import *
 
 """
 A KinematicTree with no branching.
 """
-class KinematicChain(KinematicTree):
-    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False):
-        super().__init__(startJoint, maxAnglePerElbow)
+class KinematicChain(KinematicTree[F]):
+    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
+                 joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
+                 parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
+                 boundingBall : Optional[Ball] = None):
+        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, boundingBall)
         if gimbal:
             self.boundingBall.expandToCenterOnLine(Line(startJoint.Pose.t, startJoint.Pose.R[:,2]))
             self.nestedBallsRelativeToJoints = []
@@ -37,20 +35,13 @@ class KinematicChain(KinematicTree):
         return super().addJoint(parentIndex, newJoint, relative=False, 
                                 fixedPosition=True, fixedOrientation=True, safe=False)
     
-    def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
-        chainPattern = copy.deepcopy(self.Joints[0].pattern)
-        numSides = self.Joints[0].numSides
-        for j in range(1, len(self.Joints)):
-            chainPattern.append(self.Links[j].creasePattern(numSides, twistPortion))
-            chainPattern.append(self.Joints[j].pattern)
-        return chainPattern
-    
     def delete(self, jointIndex : int, safe : bool = True) -> bool:
         assert(jointIndex>=0)
         if safe:
             backup = self.dataDeepCopy()
             try:
                 self.delete(jointIndex, safe=False)
+                return True
             except ValueError as err:
                 print("WARNING: something went wrong in delete:")
                 print(err)
@@ -77,14 +68,15 @@ class KinematicChain(KinematicTree):
             self.Parents = []
             for i in range(len(self.Joints)):
                 self.Parents.append(i-1)
+            return True
     
 
     # returns the index of the last joint that is not a waypoint, 
     # or 0 (root) if there are no non-waypoint joints
-    def lastRealJointIndex(self) -> Joint:
+    def lastRealJointIndex(self) -> int:
         # loop over the joint indices in reverse order
         for i in range(len(self.Joints)-1, -1, -1):
-            if not isinstance(self.Joints[i], Waypoint) and not isinstance(self.Joints[i], PrintedWaypoint):
+            if not isinstance(self.Joints[i], Waypoint):
                 return i
         return 0
 
@@ -112,11 +104,7 @@ class KinematicChain(KinematicTree):
         outwardPoseOnBoundary = SE3.Rt(parent.Pose.R, outerPoint)
 
         # create a new waypoint at the intersection
-        if isinstance(parent, PrintedJoint):
-            newWaypoint = PrintedWaypoint(parent.r, outwardPoseOnBoundary, screwRadius=parent.screwRadius, pathIndex=2)
-        elif isinstance(parent, OrigamiJoint):
-            newWaypoint = Waypoint(parent.numSides, parent.r, outwardPoseOnBoundary, pathIndex=2)
-
+        newWaypoint = Waypoint(parent.r, outwardPoseOnBoundary, pathIndex=2)
         self.appendGlobalFixed(newWaypoint)
     
     def addNestedBall(self, verify : bool = True):
@@ -140,12 +128,6 @@ class KinematicChain(KinematicTree):
     def appendGeneralizedGimbal(self, newJoint : Joint, relative : bool = False, addOutwardWaypoint : bool = True) -> int:
         lrji = self.lastRealJointIndex()
         lastRealJoint = self.Joints[lrji]
-        
-        """
-        ballsGlobal = self.nestedBallsGlobal()
-        if not Line(lastRealJoint.Pose.t, lastRealJoint.Pose.R[:,2]).contains(ballsGlobal[lrji].c):
-            raise ValueError("Bounding ball is not centered on the parent's Z axis")
-        """
                 
         if relative:
             newJoint.transformPoseIntoFrame(lastRealJoint.Pose)
@@ -171,16 +153,13 @@ class KinematicChain(KinematicTree):
         waypointPose = SE3.Rt(newJoint.Pose.R, intersect)
 
         # create a new waypoint at the intersection
-        if isinstance(endJoint, PrintedJoint):
-            newWaypoint = PrintedWaypoint(endJoint.r, waypointPose, screwRadius=endJoint.screwRadius, pathIndex=2)
-        elif isinstance(endJoint, OrigamiJoint):
-            newWaypoint = Waypoint(endJoint.numSides, endJoint.r, waypointPose, pathIndex=2)
+        newWaypoint = Waypoint(endJoint.r, waypointPose, pathIndex=2)
 
         self.appendGlobalFixed(newWaypoint)
         self.addNestedBall()
 
         # if the new joint is prismatic, make sure it's fully expanded
-        if isinstance(newJoint, PrismaticJoint) or isinstance(newJoint, PrintedPrismaticJoint):
+        if isinstance(newJoint, Prismatic):
             newJoint.state = newJoint.stateRange()[1]
 
         newJoint = moveJointNearNeighborBut4rPastPlane(newJoint, newWaypoint, tangentPlane)

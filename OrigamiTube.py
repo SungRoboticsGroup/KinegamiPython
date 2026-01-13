@@ -1,8 +1,10 @@
 from Joint import *
 from TubularPattern import *
 from LinkCSC import *
+from KinematicChain import *
+from Tube import Tube
 
-class OrigamiTube(ABC):
+class OrigamiTube(Tube):
     def __init__(self, numSides : int):
         if not (numSides >= 4 and numSides % 2 == 0):
             raise ValueError("OrigamiTube requires numSides to be an even integer >= 4")
@@ -28,10 +30,10 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
         outerLength (Optional[float]): Length of the tubular extension on each side of the revolute joint. 
                             If None, it is computed automatically to avoid intersection of end circles.
         numSinkLayers (int): Number of sink layers in the revolute joint pattern.
-        initialAngle (float): Initial angle of the revolute joint in radians. Defaults to 0. 
+        initialState (float): Initial angle of the revolute joint in radians. Defaults to 0. 
     """
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
-                 outerLength: Optional[float], Pose : SE3, numSinkLayers : int = 1,
+                 Pose : SE3, outerLength: Optional[float] = None, numSinkLayers : int = 1,
                  initialState : float = 0):
         if not (totalBendingAngle > 0 and totalBendingAngle < np.pi):
             raise ValueError("OrigamiExtendedRevolute requires totalBendingAngle to be in (0, pi) radians")
@@ -133,8 +135,8 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
 
 class OrigamiRevolute(OrigamiExtendedRevolute):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
-                 Pose : SE3, numSinkLayers : int = 1, initialAngle : float = 0):
-        super().__init__(numSides, r, totalBendingAngle, 0, Pose, numSinkLayers, initialAngle)
+                 Pose : SE3, numSinkLayers : int = 1, initialState : float = 0):
+        super().__init__(numSides, r, totalBendingAngle, 0, Pose, numSinkLayers, initialState)
 
 
 class OrigamiPrismatic(OrigamiTube, Prismatic):
@@ -259,6 +261,24 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
         OrigamiTube.__init__(self, numSides)
         LinkCSC.__init__(self, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
     
+    @classmethod
+    def from_link_params(cls, r: float, StartDubinsPose: SE3, EndDubinsPose: SE3, 
+                         maxAnglePerElbow: float = np.pi/2, path: Optional[PathCSC] = None,
+                         EPSILON: float = 0.01, **kwargs):
+        """Factory method that infers numSides from context or uses default"""
+        # For now, use a default numSides. In practice, this could be inferred from the tree's joints
+        numSides = kwargs.get('numSides', 6)
+        return cls(numSides, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
+    
+    @classmethod
+    def from_link_params(cls, r: float, StartDubinsPose: SE3, EndDubinsPose: SE3, 
+                         maxAnglePerElbow: float = np.pi/2, path: Optional[PathCSC] = None,
+                         EPSILON: float = 0.01, **kwargs):
+        """Factory method that infers numSides from context or uses default"""
+        # For now, use a default numSides. In practice, this could be inferred from the tree's joints
+        numSides = kwargs.get('numSides', 6)
+        return cls(numSides, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
+    
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         assert(self.numSides >= 4 and self.numSides%2==0)
         assert(twistPortion > 0)
@@ -295,3 +315,39 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
                 composed.append(elbow2PartPattern)
         
         return composed
+
+
+class OrigamiKinematicChain(KinematicChain):
+    """KinematicChain constrained to OrigamiTube fabrication"""
+    _fabrication_type = OrigamiTube  # Class-level fabrication type constraint
+    
+    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
+                 joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
+                 parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
+                 boundingBall : Optional[Ball] = None):
+        super().__init__(startJoint=startJoint, maxAnglePerElbow=maxAnglePerElbow, gimbal=gimbal,
+                         joints=joints, links=links, parents=parents, children=children, boundingBall=boundingBall)
+    
+    def _get_link_constructor(self):
+        """Return a callable that creates OrigamiLinkCSC with numSides inferred from joints"""
+        def make_origami_link(r, start_pose, end_pose, max_angle_per_elbow, path=None, epsilon=0.01):
+            # Infer numSides from the first OrigamiTube joint in the tree
+            numSides = 6  # default
+            for joint in self.Joints:
+                if isinstance(joint, OrigamiTube):
+                    numSides = joint.numSides
+                    break
+            return OrigamiLinkCSC(numSides, r, start_pose, end_pose, max_angle_per_elbow, path, epsilon)
+        return make_origami_link
+    
+    
+    def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
+        chainPattern = copy.deepcopy(self.Joints[0].creasePattern())
+        numSides = self.Joints[0].numSides
+        for j in range(1, len(self.Joints)):
+            chainPattern.append(self.Links[j].creasePattern(twistPortion))
+            chainPattern.append(self.Joints[j].creasePattern())
+        return chainPattern
+
+# Note: _link_constructor is set via the _get_link_constructor() method above
+# which dynamically infers numSides from joints rather than using a static class attribute

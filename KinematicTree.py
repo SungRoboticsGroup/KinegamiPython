@@ -7,19 +7,15 @@ Created on Fri Jun 23 23:13:27 2023
 from ast import Raise
 import Joint
 from Joint import *
-from OrigamiJoint import *
 import PathCSC
 from PathCSC import *
 import scipy
 from scipy.optimize import NonlinearConstraint, minimize
 import queue
-import TubularPattern
-from TubularPattern import *
 from LinkCSC import LinkCSC
-from PrintedJoint import *
 import os
 import time
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, get_args, Union
 from functools import partial
 from geometryHelpers import *
 import pyswarms as ps
@@ -27,14 +23,14 @@ import logging
 import collections
 import traceback
 import style
+from Tube import Tube
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('pyswarms')
 logger.setLevel(logging.DEBUG)
 
-J = TypeVar("J", bound=Joint)
-
-class KinematicTree(Generic[J]):
+F = TypeVar("F", bound="Tube")
+class KinematicTree(Generic[F]):
     """
     Nodes are Joint objects
     Edges are Dubins linkages from parent distal frame to child proximal frame    
@@ -46,33 +42,29 @@ class KinematicTree(Generic[J]):
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : J, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None,
-                    links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None, boundingBall : Ball = None):
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2, 
+                 joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
+                 parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
+                 boundingBall : Optional[Ball] = None):
             self.r = root.r
 
-            saveParamsAreNone = np.array([joints is None, links is None, parents is None, children is None, boundingBall is None])
-            assert(np.all(saveParamsAreNone) or np.all(np.logical_not(saveParamsAreNone)))
-
-            try:
-                self.numSides = root.numSides
-            except:
-                self.numSides = 4
-            if joints:
+            #saveParamsAreNone = np.array([joints is None, links is None, parents is None, children is None, boundingBall is None])
+            if not joints is None and not links is None and not parents is None and not children is None and not boundingBall is None:
                 self.Joints = joints
-            else:
-                self.Joints = [root]
-            if parents:
                 self.Parents = parents
-            else:
-                self.Parents = [-1]     # root has no parent
-            if links:
                 self.Links = links
-            else:
-                self.Links = [LinkCSC(self.r, root.ProximalDubinsFrame(),
+            elif joints is None and links is None and parents is None and children is None and boundingBall is None:
+                self.Joints = [root]
+                self.Parents = [-1]     # root has no parent
+                # Use fabrication-specific link constructor if available
+                link_constructor = self._get_link_constructor()
+                self.Links = [link_constructor(self.r, root.ProximalDubinsFrame(),
                                         root.ProximalDubinsFrame(),
                                         maxAnglePerElbow)]
-            assert(maxAnglePerElbow >= 0 and maxAnglePerElbow <= np.pi)
-            self.maxAnglePerElbow = maxAnglePerElbow
+            if maxAnglePerElbow > 0 and maxAnglePerElbow < np.pi:
+                self.maxAnglePerElbow = maxAnglePerElbow
+            else:
+                raise ValueError("ERROR: maxAnglePerElbow must be in (0, pi)")
 
             if boundingBall:
                 self.boundingBall = boundingBall
@@ -86,6 +78,16 @@ class KinematicTree(Generic[J]):
             else:
                 self.Children = [[]]
 
+    def _get_link_constructor(self):
+        """Get the link constructor for this tree, defaulting to LinkCSC"""
+        constructor = getattr(type(self), '_link_constructor', None)
+        if constructor is None:
+            return LinkCSC
+        # Check if it's a method (for parametric constructors)
+        if callable(constructor) and hasattr(constructor, '__self__'):
+            return constructor
+        return constructor
+    
     def __repr__(self):
         numpy_precision = np.get_printoptions()['precision']
         if numpy_precision < 16:
@@ -130,21 +132,33 @@ class KinematicTree(Generic[J]):
             parent to guarantee it avoids local self-intersection (i.e., run 
             Algorithm 9 from the Kinegami paper instead of Algorithm 8).
             Not compatible with fixedPosition or fixedOrientation.
-    endPlane - Plane: defaults to None, but if this is specified and 
+    endPlane - Optional[Plane]: defaults to None, but if this is specified and 
             fixedPosition is False, the algorithm will place the new joint such
             that its whole bounding sphere is >= 4r from this plane.
     """
-    def addJoint(self, parentIndex : int, newJoint : J, 
+    def addJoint(self, parentIndex : int, newJoint : Joint, 
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
-                 safe : bool = True, endPlane : Plane = None,
+                 safe : bool = True, endPlane : Optional[Plane] = None,
                  chooseXhatToMinPath : bool = False) -> int:
+        # Validate fabrication type if this tree has a type constraint
+        # Skip validation for waypoints as they are fabrication-agnostic
+        from Joint import Waypoint
+        if not isinstance(newJoint, Waypoint):
+            # Check for class-level _fabrication_type attribute first
+            fabrication_type = getattr(type(self), '_fabrication_type', None)
+            if fabrication_type is None:
+                # Fall back to checking __orig_class__ for generic instantiation
+                orig_class = getattr(self, '__orig_class__', None)
+                if orig_class is not None:
+                    type_args = get_args(orig_class)
+                    if type_args and type_args[0] is not type(None):
+                        fabrication_type = type_args[0]
+            
+            if fabrication_type is not None:
+                if not isinstance(newJoint, fabrication_type):
+                    raise TypeError(f"Joint must inherit from {fabrication_type.__name__}, got {type(newJoint).__name__}")
         
-        if isinstance(newJoint, OrigamiJoint):
-            if newJoint.r != self.r:
-                raise ValueError("ERROR: newJoint.r != self.r")
-            if newJoint.numSides != self.Joints[parentIndex].numSides:
-                raise ValueError("ERROR: newJoint.numSides != self.Joints[parentIndex].numSides")
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
                 safe and fixedPosition both True")
@@ -211,7 +225,9 @@ class KinematicTree(Generic[J]):
 
 
 
-        newLink = LinkCSC(self.r, parent.DistalDubinsFrame(), 
+        # Use fabrication-specific link constructor if available
+        link_constructor = self._get_link_constructor()
+        newLink = link_constructor(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow)
         if newLink is None:
@@ -231,13 +247,6 @@ class KinematicTree(Generic[J]):
         self.Children.append([])
         self.Parents.append(parentIndex)
         self.Links.append(newLink)
-        
-        #set twist angle for newly added joint
-        if (isinstance(newJoint, PrintedJoint)):
-            jointProximalFrame = newJoint.ProximalDubinsFrame()
-            prevDistalFrame = self.Joints[parentIndex].DistalDubinsFrame()
-            twistAngle = signedAngle(jointProximalFrame.R[:,1], prevDistalFrame.R[:,1], jointProximalFrame.R[:,0])
-            newJoint.setTwistAngle(twistAngle)
 
         return newIndex
     
@@ -334,14 +343,6 @@ class KinematicTree(Generic[J]):
         return np.array(xyzHandles), np.array(abcHandles)
     
     def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):
-        # tree = KinematicTree(Waypoint(self.numSides, self.r, SE3()), self.maxAnglePerElbow)
-        # # for i in range(1, len(self.Joints)):
-        # #     tree.addJoint(self.Parents[i], self.Joints[i].copy(), relative=False, fixedPosition=True, fixedOrientation=True, safe = False)
-        # tree.Joints = [copy.deepcopy(joint) for joint in self.Joints]
-        # tree.Links = [copy.deepcopy(link) for link in self.Links]
-        # tree.Parents = self.Parents
-        # tree.Children = self.Children
-        # return tree
         try:
             newTree = KinematicTree(copy.deepcopy(self.Joints[self.Parents[self.Parents[isolateJoint]]]), self.maxAnglePerElbow)
         except:
@@ -1190,36 +1191,7 @@ class KinematicTree(Generic[J]):
             name = "save/" + filename
         
         with open(name, "w") as f:
-            save = str(self.maxAnglePerElbow) + "\n"
-            for i in range(0, len(self.Joints)):
-                joint = self.Joints[i]
-                
-                save += str(self.Parents[i]) + " "
-                if isinstance(joint, Waypoint):
-                    save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
-                elif isinstance(joint, RevoluteJoint):
-                    save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
-                elif isinstance(joint, ExtendedRevoluteJoint):
-                    save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.initialState) + " "
-                elif isinstance(joint, PrismaticJoint):
-                    save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.initialState) + " "
-                elif isinstance(joint, Tip):
-                    save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " " + str(joint.pidx) + " "
-                elif isinstance(joint, PrintedWaypoint):
-                    save += "PrintedWaypoint " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedPrismaticJoint):
-                    save += "PrintedPrismaticJoint " + str(joint.r) + " " + str(joint.extensionLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.minLength) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedTransverseRevoluteJoint):
-                    save += "PrintedTransverseRevoluteJoint " + str(joint.r) + " " + str(joint.startBendingAngle) + " " + str(joint.endBendingAngle) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + str(joint.bottomLength) + " " + str(joint.topLength) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedCoaxialRevoluteJoint):
-                    save += "PrintedCoaxialRevoluteJoint " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.screwRadius) + " " + str(joint.initialState) + " " + joint.printParameters.toString() + " "
-                elif isinstance(joint, PrintedTip):
-                    save += "PrintedTip " + str(joint.r) + " " + str(joint.screwRadius) + " " + str(joint.pidx) + " " + joint.printParameters.toString() + " "
-                else:
-                    raise Exception("Not Implemented")
-                save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()])
-                save += "\n"
-            
+            save = self.__repr__()
             f.write(save)
             f.close()
 
@@ -1305,104 +1277,12 @@ def optimizationLoss(tree):
         loss += tree.Links[i].path.length
     return loss
 
-def loadKinematicTree(filename : str):
-    def getJoint(line):
-        first = line.split(' ')
-        pose = SE3(np.array([float(x) for x in line.split('[')[1].split(",")[:-1]]).reshape(4,4))
-        match first[1]:
-            case "Waypoint":
-                numSides = int(first[2])
-                r = float(first[3])
-                pathIndex = int(first[4])
-                return Waypoint(numSides, r, pose, pathIndex)
-            case "RevoluteJoint":
-                numSides = int(first[2])
-                r = float(first[3])
-                totalBendingAngle = float(first[4])
-                numSinkLayers = int(first[5])
-                initialState = float(first[6])
-                return RevoluteJoint(numSides, r, totalBendingAngle, pose, numSinkLayers, initialState)
-            case "ExtendedRevoluteJoint":
-                numSides = int(first[2])
-                r = float(first[3])
-                totalBendingAngle = float(first[4])
-                tubeLength = float(first[5])
-                numSinkLayers = int(first[6])
-                initialState = float(first[7])
-                return ExtendedRevoluteJoint(numSides, r, totalBendingAngle, tubeLength, pose, numSinkLayers, initialState)
-            case "PrismaticJoint":
-                numSides = int(first[2])
-                r = float(first[3])
-                neutralLength = float(first[4])
-                numLayers = int(first[5])
-                coneAngle = float(first[6])
-                initialState = float(first[7])
-                return PrismaticJoint(numSides, r, neutralLength, numLayers, coneAngle, pose, initialState)
-            case "Tip":
-                numSides = int(first[2])
-                r = float(first[3])
-                length = float(first[4])
-                closesForward = bool(first[5])
-                pidx = int(first[6])
-                return Tip(numSides, r, pose, length, closesForward, pathIndex=pidx)
-            case "PrintedWaypoint":
-                r = float(first[2])
-                screwRadius = float(first[3])
-                pathIndex = int(first[4])
-                printParameters = PrintParameters.fromString(first[5])
-                return PrintedWaypoint(r, pose, screwRadius, pathIndex, printParameters)
-            case "PrintedPrismaticJoint":
-                r = float(first[2])
-                extensionLength = float(first[3])
-                screwRadius = float(first[4])
-                initialState = float(first[5])
-                minLength = float(first[6])
-                printParameters = PrintParameters.fromString(first[7])
-                newJoint = PrintedPrismaticJoint(r, extensionLength, pose, screwRadius, printParameters, initialState)
-                newJoint.extendSegment(minLength - newJoint.minLength)
-                return newJoint
-            case "PrintedTransverseRevoluteJoint":
-                r = float(first[2])
-                startAngle = float(first[3])
-                endAngle = float(first[4])
-                screwRadius = float(first[5])
-                initialState = float(first[6])
-                bottomLength = float(first[7])
-                topLength = float(first[8])
-                printParameters = PrintParameters.fromString(first[9])
-                newJoint = PrintedTransverseRevoluteJoint(r, startAngle, endAngle, pose, screwRadius, printParameters, initialState)
-                newJoint.extendSegment(topLength - newJoint.topLength)
-                newJoint.extendBottomSegment(bottomLength - newJoint.bottomLength)
-                return newJoint
-            case "PrintedCoaxialRevoluteJoint":
-                r = float(first[2])
-                neutralLength = float(first[3])
-                screwRadius = float(first[4])
-                initialState = float(first[5])
-                printParameters = PrintParameters.fromString(first[6])
-                return PrintedCoaxialRevoluteJoint(r, neutralLength, pose, screwRadius, printParameters, initialState)
-            case "PrintedTip":
-                r = float(first[2])
-                screwRadius = float(first[3])
-                pathIndex = int(first[4])
-                printParameters = PrintParameters.fromString(first[5])
-                return PrintedTip(r, pose, screwRadius, pathIndex, printParameters)
-
-
-        raise Exception(f"{first[1]} not implemented in save")
-            
+def loadKinematicTree(filename : str): 
     try:
         with open(filename) as f:
-            lines = f.readlines()
-            rootJoint = getJoint(lines[1])
-            if isinstance(rootJoint, OrigamiJoint):
-                tree = KinematicTree[OrigamiJoint](rootJoint, float(lines[0]))
-            else:
-                tree = KinematicTree[PrintedJoint](rootJoint, float(lines[0]))
-            for i in range(2, len(lines)):
-                parent = int(lines[i].split(" ")[0])
-                tree.addJoint(parent, getJoint(lines[i]), relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
-            
+            data = f.read()
+            tree = eval(data)
+            f.close()
             return tree
     except Exception as e:
         print(e)
@@ -1411,46 +1291,11 @@ def loadKinematicTree(filename : str):
 def isWaypoint(joint):
     if joint is None:
         return False
-    return isinstance(joint, Waypoint) or isinstance(joint, PrintedWaypoint)
+    return isinstance(joint, Waypoint)
 
 def curvinessOfLink(link : LinkCSC):
     return link.path.theta1 ** 1.5 * link.path.r + link.path.theta2 ** 1.5 * link.path.r
 
-def origamiToPrinted(t : KinematicTree[OrigamiJoint], screwRadius: float):
-    tree = copy.deepcopy(t)
-
-    newTree = KinematicTree[PrintedJoint](tree.Joints[0].toPrinted(screwRadius), tree.maxAnglePerElbow)
-    for i in range(1, len(tree.Joints)):
-        try:
-            tree.setJointState(i, tree.Joints[i].initialState)
-            newJoint = tree.Joints[i].toPrinted(screwRadius)
-            parent = newTree.Joints[tree.Parents[i]]
-            
-            dist_to_prox = tree.Joints[tree.Parents[i]].DistalDubinsFrame().inv() * tree.Joints[i].ProximalDubinsFrame()
-            prox_to_pose = newJoint.ProximalDubinsFrame().inv() * newJoint.Pose
-            newJoint.Pose = parent.DistalDubinsFrame() @ dist_to_prox @ prox_to_pose
-            newTree.addJoint(tree.Parents[i], newJoint, relative=False, safe=False, 
-            fixedPosition=True, fixedOrientation=True)
-        except Exception as e:
-            #EDGE CASE WHERE WAYPOINT POSE IS SAME AS PARENT, has some rounding error
-            if (tree.Joints[tree.Parents[i]].Pose == tree.Joints[i].Pose):
-                newTree.addJoint(tree.Parents[i], copy.deepcopy(newTree.Joints[tree.Parents[i]]), relative=False, safe = False, fixedPosition=True, fixedOrientation=True)
-            else:
-                print(f"Unable to convert tree to 3D print because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try increasing placing joints further apart)")
-                return None
-    return newTree
-
-def printedToOrigami(tree : KinematicTree[PrintedJoint], numSides: int, numLayers : int = 1):
-    newTree = KinematicTree[OrigamiJoint](tree.Joints[0].toOrigami(numSides, numLayers), tree.maxAnglePerElbow)
-    for i in range(1, len(tree.Joints)):
-        try:
-            tree.setJointState(i, tree.Joints[i].initialState)
-            newTree.addJoint(tree.Parents[i], tree.Joints[i].toOrigami(numSides, numLayers), relative=False, safe=False, 
-            fixedPosition=True, fixedOrientation=True)
-        except Exception as e:
-            print(f"Unable to convert tree to origami because of joint {i} (parent is joint {tree.Parents[i]}): {e}\n(Try adjusting parameters)")
-            return None
-    return newTree
 
 """ 
 Places joint along its joint axis, as close as possible to the given neighbor 
@@ -1565,8 +1410,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     originW1 = tangentPlane1.intersectionWithLine(neighborPathAxis)
     # guaranteed to be a point because line is normal to plane
     PoseW1 = SE3.Rt(neighbor.Pose.R, originW1)
-    W1 = Waypoint(jointToPlace.numSides, jointToPlace.r, PoseW1, 
-                  neighbor.pathIndex())
+    W1 = Waypoint(jointToPlace.r, PoseW1, neighbor.pathIndex())
     toReturn.append(W1)
     
     """ Translate the tangent plane forward by 4r + the new joint's 
@@ -1597,7 +1441,7 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
         originW2 = tangentPlane2.intersectionWithLine(
                                         Line(originW1 + r*nhat1, nhat2))
         PoseW2 = SE3.Rt(RotationW2, originW2)
-        W2 = Waypoint(jointToPlace.numSides, r, PoseW2, neighbor.pathIndex())
+        W2 = Waypoint(r, PoseW2, neighbor.pathIndex())
         toReturn.append(W2)
         
         farPoint2 = s2 + nhat2 * (4*r + jointToPlace.boundingRadius())

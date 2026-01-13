@@ -1,5 +1,4 @@
 from optimizationFunctions import *
-from testqtgraph import *
 from makeKinematicTree import *
 from KinematicTree import *
 

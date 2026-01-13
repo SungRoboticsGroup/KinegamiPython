@@ -354,7 +354,7 @@ class PathCSC:
         if not density is None:
             if density <= 0:
                 raise ValueError("Density must be positive")
-            count = max(2, int(np.ceil(self.length() * density)) + 1)
+            count = max(2, int(np.ceil(self.length * density)) + 1)
         elif count < 2:
             raise ValueError("Count must be at least 2")
         return self.interpolate_vectorized(np.linspace(0, 1, count))

@@ -246,7 +246,7 @@ class LinkCSC:
         return self.path.interpolateAt(t)
             
     def interpolate(self, count : Optional[int] = None, density: Optional[float] = None) -> np.ndarray:
-        self.path.interpolate(count=count, density=density)
+        return self.path.interpolate(count=count, density=density)
     
     def interpolate_vectorized(self, t_array: np.ndarray) -> np.ndarray:
         """

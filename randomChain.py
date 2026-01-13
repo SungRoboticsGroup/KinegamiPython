@@ -1,5 +1,4 @@
 from optimizationFunctions import *
-from testqtgraph import *
 from makeKinematicTree import *
 from KinematicTree import *
 from KinematicChain import *
@@ -41,13 +40,20 @@ def generateRandomChain(nJoints):
     numSides = 4
     neutralLength = 3
 
-    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+    # Define joint constructor lambdas with all parameters except Pose
+    jointConstructors = [
+        lambda pose: TransverseRevolute(r=r, Pose=pose, minAngle=-np.pi/2, maxAngle=np.pi/2),
+        lambda pose: CoaxialRevolute(r=r, Pose=pose, neutralLength=neutralLength, minAngle=-np.pi/2, maxAngle=np.pi/2),
+        lambda pose: Prismatic(r, neutralLength, neutralLength/2, neutralLength*2, pose)
+    ]
+
+    # Randomly select a joint constructor and apply the first pose
+    root = random.choice(jointConstructors)(poses[0])
 
     chain = KinematicChain(root, gimbal=True)
-    for i in range(1,nJoints):
-        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+    for i in range(1, nJoints):
+        # Randomly select a joint constructor and apply the pose
+        newJoint = random.choice(jointConstructors)(poses[i])
         chain.appendGeneralizedGimbal(newJoint)
 
     return chain

@@ -1,6 +1,4 @@
 from KinematicTree import *
-from OrigamiJoint import *
-from PrintedJoint import *
 """
 A tree of Joint objects.
 Unlike KinematicTree, this does not have any link geometry connecting the joints.
@@ -122,8 +120,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             r = jointSpecs.Joints[j].r
             o1 = boundingCylinder.start + (r + boundingCylinder.r)*axisToParentDir + \
                 (4*r + StartPlane.signedDistanceToPoint(parentJointBBend))*planeNormal
-            Waypoint1 = Waypoint(parentJoint.numSides, r, 
-                        SE3.Rt(boundingCylinder.orientation(), o1), pathIndex=2)
+            Waypoint1 = Waypoint(r, SE3.Rt(boundingCylinder.orientation(), o1), pathIndex=2)
             
             parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint1, 
                                     relative=False, fixedPosition=True, 
@@ -137,8 +134,7 @@ def makeTubularKinematicTree(jointSpecs : JointSpecificationTree, plotSteps : bo
             nDist = boundingCylinder.endPlane().signedDistanceToPoint(o1)
             assert(nDist < 0)
             o2 = o1 - nDist*planeNormal
-            Waypoint2 = Waypoint(parentJoint.numSides, r, 
-                        SE3.Rt(boundingCylinder.orientation(), o2), pathIndex=2)
+            Waypoint2 = Waypoint(r, SE3.Rt(boundingCylinder.orientation(), o2), pathIndex=2)
             parentIndexInKT = KT.addJoint(parentIndexInKT, Waypoint2, 
                                     relative=False, fixedPosition=True, 
                                     fixedOrientation=True, safe=False)

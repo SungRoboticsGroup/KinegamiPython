@@ -6,8 +6,6 @@ those with initial collisions.
 
 from KinematicTree import *
 from makeKinematicTree import *
-from OrigamiJoint import *
-from PrintedJoint import *
 import random
 import numpy as np
 import copy
