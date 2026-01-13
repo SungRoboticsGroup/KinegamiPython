@@ -338,7 +338,8 @@ class KinematicTree(Generic[F]):
                     ball.addToPlot(ax, color=sphereColor, alpha=0.05, frame=True)
         
         if not plotPoint is None:
-            ax.scatter(plotPoint[0], plotPoint[1], plotPoint[2], color='red', s=50)
+            plotPoint = plotPoint.reshape((-1,3))
+            ax.scatter(plotPoint[0,:], plotPoint[1,:], plotPoint[2,:], color='red', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
     def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):

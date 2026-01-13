@@ -220,4 +220,25 @@ def plotColoredTrees(directory):
     plt.show(block=True)
 
 
-test()
+if __name__ == "__main__":
+    profile = False
+    if not profile:
+        test()
+    else:
+        import cProfile
+        import pstats
+        
+        profiler = cProfile.Profile()
+        profiler.enable()
+        
+        try:
+            # Your main code here
+            test()
+        finally:
+            # This runs even if there's an error
+            profiler.disable()
+            profiler.dump_stats('randomChain.prof')
+            
+            stats = pstats.Stats(profiler)
+            stats.sort_stats('cumulative')
+            stats.print_stats(20)
