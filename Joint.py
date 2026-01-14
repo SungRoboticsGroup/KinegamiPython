@@ -32,7 +32,6 @@ class Joint(ABC):
         self.Pose = Pose
         self.neutralLength = neutralLength
         self.state = 0
-        self.initialState = initialState
         self.TransformStateTo(initialState)
 
         self.collisionCapsules = self.getCapsules()
@@ -89,7 +88,7 @@ class Joint(ABC):
 
     
     def copy(self):
-        return Joint(self.r, self.neutralLength, self.Pose, self.initialState)
+        return Joint(self.r, self.neutralLength, self.Pose, self.state)
     
     def ProximalFrame(self) -> SE3:
         return SE3.Trans(-(self.neutralLength/2) * self.pathDirection()) @ self.Pose
@@ -314,7 +313,7 @@ class Prismatic(Joint):
         super().__init__(r, neutralLength, Pose, initialState)
     
     def __repr__(self):
-        return f"Prismatic(r={repr(self.r)}, neutralLength={repr(self.neutralLength)}, minLength={repr(self.minLength)}, maxLength={repr(self.maxLength)}, Pose={repr(self.Pose)}, initialState={repr(self.initialState)})"
+        return f"Prismatic(r={repr(self.r)}, neutralLength={repr(self.neutralLength)}, minLength={repr(self.minLength)}, maxLength={repr(self.maxLength)}, Pose={repr(self.Pose)}, initialState={repr(self.state)})"
 
     def pathIndex(self) -> int:
         return 2 # zhat
@@ -479,7 +478,7 @@ class TransverseRevolute(Revolute):
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
     
     def __repr__(self):
-        return f"TransverseRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, neutralLength={repr(self.neutralLength)}, initialState={repr(self.initialState)})"
+        return f"TransverseRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, neutralLength={repr(self.neutralLength)}, initialState={repr(self.state)})"
 
 class CoaxialRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, neutralLength : float, minAngle : Optional[float], 
@@ -488,7 +487,7 @@ class CoaxialRevolute(Revolute):
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
     
     def __repr__(self):
-        return f"CoaxialRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, neutralLength={repr(self.neutralLength)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, initialState={repr(self.initialState)})"
+        return f"CoaxialRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, neutralLength={repr(self.neutralLength)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, initialState={repr(self.state)})"
 
 class Waypoint(Joint):
     # path direction through a waypoint defaults to zhat
