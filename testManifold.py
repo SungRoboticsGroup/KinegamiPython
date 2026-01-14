@@ -229,9 +229,9 @@ plotManifold(hollowHull)
 link = PrintedLinkCSC(r=1, StartDubinsPose=SE3.Rz(np.pi/3), 
                EndDubinsPose=SE3.Tx(4.0)@SE3.Ry(np.pi/4)@SE3.Rz(np.pi/3), 
                wallThickness=0.1, holeDiameter=0.15, numHoles=4, 
-               maxAnglePerElbow=np.pi/10)
+               maxAnglePerElbow=np.pi/10, startRadius=1, endRadius=1)
 #link.show(showManifold=True, startRadius=1, endRadius=0.75, hullBends=False, wallThickness=0.1, extendBackward=0.2, extendForward=0.2, numSides=20)
-module = link.connectableModule(hullBends=False, trussify=False, trussCenterline=False)
+module = link.connectableModule(hullBends=False, trussify=True, trussCenterline=False)
 analyzeProperties(module)
 plotManifold(module, block=True)
 

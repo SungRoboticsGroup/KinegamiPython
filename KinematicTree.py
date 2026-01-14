@@ -18,16 +18,15 @@ import time
 from typing import Generic, TypeVar, get_args, Union, Optional, Tuple
 from functools import partial
 from geometryHelpers import *
-import pyswarms as ps
-import logging
 import collections
 import traceback
 import style
 from Tube import Tube
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('pyswarms')
-logger.setLevel(logging.DEBUG)
+# import logging
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger('pyswarms')
+# logger.setLevel(logging.DEBUG)
 
 F = TypeVar("F", bound="Tube")
 class KinematicTree(Generic[F]):
@@ -42,7 +41,7 @@ class KinematicTree(Generic[F]):
         boundingBall    ball bounding all proximal, central, and distal origins
         Children        array of arrays of child indices of each joint
     """
-    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2, 
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/12, 
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
                  boundingBall : Optional[Ball] = None):
@@ -386,221 +385,126 @@ class KinematicTree(Generic[F]):
 
         return newTree
 
-    def detectCollisions(self, specificJointIndices = None, plot=False, includeEnds=False, debug=False, ignoreLater=False, ignoreWaypoints=True):
-        toCheck = list(range(len(self.Joints))) if specificJointIndices is None else specificJointIndices
-        numCollisions = 0
-        # for index in toCheck:
-        #     capsules = self.selectCollisionCapsules(specificJointIndices=[index], ignoreLater=ignoreLater)
-        #     numCollisions += self.detectCollisionsWithCapsules([index], capsules, debug=debug)
-
-        collisionPairDict = self.buildCollisionPairDictionary()
-        numCollisions = self.detectCollisionsWithPairs(toCheck, collisionPairDict, debug=debug)
-        
+    def detectCollisions(self, specificJointIndex : Optional[int] = None, plot: bool = False, debug: bool = False) -> int:
+        collisionMatrices = self.buildCollisionMatrices()
+        numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
         return numCollisions
 
-    def selectCollisionCapsules(self, specificJointIndices = None, ignoreLater = False, ignoreWaypoints=True):
-        allCapsules = [[],[]]
-        EPSILON = 0.001
-
-        others = [x for x in list(range(0,len(self.Joints))) if not x in specificJointIndices]
-        if ignoreLater:
-            latest = max(specificJointIndices)
-            others = [x for x in others if x <= latest]
-
-        def posesAreSame(pose1, pose2):
-            return np.allclose(pose1.t, pose2.t, rtol=1e-05, atol=1e-08)
-
-        def caseWaypointTooClose(t1, j1, t2, j2):
-            joint1 = t1.Joints[j1]
-            joint2 = t2.Joints[j2]
-
-            if (not isWaypoint(joint1)) or (not isWaypoint(joint2)):
-                return False
-
-            return posesAreSame(joint1.DistalDubinsFrame(), joint2.ProximalDubinsFrame()) or posesAreSame(joint1.ProximalDubinsFrame(), joint2.DistalDubinsFrame())# or (t1.Parents[j1] != None and posesAreSame(joint1.ProximalDubinsFrame(), t1.Joints[t1.Parents[j1]].DistalDubinsFrame()) and caseWaypointTooClose(t1, t1.Parents[j1], t2, j2)) or (t2.Parents[j2] != None and posesAreSame(joint2.ProximalDubinsFrame(), t2.Joints[t2.Parents[j2]].DistalDubinsFrame()) and caseWaypointTooClose(t1, j1, t2, t2.Parents[j2]))
+    
+    def collisionPairsFromMovingJoint(self, movingJointIndex : int, 
+            collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
+        i = movingJointIndex
         
-        def caseWaypointOnTopOfBranch(t1, l1, t2, l2):
-            while t1.Parents[t1.Parents[l1]] != None and t1.Parents[t1.Parents[l1]] != -1 and isWaypoint(t1.Joints[t1.Parents[l1]]) and posesAreSame(t1.Joints[t1.Parents[l1]].ProximalDubinsFrame(), t1.Joints[t1.Parents[t1.Parents[l1]]].DistalDubinsFrame()):
-                l1 = t1.Parents[l1]
-            while t2.Parents[t2.Parents[l2]] != None and t2.Parents[t2.Parents[l2]] != -1 and isWaypoint(t2.Joints[t2.Parents[l2]]) and posesAreSame(t2.Joints[t2.Parents[l2]].ProximalDubinsFrame(), t2.Joints[t2.Parents[t2.Parents[l2]]].DistalDubinsFrame()):
-                l2 = t2.Parents[l2]
-
-            if isWaypoint(t1.Joints[l1]):
-                if linksInSameBranch(t1, l1, t2, l2):
-                    return True
-            if isWaypoint(t2.Joints[l2]):
-                if linksInSameBranch(t1, l1, t2, l2):
-                    return True
-            
-            return False
-
-        def waypointOnTopOfJoint(t1, j1, t2, j2):
-            joint1 = t1.Joints[j1]
-            joint2 = t2.Joints[j2]
-            
-            return t1.Parents[j1] == j2 or t2.Parents[j2] == j1 or posesAreSame(t1.Links[j1].StartDubinsPose, joint2.DistalDubinsFrame()) or posesAreSame(joint1.DistalDubinsFrame(), t2.Links[j2].StartDubinsPose)# or (isWaypoint(t1.Parents[j1]) and waypointOnTopOfJoint(t1, t1.Parents[j1], t2, j2)) or (isWaypoint(t2.Parents[j2]) and waypointOnTopOfJoint(t1, j1, t2, t2.Parents[j2]))
+        # Vectorized: Find all collidable objects for this joint
+        # Joint-Joint collisions where row i is True
+        joints_paired_with_joint_i = np.where(jointJointCollisionMatrix[i, :])[0]
+        jj_pairs = np.vstack((np.full(len(joints_paired_with_joint_i), i), joints_paired_with_joint_i)) if len(joints_paired_with_joint_i) > 0 else np.empty((2, 0), dtype=int)
         
-        def linksInSameBranch(t1, l1, t2, l2):
-            while t1.Parents[t1.Parents[l1]] != None and t1.Parents[t1.Parents[l1]] != -1 and isWaypoint(t1.Joints[t1.Parents[l1]]) and posesAreSame(t1.Joints[t1.Parents[l1]].ProximalDubinsFrame(), t1.Joints[t1.Parents[t1.Parents[l1]]].DistalDubinsFrame()):
-                l1 = t1.Parents[l1]
-            while t2.Parents[t2.Parents[l2]] != None and t2.Parents[t2.Parents[l2]] != -1 and isWaypoint(t2.Joints[t2.Parents[l2]]) and posesAreSame(t2.Joints[t2.Parents[l2]].ProximalDubinsFrame(), t2.Joints[t2.Parents[t2.Parents[l2]]].DistalDubinsFrame()):
-                l2 = t2.Parents[l2]
+        # Joint-Link collisions where row i is True
+        links_paired_with_joint_i = np.where(jointLinkCollisionMatrix[i, :])[0]
+        jl_pairs_list = [np.vstack((np.full(len(links_paired_with_joint_i), i), links_paired_with_joint_i))] if len(links_paired_with_joint_i) > 0 else []
+        
+        # Find all collidable objects for this joint's incoming and outgoing links
+        adjacentLinks = np.array([i] + self.Children[i])
+        ll_pairs_list = []
+        for linkIdx in adjacentLinks:
+            links_paired_with_link_idx = np.where(linkLinkCollisionMatrix[linkIdx, :])[0]
+            if len(links_paired_with_link_idx) > 0:
+                ll_pairs_list.append(np.vstack((np.full(len(links_paired_with_link_idx), linkIdx), links_paired_with_link_idx)))
+            joints_paired_with_link_idx = np.where(jointLinkCollisionMatrix[:, linkIdx])[0]
+            if len(joints_paired_with_link_idx) > 0:
+                jl_pairs_list.append(np.vstack((joints_paired_with_link_idx, np.full(len(joints_paired_with_link_idx), linkIdx))))
+        ll_pairs = np.hstack(ll_pairs_list) if ll_pairs_list else np.empty((2,0), dtype=int)
+        jl_pairs = np.hstack(jl_pairs_list) if jl_pairs_list else np.empty((2,0), dtype=int)
+        
+        # Remove duplicates (e.g., (i,j) and (j,i))
+        jj_pairs = np.unique(np.sort(jj_pairs, axis=0), axis=1) if jj_pairs.size > 0 else jj_pairs
+        ll_pairs = np.unique(np.sort(ll_pairs, axis=0), axis=1) if ll_pairs.size > 0 else ll_pairs
 
-            return posesAreSame(t1.Links[l1].StartDubinsPose, t2.Links[l2].StartDubinsPose)
+        return jj_pairs, jl_pairs, ll_pairs
 
-        for i in others:
-            #NEED TO SET i=i IN LAMBDA BECAUSE CAPTURE BY REFERENCE
-            joint = self.Joints[i]
-
-            allCapsules[0].append((i, joint.collisionCapsules, lambda tree, jointIdx: True))
-            
-            #link-joint
-
-            allCapsules[1].append((i, joint.collisionCapsules, lambda tree, linkIdx, i=i: not (tree.Parents[linkIdx] == i or caseWaypointTooClose(tree, tree.Parents[linkIdx], self, i) or waypointOnTopOfJoint(self, i, tree, linkIdx) or linksInSameBranch(self, i, tree, linkIdx) or caseWaypointOnTopOfBranch(self, i, tree, linkIdx))))
-
-            link = self.Links[i]
-            
-            #joint-link
-            allCapsules[0].append((i, link.collisionCapsules, lambda tree, jointIdx, i=i: not (self.Parents[i] == jointIdx or caseWaypointTooClose(self, self.Parents[i], tree, jointIdx) or waypointOnTopOfJoint(self, i, tree, jointIdx))))
-            
-            #link-link
-
-            #base of branch
-            allCapsules[1].append((i, link.collisionCapsules, lambda tree, linkIdx, i=i: not (self.Parents[i] == tree.Parents[linkIdx] or caseWaypointTooClose(self, i, tree, linkIdx) or waypointOnTopOfJoint(self, i, tree, linkIdx) or linksInSameBranch(self, i, tree, linkIdx) or caseWaypointOnTopOfBranch(self, i, tree, linkIdx))))
-
-            #end cap (taken care of by joints)
-            # allCapsules[1].append((i, [link.collisionCapsules[-1]], lambda tree, linkIdx, i=i: not caseWaypointTooClose(self, i, tree, tree.Parents[linkIdx]) and not waypointOnTopOfJoint(self, i, tree, linkIdx)))
-
-        return allCapsules
-
-    def detectCollisionsWithCapsules(self, indices, capsulesToCheck, show=False,debug=False):
-        # vectorized doesn't improve speed
-        # start = time.time()
-        # def process_capsules(capsule_source, check_list):
-        #     all_capsules = np.concatenate([getattr(self, capsule_source)[idx].collisionCapsules for idx in indices])
-        #     all_check_capsules = np.concatenate([capsuleList for capsuleList, _ in check_list])
-        #     all_funcs = np.concatenate([np.concatenate([[func(self, idx)] * len(getattr(self, capsule_source)[idx].collisionCapsules) for idx in indices]).repeat(len(capsuleList)) for capsuleList, func in check_list])
-            
-        #     # matrix of all possible capsule pairs
-        #     capsule_pairs = np.array(np.meshgrid(all_capsules, all_check_capsules)).T.reshape(-1, 2)
-            
-        #     # collision check
-        #     collisions = np.array([all_funcs[i] and capsule_pairs[i][1].collidesWith(capsule_pairs[i][0])[0] 
-        #                         for i in range(0,len(capsule_pairs))])
-
-        #     return np.sum(collisions)
-
-        # joint_collisions = process_capsules('Joints', capsulesToCheck[0])
-        # link_collisions = process_capsules('Links', capsulesToCheck[1])
-
-        # numCollisions = joint_collisions + link_collisions + self.detectCollisions(specificJointIndices = indices)
-        # #print(time.time() - start)
-        # return numCollisions
-
+    
+    def getAllCollisionPairs(self, collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
+        jj_pairs = np.array(np.where(np.triu(jointJointCollisionMatrix, k=1)))
+        jl_pairs = np.array(np.where(jointLinkCollisionMatrix))
+        ll_pairs = np.array(np.where(np.triu(linkLinkCollisionMatrix, k=1)))
+        return jj_pairs, jl_pairs, ll_pairs
+    
+    
+    def collisionsCountAndError(self, movingJointIndex: Optional[int], 
+                                  collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray], 
+                                  show : bool = False, debug: bool = False,
+                                  coarseDistanceThreshold : float = 0.5, fineDistanceThreshold: float = 0.001) -> Tuple[int, float]:
+        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
         numCollisions = 0
-        angles = list(range(0,90,15))
-        angles1 = angles * len(angles)
-        angles2 = np.concatenate([[a] * len(angles) for a in angles])
+        pairs = []
 
-        for idx in indices:
-            capsules = self.Joints[idx].collisionCapsules
-            for (i, capsuleList, func) in capsulesToCheck[0]:
-                if func(self, idx):
-                    for capsule2 in capsuleList:
-                        for capsule1 in capsules:
-                            if separatingAxisTheorem(capsule1.box, capsule2.box):
-                                #if np.all(vectorized_box_collision(np.array([capsule1.box.rotate(angle) for angle in angles1]), np.array([capsule2.box.rotate(angle) for angle in angles2]))):
-                                #if capsule_box_collision(capsule1.start, capsule1.end, capsule1.radius, capsule2.box.points) and capsule_box_collision(capsule2.start, capsule2.end, capsule2.radius, capsule1.box.points):
-                                didCollide1, pt = capsule2.collidesWith(capsule1)
-                                
-                                if didCollide1:
-                                    #if capsule1.collidesWith(capsule2)[0]:
-                                    numCollisions += 1
-                                    if debug:
-                                        print("joint", idx, i)
-                                    if show:
-                                        self.show(addCapsules=[capsule1, capsule2], plotPoint=pt)
-
+        if movingJointIndex is None:
+            jj_pairs, jl_pairs, ll_pairs = self.getAllCollisionPairs(collisionMatrices)
+        else:
+            jj_pairs, jl_pairs, ll_pairs = self.collisionPairsFromMovingJoint(movingJointIndex, collisionMatrices)          
+        
+        collisions = []
+        totalError = 0.0
+        for j1, j2 in jj_pairs.T:
+            collisionResult = self.collision(self.Joints[j1], self.Joints[j2], 
+                                                coarseDistanceThreshold, fineDistanceThreshold)
+            if collisionResult is not None:
+                collisions.append(( (j1, 'Joint'), (j2, 'Joint'), collisionResult))
+        for j, l in jl_pairs.T:
+            collisionResult = self.collision(self.Joints[j], self.Links[l], 
+                                                coarseDistanceThreshold, fineDistanceThreshold)
+            if collisionResult is not None:
+                collisions.append(( (j, 'Joint'), (l, 'Link'), collisionResult))
+        for l1, l2 in ll_pairs.T:
+            collisionResult = self.collision(self.Links[l1], self.Links[l2], 
+                                                coarseDistanceThreshold, fineDistanceThreshold)
+            if collisionResult is not None:
+                collisions.append(( (l1, 'Link'), (l2, 'Link'), collisionResult))
+        
+        for collision in collisions:
+            (idx1, type1), (idx2, type2), collisionResult = collision
+            minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
+            distance = min(minDist1to2, minDist2to1)
+            # Smooth error function based on logistic function
+            k = 50 #steepness of the transition
+            totalError += 1 / (1 + np.exp(-k * distance))
+            if show:
+                self.show(block=False)
+            if debug:
+                print(f"{type1} {idx1} vs {type2} {idx2}")
             
-            capsules = self.Links[idx].collisionCapsules
-            for (i, capsuleList, func) in capsulesToCheck[1]:
-                if func(self, idx):
-                    for capsule2 in capsuleList:
-                        for capsule1 in capsules:
-                            if separatingAxisTheorem(capsule1.box, capsule2.box):
-                                #if np.all(vectorized_box_collision(np.array([capsule1.box.rotate(angle) for angle in angles1]), np.array([capsule2.box.rotate(angle) for angle in angles2]))):
-                                #if capsule_box_collision(capsule1.start, capsule1.end, capsule1.radius, capsule2.box.points) and capsule_box_collision(capsule2.start, capsule2.end, capsule2.radius, capsule1.box.points):
-                                didCollide1, pt = capsule2.collidesWith(capsule1)
+        return len(collisions), totalError
 
-                                if didCollide1:
-                                    #if capsule1.collidesWith(capsule2)[0]:
-                                    numCollisions += 1
-                                    if debug:
-                                        print("link", idx, i)
-                                    if show:
-                                        self.show(addCapsules=[capsule1, capsule2], plotPoint=pt)
-
-        #collision between indices
-        #numCollisions += self.detectCollisions(specificJointIndices = indices, debug=True, plot=True)
-
-        #print(time.time() - start)
-        return numCollisions
-
-    def getCollisionError(self, indices, capsulesToCheck):
-        totalError = 0
-
-        for idx in indices:
-            capsules = self.Joints[idx].collisionCapsules
-            for (i, capsuleList, func) in capsulesToCheck[0]:
-                if func(self, idx):
-                    for capsule2 in capsuleList:
-                        for capsule1 in capsules:
-                            if separatingAxisTheorem(capsule1.box, capsule2.box):
-                                totalError += capsule2.collisionErrorWith(capsule1)
-                                
+    # def getCollisionErrorFromDict(self, indices, collisionPairDict):
+    #     totalError = 0
+        
+    #     for idx in indices:
+    #         pairs = collisionPairDict.get(idx, [])
             
-            capsules = self.Links[idx].collisionCapsules
-            for (i, capsuleList, func) in capsulesToCheck[1]:
-                if func(self, idx):
-                    for capsule2 in capsuleList:
-                        for capsule1 in capsules:
-                            if separatingAxisTheorem(capsule1.box, capsule2.box):
-                                totalError += capsule2.collisionErrorWith(capsule1)
-
-        return totalError
-
-    def detectCollisionsWithPairs(self, indices, collisionPairDict, show=True, debug=True,
-                                  coarseDistanceThreshold=0.5, fineDistanceThreshold=0.001):
-        numCollisions = 0        
-        for idx in indices:
-            pairs = collisionPairDict.get(idx, [])
-            
-            for (obj1, obj2) in pairs:
-                idx1, type1 = obj1
-                idx2, type2 = obj2
-
-                tube1 = self.Joints[idx1] if type1 == 'joint' else self.Links[idx1]
-                tube2 = self.Joints[idx2] if type2 == 'joint' else self.Links[idx2]
+    #         for (obj1, obj2) in pairs:
+    #             idx1, type1 = obj1
+    #             idx2, type2 = obj2
                 
-                collisionResult = self.collision(idx1, type1, idx2, type2, 
-                                                 coarseDistanceThreshold, fineDistanceThreshold)
-                if collisionResult is not None:
-                    minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
-                    numCollisions += 1
-                    if show:
-                        self.show(block=False)
-                    if debug:
-                        print(f"{type1} {idx1} vs {type2} {idx2}")
-        return numCollisions
-
+    #             collisionResult = self.collision(idx1, type1, idx2, type2)
+    #             if collisionResult is not None:
+    #                 minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
+    #                 distance = min(minDist1to2, minDist2to1)
+    #                 # Smooth error function based on logistic function
+    #                 k = 50 #steepness of the transition
+    #                 error = 1 / (1 + np.exp(-k * distance))
+    #                 totalError += error
+        
+    #     return totalError
+    
+    
     # Returns None for no collision or the pair of closest points for a collision
-    def collision(self, idx1, type1, idx2, type2, coarseDistanceThreshold=0.5, 
+    def collision(self, tube1, tube2, coarseDistanceThreshold=0.5, 
                   fineDistanceThreshold=0.001) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
         coarseDensity = 1 / coarseDistanceThreshold
-        fineDensity = 1 / fineDistanceThreshold
-        tube1 = self.Joints[idx1] if type1 == 'joint' else self.Links[idx1]
-        tube2 = self.Joints[idx2] if type2 == 'joint' else self.Links[idx2]
-        
+        fineDensity = 1 / fineDistanceThreshold        
         # Filter out if either tube is empty (no length)
         epsilon = 1e-2 * fineDistanceThreshold
         if tube1.length() > epsilon and tube2.length() > epsilon:
@@ -641,30 +545,10 @@ class KinematicTree(Generic[F]):
                         if isTrueCollision:
                             return points1[minIdx1to2], minDist1to2, points2[minIdx2to1], minDist2to1                
         return None
-    
-    def getCollisionErrorFromDict(self, indices, collisionPairDict):
-        totalError = 0
-        
-        for idx in indices:
-            pairs = collisionPairDict.get(idx, [])
-            
-            for (obj1, obj2) in pairs:
-                idx1, type1 = obj1
-                idx2, type2 = obj2
-                
-                collisionResult = self.collision(idx1, type1, idx2, type2)
-                if collisionResult is not None:
-                    minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
-                    distance = min(minDist1to2, minDist2to1)
-                    # Smooth error function based on logistic function
-                    k = 50 #steepness of the transition
-                    error = 1 / (1 + np.exp(-k * distance))
-                    totalError += error
-        
-        return totalError
 
-    def findWaypointSets(self):
+    def findLinkClusters(self):
         # Find clusters of waypoints and their incoming + outgoing links, that are connected without real joints between them
+        # Every link except link 0 should be in a cluster
 
         visited = set()
         waypoint_sets = []
@@ -712,6 +596,54 @@ class KinematicTree(Generic[F]):
         
         return link_sets
     
+    
+    def buildCollisionMatrices(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Build matrices indicating which joint/joint, link/link, and joint/link pairs need collision checking.
+        
+        Returns:
+            jointJointCollisionMatrix (np.ndarray): Boolean matrix for joint/joint collisions.
+            linkLinkCollisionMatrix (np.ndarray): Boolean matrix for link/link collisions.
+            jointLinkCollisionMatrix (np.ndarray): Boolean matrix for joint/link collisions.
+        
+        Rules:
+        - Waypoints don't collision check directly (all False)
+        - Link 0 is empty, not checked against anything (all False)
+        - Link/Link: check iff separated by real joint (different waypoint cluster)
+        - Real Joint/Real Joint: always check
+        - Real Joint/Link: always check
+        """
+        link_sets = self.findLinkClusters()
+        # Create link-to-set mapping 
+        whichLinkSet = {}
+        for set_idx, link_set in enumerate(link_sets):
+            for link_idx in link_set:
+                whichLinkSet[link_idx] = set_idx
+        
+        # Pre-classify all joints
+        real_joints = [i for i in range(len(self.Joints)) if not isWaypoint(self.Joints[i])]
+
+        # Initialize matrices
+        jointJointCollisionMatrix = np.zeros((len(self.Joints), len(self.Joints)), dtype=bool)
+        linkLinkCollisionMatrix = np.zeros((len(self.Links), len(self.Links)), dtype=bool)
+        jointLinkCollisionMatrix = np.zeros((len(self.Joints), len(self.Links)), dtype=bool)
+
+        for i in range(len(self.Joints)):
+            # Joint i
+            if not isWaypoint(self.Joints[i]):
+                # Check real joint against all other real joints and against all links
+                for j in range(len(self.Joints)):
+                    jointJointCollisionMatrix[i, j] = not isWaypoint(self.Joints[j]) and i != j  
+                    jointLinkCollisionMatrix[i, j] = True
+            # Link i
+            if i > 0:
+                set_idx = whichLinkSet.get(i)
+                for j in range(len(self.Links)):
+                    linkLinkCollisionMatrix[i, j] = whichLinkSet.get(j) != set_idx
+        
+        return jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix
+    
+    
     def buildCollisionPairDictionary(self):
         """
         Build a dictionary mapping each joint index to collision pairs that need checking.
@@ -727,7 +659,7 @@ class KinematicTree(Generic[F]):
                   [((idx1, type1), (idx2, type2)), ...]
                   where type is 'joint' or 'link'
         """
-        link_sets = self.findWaypointSets()
+        link_sets = self.findLinkClusters()
         
         # Pre-classify all joints
         real_joints = [i for i in range(len(self.Joints)) if not isWaypoint(self.Joints[i])]

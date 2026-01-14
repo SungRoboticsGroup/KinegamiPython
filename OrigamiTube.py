@@ -270,15 +270,6 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
         numSides = kwargs.get('numSides', 6)
         return cls(numSides, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
     
-    @classmethod
-    def from_link_params(cls, r: float, StartDubinsPose: SE3, EndDubinsPose: SE3, 
-                         maxAnglePerElbow: float = np.pi/2, path: Optional[PathCSC] = None,
-                         EPSILON: float = 0.01, **kwargs):
-        """Factory method that infers numSides from context or uses default"""
-        # For now, use a default numSides. In practice, this could be inferred from the tree's joints
-        numSides = kwargs.get('numSides', 6)
-        return cls(numSides, r, StartDubinsPose, EndDubinsPose, maxAnglePerElbow, path, EPSILON)
-    
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         assert(self.numSides >= 4 and self.numSides%2==0)
         assert(twistPortion > 0)
@@ -317,7 +308,7 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
         return composed
 
 
-class OrigamiKinematicChain(KinematicChain):
+class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
     """KinematicChain constrained to OrigamiTube fabrication"""
     _fabrication_type = OrigamiTube  # Class-level fabrication type constraint
     

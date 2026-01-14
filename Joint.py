@@ -360,6 +360,7 @@ class Prismatic(Joint):
         return plotHandles
     
     def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        # TODO: ADD PLANAR CUTOFFS
         point = xp.asarray(point).reshape(-1,3)
         return sdf_capsule(xp, point, 
                             a = xp.asarray([self.ProximalDubinsFrame().t]).reshape(1,3),
@@ -478,7 +479,8 @@ class TransverseRevolute(Revolute):
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
     
     def __repr__(self):
-        return f"TransverseRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, neutralLength={repr(self.neutralLength)}, initialState={repr(self.state)})"
+        return f"TransverseRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, minAngle={repr(self.minAngle)}, "+\
+                f"maxAngle={repr(self.maxAngle)}, neutralLength={repr(self.neutralLength)}, initialState={repr(self.state)})"
 
 class CoaxialRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, neutralLength : float, minAngle : Optional[float], 
@@ -487,7 +489,8 @@ class CoaxialRevolute(Revolute):
                          minAngle=minAngle, maxAngle=maxAngle, initialState=initialState)
     
     def __repr__(self):
-        return f"CoaxialRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, neutralLength={repr(self.neutralLength)}, minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, initialState={repr(self.state)})"
+        return f"CoaxialRevolute(r={repr(self.r)}, Pose={repr(self.Pose)}, neutralLength={repr(self.neutralLength)}, "+\
+                f"minAngle={repr(self.minAngle)}, maxAngle={repr(self.maxAngle)}, initialState={repr(self.state)})"
 
 class Waypoint(Joint):
     # path direction through a waypoint defaults to zhat

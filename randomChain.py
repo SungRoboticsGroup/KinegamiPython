@@ -12,7 +12,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 3
+jointCount = 2
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -36,14 +36,11 @@ def generateRandomChain(nJoints):
                 for _ in range(nJoints) ]
 
     r = 1
-    numSides = 4
-    neutralLength = 3
-
     # Define joint constructor lambdas with all parameters except Pose
     jointConstructors = [
         lambda pose: TransverseRevolute(r=r, Pose=pose, minAngle=-np.pi/2, maxAngle=np.pi/2),
-        lambda pose: CoaxialRevolute(r=r, Pose=pose, neutralLength=neutralLength, minAngle=-np.pi/2, maxAngle=np.pi/2),
-        lambda pose: Prismatic(r, neutralLength, neutralLength/2, neutralLength*2, pose)
+        lambda pose: CoaxialRevolute(r=r, Pose=pose, neutralLength=2, minAngle=-np.pi/2, maxAngle=np.pi/2),
+        lambda pose: Prismatic(r=r, neutralLength=3, minLength=1, maxLength=5, Pose=pose)
     ]
 
     # Randomly select a joint constructor and apply the first pose
@@ -81,29 +78,15 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
     return configs
 
 def test():
-    optimizations = [
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
-                    #partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n")
+    versions = [
+        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
+        #(partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
+        #(partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
+        #(partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
+        #(partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
     ]
-
-    labels = [
-            #"DFS - Outward Longest",
-            #"DFS - Outward Shortest",
-            "DFS - Inward Longest",
-            #"DFS - Inward Shortest",
-            #"BFS - Outward Longest",
-            #"BFS - Outward Shortest",
-            #"BFS - Inward Longest",
-            #"BFS - Inward Shortest",
-            #"Randomized Weighted"
-    ]
+    optimizations = [v[0] for v in versions]
+    labels = [v[1] for v in versions]
 
     lowerBounds = []
     results = []
@@ -118,9 +101,9 @@ def test():
         # Reset random state before each trial to ensure deterministic behavior
         np.random.set_state(saved_state)
         construct = generateRandomChain(jointCount)
-        tree_save_path = os.path.join(results_dir, f"{i}.txt")
+        tree_save_path = os.path.join(results_dir, f"{i}.tree")
         
-        construct.show(block=False)
+        #construct.show(block=False)
         # Save using repr() representation
         with open(tree_save_path, 'w') as f:
             f.write(repr(construct))
@@ -162,7 +145,7 @@ def test():
                     count += 1
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
-            optimized.show(block=False)
+            #optimized.show(block=False)
         
         # Save checkpoint to results directory
         checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")

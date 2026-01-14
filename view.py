@@ -11,10 +11,12 @@ import os
 # final_path = "/home/samhitha/code/Trials Before Experiments/2025.12.09_12.47.59_Joints3_Chains1_Seed42/0/DFS - Inward Longest149.83452987670898_3.tree"
 final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.13_23.41.12_Joints3_Chains1_Seed42/0/DFS - Inward Longestfinal.tree"
 
-# Try to load collision-free configs if available
+# Try to load initial tree and collision-free configs
 trial_dir = os.path.dirname(os.path.dirname(final_path))  # Go up two levels to get trial directory
+initial_path = os.path.join(trial_dir, "0.txt")
 configs_path = os.path.join(trial_dir, "0_configs.json")
 
+# Load collision-free configs
 configs = None
 if os.path.exists(configs_path):
     with open(configs_path, 'r') as f:
@@ -24,15 +26,44 @@ else:
     print(f"No configs file found at {configs_path}, using default configurations")
     configs = [[0, 0, 0, 0, 0, 0, 0, 0]]
 
+# Load initial tree (before optimization)
+initial = None
+if os.path.exists(initial_path):
+    with open(initial_path, 'r') as f:
+        initial_repr = f.read()
+    initial = eval(initial_repr)
+    print(f"Loaded initial tree from {initial_path}")
+    print(f"Initial tree total length: {initial.totalLength():.3f}")
+else:
+    print(f"No initial tree found at {initial_path}")
 
-# read initial_path contents to string init_repr
+# Load final tree (after optimization)
 with open(final_path, 'r') as f:
     final_repr = f.read()
-
 final = eval(final_repr)
+print(f"Loaded final tree from {final_path}")
+print(f"Final tree total length: {final.totalLength():.3f}")
 
-# Visualize in all collision-free configurations
-print(f"\nVisualizing tree in {len(configs)} configurations:")
+if initial:
+    print(f"Length reduction: {initial.totalLength() - final.totalLength():.3f}")
+
+# Visualize initial tree if available
+if initial:
+    print(f"\n=== INITIAL TREE (before optimization) ===")
+    print(f"Visualizing initial tree in {len(configs)} configurations:")
+    for idx, config in enumerate(configs):
+        print(f"\nConfiguration {idx}: {config}")
+        initial.setConfiguration(config, realJointsOnly=False)
+        initial.recursivelyRecomputeCollisionCapsules(0)
+        num_collisions = initial.detectCollisions(debug=True)
+        print(f"  Collisions detected: {num_collisions}")
+        if num_collisions > 0:
+            print(f"  WARNING: Initial configuration {idx} has collisions!")
+        initial.show(block=False)
+
+# Visualize final tree
+print(f"\n=== FINAL TREE (after optimization) ===")
+print(f"Visualizing final tree in {len(configs)} configurations:")
 for idx, config in enumerate(configs):
     print(f"\nConfiguration {idx}: {config}")
     final.setConfiguration(config, realJointsOnly=False)

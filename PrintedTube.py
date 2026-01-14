@@ -84,10 +84,13 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  wallThickness : float, holeDiameter : float, numHoles : int,
                  maxAnglePerElbow : float = np.pi/2, path : Optional[PathCSC] = None, 
-                 EPSILON : float = 0.01):
+                 EPSILON : float = 0.01, startRadius : Optional[float] = None, 
+                 endRadius : Optional[float] = None):
         PrintedTube.__init__(self, wallThickness, holeDiameter, numHoles)
         LinkCSC.__init__(self, r, StartDubinsPose, EndDubinsPose,
                             maxAnglePerElbow=maxAnglePerElbow, path=path, EPSILON=EPSILON)
+        self.startRadius = startRadius if startRadius is not None else r
+        self.endRadius = endRadius if endRadius is not None else r
         
 
     def manifold(self, startRadius : Optional[float] = None, endRadius : Optional[float] = None, 
@@ -97,9 +100,9 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         if maxSectionAngle is None:
             maxSectionAngle = self.maxAnglePerElbow
         if startRadius is None:
-            startRadius = self.r
+            startRadius = self.startRadius
         if endRadius is None:
-            endRadius = self.r
+            endRadius = self.endRadius
         assert(startRadius > 0 and startRadius <= self.r and endRadius > 0 and endRadius <= self.r)
         assert(numSides >= 3)
 
@@ -273,3 +276,5 @@ class PrintedKinematicTree(KinematicTree):
             return PrintedLinkCSC(r, start_pose, end_pose, wallThickness, 
                                   holeDiameter, numHoles, max_angle_per_elbow, path, epsilon)
         return make_printed_link
+    
+    # TODO: make method to export meshes for all links in the tree as connectable modules
