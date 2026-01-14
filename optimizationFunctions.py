@@ -1,7 +1,8 @@
 from KinematicTree import *
-import random 
 from treeTraversals import *
 from sets import buildCollisionPairDictionary
+import pyswarms as ps
+
 
 def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale, 
                            childFraction = 1, ignorePlacement = False, 
@@ -74,7 +75,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
              not tree.transformJoint(index, SE3(), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False)):
             tree2 = subject.copyAbbreviatedSelf(ignoreLater, index)
             tree2.Joints[index].reverseZhat()
-            if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
+            if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, 
+                                    propogate=ignorePlacement, recomputeLinkPath=True, recomputeBoundingBall=False):
                 linkLossReversedZhat = linkLoss(tree2, 
                                                 index, 
                                                 power=power,
@@ -117,10 +119,12 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     initialGuess = [initialPosition,initialRotation]
     initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
     
-    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
+    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), 
+                                      propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
         initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
     
-    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
+    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation), 
+                                      propogate=ignorePlacement, safe=True, relative=True, recomputeBoundingBall=False):
         initialGuess = [0,0]
 
     initialLoss = objective([0,0])
@@ -149,7 +153,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist2, dist2)
     init_pos[2:, 1] = np.clip(init_pos[2:, 1], -np.pi*2, np.pi*2)
 
-    optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
+    optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},
+                                        bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
     minSwarmLoss, minSwarmResult = optimizer.optimize(joint_batch_objective_function, iters=int((maxiter + 1)/2),verbose=False, 
                                                         n_processes=n_particles if parallelize else None)
 
@@ -169,16 +174,19 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
 
     tree = subject.copyAbbreviatedSelf()
     if which == 1:
-        if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+        if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), 
+                                   propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
             raise Exception()
         final_tree, final_loss = tree, loss
     else:
         try:
-            if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+            if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]), 
+                                       propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
                 raise Exception()
             
             tree.Joints[index].reverseZhat()
-            if not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+            if not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True, 
+                                       propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
                 raise Exception()
 
             final_tree, final_loss = tree, loss
@@ -186,7 +194,9 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
             tree2 = subject.copyAbbreviatedSelf()
             tree2.Joints[index].reverseZhat()
 
-            if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+            if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]), 
+                                        safe=True, relative=True, propogate=False, 
+                                        recomputeLinkPath=True, recomputeBoundingBall=False):
                 raise Exception()
             final_tree, final_loss = tree2, loss
 
@@ -273,14 +283,16 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     def objective(params):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
-        if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
+        if not tree.transformJoint(index, SE3.Trans(params[0:3]) @ SE3.Rz(params[3]) @ SE3.Ry(params[4]) @ SE3.Rz(params[5]),  
+                                   propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
             return collisionPenaltyScale * len(subject.Joints) * (len(subject.Children) + 1)
         
         return linkLoss(tree, index, includeCollisionPenalty=True, configurations=configurations, 
                         collisionPairDict=collisionPairDict, selectedIndices=selectedIndices) + \
             np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10
 
-    if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
+    if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  
+                                      propogate=ignorePlacement, safe=True, relative=False, recomputeBoundingBall=False):
         initialGuess = [0]*6
 
     #print(f"INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
@@ -373,7 +385,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                 min_state, max_state = joint.stateRange()
                 range_size = max_state - min_state
                 margin = range_size * tolerance
-                random_config[i] = random.uniform(min_state + margin, max_state - margin)
+                random_config[i] = np.random.uniform(min_state + margin, max_state - margin)
         
         neutral_config = [0] * num_joints  
         configurations = [neutral_config]

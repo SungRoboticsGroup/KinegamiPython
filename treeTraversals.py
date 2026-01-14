@@ -1,7 +1,6 @@
 from makeKinematicTree import *
 from KinematicTree import *
 
-import random
 from collections import defaultdict, deque
 import json
 from functools import partial
@@ -133,7 +132,7 @@ def randomized(subject, power, count, childFraction, isWeighted):
         if isWeighted:
             weights = [linkLoss(subject, i, power, childFraction, 0) for i in range(1, len(subject.Joints))]
             print(weights)
-            yield random.choices(range(1, len(subject.Joints)), weights=weights, k=1)[0]
+            yield np.random.choice(range(1, len(subject.Joints)), p=weights/np.sum(weights))
         else:
             yield np.random.randint(1, len(subject.Joints))
 

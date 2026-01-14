@@ -3,7 +3,6 @@ from makeKinematicTree import *
 from KinematicTree import *
 from KinematicChain import *
 
-import random
 import copy
 from collections import defaultdict, deque
 import json
@@ -48,12 +47,12 @@ def generateRandomChain(nJoints):
     ]
 
     # Randomly select a joint constructor and apply the first pose
-    root = random.choice(jointConstructors)(poses[0])
+    root = np.random.choice(jointConstructors)(poses[0])
 
     chain = KinematicChain(root, gimbal=True)
     for i in range(1, nJoints):
         # Randomly select a joint constructor and apply the pose
-        newJoint = random.choice(jointConstructors)(poses[i])
+        newJoint = np.random.choice(jointConstructors)(poses[i])
         chain.appendGeneralizedGimbal(newJoint)
 
     return chain
@@ -133,6 +132,12 @@ def test():
         # This shouldn't be necessary since we're using the gimbal construction...
         collision_free_configs = find_collision_free_configs(construct, max_attempts=100, num_configs_needed=4)
         print("Optimizing for configurations:\n", collision_free_configs)
+        
+        # Save collision-free configs to file
+        configs_save_path = os.path.join(results_dir, f"{i}_configs.json")
+        with open(configs_save_path, 'w') as f:
+            json.dump(collision_free_configs, f, indent=2)
+        print(f"Saved collision-free configs to: {configs_save_path}")
         
         for no, f in enumerate(optimizations):
             print(f"\nTrying loss function {no}")
