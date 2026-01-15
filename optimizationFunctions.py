@@ -55,7 +55,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
         linkLossReversedZhat = pathNonExistancePenalty
 
         #try just moving it
-        if tree.transformJoint(index, transform, safe=True, relative=True, recomputeBoundingBall=False):
+        if tree.transformJoint(index, transform, propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
             linkLossSameZhat = linkLoss(tree, 
                                         index, 
                                         power=power,
@@ -329,7 +329,8 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     minSwarmLoss, minSwarmResult = optimizer.optimize(waypoint_batch_objective_function, iters=maxiter,verbose=False, n_processes=n_particles if parallelize else None)
     
     tree = subject.copyAbbreviatedSelf()
-    if tree.transformJoint(index, SE3.Trans(minSwarmResult[0:3]) @ SE3.Rz(minSwarmResult[3]) @ SE3.Ry(minSwarmResult[4]) @ SE3.Rz(minSwarmResult[5]),  propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
+    if tree.transformJoint(index, SE3.Trans(minSwarmResult[0:3]) @ SE3.Rz(minSwarmResult[3]) @ SE3.Ry(minSwarmResult[4]) @ SE3.Rz(minSwarmResult[5]),  
+                           propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
         if verbose:
             print(f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}")
         
