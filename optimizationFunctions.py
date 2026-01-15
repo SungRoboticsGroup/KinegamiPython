@@ -1,6 +1,5 @@
 from KinematicTree import *
 from treeTraversals import *
-from sets import buildCollisionPairDictionary
 import pyswarms as ps
 
 
@@ -44,7 +43,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     movedJointIndex = index
     collisionMatrices = subject.buildCollisionMatrices()
     
-    def objective(params, returnWhich = False):
+    def objective(params, returnWhich : bool = False) -> float:
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
         translation = params[0]
@@ -136,6 +135,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     bounds = [positionBound, angleBound]
 
     #initial swarm
+    global joint_batch_objective_function
     def joint_batch_objective_function(X):
         return np.array([objective(x) for x in X])
     n_particles = 16
@@ -150,8 +150,14 @@ def optimizeJointPlacement(subject, index, maxiter, tol, penaltyScale,
     init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist2, dist2)
     init_pos[2:, 1] = np.clip(init_pos[2:, 1], -np.pi*2, np.pi*2)
 
+    min_bound = np.array([b[0] for b in bounds])
+    max_bound = np.array([b[1] for b in bounds])
+    dimensions = 2
+    if not min_bound.shape == (dimensions,) or not max_bound.shape == (dimensions,):
+        raise ValueError(f"Bounds arrays must be of shape ({dimensions},)")
+
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},
-                                        bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
+                                        bounds=(min_bound, max_bound),init_pos=init_pos,ftol=tol)
     minSwarmLoss, minSwarmResult = optimizer.optimize(joint_batch_objective_function, iters=int((maxiter + 1)/2),verbose=False, 
                                                         n_processes=n_particles if parallelize else None)
 
@@ -300,6 +306,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     dist = subject.Links[index].path.length + max(np.amax(np.abs(initialGuess)), np.amax(np.abs(subject.Joints[index].Pose.t)))
     bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
 
+    global waypoint_batch_objective_function
     def waypoint_batch_objective_function(X):
         return np.array([objective(x) for x in X])
 

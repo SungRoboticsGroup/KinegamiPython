@@ -17,11 +17,22 @@ probabilityOfBranching = 0.5
 sparse = False
 cubeSize = 100 if sparse else 10
 
-def linkLoss(tree : KinematicTree, index : int, power=2, childFraction=1, 
-             collisionPenaltyScale=1, collisionMatrices=None, movedJointIndex : Optional[int]=None,
-             includeCollisionPenalty=False, configurations=None, collisionErrorWeight=1):
+def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction : float =1, 
+             collisionPenaltyScale : float = 1, 
+             collisionMatrices : Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None, 
+             movedJointIndex : Optional[int] = None,
+             includeCollisionPenalty : bool = False, 
+             configurations : Optional[list] = None, 
+             collisionErrorWeight : float = 1) -> float:
     
-    assert(childFraction>=0 and power>=0 and index>=0 and collisionPenaltyScale>=0)
+    if not childFraction>=0:
+        raise ValueError("childFraction must be non-negative")
+    if not power>=0:
+        raise ValueError("power must be non-negative")
+    if not index>=0:
+        raise ValueError("index must be non-negative")
+    if not collisionPenaltyScale>=0:
+        raise ValueError("collisionPenaltyScale must be non-negative")
 
     # incoming link
     loss = tree.Links[index].path.length**power 
@@ -38,7 +49,7 @@ def linkLoss(tree : KinematicTree, index : int, power=2, childFraction=1,
             collisionMatrices = tree.buildCollisionMatrices()
         for i in range(0, len(configurations)):
             tree.setConfiguration(configurations[i])
-            loss += tree.collisionsCountAndError(movedJointIndex, collisionMatrices) * collisionErrorWeight
+            loss += tree.collisionsCountAndError(movedJointIndex, collisionMatrices)[1] * collisionErrorWeight
     
     # print("Loss with collision penalty:", loss)
     return loss 
