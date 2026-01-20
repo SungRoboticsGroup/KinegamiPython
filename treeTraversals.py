@@ -35,11 +35,11 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
         raise ValueError("collisionPenaltyScale must be non-negative")
 
     # incoming link
-    loss = tree.Links[index].path.length**power 
+    loss = tree.Links[index].path.length ** power 
 
     # outgoing links
     if len(tree.Children[index]) > 0 and childFraction > 0: 
-        loss += np.sum([tree.Links[idx].path.length ** 2 for idx in tree.Children[index]]) * childFraction
+        loss += np.sum([tree.Links[idx].path.length ** power for idx in tree.Children[index]]) * childFraction
 
     # print("loss (no collision):", loss)
 
