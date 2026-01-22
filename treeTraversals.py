@@ -18,7 +18,6 @@ sparse = False
 cubeSize = 100 if sparse else 10
 
 def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction : float =1, 
-             collisionPenaltyScale : float = 1, 
              collisionMatrices : Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]] = None, 
              movedJointIndex : Optional[int] = None,
              includeCollisionPenalty : bool = False, 
@@ -31,8 +30,6 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
         raise ValueError("power must be non-negative")
     if not index>=0:
         raise ValueError("index must be non-negative")
-    if not collisionPenaltyScale>=0:
-        raise ValueError("collisionPenaltyScale must be non-negative")
 
     # incoming link
     loss = tree.Links[index].path.length ** power 

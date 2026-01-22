@@ -10,7 +10,8 @@ import os
 # final_path="/home/daniel/KinegamiPython/Trials Before Experiments/2025.12.05_12.03.23_Joints3_Chains1_Seed42/0/DFS - Inward Longest184.94166469573975_7.tree"
 # final_path = "/home/samhitha/code/Trials Before Experiments/2025.12.09_12.47.59_Joints3_Chains1_Seed42/0/DFS - Inward Longest149.83452987670898_3.tree"
 # final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.15_01.16.48_Joints2_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
-final_path = "/home/samhitha/code/Trials Before Experiments/2026.01.17_06.46.06_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
+# final_path = "/home/samhitha/code/Trials Before Experiments/2026.01.17_06.46.06_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
+final_path = "/home/samhitha/code/Trials Before Experiments/2026.01.21_18.40.30_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitions553.2428340911865_16.tree"
 
 # Try to load initial tree and collision-free configs
 trial_dir = os.path.dirname(os.path.dirname(final_path))  # Go up two levels to get trial directory
