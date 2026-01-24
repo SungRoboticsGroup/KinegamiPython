@@ -899,6 +899,18 @@ class WindowKinegamiGUI(QMainWindow):
         # Add the message layout to the main layout
         #message_display_widget.setLayout(self.message_layout)
 
+        # //////////////////////////////////    CONFIGURATIONS    ///////////////////////////////////
+        self.configurations_widget = QWidget()
+        self.configurations_layout = QVBoxLayout(self.configurations_widget)
+        self.config_text_boxes = []  # List to store text boxes for joint states
+        self.config_sliders = []  # List to store sliders for joint states
+        self.config_joint_indices = []  # List to map text box index to actual joint index
+        self.saved_configurations = []  # List of saved configurations (each is a list of joint states)
+        
+        self.configurations_dock = QDockWidget("Configurations", self)
+        self.configurations_dock.setWidget(self.configurations_widget)
+        self.configurations_dock.setVisible(True)
+
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_prismatic = QPushButton("Add Prismatic Joint")
         self.add_prismatic_menu = AddPrismaticMenu(self)
@@ -1254,6 +1266,14 @@ class WindowKinegamiGUI(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, add_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, edit_joints_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
+        
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.configurations_dock)
+        
+        # Make side docks take precedence at corners (extend full height)
+        self.setCorner(Qt.TopLeftCorner, Qt.LeftDockWidgetArea)
+        self.setCorner(Qt.TopRightCorner, Qt.RightDockWidgetArea)
+        self.setCorner(Qt.BottomLeftCorner, Qt.LeftDockWidgetArea)
+        self.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
 
         self.factor = {
             'Centimeter (cm)': 1.0,
@@ -1274,6 +1294,303 @@ class WindowKinegamiGUI(QMainWindow):
         self.chain.units = key
         # self.log_version()
         self.update_joint()
+
+    def update_configurations(self):
+        """Update the configurations widget with text boxes for each real (non-Waypoint) joint"""
+        # Clear existing text boxes and layouts completely
+        while self.configurations_layout.count():
+            item = self.configurations_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                # Clear the layout
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                    elif child.layout():
+                        while child.layout().count():
+                            subchild = child.layout().takeAt(0)
+                            if subchild.widget():
+                                subchild.widget().deleteLater()
+                        child.layout().deleteLater()
+                item.layout().deleteLater()
+        self.config_text_boxes.clear()
+        self.config_sliders.clear()
+        self.config_joint_indices.clear()
+        
+        if self.chain is None or not self.chain_created:
+            return
+        
+        # Create a widget to hold the centered content
+        container_widget = QWidget()
+        text_box_layout = QHBoxLayout(container_widget)
+        text_box_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Count real joints and create text boxes
+        joint_index = 0
+        for actual_joint_index, joint in enumerate(self.chain.Joints):
+            # Skip Waypoint joints
+            if type(joint).__name__ in ['Waypoint', 'PrintedWaypoint']:
+                continue
+            
+            # Create a container widget for each joint
+            joint_widget = QWidget()
+            joint_layout = QVBoxLayout(joint_widget)
+            joint_layout.setContentsMargins(5, 0, 5, 0)
+            joint_layout.setSpacing(2)
+            
+            joint_label = QLabel(f"J{joint_index}")
+            joint_label.setAlignment(Qt.AlignCenter)
+            joint_label.setFixedWidth(80)
+            
+            text_box = QLineEdit()
+            text_box.setPlaceholderText("0.0")
+            text_box.setFixedWidth(80)
+            text_box.setAlignment(Qt.AlignCenter)
+            # Connect to handler with lambda to capture the actual joint index
+            text_box.returnPressed.connect(lambda idx=actual_joint_index: self.config_textbox_return(idx))
+            
+            # Create slider
+            slider = QSlider(Qt.Horizontal)
+            slider.setFixedWidth(80)
+            
+            # Set slider range and value based on joint type
+            if isinstance(joint, PrismaticJoint):
+                display_state = joint.state
+                state_range = joint.stateRange()
+                # Scale by 100*r for prismatic joints
+                scale = 100 * self.chain.r
+                slider.setMinimum(int(state_range[0] * scale))
+                slider.setMaximum(int(state_range[1] * scale))
+                slider.setValue(int(display_state * scale))
+            elif isinstance(joint, RevoluteJoint):
+                display_state = math.degrees(joint.state)
+                state_range = joint.stateRange()
+                # Use degrees for revolute joints
+                slider.setMinimum(int(math.degrees(state_range[0])))
+                slider.setMaximum(int(math.degrees(state_range[1])))
+                slider.setValue(int(display_state))
+            else:
+                display_state = 0.0
+            
+            # Connect slider to handler
+            slider.sliderMoved.connect(lambda value, idx=actual_joint_index: self.config_slider_moved(idx, value))
+            slider.sliderReleased.connect(lambda idx=actual_joint_index: self.config_slider_released(idx))
+            
+            text_box.setText(str(round(display_state, 2)))
+            
+            joint_layout.addWidget(joint_label)
+            joint_layout.addWidget(text_box)
+            joint_layout.addWidget(slider)
+            joint_layout.addStretch()
+            
+            text_box_layout.addWidget(joint_widget)
+            self.config_text_boxes.append(text_box)
+            self.config_sliders.append(slider)
+            self.config_joint_indices.append(actual_joint_index)
+            joint_index += 1
+        
+        # Add "Save Configuration" button
+        save_button = QPushButton("Save Configuration")
+        save_button.clicked.connect(self.save_current_configuration)
+        text_box_layout.addWidget(save_button)
+        
+        # Center the container in the main layout
+        center_layout = QHBoxLayout()
+        center_layout.addStretch()
+        center_layout.addWidget(container_widget)
+        center_layout.addStretch()
+        
+        self.configurations_layout.addLayout(center_layout)
+        
+        # Display saved configurations
+        self.display_saved_configurations()
+        
+        # Highlight the selected joint if any
+        self.highlight_selected_config_box()
+    
+    def update_config_values(self):
+        """Update the values in configuration text boxes and sliders without recreating widgets"""
+        if not hasattr(self, 'config_text_boxes') or not self.config_text_boxes:
+            return
+        
+        if self.chain is None or not self.chain_created:
+            return
+        
+        # Update each text box and slider with current joint state
+        for i, joint_index in enumerate(self.config_joint_indices):
+            if joint_index >= len(self.chain.Joints):
+                continue
+            
+            joint = self.chain.Joints[joint_index]
+            text_box = self.config_text_boxes[i]
+            slider = self.config_sliders[i]
+            
+            # Block signals to prevent triggering updates during value setting
+            text_box.blockSignals(True)
+            slider.blockSignals(True)
+            
+            if isinstance(joint, PrismaticJoint):
+                display_state = joint.state
+                text_box.setText(str(round(display_state, 2)))
+                slider.setValue(int(display_state * 100 * self.chain.r))
+            elif isinstance(joint, RevoluteJoint):
+                display_state = math.degrees(joint.state)
+                text_box.setText(str(round(display_state, 2)))
+                slider.setValue(int(display_state))
+            
+            text_box.blockSignals(False)
+            slider.blockSignals(False)
+
+    def highlight_selected_config_box(self):
+        """Highlight the configuration text box for the currently selected joint"""
+        if not hasattr(self, 'config_text_boxes') or not self.config_text_boxes:
+            return
+        
+        # Reset all text boxes to default style
+        for text_box in self.config_text_boxes:
+            text_box.setStyleSheet("")
+        
+        # Highlight the selected joint's text box
+        if self.selected_joint != -1 and self.selected_joint in self.config_joint_indices:
+            try:
+                text_box_index = self.config_joint_indices.index(self.selected_joint)
+                self.config_text_boxes[text_box_index].setStyleSheet(
+                    "background-color: #FFD700; border: 2px solid #FFA500;"
+                )
+            except (ValueError, IndexError):
+                pass
+
+    def save_current_configuration(self):
+        """Save the current configuration from the text boxes"""
+        if not self.config_text_boxes:
+            return
+        
+        current_config = []
+        for text_box in self.config_text_boxes:
+            try:
+                value = float(text_box.text())
+                current_config.append(value)
+            except ValueError:
+                current_config.append(0.0)
+        
+        self.saved_configurations.append(current_config)
+        self.display_saved_configurations()
+    
+    def display_saved_configurations(self):
+        """Display all saved configurations as rows below the current configuration"""
+        # Remove any existing saved config rows (they start after the first layout)
+        while self.configurations_layout.count() > 1:
+            item = self.configurations_layout.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                while item.layout().count():
+                    child = item.layout().takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                item.layout().deleteLater()
+        
+        if not self.saved_configurations:
+            return
+        
+        # Display each saved configuration
+        for config_index, config in enumerate(self.saved_configurations):
+            container_widget = QWidget()
+            config_row_layout = QHBoxLayout(container_widget)
+            config_row_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Add value labels for each joint, aligned with the text boxes above
+            for value in config:
+                value_widget = QWidget()
+                value_layout = QVBoxLayout(value_widget)
+                value_layout.setContentsMargins(5, 0, 5, 0)
+                
+                value_label = QLabel(str(round(value, 2)))
+                value_label.setAlignment(Qt.AlignCenter)
+                value_label.setFixedWidth(80)
+                value_layout.addWidget(value_label)
+                
+                config_row_layout.addWidget(value_widget)
+            
+            # Add "Set" button
+            set_button = QPushButton("Set")
+            set_button.setFixedWidth(60)
+            set_button.clicked.connect(lambda checked, idx=config_index: self.set_configuration(idx))
+            config_row_layout.addWidget(set_button)
+            
+            # Add delete button (red X)
+            delete_button = QPushButton("✗")
+            delete_button.setFixedWidth(30)
+            delete_button.setStyleSheet("background-color: #FF4444; color: white; font-weight: bold;")
+            delete_button.clicked.connect(lambda checked, idx=config_index: self.delete_configuration(idx))
+            config_row_layout.addWidget(delete_button)
+            
+            # Center the row
+            row_layout = QHBoxLayout()
+            row_layout.addStretch()
+            row_layout.addWidget(container_widget)
+            row_layout.addStretch()
+            
+            self.configurations_layout.addLayout(row_layout)
+    
+    def set_configuration(self, config_index):
+        """Set the chain to a saved configuration"""
+        if config_index >= len(self.saved_configurations):
+            return
+        
+        config = self.saved_configurations[config_index]
+        
+        # Apply each state to the corresponding joint
+        for i, value in enumerate(config):
+            if i >= len(self.config_joint_indices):
+                break
+            
+            joint_index = self.config_joint_indices[i]
+            if joint_index >= len(self.chain.Joints):
+                continue
+            
+            joint = self.chain.Joints[joint_index]
+            if isinstance(joint, PrismaticJoint):
+                actualState = value
+            elif isinstance(joint, RevoluteJoint):
+                actualState = math.radians(value)
+            else:
+                continue
+            
+            self.chain.setJointState(joint_index, actualState)
+        
+        self.update_joint()
+        self.set_state_tools()
+        self.log_version()
+    
+    def delete_configuration(self, config_index):
+        """Delete a saved configuration"""
+        if config_index < len(self.saved_configurations):
+            self.saved_configurations.pop(config_index)
+            self.display_saved_configurations()
+    
+    def update_saved_configs_for_joint_added(self):
+        """Add state 0 to all saved configurations when a joint is added"""
+        for config in self.saved_configurations:
+            config.append(0.0)
+    
+    def update_saved_configs_for_joint_deleted(self, deleted_joint_index):
+        """Remove the state for a deleted joint from all saved configurations"""
+        if deleted_joint_index not in self.config_joint_indices:
+            return  # Joint was a waypoint, doesn't affect saved configs
+        
+        # Find which position in config corresponds to this joint
+        try:
+            config_position = self.config_joint_indices.index(deleted_joint_index)
+        except ValueError:
+            return
+        
+        # Remove that position from all saved configurations
+        for config in self.saved_configurations:
+            if config_position < len(config):
+                config.pop(config_position)
 
     def rescale_dimensions(self, prev, new):
         if (prev != new):
@@ -1437,7 +1754,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.delete_joint_dock.setVisible(True)
 
     def delete_selected_joint(self):
-        self.selected_joint = self.select_joint_options.currentIndex() 
+        self.selected_joint = self.select_joint_options.currentIndex()
+        deleted_index = self.selected_joint
         temp_last = len(self.chain.Joints) - 1
         if len(self.chain.Joints) == 1:
             self.chain = None
@@ -1446,9 +1764,13 @@ class WindowKinegamiGUI(QMainWindow):
             self.setCentralWidget(self.plot_widget)
             self.show_success('Joint successfully deleted!')
             self.last_joint = -1
+            # Clear saved configurations when chain is deleted
+            self.saved_configurations.clear()
         else:
             backup = copy.deepcopy(self.chain)
             try:
+                # Update saved configs before deleting
+                self.update_saved_configs_for_joint_deleted(deleted_index)
                 self.chain = chainWithJointDeleted(self.chain, self.selected_joint)
                 # self.reload_IDs()
                 self.update_joint()
@@ -1677,6 +1999,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.reset_rotation_tools()
             self.reset_translation_tools()
             self.set_state_tools()
+            self.highlight_selected_config_box()
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -2138,6 +2461,69 @@ class WindowKinegamiGUI(QMainWindow):
                 self.set_state_tools()
                 self.log_version()
 
+    def config_textbox_return(self, joint_index):
+        """Handle configuration textbox input for a specific joint"""
+        if self.chain and 0 <= joint_index < len(self.chain.Joints):
+            # Find the text box index for this joint
+            try:
+                text_box_index = self.config_joint_indices.index(joint_index)
+                text_box = self.config_text_boxes[text_box_index]
+            except (ValueError, IndexError):
+                return
+            
+            try:
+                value = float(text_box.text())
+            except ValueError:
+                return
+            
+            joint = self.chain.Joints[joint_index]
+            if isinstance(joint, PrismaticJoint):
+                actualState = value
+            elif isinstance(joint, RevoluteJoint):
+                actualState = math.radians(value)
+            else:
+                # This shouldn't happen since we skip waypoints
+                return
+            
+            if self.chain.setJointState(joint_index, actualState):
+                self.update_joint()
+                self.set_state_tools()
+                self.log_version()
+
+    def config_slider_moved(self, joint_index, value):
+        """Handle configuration slider movement for a specific joint"""
+        if self.chain and 0 <= joint_index < len(self.chain.Joints):
+            joint = self.chain.Joints[joint_index]
+            
+            if isinstance(joint, PrismaticJoint):
+                # Prismatic joints: slider value is scaled by 100*r
+                actualState = value / (100 * self.chain.r)
+                display_state = actualState
+            elif isinstance(joint, RevoluteJoint):
+                # Revolute joints: slider value is in degrees, actual state is radians
+                actualState = math.radians(value)
+                display_state = value
+            else:
+                return
+            
+            if self.chain.setJointState(joint_index, actualState):
+                # Update the visual representation without recreating widgets
+                self.update_joint()
+                # Update the corresponding text box
+                try:
+                    text_box_index = self.config_joint_indices.index(joint_index)
+                    self.config_text_boxes[text_box_index].blockSignals(True)
+                    self.config_text_boxes[text_box_index].setText(str(round(display_state, 2)))
+                    self.config_text_boxes[text_box_index].blockSignals(False)
+                except (ValueError, IndexError):
+                    pass
+                self.set_state_tools()
+    
+    def config_slider_released(self, joint_index):
+        """Handle configuration slider release for a specific joint"""
+        self.set_state_tools()
+        self.log_version()
+
     def state_slider_released(self):
         self.set_state_tools()
         self.log_version()
@@ -2250,6 +2636,23 @@ class WindowKinegamiGUI(QMainWindow):
         self.select_link_options.blockSignals(True)
 
         self.units_label.setText(f"Current units: {self.units}")
+        
+        # Check if we need to recreate config widgets or just update values
+        need_recreate = False
+        if self.chain is None or not self.chain_created:
+            need_recreate = True
+        elif not hasattr(self, 'config_joint_indices'):
+            need_recreate = True
+        else:
+            # Check if the number of real joints has changed
+            real_joint_count = sum(1 for j in self.chain.Joints if type(j).__name__ not in ['Waypoint', 'PrintedWaypoint'])
+            if real_joint_count != len(self.config_joint_indices):
+                need_recreate = True
+        
+        if need_recreate:
+            self.update_configurations()
+        else:
+            self.update_config_values()
 
         if (not self.stl_generated):
             self.plot_widget.clear()
@@ -2365,6 +2768,9 @@ class WindowKinegamiGUI(QMainWindow):
             # self.update_joint()
             # self.log_version()
     def add_joint(self, joint : Joint):
+        # Check if this is a real joint (not a waypoint)
+        is_real_joint = type(joint).__name__ not in ['Waypoint', 'PrintedWaypoint']
+        
         if not self.add_to_root:
             if (self.chain == None or len(self.chain.Joints) == 0) :
                 self.chain = KinematicChain(joint, units=self.units)
@@ -2391,6 +2797,10 @@ class WindowKinegamiGUI(QMainWindow):
                 self.chain = new_chain
 
             self.selected_joint = 0
+
+        # Update saved configurations if a real joint was added
+        if is_real_joint:
+            self.update_saved_configs_for_joint_added()
 
         self.update_joint()
         #self.log_version() # now called in joint_selection_changed
