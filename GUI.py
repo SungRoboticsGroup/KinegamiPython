@@ -1404,6 +1404,10 @@ class WindowKinegamiGUI(QMainWindow):
         
         self.configurations_layout.addLayout(center_layout)
         
+        # Create horizontal layout for saved configs and interpolation slider
+        self.saved_configs_container = QHBoxLayout()
+        self.configurations_layout.addLayout(self.saved_configs_container)
+        
         # Display saved configurations
         self.display_saved_configurations()
         
@@ -1475,14 +1479,50 @@ class WindowKinegamiGUI(QMainWindow):
             except ValueError:
                 current_config.append(0.0)
         
-        self.saved_configurations.append(current_config)
+        # Determine where to insert the configuration
+        insert_index = len(self.saved_configurations)  # Default: append at end
+        
+        # Check if interpolation slider exists and is between configurations
+        if (hasattr(self, 'config_interp_slider') and 
+            len(self.saved_configurations) > 1):
+            slider_value = self.config_interp_slider.value()
+            max_value = self.config_interp_slider.maximum()
+            # Invert because vertical sliders have max at top
+            inverted_value = max_value - slider_value
+            config_value = inverted_value / 100.0
+            
+            # Round to nearest integer to find closest config position
+            nearest_config = round(config_value)
+            
+            # Check if we're between two configurations (not exactly at one)
+            # Use a small tolerance for floating point comparison
+            if abs(config_value - nearest_config) > 0.01:
+                # We're between configs - insert after the lower one
+                insert_index = int(config_value) + 1
+                # Make sure we don't exceed bounds
+                insert_index = min(insert_index, len(self.saved_configurations))
+        
+        self.saved_configurations.insert(insert_index, current_config)
         self.display_saved_configurations()
+        
+        # Move the interpolation slider to the newly added configuration
+        if hasattr(self, 'config_interp_slider'):
+            max_value = self.config_interp_slider.maximum()
+            slider_value = max_value - (insert_index * 100)
+            self.config_interp_slider.blockSignals(True)
+            self.config_interp_slider.setValue(slider_value)
+            self.config_interp_slider.blockSignals(False)
     
     def display_saved_configurations(self):
         """Display all saved configurations as rows below the current configuration"""
-        # Remove any existing saved config rows (they start after the first layout)
-        while self.configurations_layout.count() > 1:
-            item = self.configurations_layout.takeAt(1)
+        # Save the current interpolation slider position before recreating
+        saved_slider_value = None
+        if hasattr(self, 'config_interp_slider'):
+            saved_slider_value = self.config_interp_slider.value()
+        
+        # Clear the saved configs container
+        while self.saved_configs_container.count():
+            item = self.saved_configs_container.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
             elif item.layout():
@@ -1495,11 +1535,27 @@ class WindowKinegamiGUI(QMainWindow):
         if not self.saved_configurations:
             return
         
+        # Create vertical layout for configuration rows
+        configs_column = QVBoxLayout()
+        
         # Display each saved configuration
         for config_index, config in enumerate(self.saved_configurations):
             container_widget = QWidget()
             config_row_layout = QHBoxLayout(container_widget)
             config_row_layout.setContentsMargins(0, 0, 0, 0)
+            
+            # Add up/down buttons for reordering (at the left)
+            up_button = QPushButton("▲")
+            up_button.setFixedWidth(30)
+            up_button.setEnabled(config_index > 0)  # Disable if already at top
+            up_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_up(idx))
+            config_row_layout.addWidget(up_button)
+            
+            down_button = QPushButton("▼")
+            down_button.setFixedWidth(30)
+            down_button.setEnabled(config_index < len(self.saved_configurations) - 1)  # Disable if already at bottom
+            down_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_down(idx))
+            config_row_layout.addWidget(down_button)
             
             # Add value labels for each joint, aligned with the text boxes above
             for value in config:
@@ -1527,13 +1583,98 @@ class WindowKinegamiGUI(QMainWindow):
             delete_button.clicked.connect(lambda checked, idx=config_index: self.delete_configuration(idx))
             config_row_layout.addWidget(delete_button)
             
-            # Center the row
-            row_layout = QHBoxLayout()
-            row_layout.addStretch()
-            row_layout.addWidget(container_widget)
-            row_layout.addStretch()
+            # Add the row to the configs column
+            configs_column.addWidget(container_widget)
+        
+        # Add configs column to the container
+        self.saved_configs_container.addStretch()
+        self.saved_configs_container.addLayout(configs_column)
+        self.saved_configs_container.addStretch()
+        
+        # Add interpolation slider on the right
+        if len(self.saved_configurations) > 1:
+            slider_widget = QWidget()
+            slider_layout = QVBoxLayout(slider_widget)
+            slider_layout.setContentsMargins(10, 0, 10, 0)
+            slider_layout.setAlignment(Qt.AlignHCenter)
             
-            self.configurations_layout.addLayout(row_layout)
+            slider_label = QLabel("Interpolate")
+            slider_label.setAlignment(Qt.AlignCenter)
+            slider_label.setFixedWidth(80)
+            slider_layout.addWidget(slider_label, 0, Qt.AlignHCenter)
+            
+            self.config_interp_slider = QSlider(Qt.Vertical)
+            self.config_interp_slider.setMinimum(0)
+            self.config_interp_slider.setMaximum((len(self.saved_configurations) - 1) * 100)  # 100 steps per config
+            
+            # Restore previous slider position if it was saved, otherwise default to 0
+            if saved_slider_value is not None:
+                # Make sure the saved value is within the new range
+                saved_slider_value = min(saved_slider_value, self.config_interp_slider.maximum())
+                self.config_interp_slider.setValue(saved_slider_value)
+            else:
+                self.config_interp_slider.setValue(0)
+            
+            self.config_interp_slider.setTickPosition(QSlider.TicksBothSides)
+            self.config_interp_slider.setTickInterval(100)  # Tick at each configuration
+            self.config_interp_slider.setMinimumHeight(200)
+            self.config_interp_slider.sliderMoved.connect(self.interpolate_configurations)
+            self.config_interp_slider.sliderReleased.connect(self.interpolation_slider_released)
+            slider_layout.addWidget(self.config_interp_slider, 0, Qt.AlignHCenter)
+            
+            self.saved_configs_container.addWidget(slider_widget)
+    
+    def interpolate_configurations(self, slider_value):
+        """Interpolate between saved configurations based on slider value"""
+        if len(self.saved_configurations) < 2:
+            return
+        
+        # Invert because vertical sliders have max at top
+        max_value = self.config_interp_slider.maximum()
+        inverted_value = max_value - slider_value
+        
+        # Convert slider value to config space (0.0 to len-1)
+        config_value = inverted_value / 100.0
+        
+        # Determine which two configs to interpolate between
+        config_index = int(config_value)
+        if config_index >= len(self.saved_configurations) - 1:
+            config_index = len(self.saved_configurations) - 2
+        
+        # Interpolation factor (0.0 to 1.0)
+        t = config_value - config_index
+        
+        config_a = self.saved_configurations[config_index]
+        config_b = self.saved_configurations[config_index + 1]
+        
+        # Interpolate each joint state
+        for i in range(min(len(config_a), len(config_b))):
+            if i >= len(self.config_joint_indices):
+                break
+            
+            joint_index = self.config_joint_indices[i]
+            if joint_index >= len(self.chain.Joints):
+                continue
+            
+            # Linear interpolation
+            interpolated_value = config_a[i] * (1 - t) + config_b[i] * t
+            
+            joint = self.chain.Joints[joint_index]
+            if isinstance(joint, PrismaticJoint):
+                actualState = interpolated_value
+            elif isinstance(joint, RevoluteJoint):
+                actualState = math.radians(interpolated_value)
+            else:
+                continue
+            
+            self.chain.setJointState(joint_index, actualState)
+        
+        self.update_joint()
+        self.set_state_tools()
+    
+    def interpolation_slider_released(self):
+        """Handle when interpolation slider is released"""
+        self.log_version()
     
     def set_configuration(self, config_index):
         """Set the chain to a saved configuration"""
@@ -1561,6 +1702,16 @@ class WindowKinegamiGUI(QMainWindow):
             
             self.chain.setJointState(joint_index, actualState)
         
+        # Update the interpolation slider to match this configuration
+        if hasattr(self, 'config_interp_slider'):
+            # Calculate slider position for this config index
+            # Since slider is inverted: max_value at top (config 0), 0 at bottom (last config)
+            max_value = self.config_interp_slider.maximum()
+            slider_value = max_value - (config_index * 100)
+            self.config_interp_slider.blockSignals(True)
+            self.config_interp_slider.setValue(slider_value)
+            self.config_interp_slider.blockSignals(False)
+        
         self.update_joint()
         self.set_state_tools()
         self.log_version()
@@ -1569,6 +1720,22 @@ class WindowKinegamiGUI(QMainWindow):
         """Delete a saved configuration"""
         if config_index < len(self.saved_configurations):
             self.saved_configurations.pop(config_index)
+            self.display_saved_configurations()
+    
+    def move_configuration_up(self, config_index):
+        """Move a configuration up in the list"""
+        if config_index > 0 and config_index < len(self.saved_configurations):
+            # Swap with the one above
+            self.saved_configurations[config_index], self.saved_configurations[config_index - 1] = \
+                self.saved_configurations[config_index - 1], self.saved_configurations[config_index]
+            self.display_saved_configurations()
+    
+    def move_configuration_down(self, config_index):
+        """Move a configuration down in the list"""
+        if config_index >= 0 and config_index < len(self.saved_configurations) - 1:
+            # Swap with the one below
+            self.saved_configurations[config_index], self.saved_configurations[config_index + 1] = \
+                self.saved_configurations[config_index + 1], self.saved_configurations[config_index]
             self.display_saved_configurations()
     
     def update_saved_configs_for_joint_added(self):
