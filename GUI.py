@@ -23,7 +23,7 @@ import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -906,6 +906,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.config_sliders = []  # List to store sliders for joint states
         self.config_joint_indices = []  # List to map text box index to actual joint index
         self.saved_configurations = []  # List of saved configurations (each is a list of joint states)
+        self.config_durations = []  # List of durations (in seconds) between each pair of configs
+        self.animation_timer = None  # QTimer for animation
+        self.is_animating = False  # Animation state
+        self.animation_start_time = 0  # Animation start timestamp
+        self.animation_start_value = 0  # Slider value when animation started
+        self.animation_loop = False  # Whether animation should loop
         
         self.configurations_dock = QDockWidget("Configurations", self)
         self.configurations_dock.setWidget(self.configurations_widget)
@@ -1623,6 +1629,67 @@ class WindowKinegamiGUI(QMainWindow):
             slider_layout.addWidget(self.config_interp_slider, 0, Qt.AlignHCenter)
             
             self.saved_configs_container.addWidget(slider_widget)
+            
+            # Add animation controls column on the right
+            animation_widget = QWidget()
+            animation_layout = QVBoxLayout(animation_widget)
+            animation_layout.setContentsMargins(10, 0, 10, 0)
+            animation_layout.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+            
+            # Add label above play/pause button
+            animation_label = QLabel("Animate (s)")
+            animation_label.setAlignment(Qt.AlignCenter)
+            animation_label.setFixedWidth(80)
+            animation_layout.addWidget(animation_label, 0, Qt.AlignHCenter)
+            
+            # Create horizontal layout for play button and loop checkbox
+            play_loop_layout = QHBoxLayout()
+            play_loop_layout.setSpacing(5)
+            
+            # Play/Pause button
+            if self.is_animating:
+                self.play_pause_button = QPushButton("⏸")
+                self.play_pause_button.setToolTip("Pause")
+            else:
+                self.play_pause_button = QPushButton("▶")
+                self.play_pause_button.setToolTip("Play")
+            self.play_pause_button.setFixedSize(40, 40)
+            self.play_pause_button.clicked.connect(self.toggle_animation)
+            play_loop_layout.addWidget(self.play_pause_button)
+            
+            # Loop checkbox next to play button
+            self.animation_loop_checkbox = QCheckBox("Loop")
+            self.animation_loop_checkbox.setChecked(self.animation_loop)
+            self.animation_loop_checkbox.stateChanged.connect(self.toggle_animation_loop)
+            play_loop_layout.addWidget(self.animation_loop_checkbox)
+            
+            animation_layout.addLayout(play_loop_layout)
+            
+            # Ensure we have durations list matching the number of segments
+            num_segments = len(self.saved_configurations) - 1
+            while len(self.config_durations) < num_segments:
+                self.config_durations.append(1.0)
+            while len(self.config_durations) > num_segments:
+                self.config_durations.pop()
+            
+            # Add duration text boxes aligned with bottom of each interval (configuration row)
+            for i in range(num_segments):
+                # Add spacing to align with the configuration row at the END of this interval
+                # First config row appears after some initial spacing
+                if i == 0:
+                    animation_layout.addSpacing(30)  # Align with first config row
+                else:
+                    animation_layout.addSpacing(40)  # Full row height to next config
+                
+                duration_box = QLineEdit(str(self.config_durations[i]))
+                duration_box.setFixedWidth(50)
+                duration_box.setAlignment(Qt.AlignCenter)
+                duration_box.setToolTip(f"Duration (seconds) from config {i} to {i+1}")
+                duration_box.editingFinished.connect(lambda idx=i: self.update_duration(idx))
+                animation_layout.addWidget(duration_box, 0, Qt.AlignHCenter)
+            
+            animation_layout.addStretch()
+            self.saved_configs_container.addWidget(animation_widget)
     
     def interpolate_configurations(self, slider_value):
         """Interpolate between saved configurations based on slider value"""
@@ -1758,6 +1825,140 @@ class WindowKinegamiGUI(QMainWindow):
         for config in self.saved_configurations:
             if config_position < len(config):
                 config.pop(config_position)
+    
+    def update_duration(self, segment_index):
+        """Update the duration for a segment from user input"""
+        # Find the duration text box and update the stored value
+        try:
+            # Find the sender widget
+            sender = self.sender()
+            if sender and isinstance(sender, QLineEdit):
+                try:
+                    new_duration = float(sender.text())
+                    if new_duration > 0:
+                        if segment_index < len(self.config_durations):
+                            self.config_durations[segment_index] = new_duration
+                    else:
+                        sender.setText(str(self.config_durations[segment_index]))
+                except ValueError:
+                    sender.setText(str(self.config_durations[segment_index]))
+        except Exception as e:
+            print(f"Error updating duration: {e}")
+    
+    def toggle_animation(self):
+        """Toggle between play and pause states"""
+        if self.is_animating:
+            self.pause_animation()
+        else:
+            self.start_animation()
+    
+    def start_animation(self):
+        """Start the animation through configurations"""
+        if len(self.saved_configurations) < 2:
+            return
+        
+        self.is_animating = True
+        
+        # Create timer if it doesn't exist
+        if self.animation_timer is None:
+            self.animation_timer = qc.QTimer()
+            self.animation_timer.timeout.connect(self.animation_step)
+        
+        # Record start position and time
+        self.animation_start_value = self.config_interp_slider.value()
+        self.animation_start_time = qc.QTime.currentTime().msecsSinceStartOfDay() / 1000.0
+        
+        # Track which segment we're animating through
+        max_value = self.config_interp_slider.maximum()
+        inverted_value = max_value - self.animation_start_value
+        current_config_value = inverted_value / 100.0
+        self.animation_current_segment = int(current_config_value)
+        self.animation_segment_start_time = self.animation_start_time
+        
+        # Update button to pause icon
+        self.play_pause_button.setText("⏸")
+        self.play_pause_button.setToolTip("Pause")
+        
+        # Start timer (update every 16ms for ~60fps)
+        self.animation_timer.start(16)
+    
+    def pause_animation(self):
+        """Pause the animation"""
+        self.is_animating = False
+        
+        if self.animation_timer is not None:
+            self.animation_timer.stop()
+        
+        # Update button to play icon
+        self.play_pause_button.setText("▶")
+        self.play_pause_button.setToolTip("Play")
+    
+    def toggle_animation_loop(self, state):
+        """Toggle animation loop on/off"""
+        self.animation_loop = (state == Qt.Checked)
+    
+    def animation_step(self):
+        """Update animation - called by timer"""
+        if not self.is_animating or len(self.saved_configurations) < 2:
+            return
+        
+        current_time = qc.QTime.currentTime().msecsSinceStartOfDay() / 1000.0
+        
+        # Calculate elapsed time in current segment
+        elapsed_in_segment = current_time - self.animation_segment_start_time
+        
+        # Get duration for current segment
+        segment_duration = self.config_durations[self.animation_current_segment] if self.animation_current_segment < len(self.config_durations) else 1.0
+        
+        # Calculate progress through current segment (0.0 to 1.0)
+        if segment_duration > 0:
+            segment_progress = elapsed_in_segment / segment_duration
+        else:
+            segment_progress = 1.0
+        
+        # Check if we've completed this segment
+        if segment_progress >= 1.0:
+            # Move to next segment
+            self.animation_current_segment += 1
+            
+            # Check if we've reached the end
+            if self.animation_current_segment >= len(self.saved_configurations) - 1:
+                # Check if we should loop
+                if self.animation_loop:
+                    # Loop back to start
+                    self.animation_current_segment = 0
+                    self.animation_segment_start_time = current_time
+                    # Set to first config
+                    max_value = self.config_interp_slider.maximum()
+                    self.config_interp_slider.blockSignals(True)
+                    self.config_interp_slider.setValue(max_value)
+                    self.config_interp_slider.blockSignals(False)
+                    self.interpolate_configurations(max_value)
+                    return
+                else:
+                    # Stop at the end
+                    self.pause_animation()
+                    return
+            else:
+                # Start timing the new segment
+                self.animation_segment_start_time = current_time
+                segment_progress = 0.0
+        
+        # Calculate config value (segment_index + progress through segment)
+        new_config_value = self.animation_current_segment + segment_progress
+        
+        # Convert to slider value (inverted)
+        max_value = self.config_interp_slider.maximum()
+        new_inverted_value = new_config_value * 100
+        new_slider_value = max_value - new_inverted_value
+        
+        # Update slider
+        self.config_interp_slider.blockSignals(True)
+        self.config_interp_slider.setValue(int(new_slider_value))
+        self.config_interp_slider.blockSignals(False)
+        
+        # Trigger interpolation
+        self.interpolate_configurations(int(new_slider_value))
 
     def rescale_dimensions(self, prev, new):
         if (prev != new):
