@@ -5,6 +5,7 @@ from geometryHelpers import revoluteColorDefault, revoluteEdgeColorDefault, sphe
 from LinkCSC import *
 from Tube import Tube
 from KinematicTree import KinematicTree
+from mpl_toolkits.mplot3d import Axes3D
 
 class PrintedTube(Tube):
     def __init__(self, wallThickness : float, holeDiameter : float, numHoles : int):
@@ -83,7 +84,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
 class PrintedLinkCSC(PrintedTube, LinkCSC):
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  wallThickness : float, holeDiameter : float, numHoles : int,
-                 maxAnglePerElbow : float = np.pi/2, path : Optional[PathCSC] = None, 
+                 maxAnglePerElbow : float = np.pi/10, path : Optional[PathCSC] = None, 
                  EPSILON : float = 0.01, startRadius : Optional[float] = None, 
                  endRadius : Optional[float] = None):
         PrintedTube.__init__(self, wallThickness, holeDiameter, numHoles)
@@ -117,7 +118,6 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
 
         output = m3d.Manifold() # empty manifold
 
-        print("computing manifold")
         if self.elbow1:
             bend1 = Bend(arcRadius=self.r, StartFrame=self.StartDubinsPose,
                          bendingAngle=self.path.theta1, rotationalAxisAngle=self.rot1AxisAngle,
@@ -168,10 +168,6 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
                                   hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)
             insetSolid = insetSolid.refine_to_length(self.r)
             if trussCenterline:
-                """insetSolid -= self.manifold(0.4*insetStartRadius, 0.4*insetEndRadius,
-                                  trussNumSides, stabilize=True, wallThickness=None, 
-                                  hullBends=hullBends, maxSectionAngle=trussMaxSectionAngle)"""
-                        
                 numCenterlinePoints = max(3, int(self.path.length/self.r))
                 centerlineVertices = self.path.interpolate(count=numCenterlinePoints)
                 centerlineEdges = np.hstack((np.arange(numCenterlinePoints-1).reshape(-1,1), 
@@ -248,10 +244,153 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
         tri_mesh.export(filename)
 
+    def addToPlot(self, ax: Axes3D, numSides : int = 32, color : str = linkColorDefault, 
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = False, showPath : bool = True, 
+                  pathColor : str = pathColorDefault,
+                  showPathCircles : bool = False, showBoundary : bool = True,
+                  showElbowBoundingBalls : bool = False, showModule : bool = False):
+        """
+        Add this link to a 3D plot, with optional module visualization.
+        
+        Parameters
+        ----------
+        showModule : bool, default=False
+            If True, displays the connectable module instead of the usual surface.
+            When True, showBoundary is automatically set to False.
+        
+        Other parameters are inherited from LinkCSC.addToPlot()
+        """
+        if showModule:
+            # Generate and display the connectable module
+            module = self.connectableModule()
+            mesh = module.to_mesh()
+            vertices = mesh.vert_properties[:, :3]
+            triangles = mesh.tri_verts
+            
+            # Create a list of triangle vertex coordinates
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            faces = [vertices[tri] for tri in triangles]
+            mesh_collection = Poly3DCollection(faces, alpha=alpha, 
+                                              edgecolor='k' if wireFrame else None,
+                                              facecolors=color)
+            ax.add_collection3d(mesh_collection)
+            
+        return super().addToPlot(ax, numSides=numSides, color=color, alpha=alpha,
+                                   wireFrame=wireFrame, showFrames=showFrames,
+                                   showPath=showPath, pathColor=pathColor,
+                                   showPathCircles=showPathCircles, 
+                                   showBoundary=showBoundary and not showModule,
+                                   showElbowBoundingBalls=showElbowBoundingBalls)
+
+    def show(self, numSides : int = 32, color : str = linkColorDefault, 
+             alpha : float = 0.5, wireFrame : bool = False, 
+             showFrames : bool = False, showPath : bool = True, 
+             pathColor : str = pathColorDefault,
+             showPathCircles : bool = False, showBoundary : bool = True,
+             showElbowBoundingBalls : bool = False, block : bool = False,
+             showModule : bool = False):
+        """
+        Display this link in a 3D plot window.
+        
+        Parameters
+        ----------
+        showModule : bool, default=False
+            If True, displays the connectable module instead of the usual surface.
+            When True, showBoundary is automatically set to False.
+        block : bool, default=False
+            If True, blocks execution until the plot window is closed.
+        
+        Other parameters are inherited from LinkCSC.show()
+        """
+        ax: Axes3D = plt.figure().add_subplot(projection='3d')
+        allElbowHandleSets = self.addToPlot(ax, numSides, color, alpha, wireFrame, 
+                                     showFrames, showPath, pathColor, showPathCircles,
+                                     showBoundary, showElbowBoundingBalls, showModule)
+        ax.set_aspect('equal')
+        plt.show(block=block)
+
+def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends : bool = False,
+                     maxSectionAngle : float = np.pi/10) -> m3d.Manifold:
+    """Generate a connectable branching module from multiple PrintedLinkCSC links sharing the same start pose"""
+    if len(links) < 1:
+        raise ValueError("At least one link is required to create a branching module.")
+    # Verify that all links share the same start pose
+    startPose = links[0].StartDubinsPose
+    DISTANCE_EPSILON = links[0].DISTANCE_EPSILON
+    wallThickness = links[0].wallThickness
+    holeDiameter = links[0].holeDiameter
+    numHoles = links[0].numHoles
+    r = links[0].r
+    startRadius = links[0].startRadius
+    
+    outer = m3d.Manifold()
+    inner = m3d.Manifold()
+    for link in links:
+        if not np.all(np.isclose(link.StartDubinsPose.A, startPose.A)):
+            raise ValueError("All links must share the same start pose to create a branching module.")
+        if not abs(r - link.r) < DISTANCE_EPSILON:
+            raise ValueError("All links must have the same radius to create a branching module.")
+        if not abs(wallThickness - link.wallThickness) < DISTANCE_EPSILON:
+            raise ValueError("All links must have the same wall thickness to create a branching module.")
+        if not abs(holeDiameter - link.holeDiameter) < DISTANCE_EPSILON:
+            raise ValueError("All links must have the same hole diameter to create a branching module.")
+        if not numHoles == link.numHoles:
+            raise ValueError("All links must have the same number of holes to create a branching module.")
+        if not abs(startRadius - link.startRadius) < DISTANCE_EPSILON:
+            raise ValueError("All links must have the same start radius to create a branching module.")
+        
+        outer += link.manifold(numSides=numSides, hullBends=hullBends, stabilize=True, wallThickness=None,
+                               maxSectionAngle=maxSectionAngle)
+        inner += link.manifold(startRadius=startRadius - wallThickness, 
+                               endRadius=link.endRadius - link.wallThickness,
+                               numSides=numSides, hullBends=hullBends, stabilize=True, wallThickness=None,
+                               maxSectionAngle=maxSectionAngle, extendBackward=link.DISTANCE_EPSILON,
+                               extendForward=link.DISTANCE_EPSILON)
+    tube = outer - inner
+
+    # Create the inset at the base
+    holeSlicer = m3d.Manifold()
+    holeAnglesDegrees = np.linspace(0, 360, numHoles, endpoint=False)
+    connectionLength = 2 * holeDiameter
+    for angle in holeAnglesDegrees:
+        hole = m3d.Manifold.cylinder(height=r+DISTANCE_EPSILON, 
+                                         radius_low=holeDiameter/2, 
+                                         radius_high=holeDiameter/2, 
+                                         circular_segments=numSides)
+        hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+        holeSlicer += hole
+    
+    inset = m3d.Manifold.cylinder(height=2*connectionLength+2*DISTANCE_EPSILON, 
+                                       radius_low=startRadius-wallThickness+DISTANCE_EPSILON, 
+                                       radius_high=startRadius-wallThickness+DISTANCE_EPSILON,
+                                       circular_segments=numSides)
+    tube -= inset.translate((0,0,-connectionLength-DISTANCE_EPSILON)).rotate((0,90,0)).transform(startPose.A[:3,:])
+    tube -= holeSlicer.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(startPose.A[:3,:])
+
+    # Create the outsets at each link end
+    for link in links:
+        outset = m3d.Manifold.cylinder(height=2*connectionLength, 
+                                       radius_low=link.endRadius-wallThickness+DISTANCE_EPSILON, 
+                                       radius_high=link.endRadius-wallThickness+DISTANCE_EPSILON,
+                                       circular_segments=numSides)
+        outset -= m3d.Manifold.cylinder(height=2*connectionLength, 
+                                       radius_low=link.endRadius-2*wallThickness, 
+                                       radius_high=link.endRadius-2*wallThickness,
+                                       circular_segments=numSides)
+        outset -= holeSlicer.translate((0,0,3*holeDiameter))
+        outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(link.EndDubinsPose.A[:3,:])
+        tube += outset
+    
+    return tube
+        
+
+
 
 class PrintedKinematicTree(KinematicTree):
     """KinematicTree constrained to PrintedTube fabrication"""
     _fabrication_type = PrintedTube  # Class-level fabrication type constraint
+    Links: list[PrintedLinkCSC]  # Type annotation override for proper type checking
     
     def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2,
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
@@ -277,4 +416,46 @@ class PrintedKinematicTree(KinematicTree):
                                   holeDiameter, numHoles, max_angle_per_elbow, path, epsilon)
         return make_printed_link
     
-    # TODO: make method to export meshes for all links in the tree as connectable modules
+    def getBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+                          maxSectionAngle : float = np.pi/10) -> dict[int, m3d.Manifold]:
+        """Generate connectable branching modules for all joints with children"""
+        branchingModules = {}
+        for jointIndex, childIndices in enumerate(self.Children):
+            if len(childIndices) >= 1:
+                links = [link for childIndex in childIndices if (link := self.Links[childIndex]).path.length > link.DISTANCE_EPSILON]
+                branchingModuleManifold = branchingModule(links, numSides, hullBends, maxSectionAngle)
+                branchingModules[jointIndex] = branchingModuleManifold
+        return branchingModules
+    
+    def saveBranchingModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
+                          maxSectionAngle : float = np.pi/10) -> None:
+        """Save connectable branching modules for all joints with children to files"""
+        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
+        for jointIndex, module in branchingModules.items():
+            filename = f"{baseFilename}_joint{jointIndex}.stl"
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
+            faces = mesh_data.tri_verts
+            tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+            tri_mesh.export(filename)
+    
+    def showBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+                          maxSectionAngle : float = np.pi/10, block : bool = False) -> None:
+        """Display connectable branching modules for all joints with children in a 3D plot window"""
+        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
+        fig = plt.figure()
+        ax: Axes3D = fig.add_subplot(projection='3d')
+        for jointIndex, module in branchingModules.items():
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]
+            triangles = mesh_data.tri_verts
+            
+            # Create a list of triangle vertex coordinates
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            faces = [vertices[tri] for tri in triangles]
+            mesh_collection = Poly3DCollection(faces, alpha=0.5, 
+                                              edgecolor='k',
+                                              facecolors='cyan')
+            ax.add_collection3d(mesh_collection)
+        ax.set_aspect('equal')
+        plt.show(block=block)

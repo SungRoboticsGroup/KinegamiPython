@@ -181,10 +181,20 @@ class LinkCSC:
                                                     showElbowBoundingBalls)
                 if showFrames:
                     allElbowHandleSets += elbow2HandleSets
-        
+        elif showFrames:
+            # show the start and end frames
+            startFrameHandles = addPosesToPlot(np.array([self.StartDubinsPose]), ax, 
+                                              axisLength=self.r, xColor='darkred', 
+                                              yColor='darkblue', zColor='darkgreen')
+            endFrameHandles = addPosesToPlot(np.array([self.EndDubinsPose]), ax, 
+                                            axisLength=self.r, xColor='darkred', 
+                                            yColor='darkblue', zColor='darkgreen')
+            allElbowHandleSets.append(startFrameHandles)
+            allElbowHandleSets.append(endFrameHandles)
+
         if showPath:
             self.path.addToPlot(ax, showCircles=showPathCircles, 
-                                showPoses=showFrames, pathColor=pathColor)
+                                showPoses=False, pathColor=pathColor)
         
         return allElbowHandleSets
     

@@ -21,6 +21,8 @@ from types import ModuleType
 import manifold3d as m3d
 import trimesh
 from pytetwild.pytetwild import tetrahedralize
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from mpl_toolkits.mplot3d import Axes3D
 
 def unit(v):
     return v / np.linalg.norm(v)
@@ -725,12 +727,12 @@ class Elbow:
             FwdRotFwd = FwdRot @ self.Forward
             Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
             aHats, bHats, cHats, origins = addPosesToPlot(Poses, ax, 
-                                        axisLength=1, xColor='darkred', 
+                                        axisLength=self.r, xColor='darkred', 
                                         yColor='darkblue', zColor='darkgreen')
             frameHandles = [aHats, bHats, cHats, origins]
             x,y,z = Fwd.t
             u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
-            ax.quiver(x,y,z,u,v,w,length=2,normalize=True)
+            ax.quiver(x,y,z,u,v,w,length=self.r,normalize=True)
         
         return frameHandles
     
@@ -1514,3 +1516,51 @@ def sdf_aabb(
     return float(result[0]) if result.shape[0] == 1 else result
 
 
+def plotManifold(manifold, block=True, globalFrame=False):
+  # Get mesh representation
+  mesh = manifold.to_mesh()
+  vertices = mesh.vert_properties[:, :3]
+  triangles = mesh.tri_verts
+
+  # Matplotlib 3D plot
+  fig = plt.figure()
+  ax = fig.add_subplot(111, projection='3d')
+
+  # Create a list of triangle vertex coordinates
+  faces = [vertices[tri] for tri in triangles]
+  mesh_collection = Poly3DCollection(faces, alpha=0.7, edgecolor='k')
+  ax.add_collection3d(mesh_collection)
+
+  if globalFrame:
+     addPosesToPlot(np.array([SE3()]), ax, axisLength=1)
+
+  # Auto scale to the mesh size
+  scale = vertices.flatten()
+  ax.set_aspect('equal')
+  # hide axes
+  ax.axis('off')
+
+  plt.show(block=block)
+
+def analyzeManifoldProperties(manifold : m3d.Manifold):
+  # Get mesh representation
+  mesh = manifold.to_mesh()
+  vertices = mesh.vert_properties[:, :3]
+  triangles = mesh.tri_verts
+
+  volume = manifold.volume()
+  surface_area = manifold.surface_area()
+  genus = manifold.genus()
+  print(f"Volume: {volume}, Surface Area: {surface_area}, Genus: {genus}")
+  print(f"Vertices: {vertices.shape}, Triangles: {triangles.shape}")
+
+def saveManifold(manifold : m3d.Manifold, filename : str):
+    """
+    Export a manifold to a 3MF file for 3D printing or CAD applications.
+    """
+    mesh_data = manifold.to_mesh()
+    vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
+    faces = mesh_data.tri_verts
+    tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    
+    tri_mesh.export(filename)
