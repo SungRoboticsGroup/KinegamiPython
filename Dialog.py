@@ -10,8 +10,8 @@ from spatialmath import SE3
 import math
 from PathCSC import *
 from KinematicChain import *
+from OrigamiTube import *
 from scipy.spatial.transform import Rotation as R
-from testqtgraph import *
 from style import *
 
 class EditJointStateDialog(QDialog):
@@ -130,7 +130,7 @@ class AddPrismaticDialog(AddJointDialog):
                 if self.prevJoint.pathIndex() == 0:
                     pose = SE3.Ry(np.pi/2) @ pose
 
-            self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
+            self.jointToAdd = OrigamiPrismatic(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
             self.accept()
         except ValueError:
             self.show_error('Please enter valid numbers.')
@@ -168,7 +168,7 @@ class AddRevoluteDialog(AddJointDialog):
         bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
         
         
-        self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
+        self.jointToAdd = OrigamiRevolute(self.numSides, self.r, math.radians(bendingAngleText), SE3())
 
         if not self.prevJoint is None:
             distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2

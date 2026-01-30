@@ -1,83 +1,60 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Created on Wed Dec  6 14:07:27 2023
 
 @author: Daniel Feshbach
 """
-from Joint import *
-from OrigamiJoint import *
-from KinematicTree import KinematicTree
-from TubularPattern import *
-from LinkCSC import LinkCSC
-from numpy import array
-from PathCSC import PathCSC
-
-def remove_duplicates(arr):
-    seen = []
-    unique_arr = []
-    for item in arr:
-        if item not in seen:
-            unique_arr.append(item)
-            seen.append(item)
-    return unique_arr
+from KinematicTree import *
 
 """
 A KinematicTree with no branching.
 """
-class KinematicChain(KinematicTree):
-    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, joints : list[Joint] = None, 
-                 links : list[LinkCSC] = None, parents : list[int] = None, children : list[list[int]] = None,
-                 units : str = "Centimeter (cm)"):
-        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, units)
+class KinematicChain(KinematicTree[F]):
+    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
+                 joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
+                 parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
+                 boundingBall : Optional[Ball] = None, units : str = "Centimeter (cm)"):
+        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, boundingBall, units)
+        if gimbal:
+            self.boundingBall.expandToCenterOnLine(Line(startJoint.Pose.t, startJoint.Pose.R[:,2]))
+            self.nestedBallsRelativeToJoints = []
+            self.addNestedBall()
+            self.appendOuterWaypoint()
+            self.addNestedBall()
     
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 safe : bool = True, cachedLink : LinkCSC = None) -> int:
+                 safe : bool = True, chooseXhatToMinPath : bool = False) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, safe, cachedLink)
+                                fixedOrientation, safe, None, chooseXhatToMinPath)
     
-    def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
-        chainPattern = copy.deepcopy(self.Joints[0].pattern)
-        for j in range(1, len(self.Joints)):
-            chainPattern.append(self.Links[j].creasePattern(self.numSides, twistPortion))
-            chainPattern.append(self.Joints[j].pattern)
-        return chainPattern
+    def appendGlobalFixed(self, newJoint : Joint) -> int:
+        parentIndex = len(self.Joints) - 1
+        return super().addJoint(parentIndex, newJoint, relative=False, 
+                                fixedPosition=True, fixedOrientation=True, safe=False)
     
-    """ WARNING: this might have bugs. Or the bugs might be in the GUI.
-    I don't have time to figure it out right now, so I'm implementing the
-    (less efficient) deleteJoint function instead of using this method. """
     def delete(self, jointIndex : int, safe : bool = True) -> bool:
-        assert(jointIndex>=0 and jointIndex<len(self.Joints) and len(self.Joints)>1)
+        assert(jointIndex>=0)
         if safe:
             backup = self.dataDeepCopy()
             try:
                 self.delete(jointIndex, safe=False)
+                return True
             except ValueError as err:
                 print("WARNING: something went wrong in delete:")
                 print(err)
                 print("Deletion canceled.")
                 self.setTo(backup)
                 return False
-        elif jointIndex == len(self.Joints)-1:
-            self.Links = self.Links[:-1]
-            self.Joints = self.Joints[:-1]
-            self.Children = self.Children[:-1]
-            self.Children[-1] = []
-            self.Parents = self.Parents[:-1]
-            self.recomputeBoundingBall()
         else:
             nextJoint = self.Joints[jointIndex+1]
-            if jointIndex>0:
-                prevJoint = self.Joints[jointIndex-1]
-                newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
-                                        nextJoint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow)
-            else:
-                newLink = LinkCSC(self.r, nextJoint.ProximalDubinsFrame(), 
-                                        nextJoint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow)
+            prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
+            link_constructor = self._get_link_constructor()
+            newLink = link_constructor(self.r, prevJoint.DistalDubinsFrame(), 
+                                    nextJoint.ProximalDubinsFrame(),
+                                    self.maxAnglePerElbow)
             linksBefore = self.Links[:jointIndex]
             linksAfter = self.Links[jointIndex+2:]
             self.Links = linksBefore + [newLink] + linksAfter
@@ -93,133 +70,118 @@ class KinematicChain(KinematicTree):
             for i in range(len(self.Joints)):
                 self.Parents.append(i-1)
             return True
+    
+
+    # returns the index of the last joint that is not a waypoint, 
+    # or 0 (root) if there are no non-waypoint joints
+    def lastRealJointIndex(self) -> int:
+        # loop over the joint indices in reverse order
+        for i in range(len(self.Joints)-1, -1, -1):
+            if not isinstance(self.Joints[i], Waypoint):
+                return i
+        return 0
+
+
+    # add a waypoint on the intersection of the bounding ball and 
+    # the parent's z axis, facing outwards
+    def appendOuterWaypoint(self, parent = None):
+        if parent is None:
+            parent = self.Joints[self.lastRealJointIndex()]
         
-    def __repr__(self):
-        numpy_precision = np.get_printoptions()['precision']
-        if numpy_precision < 16:
-            np.set_printoptions(precision=16)
-        output = (
-            f"KinematicChain(startJoint={repr(self.Joints[0])}, "
-            f"maxAnglePerElbow={repr(self.maxAnglePerElbow)}, "
-            f"joints={repr(self.Joints)}, "
-            f"links={repr(self.Links)}, "
-            f"children={repr(self.Children)}, "
-            f"parents={repr(self.Parents)}, "
-            f"units={repr(self.units)})"
-        )
-        np.set_printoptions(precision=numpy_precision)
-        return output
-    
+        parentZhat = parent.Pose.R[:,2]
+
+        if not Line(parent.Pose.t, parentZhat).contains(self.boundingBall.c):
+            raise ValueError("Bounding ball is not centered on the parent's Z axis")
         
-    def save(self, file_path: str):
-        with open(file_path, "w") as f:
-            save = repr(self)
-            f.write(save)
-            f.close()
+        if not Ray(parent.Pose.t, -parentZhat).contains(self.boundingBall.c):
+            raise ValueError("Parent zhat is facing inwards, not outwards")
 
-    
-    # def save(self, file_path: str):
-    #     with open(file_path, "w") as f:
-    #         save = str(self.maxAnglePerElbow) + "\n"
-    #         for i in range(0, len(self.Joints)):
-    #             joint = self.Joints[i]
-    #             save += str(self.Parents[i]) + " "
-    #             if isinstance(joint, Waypoint):
-    #                 save += "Waypoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.pidx) + " "
-    #             elif isinstance(joint, RevoluteJoint):
-    #                 save += "RevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
-    #             elif isinstance(joint, ExtendedRevoluteJoint):
-    #                 save += "ExtendedRevoluteJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.totalBendingAngle) + " " + str(joint.tubeLength) + " " + str(joint.numSinkLayers) + " " + str(joint.state) + " "
-    #             elif isinstance(joint, PrismaticJoint):
-    #                 save += "PrismaticJoint " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.numLayers) + " " + str(joint.coneAngle) + " " + str(joint.state) + " "
-    #             elif isinstance(joint, Tip):
-    #                 save += "Tip " + str(joint.numSides) + " " + str(joint.r) + " " + str(joint.neutralLength) + " " + str(joint.forward) + " "
-    #             else:
-    #                 raise Exception("Not Implemented")
-    #             save += "[" + ''.join([str(x) + "," for x in joint.Pose.A.reshape((16,)).tolist()]) 
-    #             save += "\n"   
-
-    #         f.write(save)
-    #         f.close()
-    
-def loadKinematicChain(filepath : str):
-    try:
-        with open(filepath) as f:
-            chain = eval(f.read())
-            return chain
-    except Exception as e:
-        raise Exception(f"Error loading file: {e}")
-    
-
-# def loadKinematicChain(filepath : str):
-#     def getJoint(line):
-#         first = line.split(' ')
-#         pose = SE3(np.array([float(x) for x in line.split('[')[1].split(",")[:-1]]).reshape(4,4))
-#         match first[1]:
-#             case "Waypoint":
-#                 numSides = int(first[2])
-#                 r = float(first[3])
-#                 pathIndex = int(first[4])
-#                 return Waypoint(numSides, r, pose, pathIndex)
-#             case "RevoluteJoint":
-#                 numSides = int(first[2])
-#                 r = float(first[3])
-#                 totalBendingAngle = float(first[4])
-#                 numSinkLayers = int(first[5])
-#                 savedState = float(first[6])
-#                 return RevoluteJoint(numSides, r, totalBendingAngle, pose, numSinkLayers, savedState)
-#             case "ExtendedRevoluteJoint":
-#                 numSides = int(first[2])
-#                 r = float(first[3])
-#                 totalBendingAngle = float(first[4])
-#                 tubeLength = float(first[5])
-#                 numSinkLayers = int(first[6])
-#                 savedState = float(first[7])
-#                 return ExtendedRevoluteJoint(numSides, r, totalBendingAngle, tubeLength, pose, numSinkLayers, savedState)
-#             case "PrismaticJoint":
-#                 numSides = int(first[2])
-#                 r = float(first[3])
-#                 neutralLength = float(first[4])
-#                 numLayers = int(first[5])
-#                 coneAngle = float(first[6])
-#                 savedState = float(first[7])
-#                 return PrismaticJoint(numSides, r, neutralLength, numLayers, coneAngle, pose, savedState)
-#             case "Tip":
-#                 numSides = int(first[2])
-#                 r = float(first[3])
-#                 length = float(first[4])
-#                 closesForward = bool(first[5])
-#                 return Tip(numSides, r, pose, length, closesForward)
-
-#         raise Exception(f"{first[1]} not implemented in save")
+        outerPoint = self.boundingBall.c + parentZhat * self.boundingBall.r
+        # make sure it's at least 4r in the parentZhat direction from the bounding sphere of the parent
+        parentBB = parent.boundingBall()
+        if norm(outerPoint - parentBB.c) < parentBB.r + 4*parent.r:
+            outerPoint = parentBB.c + (parentBB.r + 4*parent.r) * parentZhat
         
-#     try:
-#         with open(filepath) as f:
-#             lines = f.readlines()
-#             chain = KinematicChain(getJoint(lines[1]), float(lines[0]))
-#             for i in range(2, len(lines)):
-#                 parent = int(lines[i].split(" ")[0])
-#                 joint = getJoint(lines[i])
-#                 chain.addJoint(parent, joint, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
-#             return chain
-#     except Exception as e:
-#         raise Exception(f"Error loading file: {e}")
+        outwardPoseOnBoundary = SE3.Rt(parent.Pose.R, outerPoint)
+
+        # create a new waypoint at the intersection
+        newWaypoint = Waypoint(parent.r, outwardPoseOnBoundary, pathIndex=2)
+        self.appendGlobalFixed(newWaypoint)
+    
+    def addNestedBall(self, verify : bool = True):
+        self.nestedBallsRelativeToJoints.append(self.boundingBall.newBallTransformedBy(self.Joints[-1].Pose.inv()))
+        if verify:
+            self.checkBallsAreNested()
+    
+    
+    def nestedBallsGlobal(self):
+        return [self.nestedBallsRelativeToJoints[i].newBallTransformedBy(self.Joints[i].Pose) for i in range(len(self.Joints))]
+    
+    def checkBallsAreNested(self):
+        if len(self.nestedBallsRelativeToJoints) != len(self.Joints):
+            raise ValueError("Length mismatch between joints and nested balls")
+        globalBalls = self.nestedBallsGlobal()
+        for i in range(len(globalBalls)-1):
+            if not globalBalls[i+1].containsBall(globalBalls[i]):
+                raise ValueError("Nested balls are not nested")
+            
+
+    def appendGeneralizedGimbal(self, newJoint : Joint, relative : bool = False, addOutwardWaypoint : bool = True) -> int:
+        lrji = self.lastRealJointIndex()
+        lastRealJoint = self.Joints[lrji]
+                
+        if relative:
+            newJoint.transformPoseIntoFrame(lastRealJoint.Pose)
+        
+        # make sure the chain goes right up to the bounding sphere and faces outwards
+        endJoint = self.Joints[-1]
+        if not endJoint.boundingBall().isTangentToBall(self.boundingBall) and \
+                Ray(endJoint.Pose.t, -endJoint.pathDirection()).contains(self.boundingBall.c):
+            raise ValueError("Bounding ball is not tangent to the end joint's bounding sphere")
+
+        # reverse the new joint's zhat if that makes it more aligned with the previous joint's path direction
+        endDir = endJoint.pathDirection()
+        if np.dot(endDir, newJoint.Pose.R[:,2]) < np.dot(endDir, -newJoint.Pose.R[:,2]):
+            newJoint.reverseZhat()
+        newZhat = newJoint.Pose.R[:,2]
+
+        tangentPoint = self.boundingBall.c + newZhat * self.boundingBall.r
+        tangentPlane = Plane(tangentPoint, newZhat)
+        arcToZhat = arcToDirection(startPoint=endJoint.DistalFrame().t, startDir=endDir, endDir=newZhat, r=endJoint.r)
+        assert(norm(arcToZhat.endTangent - newZhat) < 1e-8)
+
+        intersect = tangentPlane.intersectionWithLine(Line(arcToZhat.endPoint, newZhat))
+        waypointPose = SE3.Rt(newJoint.Pose.R, intersect)
+
+        # create a new waypoint at the intersection
+        newWaypoint = Waypoint(endJoint.r, waypointPose, pathIndex=2)
+
+        self.appendGlobalFixed(newWaypoint)
+        self.addNestedBall()
+
+        # if the new joint is prismatic, make sure it's fully expanded
+        if isinstance(newJoint, Prismatic):
+            newJoint.state = newJoint.stateRange()[1]
+
+        newJoint = moveJointNearNeighborBut4rPastPlane(newJoint, newWaypoint, tangentPlane)
+        self.append(newJoint, relative=False, fixedPosition=True, fixedOrientation=False, safe=False,
+                    chooseXhatToMinPath=True)
+                    
+        self.boundingBall.expandToCenterOnLine(Line(newJoint.Pose.t, newZhat))
+        newJointIndex = len(self.Joints)-1
+        self.addNestedBall()
+
+        if addOutwardWaypoint:
+            # add a waypoint on the intersection of the bounding ball and 
+            # the new joint's z axis, facing outwards
+            self.appendOuterWaypoint(parent=newJoint)
+            self.addNestedBall()
+        
+        return newJointIndex
+        
 
 
-def chainWithJointDeleted(chain : KinematicChain, jointIndex : int) -> KinematicChain:
-    assert(len(chain.Joints) > 1)
-    if jointIndex == 0:
-        newChain = KinematicChain(chain.Joints[1])
-        for i in range(2, len(chain.Joints)):
-            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
-                            fixedOrientation=True, safe=False)
-        return newChain
-    else:
-        newChain = KinematicChain(chain.Joints[0])
-        for i in range(1, jointIndex):
-            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
-                            fixedOrientation=True, safe=False)
-        for i in range(jointIndex+1, len(chain.Joints)):
-            newChain.append(chain.Joints[i], relative=False, fixedPosition=True, 
-                            fixedOrientation=True, safe=False)
-        return newChain
+
+
+
+            

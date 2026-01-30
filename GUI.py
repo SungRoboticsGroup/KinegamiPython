@@ -33,9 +33,10 @@ from spatialmath import SE3
 import math
 from PathCSC import *
 from KinematicChain import *
+from OrigamiTube import *
+from Joint import Prismatic, Revolute
 import re
 from scipy.spatial.transform import Rotation as R
-from testqtgraph import *
 from style import *
 from ReferenceMesh import *
 from Dialog import *
@@ -122,7 +123,7 @@ class AddMeshWidget(QWidget):
         except AttributeError:
             base_path = os.path.abspath(".")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import STL", os.path.join(base_path, "referenceMeshes/"), "STL Files (*.stl)", options=options
+            self, "Import STL", os.path.join(base_path, "referenceMeshes"), "STL Files (*.stl)", options=options
         )
         if file_path:
             mesh = stlToMeshItem(file_path, scale=1)
@@ -382,7 +383,11 @@ class ImageRadioButton(QRadioButton):
         super().__init__(parent)
         self.unchecked_img = QPixmap(unchecked_img)
         self.checked_img = QPixmap(checked_img)
-        self.setIconSize(self.unchecked_img.size())
+        
+        # Only set icon size if pixmaps loaded successfully
+        if not self.unchecked_img.isNull():
+            self.setIconSize(self.unchecked_img.size())
+        
         self.update_icon()
 
         # Hide the default radio button indicator
@@ -394,10 +399,17 @@ class ImageRadioButton(QRadioButton):
         self.setToolTip(tooltip_text)
 
     def update_icon(self):
-        if self.isChecked():
+        # Only set icons if pixmaps are valid
+        if self.isChecked() and not self.checked_img.isNull():
             self.setIcon(QIcon(self.checked_img))
-        else:
+        elif not self.isChecked() and not self.unchecked_img.isNull():
             self.setIcon(QIcon(self.unchecked_img))   
+
+class OverlayLine(gl.GLLinePlotItem):
+    def paint(self):
+        glDisable(GL_DEPTH_TEST)
+        super().paint()
+        glEnable(GL_DEPTH_TEST)
 
 class ClickableGLViewWidget(gl.GLViewWidget):
     def __init__(self, parent_window, parent=None):
@@ -765,7 +777,13 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.done_transforming.emit(True)
 
         if (self.selected_joint_temp != None):
-            self.click_signal.emit(self.parent_window.chain.Joints.index(self.selected_joint_temp))
+            # Find joint index by object identity (is) instead of equality
+            joint_index = -1
+            for i, joint in enumerate(self.parent_window.chain.Joints):
+                if joint is self.selected_joint_temp:
+                    joint_index = i
+                    break
+            self.click_signal.emit(joint_index)
         elif (not self.is_dragging):
             self.selected_axis = None
             self.selected_torus = None
@@ -1362,7 +1380,7 @@ class WindowKinegamiGUI(QMainWindow):
             slider.setFixedWidth(80)
             
             # Set slider range and value based on joint type
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 display_state = joint.state
                 state_range = joint.stateRange()
                 # Scale by 100*r for prismatic joints
@@ -1370,7 +1388,7 @@ class WindowKinegamiGUI(QMainWindow):
                 slider.setMinimum(int(state_range[0] * scale))
                 slider.setMaximum(int(state_range[1] * scale))
                 slider.setValue(int(display_state * scale))
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 display_state = math.degrees(joint.state)
                 state_range = joint.stateRange()
                 # Use degrees for revolute joints
@@ -1441,11 +1459,11 @@ class WindowKinegamiGUI(QMainWindow):
             text_box.blockSignals(True)
             slider.blockSignals(True)
             
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 display_state = joint.state
                 text_box.setText(str(round(display_state, 2)))
                 slider.setValue(int(display_state * 100 * self.chain.r))
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 display_state = math.degrees(joint.state)
                 text_box.setText(str(round(display_state, 2)))
                 slider.setValue(int(display_state))
@@ -1727,9 +1745,9 @@ class WindowKinegamiGUI(QMainWindow):
             interpolated_value = config_a[i] * (1 - t) + config_b[i] * t
             
             joint = self.chain.Joints[joint_index]
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 actualState = interpolated_value
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 actualState = math.radians(interpolated_value)
             else:
                 continue
@@ -1760,9 +1778,9 @@ class WindowKinegamiGUI(QMainWindow):
                 continue
             
             joint = self.chain.Joints[joint_index]
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 actualState = value
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 actualState = math.radians(value)
             else:
                 continue
@@ -2297,7 +2315,7 @@ class WindowKinegamiGUI(QMainWindow):
             except AttributeError:
                 base_path = os.path.abspath(".")
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save File", os.path.join(base_path, "save/"), "DXF Files (*.dxf)", options=options
+                self, "Save File", os.path.join(base_path, "save"), "DXF Files (*.dxf)", options=options
             )
             crease_pattern = self.chain.creasePattern()
             if file_path:
@@ -2318,15 +2336,14 @@ class WindowKinegamiGUI(QMainWindow):
                 except AttributeError:
                     base_path = os.path.abspath(".")  
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "Save File", os.path.join(base_path, "save/"), "Chain Files (*.chain)", options=options
+                    self, "Save File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain)", options=options
                 )
             else:
                 try:
                     base_path = sys._MEIPASS
                 except AttributeError:
                     base_path = os.path.abspath(".")
-                file_path = os.path.join(base_path, f"save/autosave/autosave_{autosave_id}.chain")
-                # file_path = f"save/autosave/autosave_{autosave_id}.chain"
+                file_path = os.path.join(base_path, "save", "autosave", f"autosave_{autosave_id}.tree")
 
             if file_path:
                 self.chain.save(file_path)
@@ -2338,10 +2355,10 @@ class WindowKinegamiGUI(QMainWindow):
         except AttributeError:
             base_path = os.path.abspath(".")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open File", os.path.join(base_path, "save/"), "Chain Files (*.chain)", options=options
+            self, "Open File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain);;All Files (*.*)", options=options
         )
         if file_path:
-            self.chain = loadKinematicChain(file_path)
+            self.chain = loadOrigamiChain(file_path)
             self.radius = self.chain.r
             self.num_sides = self.chain.numSides
             self.chain_created = True
@@ -2573,9 +2590,9 @@ class WindowKinegamiGUI(QMainWindow):
         target_joint = self._backup_chain.Joints[self._selected_joint]
         self.prev_joint = self._backup_chain.Joints[self._selected_joint - 1] if self._selected_joint > 0 else None
 
-        if target_joint.__class__.__name__ == "PrismaticJoint":
+        if target_joint.__class__.__name__ in ["Prismatic", "OrigamiPrismatic"]:
             self.edit_dimension_menu.updatePrismatic()
-        elif target_joint.__class__.__name__ == "RevoluteJoint":
+        elif target_joint.__class__.__name__ in ["Revolute", "TransverseRevolute", "CoaxialRevolute", "OrigamiRevolute", "OrigamiExtendedRevolute"]:
             self.edit_dimension_menu.updateRevolute()
         elif target_joint.__class__.__name__ in ["StartTip", "EndTip", "Tip"]:
             self.edit_dimension_menu.updateTip()
@@ -2600,13 +2617,13 @@ class WindowKinegamiGUI(QMainWindow):
 
                     new_joint.Pose = joint.Pose
                     if new_chain is None:
-                        new_chain = KinematicChain(new_joint, units=self.units)
+                        new_chain = OrigamiKinematicChain(new_joint, numSides=self.num_sides, units=self.units)
                     else:
                         new_chain.append(new_joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
                 else:
                     if new_chain is None:
-                        new_chain = KinematicChain(joint, units=self.units)
+                        new_chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
                     else:
                         new_chain.append(joint, relative=False,
                                         fixedPosition=True, fixedOrientation=True, safe=False)
@@ -2768,10 +2785,10 @@ class WindowKinegamiGUI(QMainWindow):
     
     def state_slider_moved(self, value):
         if self.chain and self.selected_joint != -1:
-            if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint):
+            if isinstance(self.chain.Joints[self.selected_joint], Prismatic):
                 # Prismatic joints: slider value is scaled by 100*r
                 actualState = value / (100 * self.chain.r)
-            elif isinstance(self.chain.Joints[self.selected_joint], RevoluteJoint):
+            elif isinstance(self.chain.Joints[self.selected_joint], Revolute):
                 # Revolute joints: slider value is in degrees, actual state is radians
                 actualState = math.radians(value)
             else: # Waypoint (but it shouldn't let you move the slider in the first place in that case)
@@ -2817,9 +2834,9 @@ class WindowKinegamiGUI(QMainWindow):
                 value = float(self.state_textbox.text())
             except ValueError:
                 return #TODO: handle this with QLineEdit class's setValidator method instead
-            if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint):
+            if isinstance(self.chain.Joints[self.selected_joint], Prismatic):
                 actualState = value
-            elif isinstance(self.chain.Joints[self.selected_joint], RevoluteJoint):
+            elif isinstance(self.chain.Joints[self.selected_joint], Revolute):
                 actualState = math.radians(value)
             else:
                 print("Warning: Tried to edit state textbox on a waypoint, which should not be possible.")
@@ -2845,9 +2862,9 @@ class WindowKinegamiGUI(QMainWindow):
                 return
             
             joint = self.chain.Joints[joint_index]
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 actualState = value
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 actualState = math.radians(value)
             else:
                 # This shouldn't happen since we skip waypoints
@@ -2863,11 +2880,11 @@ class WindowKinegamiGUI(QMainWindow):
         if self.chain and 0 <= joint_index < len(self.chain.Joints):
             joint = self.chain.Joints[joint_index]
             
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 # Prismatic joints: slider value is scaled by 100*r
                 actualState = value / (100 * self.chain.r)
                 display_state = actualState
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 # Revolute joints: slider value is in degrees, actual state is radians
                 actualState = math.radians(value)
                 display_state = value
@@ -2908,14 +2925,14 @@ class WindowKinegamiGUI(QMainWindow):
         if self.chain and self.selected_joint != -1:
             joint = self.chain.Joints[self.selected_joint]
             stateRange = self.chain.Joints[self.selected_joint].stateRange()
-            if isinstance(joint, PrismaticJoint):
+            if isinstance(joint, Prismatic):
                 stateActual = self.chain.Joints[self.selected_joint].state if state is None else max(stateRange[0], min(stateRange[1], state))
                 actual = (stateRange[0], stateRange[1], stateActual)
                 scale = 100 * self.chain.r
                 scaled = (int(stateRange[0] * scale), int(stateRange[1] * scale), int(stateActual * scale))
                 actual, slider, textbox = actual, scaled, actual
                 return (actual, slider, textbox)
-            elif isinstance(joint, RevoluteJoint):
+            elif isinstance(joint, Revolute):
                 if state is None:
                     stateRadians = self.chain.Joints[self.selected_joint].state
                     stateDegrees = math.degrees(stateRadians)
@@ -2951,7 +2968,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.state_slider.setMaximum(maxSlider)
             self.state_slider.setValue(currentSlider)
             self.old_state_slider_val = currentSlider
-            decimals = 2 if isinstance(self.chain.Joints[self.selected_joint], PrismaticJoint) else 0
+            decimals = 2 if isinstance(self.chain.Joints[self.selected_joint], Prismatic) else 0
             self.state_textbox.setText(str(np.round(currentText, decimals)))
             self.current_state_label.setText(f"Min State: {np.round(minText, decimals)} ≤ Current State: {np.round(currentText, decimals)} ≤ Max State: {np.round(maxText, decimals)}")
 
@@ -3141,7 +3158,7 @@ class WindowKinegamiGUI(QMainWindow):
         
         if not self.add_to_root:
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint, units=self.units)
+                self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
             else :
                 self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
                 #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
@@ -3149,12 +3166,12 @@ class WindowKinegamiGUI(QMainWindow):
         else:
 
             if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = KinematicChain(joint, units=self.units)
+                self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
             else:
                 old_root = self.chain.Joints[0]
                 joint.Pose = old_root.Pose @ joint.Pose
 
-                new_chain = KinematicChain(joint, units=self.units)
+                new_chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
 
                 for i, jt in enumerate(self.chain.Joints):
                     if i == 0:
@@ -3253,7 +3270,7 @@ class WindowKinegamiGUI(QMainWindow):
             rot = link.cylinder.orientation()
             newRot = SE3(rot)
 
-            waypoint = Waypoint(numSides, self.radius, newPos * newRot)
+            waypoint = Waypoint(self.radius, newPos * newRot)
             waypoint_index = len(self.chain.Joints)
             
             self.chain.append(newJoint = waypoint, 
@@ -3277,28 +3294,32 @@ class WindowKinegamiGUI(QMainWindow):
                     pose = SE3()
                 else:
                     prevJoint = self.chain.Joints[0] if self.add_to_root else self.chain.Joints[-1]
-                    distance = 4 * self.radius + norm(prevJoint.distalPosition()-prevJoint.Pose.t)
+                    # Get the distal Dubins frame to account for joint state
+                    distal_dubins_frame = prevJoint.DistalDubinsFrame()
+                    distance = 4 * self.radius
                     if self.add_to_root:
                         distance *= -1
-                    pose = SE3(0,0,distance)
-                    if prevJoint.pathIndex() == 0:
-                        pose = SE3.Ry(np.pi/2) @ pose
+                    # Translate distance along the distal frame's x-axis (column 0)
+                    # Then rotate so waypoint's z-axis (pathIndex 2) aligns with Dubins x-axis
+                    new_position = distal_dubins_frame.t + distance * distal_dubins_frame.R[:,0]
+                    new_orientation = distal_dubins_frame.R @ SE3.Ry(-np.pi/2).R
+                    pose = SE3.Rt(new_orientation, new_position)
 
-                waypoint = Waypoint(numSides, self.radius, pose)
+                waypoint = Waypoint(self.radius, pose)
             
             if (self.chain == None):
-                waypoint = Waypoint(numSides, self.radius, SE3())
+                waypoint = Waypoint(self.radius, SE3())
                 waypoint_index = 0
             else:
                 waypoint_index = len(self.chain.Joints)
             
             if (self.chain == None) or len(self.chain.Joints) == 0:
-                waypoint = Waypoint(numSides, self.radius, SE3())
-                self.chain = KinematicChain(waypoint, units=self.units)
+                waypoint = Waypoint(self.radius, SE3())
+                self.chain = OrigamiKinematicChain(waypoint, numSides=self.num_sides, units=self.units)
             elif waypoint_index != 0:
                 if self.add_to_root:
                     waypoint.Pose = self.chain.Joints[0].Pose @ waypoint.Pose
-                    new_chain = KinematicChain(waypoint, units=self.units)
+                    new_chain = OrigamiKinematicChain(waypoint, numSides=self.num_sides, units=self.units)
                     for jt in self.chain.Joints:
                         new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
                     self.chain = new_chain

@@ -1,11 +1,11 @@
-import ezdxf
+﻿import ezdxf
 
 ################# Main colors for the GUI ####################
 surfaceOpacityDefault = 1.0
 linkOpacityDefault = 0.5
 linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # gray
 jointColorDefault = (0.0, 0.0, 1.0, surfaceOpacityDefault)  # blue 
-jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue 
+jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue
 referenceMeshColor = (0, 1, 0, 1)  # green
 
 ############## Colors for the crease pattern dxf #####################
@@ -27,10 +27,16 @@ yColorDefault = (0.56, 0.93, 0.56, 1.0)  # lightgreen
 zColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue
 proximalColorDefault = (0.0, 1.0, 1.0, 1.0)  # cyan
 centerColorDefault = (1.0, 0.0, 1.0, 1.0)  # magenta
-distalColorDefault = (1.0, 1.0, 0.0, 1.0)  # yellow 
+distalColorDefault = (1.0, 1.0, 0.0, 1.0)  # yellow
 
 pathColorDefault = (0.0, 0.0, 0.0, 1.0)  # black
 sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
+
+# New colors for specific joint types (from merging-in-sdf-collisions branch)
+prismaticColorDefault = 'darkblue'
+prismaticEdgeColorDefault = 'darkblue'
+revoluteColorDefault = 'darkred'
+revoluteEdgeColorDefault = 'darkred'
 
 groundPlaneColorDefault = (0.0, 0.0, 0.0, 1.0)  # black 
 
@@ -54,10 +60,14 @@ ballDefaultColor = (0, 0, 0, 0.5)  # black
 cylinderColorList = (1, 0, 0, 1)  # red
 elbowColorList = (1, 1, 1, 1)  # white
 compoundElbowColorList = (1, 1, 1, 0.5)  # white, 0.5 opacity
+linkColorList = (0.5, 0.5, 0.5, 1.0)  # gray
+prismaticColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
+revoluteColorList = (0.545, 0.0, 0.0, 1.0)  # darkred as RGB tuple
 
 xPoseColor = 'darkred'  # darkred
 yPoseColor = 'darkblue'  # darkblue
 zPoseColor = 'darkgreen'  # darkgreen
+
 oColor = 'black'  # black 
 
 lineColor = (1, 0, 0, 1)  # red
@@ -78,4 +88,3 @@ pathEndColor = 'b'  # blue
 pathWidgetColor = 'g'  # green
 pathPointColor = (1, 1, 1, 1)  # white 
 tUnitColor = (1, 1, 1, 1)  # white
-

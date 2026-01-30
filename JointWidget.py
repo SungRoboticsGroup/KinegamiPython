@@ -6,8 +6,8 @@ from spatialmath import SE3
 import math
 from PathCSC import *
 from KinematicChain import *
+from OrigamiTube import *
 from scipy.spatial.transform import Rotation as R
-from testqtgraph import *
 from style import *
 
 class AddJointMenu(QWidget):
@@ -132,7 +132,7 @@ class AddPrismaticMenu(AddJointMenu):
                    pose = SE3.Ry(np.pi/2) @ pose
 
 
-           self.jointToAdd = PrismaticJoint(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
+           self.jointToAdd = OrigamiPrismatic(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
            self.add_joint(self.jointToAdd)
            self.window().add_prismatic_toggle()
        except ValueError:
@@ -183,11 +183,17 @@ class AddRevoluteMenu(AddJointMenu):
    def onApplyClicked(self):
        self.update()
 
-
        bendingAngleText = 180 if self.angle_input.text()=="" else float(self.angle_input.text())
+       
+       # Validate bending angle
+       if bendingAngleText <= 0 or bendingAngleText >= 360:
+           from PyQt5.QtWidgets import QMessageBox
+           QMessageBox.warning(self, "Invalid Angle", 
+                             "Bending angle must be between 0 and 360 degrees (exclusive).\n"
+                             "Please enter a value like 180 or 270.")
+           return
       
-      
-       self.jointToAdd = RevoluteJoint(self.numSides, self.r, math.radians(bendingAngleText), SE3())
+       self.jointToAdd = OrigamiRevolute(self.numSides, self.r, math.radians(bendingAngleText), SE3())
 
 
        if not self.prevJoint is None:
@@ -424,16 +430,19 @@ class EditDimensionMenu(AddJointMenu):
                if self.prev_joint is None:
                    pose = SE3()
                else:
-                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
-                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + neutral_length / 2
+                   # Get the distal Dubins frame to account for joint state
+                   distal_dubins_frame = self.prev_joint.DistalDubinsFrame()
+                   distance = 4 * self.r + neutral_length / 2
                    if self.add_to_root:
                        distance *= -1
-                   pose = SE3(0, 0, distance)
-                   if self.prev_joint.pathIndex() == 0:
-                       pose = SE3.Ry(math.pi / 2) @ pose
+                   # Translate distance along the distal frame's x-axis (column 0)
+                   # Then rotate so prismatic's z-axis (pathIndex 2) aligns with Dubins x-axis
+                   new_position = distal_dubins_frame.t + distance * distal_dubins_frame.R[:,0]
+                   new_orientation = distal_dubins_frame.R @ SE3.Ry(-np.pi/2).R
+                   pose = SE3.Rt(new_orientation, new_position)
 
 
-               self.editJoint = PrismaticJoint(self.numSides, self.r, neutral_length,
+               self.editJoint = OrigamiPrismatic(self.numSides, self.r, neutral_length,
                                                  num_layers, math.radians(cone_angle), pose)
 
 
@@ -441,15 +450,16 @@ class EditDimensionMenu(AddJointMenu):
                bending_angle = float(self.angle_input.text()) if self.angle_input.text() != "" else 180.0
 
 
-               self.editJoint = RevoluteJoint(self.numSides, self.r, math.radians(bending_angle), SE3())
+               self.editJoint = OrigamiRevolute(self.numSides, self.r, math.radians(bending_angle), SE3())
                if self.prev_joint is not None:
-                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
-                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + self.editJoint.neutralLength / 2
+                   # Get the distal Dubins frame to account for joint state
+                   distal_dubins_frame = self.prev_joint.DistalDubinsFrame()
+                   distance = 4 * self.r + self.editJoint.neutralLength / 2
                    if self.add_to_root:
                        distance *= -1
-                   pose = SE3(distance, 0, 0)
-                   if self.prev_joint.pathIndex() == 2:
-                       pose = SE3.Ry(-math.pi / 2) @ pose
+                   # Translate distance along the distal frame's x-axis (column 0)
+                   new_position = distal_dubins_frame.t + distance * distal_dubins_frame.R[:,0]
+                   pose = SE3.Rt(distal_dubins_frame.R, new_position)
                    self.editJoint.Pose = pose
 
 
@@ -458,13 +468,14 @@ class EditDimensionMenu(AddJointMenu):
                if self.prev_joint is None:
                    self.editJoint = StartTip(self.numSides, self.r, SE3(), length=length)
                else:
-                   diff = self.prev_joint.distalPosition() - self.prev_joint.Pose.t
-                   distance = 4 * self.r + math.sqrt(diff.dot(diff)) + length / 2
+                   # Get the distal Dubins frame to account for joint state
+                   distal_dubins_frame = self.prev_joint.DistalDubinsFrame()
+                   distance = 4 * self.r + length / 2
                    if self.add_to_root:
                        distance *= -1
-                   pose = SE3(0, 0, distance)
-                   if self.prev_joint.pathIndex() == 0:
-                       pose = SE3.Ry(math.pi / 2) @ pose
+                   # Translate distance along the distal frame's x-axis (column 0)
+                   new_position = distal_dubins_frame.t + distance * distal_dubins_frame.R[:,0]
+                   pose = SE3.Rt(distal_dubins_frame.R, new_position)
                    self.editJoint = EndTip(self.numSides, self.r, pose, length=length)
 
            self.window().log_version()
