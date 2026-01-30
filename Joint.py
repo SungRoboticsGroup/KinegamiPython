@@ -421,7 +421,7 @@ class Revolute(Joint):
                             self.neutralLength/2, self.ProximalDubinsFrame().R[:,1])
     
     def distalCylinder(self) -> Cylinder:
-        return Cylinder(self.r, self.distalPosition(), -self.pathDirection(), 
+        return Cylinder(self.r, self.distalPosition(), -self.DistalDubinsFrame().R[:,0], 
                             self.neutralLength/2, self.DistalDubinsFrame().R[:,1])
     
     def centerSphere(self) -> Ball:

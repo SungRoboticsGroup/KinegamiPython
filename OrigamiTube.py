@@ -36,7 +36,7 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
                  Pose : SE3, outerLength: Optional[float] = None, numSinkLayers : int = 1,
                  initialState : float = 0):
         if not (totalBendingAngle > 0 and totalBendingAngle < np.pi):
-            raise ValueError("OrigamiExtendedRevolute requires totalBendingAngle to be in (0, pi) radians")
+            raise ValueError("OrigamiExtendedRevolute requires totalBendingAngle to be in (0, 2*pi) radians")
         self.totalBendingAngle = totalBendingAngle
         self.numSinkLayers = numSinkLayers
         OrigamiTube.__init__(self, numSides)
@@ -136,7 +136,7 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
 class OrigamiRevolute(OrigamiExtendedRevolute):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
                  Pose : SE3, numSinkLayers : int = 1, initialState : float = 0):
-        super().__init__(numSides, r, totalBendingAngle, 0, Pose, numSinkLayers, initialState)
+        super().__init__(numSides, r, totalBendingAngle, Pose, 0, numSinkLayers, initialState)
 
 
 class OrigamiPrismatic(OrigamiTube, Prismatic):
