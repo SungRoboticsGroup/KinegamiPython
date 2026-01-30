@@ -229,7 +229,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                                         childFraction, ignoreLater,
                                         parallelize, verbose, power,
                                         includeCollisionPenalty=True, configurations=configurations,
-                                        retryingWithPenalty=True)
+                                        retryingWithPenalty=True, collisionErrorWeight=collisionErrorWeight)
         elif verbose:
             print("No collisions detected, using result without penalty")
     
@@ -360,7 +360,8 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                 return optimizeWaypointPlacement(subject, index, maxiter, tol, failurePenalty,
                                                childFraction, ignoreLater,
                                                parallelize, verbose, configurations,
-                                               includeCollisionPenalty=True, retryingWithPenalty=True)
+                                               includeCollisionPenalty=True, retryingWithPenalty=True,
+                                               collisionErrorWeight=collisionErrorWeight)
             elif verbose:
                 print("No collisions detected, using waypoint result without penalty")
         

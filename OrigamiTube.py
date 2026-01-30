@@ -309,35 +309,54 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
 
 
 class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
-    """KinematicChain constrained to OrigamiTube fabrication"""
+    """KinematicChain constrained to OrigamiTube fabrication with a fixed numSides"""
     _fabrication_type = OrigamiTube  # Class-level fabrication type constraint
     
-    def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
+    def __init__(self, startJoint : Joint, numSides : int, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
-                 boundingBall : Optional[Ball] = None):
+                 boundingBall : Optional[Ball] = None, units : str = "Centimeter (cm)"):
+        # Validate numSides
+        if not (numSides >= 4 and numSides % 2 == 0):
+            raise ValueError("OrigamiKinematicChain requires numSides to be an even integer >= 4")
+        
+        # Check that startJoint has correct numSides if it's an OrigamiTube
+        if isinstance(startJoint, OrigamiTube) and startJoint.numSides != numSides:
+            raise ValueError(f"startJoint has numSides={startJoint.numSides} but chain requires numSides={numSides}")
+        elif not isinstance(startJoint, Waypoint):
+            raise ValueError("startJoint must be an OrigamiTube or Waypoint")
+        
+        self.numSides = numSides
         super().__init__(startJoint=startJoint, maxAnglePerElbow=maxAnglePerElbow, gimbal=gimbal,
-                         joints=joints, links=links, parents=parents, children=children, boundingBall=boundingBall)
+                         joints=joints, links=links, parents=parents, children=children, 
+                         boundingBall=boundingBall, units=units)
+    
+    def append(self, newJoint : Joint, relative : bool = True, 
+                 fixedPosition : bool = False, fixedOrientation : bool = False, 
+                 safe : bool = True, chooseXhatToMinPath : bool = False, cachedLink = None) -> int:
+        """Override append to enforce numSides constraint on OrigamiTube joints"""
+        # Check that newJoint has correct numSides if it's an OrigamiTube
+        if isinstance(newJoint, OrigamiTube):
+            if newJoint.numSides != self.numSides:
+                raise ValueError(f"Cannot append joint with numSides={newJoint.numSides} to chain with numSides={self.numSides}")
+        elif not isinstance(newJoint, Waypoint):
+            raise ValueError("newJoint must be an OrigamiTube or Waypoint")
+        
+        return super().append(newJoint, relative, fixedPosition, fixedOrientation, safe, chooseXhatToMinPath)
     
     def _get_link_constructor(self):
-        """Return a callable that creates OrigamiLinkCSC with numSides inferred from joints"""
+        """Return a callable that creates OrigamiLinkCSC with the chain's numSides"""
         def make_origami_link(r, start_pose, end_pose, max_angle_per_elbow, path=None, epsilon=0.01):
-            # Infer numSides from the first OrigamiTube joint in the tree
-            numSides = 6  # default
-            for joint in self.Joints:
-                if isinstance(joint, OrigamiTube):
-                    numSides = joint.numSides
-                    break
-            return OrigamiLinkCSC(numSides, r, start_pose, end_pose, max_angle_per_elbow, path, epsilon)
+            return OrigamiLinkCSC(self.numSides, r, start_pose, end_pose, max_angle_per_elbow, path, epsilon)
         return make_origami_link
     
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
         chainPattern = copy.deepcopy(self.Joints[0].creasePattern())
-        numSides = self.Joints[0].numSides
         for j in range(1, len(self.Joints)):
             chainPattern.append(self.Links[j].creasePattern(twistPortion))
-            chainPattern.append(self.Joints[j].creasePattern())
+            if not isinstance(self.Joints[j], Waypoint):
+                chainPattern.append(self.Joints[j].creasePattern())
         return chainPattern
 
 # Note: _link_constructor is set via the _get_link_constructor() method above
