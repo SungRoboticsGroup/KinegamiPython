@@ -3160,11 +3160,9 @@ class WindowKinegamiGUI(QMainWindow):
             if (self.chain == None or len(self.chain.Joints) == 0) :
                 self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
             else :
-                self.chain.append(joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
-                #self.chain.addJoint(self.selected_joint, joint, relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                self.chain.append(joint, relativeToDistalDubins=True, fixedPosition=True, fixedOrientation=True, safe=False)
             self.selected_joint = len(self.chain.Joints) - 1
-        else:
-
+        else: # Add to root by creating new chain with new joint as root
             if (self.chain == None or len(self.chain.Joints) == 0) :
                 self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
             else:
@@ -3294,16 +3292,11 @@ class WindowKinegamiGUI(QMainWindow):
                     pose = SE3()
                 else:
                     prevJoint = self.chain.Joints[0] if self.add_to_root else self.chain.Joints[-1]
-                    # Get the distal Dubins frame to account for joint state
-                    distal_dubins_frame = prevJoint.DistalDubinsFrame()
+                    # Calculate pose relative to distal Dubins frame of previous joint
                     distance = 4 * self.radius
                     if self.add_to_root:
                         distance *= -1
-                    # Translate distance along the distal frame's x-axis (column 0)
-                    # Then rotate so waypoint's z-axis (pathIndex 2) aligns with Dubins x-axis
-                    new_position = distal_dubins_frame.t + distance * distal_dubins_frame.R[:,0]
-                    new_orientation = distal_dubins_frame.R @ SE3.Ry(-np.pi/2).R
-                    pose = SE3.Rt(new_orientation, new_position)
+                    pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
 
                 waypoint = Waypoint(self.radius, pose)
             
@@ -3324,11 +3317,11 @@ class WindowKinegamiGUI(QMainWindow):
                         new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
                     self.chain = new_chain
                 else:
-                    self.chain.append(newJoint = waypoint, 
-                                    relative=True, fixedPosition=True, fixedOrientation=False, safe=False)
+                    self.chain.append(newJoint = waypoint, relativeToDistalDubins=True, 
+                                      fixedPosition=True, fixedOrientation=True, safe=False)
             else:
-                self.chain.append(newJoint = waypoint, 
-                                    relative=True, fixedPosition=False, fixedOrientation=False, safe=False)
+                self.chain.append(newJoint = waypoint, fixedPosition=False, 
+                                  relativeToDistalDubins=True, fixedOrientation=False, safe=False)
 
             self.update_joint()
             self.log_version()

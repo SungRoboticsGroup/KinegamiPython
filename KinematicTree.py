@@ -141,7 +141,8 @@ class KinematicTree(Generic[F]):
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
                  safe : bool = True, endPlane : Optional[Plane] = None,
-                 chooseXhatToMinPath : bool = False) -> int:
+                 chooseXhatToMinPath : bool = False, 
+                 relativeToDistalDubins : bool = False) -> int:
         # Validate fabrication type if this tree has a type constraint
         # Skip validation for waypoints as they are fabrication-agnostic
         from Joint import Waypoint
@@ -169,8 +170,10 @@ class KinematicTree(Generic[F]):
         
         newJoint = copy.deepcopy(newJoint)
         parent = self.Joints[parentIndex]
-        if relative:
+        if relative and not relativeToDistalDubins:
             newJoint.transformPoseIntoFrame(parent.Pose)
+        elif relativeToDistalDubins:
+            newJoint.transformPoseIntoFrame(parent.DistalDubinsFrame())
 
         if safe: # Algorithm 9 from [Chen et al. 2023]
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,

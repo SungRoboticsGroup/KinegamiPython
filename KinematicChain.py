@@ -25,10 +25,12 @@ class KinematicChain(KinematicTree[F]):
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 safe : bool = True, chooseXhatToMinPath : bool = False) -> int:
+                 safe : bool = True, chooseXhatToMinPath : bool = False,
+                 relativeToDistalDubins : bool = False) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, safe, None, chooseXhatToMinPath)
+                                fixedOrientation, safe, None, chooseXhatToMinPath, 
+                                relativeToDistalDubins)
     
     def appendGlobalFixed(self, newJoint : Joint) -> int:
         parentIndex = len(self.Joints) - 1

@@ -125,11 +125,11 @@ class AddPrismaticMenu(AddJointMenu):
            if (self.prevJoint is None):
                pose = SE3()
            else:
+               # Calculate pose relative to distal Dubins frame of previous joint
                distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
                if self.add_to_root: distance *= -1
-               pose = SE3(0,0,distance)
-               if self.prevJoint.pathIndex() == 0:
-                   pose = SE3.Ry(np.pi/2) @ pose
+               # Prismatic joints face z direction, so rotate about y by pi/2
+               pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
 
 
            self.jointToAdd = OrigamiPrismatic(self.numSides, self.r, neutralLength, numLayers, math.radians(coneAngleText), pose)
@@ -193,16 +193,16 @@ class AddRevoluteMenu(AddJointMenu):
                              "Please enter a value like 180 or 270.")
            return
       
-       self.jointToAdd = OrigamiRevolute(self.numSides, self.r, math.radians(bendingAngleText), SE3())
-
-
-       if not self.prevJoint is None:
-           distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + self.jointToAdd.neutralLength/2
+       # Calculate pose relative to distal Dubins frame of previous joint
+       if self.prevJoint is None:
+           pose = SE3()
+       else:
+           distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t)
            if self.add_to_root: distance *= -1
-           pose = SE3(distance,0,0)
-           if self.prevJoint.pathIndex() == 2:
-               pose = SE3.Ry(-np.pi/2) @ pose
-           self.jointToAdd.Pose = pose
+           # Revolute joints face x direction, so no rotation needed
+           pose = SE3.Rt(SE3().R, np.array([distance, 0, 0]))
+       
+       self.jointToAdd = OrigamiRevolute(self.numSides, self.r, math.radians(bendingAngleText), pose)
   
        self.add_joint(self.jointToAdd)
        self.window().add_revolute_toggle()
@@ -255,17 +255,17 @@ class AddTipMenu(AddJointMenu):
 
            length = float(self.length_input.text())
            if self.prevJoint is None:
-               self.jointToAdd = StartTip(self.numSides, self.r, SE3(), length=length)
+               self.jointToAdd = OrigamiStartTip(self.numSides, self.r, SE3(), length=length)
            else:
-               distance = 4*self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + length/2
+               # Calculate pose relative to distal Dubins frame of previous joint
+               distance = 4*self.r + length/2
                if self.add_to_root: distance *= -1
-               pose = SE3(0,0,distance)
-               if self.prevJoint.pathIndex() == 0:
-                   pose = SE3.Ry(np.pi/2) @ pose
+               # Tips face z direction, so rotate about y by pi/2
+               pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
                if self.add_to_root:
-                   self.jointToAdd = StartTip(self.numSides, self.r, pose, length=length)
+                   self.jointToAdd = OrigamiStartTip(self.numSides, self.r, pose, length=length)
                else:
-                   self.jointToAdd = EndTip(self.numSides, self.r, pose, length=length)
+                   self.jointToAdd = OrigamiEndTip(self.numSides, self.r, pose, length=length)
 
 
            self.add_joint(self.jointToAdd)
