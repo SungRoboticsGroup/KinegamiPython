@@ -343,7 +343,7 @@ class EditDimensionMenu(AddJointMenu):
        new_layout.addLayout(angle_layout)
 
 
-       apply_button = QPushButton("Add Prismatic Joint")
+       apply_button = QPushButton("Edit Prismatic Joint")
        apply_button.clicked.connect(self.onApplyClicked)
        new_layout.addWidget(apply_button)
 
@@ -372,7 +372,7 @@ class EditDimensionMenu(AddJointMenu):
        new_layout.addLayout(angle_layout)
 
 
-       apply_button = QPushButton("Add Revolute Joint")
+       apply_button = QPushButton("Edit Revolute Joint")
        apply_button.clicked.connect(self.onApplyClicked)
        new_layout.addWidget(apply_button)
 
@@ -401,7 +401,7 @@ class EditDimensionMenu(AddJointMenu):
        new_layout.addLayout(length_layout)
 
 
-       apply_button = QPushButton("Add Tip")
+       apply_button = QPushButton("Edit Tip")
        apply_button.clicked.connect(self.onApplyClicked)
        new_layout.addWidget(apply_button)
 

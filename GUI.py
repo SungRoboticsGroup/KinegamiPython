@@ -2639,7 +2639,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.chain = self._backup_chain
             self.show_error("Error rebuilding chain: " + str(e))
         
-        self.update_joint()
+        self.update_joint(force_recreate_config_widget=True)
 
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
@@ -3014,7 +3014,7 @@ class WindowKinegamiGUI(QMainWindow):
         #     a.rotate(angle, axis[0], axis[1], axis[2], local=False)
         #     a.translate(cnt[0], cnt[1], cnt[2])
 
-    def update_joint(self):
+    def update_joint(self, force_recreate_config_widget : bool = False):
         self.edit_dimension_menu.setVisible(False)
         self.edit_dimension_button.setVisible(True)
         self.select_joint_options.blockSignals(True)
@@ -3023,18 +3023,19 @@ class WindowKinegamiGUI(QMainWindow):
         self.units_label.setText(f"Current units: {self.units}")
         
         # Check if we need to recreate config widgets or just update values
-        need_recreate = False
-        if self.chain is None or not self.chain_created:
-            need_recreate = True
-        elif not hasattr(self, 'config_joint_indices'):
-            need_recreate = True
-        else:
-            # Check if the number of real joints has changed
-            real_joint_count = sum(1 for j in self.chain.Joints if type(j).__name__ not in ['Waypoint', 'PrintedWaypoint'])
-            if real_joint_count != len(self.config_joint_indices):
-                need_recreate = True
+        need_recreate_config_widget = force_recreate_config_widget
+        if not need_recreate_config_widget:
+            if self.chain is None or not self.chain_created:
+                need_recreate_config_widget = True
+            elif not hasattr(self, 'config_joint_indices'):
+                need_recreate_config_widget = True
+            else:
+                # Check if the number of real joints has changed
+                real_joint_count = sum(1 for j in self.chain.Joints if type(j).__name__ not in ['Waypoint', 'PrintedWaypoint'])
+                if real_joint_count != len(self.config_joint_indices):
+                    need_recreate_config_widget = True
         
-        if need_recreate:
+        if need_recreate_config_widget:
             self.update_configurations()
         else:
             self.update_config_values()
