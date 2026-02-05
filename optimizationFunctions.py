@@ -1,6 +1,7 @@
 from KinematicTree import *
 from treeTraversals import *
 import pyswarms as ps
+import os
 
 
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty, 
@@ -434,7 +435,8 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         times.append(diff)
         lengths.append(t.totalLength())
         if directory != None:
-            t.save(directory + str(diff) + "_" + str(idx), saveDir=False)
+            save_path = os.path.join(directory, f"{diff}_{idx}")
+            t.save(save_path, saveDir=False)
 
     tree = subject.copyAbbreviatedSelf()
     log(tree, -1)
@@ -479,7 +481,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
 
     if directory != None:
-        tree.save(directory + "final", saveDir=False)
+        tree.save(os.path.join(directory, "final"), saveDir=False)
     if (evaluate):
         return tree, times, lengths
     

@@ -12,7 +12,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 6
+jointCount = 8
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -20,7 +20,7 @@ chainCount = 1
 restartFrom = 0
 multipleIterations=False
 
-seed = 42
+seed = 44
 np.random.seed(seed)
 saved_state = np.random.get_state()
 
@@ -80,9 +80,13 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 def test():
     versions = [
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "DFS Outward Shortest n repetitions"),
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "DFS Inward Shortest n repetitions"),
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "BFS Outward Shortest n repetitions"),
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
     ]
     optimizations = [v[0] for v in versions]

@@ -12,7 +12,9 @@ import os
 # final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.15_01.16.48_Joints2_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
 # final_path = "/home/samhitha/code/Trials Before Experiments/2026.01.17_06.46.06_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
 # final_path = "/home/samhitha/code/Trials Before Experiments/2026.01.21_18.40.30_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitions553.2428340911865_16.tree"
-final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.30_12.29.54_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
+# final_path = "/home/daniel/collisions/KinegamiPython/Trials Before Experiments/2026.01.30_12.29.54_Joints6_Chains1_Seed42/0/DFS Outward Longest n repetitionsfinal.tree"
+# final_path = "/home/samhitha/code/Trials Before Experiments/2026.02.02_13.50.32_Joints8_Chains1_Seed42/0/DFS Outward Longest n repetitions/1247.404124736786_20.tree"
+final_path = "/home/samhitha/code/Trials Before Experiments/2026.02.02_14.17.21_Joints7_Chains1_Seed42/0/DFS Outward Longest n repetitions/1193.096929550171_15.tree"
 
 # Try to load initial tree and collision-free configs
 trial_dir = os.path.dirname(os.path.dirname(final_path))  # Go up two levels to get trial directory
@@ -27,7 +29,7 @@ if os.path.exists(configs_path):
     print(f"Loaded {len(configs)} collision-free configurations from {configs_path}")
 else:
     print(f"No configs file found at {configs_path}, using default configurations")
-    configs = [[0, 0, 0, 0, 0, 0, 0, 0]]
+    configs = None
 
 # Load initial tree (before optimization)
 initial = None
@@ -46,6 +48,20 @@ with open(final_path, 'r') as f:
 final = eval(final_repr)
 print(f"Loaded final tree from {final_path}")
 print(f"Final tree total length: {final.totalLength():.3f}")
+
+# Normalize configurations to match the number of joints in the tree
+def normalize_config(config, joint_count):
+    if len(config) == joint_count:
+        return config
+    if len(config) < joint_count:
+        return config + [0] * (joint_count - len(config))
+    return config[:joint_count]
+
+joint_count = len(final.Joints)
+if configs is None:
+    configs = [[0] * joint_count]
+else:
+    configs = [normalize_config(c, joint_count) for c in configs]
 
 if initial:
     print(f"Length reduction: {initial.totalLength() - final.totalLength():.3f}")
