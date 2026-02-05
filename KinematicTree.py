@@ -469,7 +469,9 @@ class KinematicTree(Generic[F]):
             minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
             distance = min(minDist1to2, minDist2to1)
             # Smooth error function based on logistic function
-            k = 50 #steepness of the transition
+            # k = steepness of the transition
+            epsilon = 1e-6
+            k = np.log(1/epsilon - 1) / fineDistanceThreshold # transition over [0, fineDistanceThreshold]
             totalError += 1 / (1 + np.exp(k * distance))
             if show:
                 self.show(block=False)
