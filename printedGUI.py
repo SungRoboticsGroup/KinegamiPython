@@ -1103,9 +1103,9 @@ class WindowKinegamiGUI(QMainWindow):
         self.load_chain_button.clicked.connect(self.load_chain)
         file_dock_layout.addWidget(self.load_chain_button)
 
-        self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
-        self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
-        file_dock_layout.addWidget(self.save_crease_pattern_button) 
+        self.export_link_modules_button = QPushButton('Export Link Modules')
+        self.export_link_modules_button.clicked.connect(self.export_link_modules)  
+        file_dock_layout.addWidget(self.export_link_modules_button) 
 
         self.units_layout = QHBoxLayout()
         self.units_label = QLabel(f"Current units: {self.units}")
@@ -2133,21 +2133,20 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.update_joint()
 
-    def save_crease_pattern(self):
+    def export_link_modules(self):
         if self.tree:
             options = QFileDialog.Options()
             try:
                 base_path = sys._MEIPASS 
             except AttributeError:
                 base_path = os.path.abspath(".")
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save File", os.path.join(base_path, "save"), "DXF Files (*.dxf)", options=options
+            folder_path = QFileDialog.getExistingDirectory(
+                self, "Select Folder for Link Modules", os.path.join(base_path, "save"), options=options
             )
-            crease_pattern = self.tree.creasePattern()
-            if file_path:
-                crease_pattern.show(dxfName=file_path)
-            else:
-                crease_pattern.show()
+            if folder_path:
+                base_filename = os.path.join(folder_path, "module")
+                self.tree.saveLinkModules(base_filename)
+            self.tree.showLinkModules()
 
     def save_chain(self, autosave_id=None):
         # confusing why autosave_id is sometimes False

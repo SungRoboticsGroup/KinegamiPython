@@ -406,7 +406,7 @@ class PrintedKinematicTree(KinematicTree):
     _fabrication_type = PrintedTube  # Class-level fabrication type constraint
     Links: list[PrintedLinkCSC]  # Type annotation override for proper type checking
     
-    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2,
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/10,
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
                  boundingBall : Optional[Ball] = None):
@@ -430,7 +430,7 @@ class PrintedKinematicTree(KinematicTree):
                                   holeDiameter, numHoles, max_angle_per_elbow, path, epsilon)
         return make_printed_link
     
-    def getBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+    def getLinkModules(self, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10) -> dict[int, m3d.Manifold]:
         """Generate connectable branching modules for all joints with children"""
         branchingModules = {}
@@ -441,25 +441,25 @@ class PrintedKinematicTree(KinematicTree):
                 branchingModules[jointIndex] = branchingModuleManifold
         return branchingModules
     
-    def saveBranchingModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
+    def saveLinkModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10) -> None:
         """Save connectable branching modules for all joints with children to files"""
-        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
-        for jointIndex, module in branchingModules.items():
-            filename = f"{baseFilename}_joint{jointIndex}.stl"
+        branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
+        for linkIndex, module in branchingModules.items():
+            filename = f"{baseFilename}_link{linkIndex}.stl"
             mesh_data = module.to_mesh()
             vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
             faces = mesh_data.tri_verts
             tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
             tri_mesh.export(filename)
     
-    def showBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+    def showLinkModules(self, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10, block : bool = False) -> None:
         """Display connectable branching modules for all joints with children in a 3D plot window"""
-        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
+        branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
         fig = plt.figure()
         ax: Axes3D = fig.add_subplot(projection='3d')
-        for jointIndex, module in branchingModules.items():
+        for linkIndex, module in branchingModules.items():
             mesh_data = module.to_mesh()
             vertices = mesh_data.vert_properties[:, :3]
             triangles = mesh_data.tri_verts
