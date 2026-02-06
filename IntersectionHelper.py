@@ -3,21 +3,42 @@ import math
 import numpy as np
 
 def compute_sphere_intersection(org, dir, cen, rad):
-    a = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]
-    b = 2 * (dir[0] * (org[0] - cen[0]) + dir[1] * (org[1] - cen[1]) + dir[2] * (org[2] - cen[2]))
-    c = (org[0] - cen[0]) ** 2 +  (org[1] - cen[1]) ** 2 + (org[2] - cen[2]) ** 2 - rad * rad
+    # Ensure direction is normalized for numerical stability
+    dir_len_sq = dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]
+    if dir_len_sq == 0:
+        return float('inf')
+    
+    # Normalize if not already normalized
+    if abs(dir_len_sq - 1.0) > 0.001:
+        dir_len = math.sqrt(dir_len_sq)
+        dir = [dir[0]/dir_len, dir[1]/dir_len, dir[2]/dir_len]
+    
+    # Ray-sphere intersection with normalized direction (a = 1)
+    oc = [org[0] - cen[0], org[1] - cen[1], org[2] - cen[2]]
+    
+    # For normalized direction: a = 1
+    # b = 2 * dot(dir, oc)
+    # c = dot(oc, oc) - r^2
+    b = 2 * (dir[0] * oc[0] + dir[1] * oc[1] + dir[2] * oc[2])
+    c = oc[0] * oc[0] + oc[1] * oc[1] + oc[2] * oc[2] - rad * rad
 
-    discrim = b*b - 4*a*c
+    discrim = b*b - 4*c  # Since a = 1, this is b*b - 4*1*c
 
-    if (discrim < -0.00001) :
-        return 2000
-    else: 
-        t0 = (-b - math.sqrt(discrim)) / (2*a)
-
-        if (t0 > 0):
-            return t0
+    if discrim < 0:
+        return float('inf')
+    
+    sqrt_discrim = math.sqrt(discrim)
+    # For a = 1: t = (-b ± sqrt(discrim)) / 2
+    t0 = (-b - sqrt_discrim) / 2
+    
+    if t0 > 0.001:  # Add small epsilon to avoid self-intersection
+        return t0
+    else:
+        t1 = (-b + sqrt_discrim) / 2
+        if t1 > 0.001:
+            return t1
         else:
-            return (-b + math.sqrt(discrim)) / (2*a)
+            return float('inf')
     
 def compute_cylinder_intersection(org: QVector3D, dir: QVector3D, start: QVector3D, axis: QVector3D, rad, len): 
     # not bothering with computing endcaps because they're too small to matter anyway
@@ -31,7 +52,7 @@ def compute_cylinder_intersection(org: QVector3D, dir: QVector3D, start: QVector
     discrim = QVector3D.dotProduct(n_cross_a, n_cross_a) * rad * rad - QVector3D.dotProduct(a, a) * (QVector3D.dotProduct(b, n_cross_a) ** 2)
 
     if (discrim < -0.00001):
-        return 2000
+        return float('inf')
     else:
         d = (QVector3D.dotProduct(n_cross_a, QVector3D.crossProduct(b, a)) - math.sqrt(discrim)) / QVector3D.dotProduct(n_cross_a, n_cross_a)
         
@@ -42,7 +63,7 @@ def compute_cylinder_intersection(org: QVector3D, dir: QVector3D, start: QVector
         if (t > 0 and t < len):
             return d
         else:
-            return 2000
+            return float('inf')
             
 def compute_closest_point_on_axis(org, dir, center, axis):
     threshold = 0.001
@@ -114,6 +135,6 @@ def compute_torus_intersection(org: QVector3D, dir: QVector3D, center: QVector3D
     real_roots = [root.real for root in roots if np.isreal(root) and root.real > 0]
     
     if not real_roots:
-        return 2000
+        return float('inf')
     
     return min(real_roots)

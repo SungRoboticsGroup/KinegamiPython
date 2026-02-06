@@ -255,6 +255,129 @@ class KinematicTree(Generic[F]):
         return newIndex
     
     
+    def deleteJoint(self, jointIndex : int, recursive : bool = False) -> None:
+        """
+        Delete a joint from the tree.
+        
+        Parameters:
+            jointIndex : int - Index of the joint to delete
+            recursive : bool - If True, delete all descendants. If False, re-parent 
+                              children to the deleted joint's parent (default: False)
+        
+        When recursive=True:
+        1. Finds all descendants of the joint (recursively)
+        2. Removes them from Joints, Links, Parents, and Children
+        3. Adjusts all remaining joint indices in Parents and Children
+        
+        When recursive=False:
+        1. Re-parents all children to the deleted joint's parent
+        2. Creates new links from parent to each child
+        3. Removes only the specified joint
+        4. Adjusts remaining joint indices
+        """
+        if jointIndex < 0 or jointIndex >= len(self.Joints):
+            raise ValueError(f"Joint index {jointIndex} out of range [0, {len(self.Joints)-1}]")
+        
+        if jointIndex == 0:
+            raise ValueError("Cannot delete the root joint (index 0)")
+        
+        parent_index = self.Parents[jointIndex]
+        
+        if recursive:
+            # Original recursive deletion behavior
+            # Step 1: Find all descendants (including the joint itself)
+            descendants = set()
+            to_process = [jointIndex]
+            
+            while to_process:
+                current = to_process.pop()
+                descendants.add(current)
+                # Add all children of current joint to the processing queue
+                to_process.extend(self.Children[current])
+            
+            # Sort descendants in descending order so we can delete from the end
+            # This prevents index shifting issues during deletion
+            descendants_sorted = sorted(descendants, reverse=True)
+            
+            # Step 2: Remove the joint from its parent's children list
+            if parent_index >= 0:
+                self.Children[parent_index] = [c for c in self.Children[parent_index] if c not in descendants]
+            
+            # Step 3: Delete all descendants from the lists (from end to start)
+            for idx in descendants_sorted:
+                del self.Joints[idx]
+                del self.Links[idx]
+                del self.Parents[idx]
+                del self.Children[idx]
+            
+            # Step 4: Adjust all indices in Parents and Children
+            # Create a mapping from old indices to new indices
+            index_mapping = {}
+            offset = 0
+            for old_idx in range(len(self.Joints) + len(descendants_sorted)):
+                if old_idx in descendants:
+                    offset += 1
+                else:
+                    index_mapping[old_idx] = old_idx - offset
+            
+            # Update Parents array
+            for i in range(len(self.Parents)):
+                if self.Parents[i] >= 0:
+                    self.Parents[i] = index_mapping[self.Parents[i]]
+            
+            # Update Children array
+            for i in range(len(self.Children)):
+                self.Children[i] = [index_mapping[c] for c in self.Children[i]]
+        else:
+            # Non-recursive: re-parent children to the deleted joint's parent
+            children_to_reparent = self.Children[jointIndex].copy()
+            
+            # Step 1: Update parent's children list - remove deleted joint, add its children
+            if parent_index >= 0:
+                self.Children[parent_index] = [c for c in self.Children[parent_index] if c != jointIndex]
+                self.Children[parent_index].extend(children_to_reparent)
+            
+            # Step 2: Create new links from parent to each child and update their parents
+            link_constructor = self._get_link_constructor()
+            parent_joint = self.Joints[parent_index]
+            
+            for child_idx in children_to_reparent:
+                child_joint = self.Joints[child_idx]
+                # Create new link from parent's distal frame to child's proximal frame
+                new_link = link_constructor(self.r, parent_joint.DistalDubinsFrame(),
+                                           child_joint.ProximalDubinsFrame(),
+                                           self.maxAnglePerElbow)
+                if new_link is None:
+                    print(f"WARNING: Could not create valid link from joint {parent_index} to joint {child_idx}")
+                    # Keep the old link as a fallback
+                else:
+                    self.Links[child_idx] = new_link
+                
+                # Update parent reference
+                self.Parents[child_idx] = parent_index
+            
+            # Step 3: Delete the joint
+            del self.Joints[jointIndex]
+            del self.Links[jointIndex]
+            del self.Parents[jointIndex]
+            del self.Children[jointIndex]
+            
+            # Step 4: Adjust all indices in Parents and Children
+            # All indices > jointIndex need to be decremented by 1
+            for i in range(len(self.Parents)):
+                if self.Parents[i] > jointIndex:
+                    self.Parents[i] -= 1
+                elif self.Parents[i] == jointIndex:
+                    # This shouldn't happen since we already re-parented children
+                    raise RuntimeError(f"Found orphaned joint at index {i}")
+            
+            for i in range(len(self.Children)):
+                self.Children[i] = [c - 1 if c > jointIndex else c for c in self.Children[i]]
+        
+        # Recompute bounding ball since we removed joints
+        self.recomputeBoundingBall()
+    
+    
     def recomputeBoundingBall(self):
         self.boundingBall = self.Joints[0].boundingBall()
         for joint in self.Joints[1:]:
@@ -270,7 +393,7 @@ class KinematicTree(Generic[F]):
             self.boundingBall = minBoundingBall(self.boundingBall,
                                                 link.elbow2BoundingBall)
             
-    
+
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',
                   showJointSurface=True, jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
@@ -1037,6 +1160,9 @@ class KinematicTree(Generic[F]):
                                         self.maxAnglePerElbow)
             else:
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            if jointIndex == 0 and not self.Links[0].length() == 0:
+                raise ValueError("Error in transformJoint: Link 0 is supposed to stay empty (length 0).")
+            
             if propogate:
                 for c in self.Children[jointIndex]:
                     self.transformJoint(c, Transformation, propogate=True, 

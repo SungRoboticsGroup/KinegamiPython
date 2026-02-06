@@ -255,7 +255,7 @@ class Joint(ABC):
                 col = selectedArrowColor if i==selectedArrow else colors[i]
                 start = center
                 end = center + rad * a
-                from GUI import OverlayLine
+                from printedGUI import OverlayLine
                 widget.plot_widget.addItem(
                     OverlayLine(pos=np.array([start,end]), color=col, width=8, antialias=True)
                 )
@@ -272,7 +272,7 @@ class Joint(ABC):
                     for t in np.linspace(0,2*math.pi,64)
                 ])
                 col = selectedArrowColor if i==selectedArrow else colors[i]
-                from GUI import OverlayLine
+                from printedGUI import OverlayLine
                 widget.plot_widget.addItem(
                     OverlayLine(pos=pts, color=col, width=8, antialias=True)
                 )

@@ -40,7 +40,7 @@ from scipy.spatial.transform import Rotation as R
 from style import *
 from ReferenceMesh import *
 from Dialog import *
-from JointWidget import *
+from origamiJointWidget import *
 from IntersectionHelper import *
 
 import warnings

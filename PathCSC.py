@@ -310,10 +310,11 @@ class PathCSC:
         pathS = gl.GLLinePlotItem(pos=pathSPoints, color=pathColor, width=2)
         widget.plot_widget.addItem(pathS)
 
-        point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=pathPointColor, size=10)
-        widget.plot_widget.addItem(point1)
-        point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=pathPointColor, size=10)
-        widget.plot_widget.addItem(point2)
+        if showCircles:
+            point1 = gl.GLScatterPlotItem(pos=pathSPoints[0], color=pathPointColor, size=10)
+            widget.plot_widget.addItem(point1)
+            point2 = gl.GLScatterPlotItem(pos=pathSPoints[1], color=pathPointColor, size=10)
+            widget.plot_widget.addItem(point2)
 
         if showTunit:
             tUnit = gl.GLLinePlotItem(pos=(self.turn1end, self.turn1end + self.tUnit), color=tUnitColor, width=2) 
