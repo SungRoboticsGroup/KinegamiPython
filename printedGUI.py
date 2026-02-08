@@ -841,29 +841,39 @@ class WindowKinegamiGUI(QMainWindow):
 
         # //////////////////////////////////    ADD JOINTS    ///////////////////////////////////
         self.add_transverse_revolute = QPushButton("Add Transverse Revolute Joint")
-        self.add_transverse_revolute_menu = AddTransverseRevoluteMenu(self)
-        self.add_transverse_revolute_menu.setVisible(False)
         self.add_coaxial_revolute = QPushButton("Add Coaxial Revolute Joint")
-        self.add_coaxial_revolute_menu = AddCoaxialRevoluteMenu(self)
-        self.add_coaxial_revolute_menu.setVisible(False)
         self.add_tip = QPushButton("Add Tip")
-        self.add_tip_menu = AddTipMenu(self)
-        self.add_tip_menu.setVisible(False)
         self.clear_tree_button = QPushButton("Clear Tree")
 
         add_waypoints_layout = QVBoxLayout()
         self.add_waypoint = QPushButton("Add Waypoint")
         add_waypoints_layout.addWidget(self.add_waypoint)
 
+        # Select parent prompt (shown when no parent is selected and user tries to add a joint)
+        self.pending_add_joint_func = None
+        self.select_parent_prompt = QWidget()
+        select_parent_layout = QVBoxLayout()
+        self.select_parent_label = QLabel("Select a parent joint:")
+        self.select_parent_combo = QComboBox()
+        self.select_parent_add_btn = QPushButton("Add")
+        self.select_parent_cancel_btn = QPushButton("Cancel")
+        select_parent_layout.addWidget(self.select_parent_label)
+        select_parent_layout.addWidget(self.select_parent_combo)
+        select_parent_layout.addWidget(self.select_parent_add_btn)
+        select_parent_layout.addWidget(self.select_parent_cancel_btn)
+        self.select_parent_prompt.setLayout(select_parent_layout)
+        self.select_parent_prompt.setVisible(False)
+        self.select_parent_add_btn.clicked.connect(self._on_select_parent_add)
+        self.select_parent_cancel_btn.clicked.connect(self._on_select_parent_cancel)
+        self.select_parent_combo.currentIndexChanged.connect(self._on_select_parent_combo_changed)
+
         add_joints_layout = QVBoxLayout()
         clear_tree_layout = QVBoxLayout()
         add_joints_layout.addWidget(self.add_transverse_revolute)
-        add_joints_layout.addWidget(self.add_transverse_revolute_menu)
         add_joints_layout.addWidget(self.add_coaxial_revolute)
-        add_joints_layout.addWidget(self.add_coaxial_revolute_menu)
         add_joints_layout.addLayout(add_waypoints_layout)
         add_joints_layout.addWidget(self.add_tip)
-        add_joints_layout.addWidget(self.add_tip_menu)
+        add_joints_layout.addWidget(self.select_parent_prompt)
 
         clear_tree_layout.addWidget(self.clear_tree_button)
 
@@ -2169,6 +2179,11 @@ class WindowKinegamiGUI(QMainWindow):
             self.reset_translation_tools()
             self.set_state_tools()
             self.highlight_selected_config_box()
+            # Sync the select parent prompt dropdown if visible
+            if self.select_parent_prompt.isVisible() and index >= 0:
+                self.select_parent_combo.blockSignals(True)
+                self.select_parent_combo.setCurrentIndex(index)
+                self.select_parent_combo.blockSignals(False)
 
     @QtCore.pyqtSlot(int)
     def arrow_selection_changed(self, index):
@@ -2989,21 +3004,195 @@ class WindowKinegamiGUI(QMainWindow):
     # def add_tip_func(self):
     #     self.add_joint_func("tip")
 
+    def _can_add_joint_directly(self):
+        """Check if conditions are met to add a joint without prompting for parent selection."""
+        # No tree or empty tree -> will create new tree
+        if self.tree is None or len(self.tree.Joints) == 0:
+            return True
+        # Add to root mode
+        if self.add_to_root:
+            return True
+        # Check dropdown first
+        dropdown_idx = self.select_joint_options.currentIndex()
+        if dropdown_idx >= 0 and self.tree and dropdown_idx < len(self.tree.Joints):
+            self.selected_joint = dropdown_idx
+            return True
+        # Check selected_joint attribute
+        if self.selected_joint >= 0 and self.selected_joint < len(self.tree.Joints):
+            return True
+        return False
+
+    def _show_select_parent_prompt(self, add_func, joint_type_name):
+        """Show the select parent prompt when no parent is selected."""
+        self.pending_add_joint_func = add_func
+        self.select_parent_combo.clear()
+        if self.tree and len(self.tree.Joints) > 0:
+            for i, joint in enumerate(self.tree.Joints):
+                self.select_parent_combo.addItem(f"Joint {i} - {joint.__class__.__name__}")
+        self.select_parent_label.setText(f"Select a parent joint for {joint_type_name}:")
+        self.select_parent_add_btn.setText(f"Add {joint_type_name}")
+        self.select_parent_prompt.setVisible(True)
+
+    def _on_select_parent_add(self):
+        """Called when user clicks Add in the select parent prompt."""
+        idx = self.select_parent_combo.currentIndex()
+        if idx >= 0 and self.tree and idx < len(self.tree.Joints):
+            self.selected_joint = idx
+            self.select_joint_options.blockSignals(True)
+            self.select_joint_options.setCurrentIndex(idx)
+            self.select_joint_options.blockSignals(False)
+            self.select_parent_prompt.setVisible(False)
+            if self.pending_add_joint_func:
+                func = self.pending_add_joint_func
+                self.pending_add_joint_func = None
+                func()
+        else:
+            self.show_error("Please select a valid parent joint.")
+
+    def _on_select_parent_cancel(self):
+        """Cancel the pending add joint operation."""
+        self.select_parent_prompt.setVisible(False)
+        self.pending_add_joint_func = None
+
+    def _on_select_parent_combo_changed(self, index):
+        """When the user picks a joint from the select-parent dropdown, visually highlight it."""
+        if index >= 0 and self.tree and index < len(self.tree.Joints):
+            self.joint_selection_changed(index)
+
+    def _create_and_add_transverse_revolute(self):
+        """Create and add a transverse revolute joint."""
+        try:
+            if self.tree is None or len(self.tree.Joints) == 0:
+                pose = SE3.Ry(-math.pi/2)
+            elif self.add_to_root:
+                root = self.tree.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                neutralLength = 76.791  # TransverseRDS3225 neutralLength
+                distance = 4 * r + neutralLength / 2
+                pose = root_proximal_dubins @ SE3.Trans(-distance, 0, 0)
+            else:
+                distance = 120  # Approximate spacing for printed joints
+                pose = SE3.Rt(SE3().R, np.array([distance, 0, 0]))
+            joint = TransverseRDS3225(pose, version=270)
+            self.add_joint(joint)
+        except Exception as e:
+            self.show_error(str(e))
+
+    def _create_and_add_coaxial_revolute(self):
+        """Create and add a coaxial revolute joint."""
+        try:
+            if self.tree is None or len(self.tree.Joints) == 0:
+                pose = SE3()
+            elif self.add_to_root:
+                root = self.tree.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                neutralLength = 64.5  # CoaxialRDS3225 neutralLength
+                distance = 4 * r + neutralLength / 2
+                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(math.pi/2).R, np.array([-distance, 0, 0]))
+            else:
+                distance = 120  # Approximate spacing for printed joints
+                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+            joint = CoaxialRDS3225(pose, version=270)
+            self.add_joint(joint)
+        except Exception as e:
+            self.show_error(str(e))
+
+    def _create_and_add_tip(self):
+        """Create and add a tip (PrintedHemisphere)."""
+        try:
+            if self.tree is None or len(self.tree.Joints) == 0:
+                pose = SE3()
+            elif self.add_to_root:
+                root = self.tree.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                distance = 4 * r + r / 2  # Tip length is r
+                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(math.pi/2).R, np.array([-distance, 0, 0]))
+            else:
+                prevJoint = self.tree.Joints[self.selected_joint]
+                distance = prevJoint.r * 4 + self.default_radius / 2
+                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+            if self.add_to_root:
+                joint = PrintedStartHemisphere(r=30, Pose=pose)
+            else:
+                joint = PrintedEndHemisphere(r=30, Pose=pose)
+            self.add_joint(joint)
+        except Exception as e:
+            self.show_error(str(e))
+
     def add_transverse_revolute_toggle(self):
-        self.add_transverse_revolute_menu.setVisible(not self.add_transverse_revolute_menu.isVisible())
-        self.add_transverse_revolute.setVisible(not self.add_transverse_revolute.isVisible())
+        if self._can_add_joint_directly():
+            self._create_and_add_transverse_revolute()
+        else:
+            self._show_select_parent_prompt(
+                self._create_and_add_transverse_revolute,
+                "Transverse Revolute"
+            )
 
     def add_coaxial_revolute_toggle(self):
-        self.add_coaxial_revolute_menu.setVisible(not self.add_coaxial_revolute_menu.isVisible())
-        self.add_coaxial_revolute.setVisible(not self.add_coaxial_revolute.isVisible())
+        if self._can_add_joint_directly():
+            self._create_and_add_coaxial_revolute()
+        else:
+            self._show_select_parent_prompt(
+                self._create_and_add_coaxial_revolute,
+                "Coaxial Revolute"
+            )
 
     def add_tip_toggle(self):
-        self.add_tip_menu.setVisible(not self.add_tip_menu.isVisible())
-        self.add_tip.setVisible(not self.add_tip.isVisible())
+        if self._can_add_joint_directly():
+            self._create_and_add_tip()
+        else:
+            self._show_select_parent_prompt(
+                self._create_and_add_tip,
+                "Tip"
+            )
 
     def edit_dimension_toggle(self):
         self.edit_dimension_menu.setVisible(not self.edit_dimension_menu.isVisible())
         self.edit_dimension_button.setVisible(not self.edit_dimension_button.isVisible())
+
+    def _create_and_add_waypoint(self):
+        """Create and add a waypoint."""
+        try:
+            if (self.tree is None) or len(self.tree.Joints) == 0:
+                waypoint = Waypoint(self.default_radius, SE3())
+                self.tree = PrintedKinematicTree(waypoint)
+                self.selected_joint = 0
+                self.update_joint()
+                self.log_version()
+                self.joint_selection_changed(self.selected_joint, force=True)
+                return
+            elif self.add_to_root:
+                # Compute pose in global coordinates behind the old root
+                root = self.tree.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                distance = 4 * r  # Waypoint neutralLength is 0
+                # Waypoint has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
+                waypoint = Waypoint(r, pose)
+                self.add_joint_as_new_root(waypoint)
+            else:
+                prevJoint = self.tree.Joints[self.selected_joint]
+                # Calculate pose relative to distal Dubins frame of previous joint
+                distance = 4 * prevJoint.r
+                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+                waypoint = Waypoint(prevJoint.r, pose)
+                self.tree.addJoint(parentIndex=self.selected_joint,
+                    newJoint=waypoint, relativeToDistalDubins=True,
+                    fixedPosition=True, fixedOrientation=True, safe=False)
+                self.selected_joint = len(self.tree.Joints) - 1
+
+            self.update_joint()
+            self.log_version()
+            if self.add_to_root:
+                self.select_joint_options.setCurrentIndex(0)
+            else:
+                self.select_joint_options.setCurrentIndex(len(self.tree.Joints) - 1)
+        except Exception as e:
+            self.show_error(str(e))
 
     def add_waypoint_func(self):
         if (self.selected_link != -1):
@@ -3032,41 +3221,13 @@ class WindowKinegamiGUI(QMainWindow):
                                                 self.tree.numHoles)
             self.update_joint()
             self.log_version()
-
-        else: 
-            if (self.tree == None) or len(self.tree.Joints) == 0:
-                waypoint = Waypoint(self.default_radius, SE3())
-                self.tree = PrintedKinematicTree(waypoint)
-            elif self.add_to_root:
-                # Compute pose in global coordinates behind the old root
-                root = self.tree.Joints[0]
-                root_proximal_dubins = root.ProximalDubinsFrame()
-                r = root.r
-                distance = 4 * r  # Waypoint neutralLength is 0
-                # Waypoint has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
-                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
-                waypoint = Waypoint(r, pose)
-                self.add_joint_as_new_root(waypoint)
-            elif self.selected_joint != -1:
-                prevJoint = self.tree.Joints[self.selected_joint]
-                # Calculate pose relative to distal Dubins frame of previous joint
-                distance = 4 * prevJoint.r
-                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
-
-                waypoint = Waypoint(prevJoint.r, pose)
-                self.tree.addJoint(parentIndex=self.selected_joint,
-                    newJoint = waypoint, relativeToDistalDubins=True, 
-                    fixedPosition=True, fixedOrientation=True, safe=False)
-            else:
-                self.show_error('Please select a parent joint or link first.')
-                return
-
-            self.update_joint()
-            self.log_version()
-            if self.add_to_root:
-                self.select_joint_options.setCurrentIndex(0)
-            else:
-                self.select_joint_options.setCurrentIndex(len(self.tree.Joints) - 1)
+        elif self._can_add_joint_directly():
+            self._create_and_add_waypoint()
+        else:
+            self._show_select_parent_prompt(
+                self._create_and_add_waypoint,
+                "Waypoint"
+            )
 
     def is_parent_joint_selected(self):
         if self.selected_joint == -1 and self.tree is not None:
