@@ -633,7 +633,18 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         links = []
         mesh = []
 
-        for item in self.itemsAt(region):
+        # Suppress pyqtgraph's "Error while drawing" messages during the
+        # GL_SELECT picking pass — GLMeshItem shaders are incompatible with
+        # selection mode, but the errors are non-fatal.
+        import io
+        _old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            picked_items = list(self.itemsAt(region))
+        finally:
+            sys.stdout = _old_stdout
+
+        for item in picked_items:
             if (item.objectName() == "Link"):
                 links.append(item)
 
