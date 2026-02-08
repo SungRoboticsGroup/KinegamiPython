@@ -124,10 +124,17 @@ class AddPrismaticMenu(AddJointMenu):
 
            if (self.prevJoint is None):
                pose = SE3()
+           elif self.add_to_root:
+               # Compute pose in global coordinates behind the old root
+               root = self.window().chain.Joints[0]
+               root_proximal_dubins = root.ProximalDubinsFrame()
+               r = root.r
+               distance = 4 * r + neutralLength / 2
+               # Prismatic has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+               pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
            else:
                # Calculate pose relative to distal Dubins frame of previous joint
                distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t) + neutralLength/2
-               if self.add_to_root: distance *= -1
                # Prismatic joints face z direction, so rotate about y by pi/2
                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
 
@@ -193,12 +200,23 @@ class AddRevoluteMenu(AddJointMenu):
                              "Please enter a value like 180 or 270.")
            return
       
-       # Calculate pose relative to distal Dubins frame of previous joint
+       # Calculate pose
        if self.prevJoint is None:
            pose = SE3()
+       elif self.add_to_root:
+           # Compute pose in global coordinates behind the old root
+           root = self.window().chain.Joints[0]
+           root_proximal_dubins = root.ProximalDubinsFrame()
+           r = root.r
+           # Compute neutralLength for OrigamiRevolute (outerLength=0)
+           polygonInnerAngle = np.pi * (self.numSides - 2) / (2 * self.numSides)
+           neutralLength = 2 * r * np.sin(polygonInnerAngle) * np.tan(math.radians(bendingAngleText) / 4)
+           distance = 4 * r + neutralLength / 2
+           # Revolute has pathIndex=0, same orientation as root's proximal dubins frame
+           pose = root_proximal_dubins @ SE3.Trans(-distance, 0, 0)
        else:
+           # Calculate pose relative to distal Dubins frame of previous joint
            distance = 4 * self.r + norm(self.prevJoint.distalPosition()-self.prevJoint.Pose.t)
-           if self.add_to_root: distance *= -1
            # Revolute joints face x direction, so no rotation needed
            pose = SE3.Rt(SE3().R, np.array([distance, 0, 0]))
        
@@ -256,16 +274,21 @@ class AddTipMenu(AddJointMenu):
            length = float(self.length_input.text())
            if self.prevJoint is None:
                self.jointToAdd = OrigamiStartTip(self.numSides, self.r, SE3(), length=length)
+           elif self.add_to_root:
+               # Compute pose in global coordinates behind the old root
+               root = self.window().chain.Joints[0]
+               root_proximal_dubins = root.ProximalDubinsFrame()
+               r = root.r
+               distance = 4 * r + length / 2
+               # Tip has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+               pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
+               self.jointToAdd = OrigamiStartTip(self.numSides, self.r, pose, length=length)
            else:
                # Calculate pose relative to distal Dubins frame of previous joint
                distance = 4*self.r + length/2
-               if self.add_to_root: distance *= -1
                # Tips face z direction, so rotate about y by pi/2
                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
-               if self.add_to_root:
-                   self.jointToAdd = OrigamiStartTip(self.numSides, self.r, pose, length=length)
-               else:
-                   self.jointToAdd = OrigamiEndTip(self.numSides, self.r, pose, length=length)
+               self.jointToAdd = OrigamiEndTip(self.numSides, self.r, pose, length=length)
 
 
            self.add_joint(self.jointToAdd)

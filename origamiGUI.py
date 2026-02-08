@@ -3157,30 +3157,16 @@ class WindowKinegamiGUI(QMainWindow):
         # Check if this is a real joint (not a waypoint)
         is_real_joint = type(joint).__name__ not in ['Waypoint', 'PrintedWaypoint']
         
-        if not self.add_to_root:
-            if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
-            else :
-                self.chain.append(joint, relativeToDistalDubins=True, fixedPosition=True, fixedOrientation=True, safe=False)
+        if (self.chain == None or len(self.chain.Joints) == 0):
+            # No chain exists, create one with this joint as root
+            self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
+            self.selected_joint = 0 if self.add_to_root else len(self.chain.Joints) - 1
+        elif self.add_to_root:
+            # Add as new root: create a new chain with this joint, then add old chain as subtree
+            self.add_joint_as_new_root(joint)
+        else:
+            self.chain.append(joint, relativeToDistalDubins=True, fixedPosition=True, fixedOrientation=True, safe=False)
             self.selected_joint = len(self.chain.Joints) - 1
-        else: # Add to root by creating new chain with new joint as root
-            if (self.chain == None or len(self.chain.Joints) == 0) :
-                self.chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
-            else:
-                old_root = self.chain.Joints[0]
-                joint.Pose = old_root.Pose @ joint.Pose
-
-                new_chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
-
-                for i, jt in enumerate(self.chain.Joints):
-                    if i == 0:
-                        cachedLink = None
-                    else:
-                        cachedLink = self.chain.Links[i]
-                    new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False, cachedLink=cachedLink)
-                self.chain = new_chain
-
-            self.selected_joint = 0
 
         # Update saved configurations if a real joint was added
         if is_real_joint:
@@ -3189,6 +3175,17 @@ class WindowKinegamiGUI(QMainWindow):
         self.update_joint()
         #self.log_version() # now called in joint_selection_changed
         self.joint_selection_changed(self.selected_joint, force=True)
+    
+    def add_joint_as_new_root(self, joint : Joint):
+        """Add a joint as the new root, making the old chain a subtree of the new root.
+        
+        The new joint's pose should already be in global coordinates.
+        """
+        old_chain = self.chain
+        new_chain = OrigamiKinematicChain(joint, numSides=self.num_sides, units=self.units)
+        new_chain.addSubtree(0, old_chain)
+        self.chain = new_chain
+        self.selected_joint = 0
     
     # def add_joint_func(self, joint_type):
     #     numSides = self.num_sides
@@ -3286,43 +3283,27 @@ class WindowKinegamiGUI(QMainWindow):
             self.log_version()
 
         else: 
-            if (self.chain and len(self.chain.Joints) > 0):
-                prevJoint = self.chain.Joints[len(self.chain.Joints)-1]
-
-                if (prevJoint is None):
-                    pose = SE3()
-                else:
-                    prevJoint = self.chain.Joints[0] if self.add_to_root else self.chain.Joints[-1]
-                    # Calculate pose relative to distal Dubins frame of previous joint
-                    distance = 4 * self.radius
-                    if self.add_to_root:
-                        distance *= -1
-                    pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
-
-                waypoint = Waypoint(self.radius, pose)
-            
-            if (self.chain == None):
-                waypoint = Waypoint(self.radius, SE3())
-                waypoint_index = 0
-            else:
-                waypoint_index = len(self.chain.Joints)
-            
             if (self.chain == None) or len(self.chain.Joints) == 0:
                 waypoint = Waypoint(self.radius, SE3())
                 self.chain = OrigamiKinematicChain(waypoint, numSides=self.num_sides, units=self.units)
-            elif waypoint_index != 0:
-                if self.add_to_root:
-                    waypoint.Pose = self.chain.Joints[0].Pose @ waypoint.Pose
-                    new_chain = OrigamiKinematicChain(waypoint, numSides=self.num_sides, units=self.units)
-                    for jt in self.chain.Joints:
-                        new_chain.append(jt, relative=False, fixedPosition=True, fixedOrientation=True, safe=False)
-                    self.chain = new_chain
-                else:
-                    self.chain.append(newJoint = waypoint, relativeToDistalDubins=True, 
-                                      fixedPosition=True, fixedOrientation=True, safe=False)
+            elif self.add_to_root:
+                # Compute pose in global coordinates behind the old root
+                root = self.chain.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                distance = 4 * r  # Waypoint neutralLength is 0
+                # Waypoint has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
+                waypoint = Waypoint(self.radius, pose)
+                self.add_joint_as_new_root(waypoint)
             else:
-                self.chain.append(newJoint = waypoint, fixedPosition=False, 
-                                  relativeToDistalDubins=True, fixedOrientation=False, safe=False)
+                prevJoint = self.chain.Joints[-1]
+                # Calculate pose relative to distal Dubins frame of previous joint
+                distance = 4 * self.radius
+                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+                waypoint = Waypoint(self.radius, pose)
+                self.chain.append(newJoint = waypoint, relativeToDistalDubins=True, 
+                                  fixedPosition=True, fixedOrientation=True, safe=False)
 
             self.update_joint()
             self.log_version()
