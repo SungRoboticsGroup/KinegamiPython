@@ -142,7 +142,8 @@ class KinematicTree(Generic[F]):
                  fixedOrientation : bool = False, 
                  safe : bool = True, endPlane : Optional[Plane] = None,
                  chooseXhatToMinPath : bool = False, 
-                 relativeToDistalDubins : bool = False) -> int:
+                 relativeToDistalDubins : bool = False,
+                 cachedLink : Optional[LinkCSC] = None) -> int:
         # Validate fabrication type if this tree has a type constraint
         # Skip validation for waypoints as they are fabrication-agnostic
         from Joint import Waypoint
@@ -231,7 +232,10 @@ class KinematicTree(Generic[F]):
 
         # Use fabrication-specific link constructor if available
         link_constructor = self._get_link_constructor()
-        newLink = link_constructor(self.r, parent.DistalDubinsFrame(), 
+        if not safe and not cachedLink is None:
+            newLink = cachedLink
+        else:
+            newLink = link_constructor(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow)
         if newLink is None:
@@ -393,6 +397,65 @@ class KinematicTree(Generic[F]):
             self.boundingBall = minBoundingBall(self.boundingBall,
                                                 link.elbow2BoundingBall)
             
+    
+    def addSubtree(self, parentIndex : int, subtree : 'KinematicTree') -> list[int]:
+        """
+        Copy all joints and links from another tree into this tree, 
+        attaching the subtree's root as a child of parentIndex.
+        
+        Uses the subtree's existing links (cachedLink) to avoid recomputing paths.
+        
+        Parameters:
+            parentIndex : int - Index of the joint in this tree to attach the subtree's root to
+            subtree : KinematicTree - The tree whose joints/links to copy in
+            
+        Returns:
+            list[int] - The new indices of all added joints (in the order they appeared in the subtree)
+        """
+        if parentIndex < 0 or parentIndex >= len(self.Joints):
+            raise ValueError(f"Parent index {parentIndex} out of range [0, {len(self.Joints)-1}]")
+        
+        # Map from old subtree indices to new indices in this tree
+        index_mapping = {}
+        
+        # BFS to add joints in parent-first order so parents exist before children
+        queue_items = collections.deque()
+        # Start with root of subtree (index 0), attaching to parentIndex in this tree
+        queue_items.append((0, parentIndex))
+        
+        new_indices = []
+        
+        while queue_items:
+            subtree_idx, new_parent_idx = queue_items.popleft()
+            subtree_joint = subtree.Joints[subtree_idx]
+            
+            # Use cached link for non-root subtree joints (root's link is a 
+            # degenerate self-link, so we need a fresh link from the new parent)
+            cachedLink = subtree.Links[subtree_idx] if subtree_idx != 0 else None
+            
+            new_idx = self.addJoint(
+                parentIndex=new_parent_idx,
+                newJoint=subtree_joint,
+                relative=False,
+                fixedPosition=True,
+                fixedOrientation=True,
+                safe=False,
+                cachedLink=cachedLink
+            )
+            
+            if new_idx is None:
+                print(f"WARNING: Failed to add subtree joint {subtree_idx}")
+                continue
+            
+            index_mapping[subtree_idx] = new_idx
+            new_indices.append(new_idx)
+            
+            # Enqueue all children of this subtree joint
+            for child_idx in subtree.Children[subtree_idx]:
+                queue_items.append((child_idx, new_idx))
+        
+        return new_indices
+
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor='c', centerColor='m', distalColor='y',

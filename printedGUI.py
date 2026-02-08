@@ -2016,40 +2016,6 @@ class WindowKinegamiGUI(QMainWindow):
             self.plot_widget.addItem(self.referenceMesh.mesh)
 
         self.show_success('Tree cleared!')
-        self.edit_dimension_menu.setVisible(False)
-        self.edit_dimension_button.setVisible(True)
-
-    def generate_stl(self):
-        newTree = origamiToPrinted(self.tree, 0.05)
-
-        self.plot_widget.clear()
-
-        self.grid = gl.GLGridItem()
-        self.grid.setColor((0,0,0,255))
-
-        if self.grid_on:
-            self.plot_widget.addItem(self.grid)
-
-        for i in range(0,len(newTree.Children)):
-            start = time.time()
-            if len(newTree.Children[i]) > 0:
-                filepath = newTree.exportLink3DFile(i, "test" + "/poses", pose=True)
-                if filepath:
-                    plotSTL(self.plot_widget, filepath, newTree.Joints[i].DistalDubinsFrame() @ SE3.Ry(np.pi/2) @SE3.Rz(-np.pi/2), color=(1,1,1,1))
-                print(f"plotted links from {i}, Time: {time.time() - start}s")
-
-        #export and plot all the joints
-        for i in range(0,len(newTree.Joints)):
-            start = time.time()
-            if not isinstance(newTree.Joints[i],PrintedWaypoint):
-                file1, rot1, file2, rot2 = newTree.Joints[i].renderPose("test")
-                plotSTL(self.plot_widget, file1, newTree.Joints[i].ProximalDubinsFrame() @ rot1, color=(0,0,1,0))
-                if (file2 != None):
-                    plotSTL(self.plot_widget, file2, newTree.Joints[i].DistalDubinsFrame() @ rot2, color=(0,0,1,0))
-            print(f"plotted joint {i}, Time: {time.time() - start}s")
-
-        self.stl_generated = True
-        #plotPrintedTree(newTree, "manualHandPrinted")
 
     def set_joint_as_frame(self):
         self.selected_frame = self.selected_joint
@@ -2947,6 +2913,9 @@ class WindowKinegamiGUI(QMainWindow):
             # No tree exists, create one with this joint as root
             self.tree = PrintedKinematicTree(joint)
             self.selected_joint = 0
+        elif self.add_to_root:
+            # Add as new root: create a new tree with this joint, then add old tree as subtree
+            self.add_joint_as_new_root(joint)
         else:
             # Tree exists, need a selected joint to add to
             if self.selected_joint == -1:
@@ -2972,6 +2941,17 @@ class WindowKinegamiGUI(QMainWindow):
         #self.log_version() # now called in joint_selection_changed
         self.joint_selection_changed(self.selected_joint, force=True)
     
+    def add_joint_as_new_root(self, joint : Joint):
+        """Add a joint as the new root, making the old tree a subtree of the new root.
+        
+        The new joint's pose should already be in global coordinates.
+        """
+        old_tree = self.tree
+        new_tree = PrintedKinematicTree(joint)
+        new_tree.addSubtree(0, old_tree)
+        self.tree = new_tree
+        self.selected_joint = 0
+
     # def add_joint_func(self, joint_type):
     #     numSides = self.num_sides
 
@@ -3054,39 +3034,19 @@ class WindowKinegamiGUI(QMainWindow):
             self.log_version()
 
         else: 
-            if (self.tree and len(self.tree.Joints) > 0):
-                prevJoint = self.tree.Joints[len(self.tree.Joints)-1]
-
-                if (prevJoint is None):
-                    pose = SE3()
-                else:
-                    prevJoint = self.tree.Joints[0] if self.add_to_root else self.tree.Joints[-1]
-                    # Calculate pose relative to distal Dubins frame of previous joint
-                    distance = 4 * prevJoint.r
-                    if self.add_to_root:
-                        distance *= -1
-                    pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
-
-                waypoint = Waypoint(prevJoint.r, pose)
-            
-            
             if (self.tree == None) or len(self.tree.Joints) == 0:
                 waypoint = Waypoint(self.default_radius, SE3())
                 self.tree = PrintedKinematicTree(waypoint)
             elif self.add_to_root:
-                waypoint = Waypoint(self.tree.Joints[0].r, SE3())
-                root_proximal_dubins = self.tree.Joints[0].ProximalDubinsFrame()
-                # Set waypoint pose to be -4*r along x-axis of root's proximal dubins frame
-                distance = 4 * self.tree.Joints[0].r
+                # Compute pose in global coordinates behind the old root
+                root = self.tree.Joints[0]
+                root_proximal_dubins = root.ProximalDubinsFrame()
+                r = root.r
+                distance = 4 * r  # Waypoint neutralLength is 0
+                # Waypoint has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
                 pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
-
-                waypoint.Pose = self.tree.Joints[0].Pose
-                new_tree = PrintedKinematicTree(waypoint)
-                for i, jt in enumerate(self.tree.Joints):
-                    new_tree.addJoint(parentIndex=self.tree.Parents[i]+1,
-                                      newJoint=jt, relative=False, fixedPosition=True, 
-                                      fixedOrientation=True, safe=False)
-                self.tree = new_tree
+                waypoint = Waypoint(r, pose)
+                self.add_joint_as_new_root(waypoint)
             elif self.selected_joint != -1:
                 prevJoint = self.tree.Joints[self.selected_joint]
                 # Calculate pose relative to distal Dubins frame of previous joint

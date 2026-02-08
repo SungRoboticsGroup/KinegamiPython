@@ -26,11 +26,11 @@ class KinematicChain(KinematicTree[F]):
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
                  safe : bool = True, chooseXhatToMinPath : bool = False,
-                 relativeToDistalDubins : bool = False) -> int:
+                 relativeToDistalDubins : bool = False, cachedLink : Optional[LinkCSC] = None) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
                                 fixedOrientation, safe, None, chooseXhatToMinPath, 
-                                relativeToDistalDubins)
+                                relativeToDistalDubins, cachedLink=cachedLink)
     
     def appendGlobalFixed(self, newJoint : Joint) -> int:
         parentIndex = len(self.Joints) - 1

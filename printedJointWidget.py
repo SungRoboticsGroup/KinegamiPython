@@ -65,11 +65,20 @@ class AddTransverseRevoluteMenu(AddJointMenu):
            # Create TransverseRDS3225 joint with 270 degrees, radius 30
            if self.prevJoint is None:
                pose = SE3.Ry(-math.pi/2)
+           elif self.add_to_root:
+               # Compute pose in global coordinates behind the old root
+               root = self.window().tree.Joints[0]
+               root_proximal_dubins = root.ProximalDubinsFrame()
+               r = root.r
+               neutralLength = 76.791  # TransverseRDS3225 neutralLength
+               distance = 4 * r + neutralLength / 2
+               # TransverseRevolute has pathIndex=0, so its path direction is x-hat of the dubins frame
+               # Same orientation as root's proximal dubins frame
+               pose = root_proximal_dubins @ SE3.Trans(-distance, 0, 0)
            else:
                # Calculate pose relative to distal Dubins frame of previous joint
                # Transverse revolute faces x direction
                distance = 120  # Approximate spacing for printed joints
-               if self.add_to_root: distance *= -1
                pose = SE3.Rt(SE3().R, np.array([distance, 0, 0]))
 
            self.jointToAdd = TransverseRDS3225(pose, version=270)
@@ -110,11 +119,19 @@ class AddCoaxialRevoluteMenu(AddJointMenu):
            # Create CoaxialRDS3225 joint with 270 degrees, radius 30
            if self.prevJoint is None:
                pose = SE3()
+           elif self.add_to_root:
+               # Compute pose in global coordinates behind the old root
+               root = self.window().tree.Joints[0]
+               root_proximal_dubins = root.ProximalDubinsFrame()
+               r = root.r
+               neutralLength = 64.5  # CoaxialRDS3225 neutralLength
+               distance = 4 * r + neutralLength / 2
+               # CoaxialRevolute has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+               pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(math.pi/2).R, np.array([-distance, 0, 0]))
            else:
                # Calculate pose relative to distal Dubins frame of previous joint
                # Coaxial revolute faces x direction
                distance = 120  # Approximate spacing for printed joints
-               if self.add_to_root: distance *= -1
                pose = SE3.Rt(SO3.Ry(np.pi/2), np.array([distance, 0, 0]))
            
            self.jointToAdd = CoaxialRDS3225(pose, version=270)
@@ -154,11 +171,18 @@ class AddTipMenu(AddJointMenu):
            # Create PrintedHemisphere with radius 30
            if self.prevJoint is None:
                pose = SE3()
+           elif self.add_to_root:
+               # Compute pose in global coordinates behind the old root
+               root = self.window().tree.Joints[0]
+               root_proximal_dubins = root.ProximalDubinsFrame()
+               r = root.r
+               distance = 4 * r + r / 2  # Tip length is r
+               # Tip has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
+               pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(math.pi/2).R, np.array([-distance, 0, 0]))
            else:
                # Calculate pose relative to distal Dubins frame of previous joint
                # Tips face z direction, so rotate about y by pi/2
                distance = self.prevJoint.r * 4 + self.window().default_radius/2  # Approximate spacing
-               if self.add_to_root: distance *= -1
                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
 
            if self.add_to_root:

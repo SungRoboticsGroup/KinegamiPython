@@ -353,7 +353,8 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
                  safe : bool = True, chooseXhatToMinPath : bool = False, 
-                 relativeToDistalDubins : bool = False) -> int:
+                 relativeToDistalDubins : bool = False, 
+                 cachedLink : Optional[OrigamiLinkCSC] = None) -> int:
         """Override append to enforce numSides constraint on OrigamiTube joints"""
         # Check that newJoint has correct numSides if it's an OrigamiTube
         if isinstance(newJoint, OrigamiTube):
@@ -363,7 +364,7 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
             raise ValueError("newJoint must be an OrigamiTube or Waypoint")
         
         return super().append(newJoint, relative, fixedPosition, fixedOrientation, safe, 
-                              chooseXhatToMinPath, relativeToDistalDubins=relativeToDistalDubins)
+                              chooseXhatToMinPath, relativeToDistalDubins=relativeToDistalDubins, cachedLink=cachedLink)
     
     def _get_link_constructor(self):
         """Return a callable that creates OrigamiLinkCSC with the chain's numSides"""
