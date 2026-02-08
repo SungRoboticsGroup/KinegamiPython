@@ -1249,8 +1249,7 @@ class WindowKinegamiGUI(QMainWindow):
         text_box_layout = QHBoxLayout(container_widget)
         text_box_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Count real joints and create text boxes
-        joint_index = 0
+        # Create text boxes for real (non-Waypoint) joints
         for actual_joint_index, joint in enumerate(self.tree.Joints):
             # Skip Waypoint joints
             if type(joint).__name__ in ['Waypoint', 'PrintedWaypoint']:
@@ -1262,7 +1261,7 @@ class WindowKinegamiGUI(QMainWindow):
             joint_layout.setContentsMargins(5, 0, 5, 0)
             joint_layout.setSpacing(2)
             
-            joint_label = QLabel(f"J{joint_index}")
+            joint_label = QLabel(f"J{actual_joint_index}")
             joint_label.setAlignment(Qt.AlignCenter)
             joint_label.setFixedWidth(80)
             
@@ -1311,7 +1310,6 @@ class WindowKinegamiGUI(QMainWindow):
             self.config_text_boxes.append(text_box)
             self.config_sliders.append(slider)
             self.config_joint_indices.append(actual_joint_index)
-            joint_index += 1
         
         # Add "Save Configuration" button
         save_button = QPushButton("Save Configuration")
