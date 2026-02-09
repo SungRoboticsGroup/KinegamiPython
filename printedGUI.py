@@ -2034,6 +2034,7 @@ class WindowKinegamiGUI(QMainWindow):
         if self.referenceMesh is not None:
             self.plot_widget.addItem(self.referenceMesh.mesh)
 
+        self.log_version()
         self.show_success('Tree cleared!')
 
     def set_joint_as_frame(self):
@@ -2962,7 +2963,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.update_saved_configs_for_joint_added()
 
         self.update_joint()
-        #self.log_version() # now called in joint_selection_changed
+        self.log_version()
         self.joint_selection_changed(self.selected_joint, force=True)
     
     def add_joint_as_new_root(self, joint : Joint):
