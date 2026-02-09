@@ -183,7 +183,7 @@ class AddTipMenu(AddJointMenu):
                distance = self.prevJoint.r * 4 + self.window().default_radius/2  # Approximate spacing
                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
 
-           if self.add_to_root:
+           if self.prevJoint is None or self.add_to_root:
                self.jointToAdd = PrintedStartHemisphere(r=TransverseRDS3225.R, Pose=pose)
            else:
                self.jointToAdd = PrintedEndHemisphere(r=TransverseRDS3225.R, Pose=pose)

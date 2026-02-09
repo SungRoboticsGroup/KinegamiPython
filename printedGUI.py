@@ -3121,7 +3121,7 @@ class WindowKinegamiGUI(QMainWindow):
                 prevJoint = self.tree.Joints[self.selected_joint]
                 distance = prevJoint.r * 4 + self.default_radius / 2
                 pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
-            if self.add_to_root:
+            if self.tree is None or len(self.tree.Joints) == 0 or self.add_to_root:
                 joint = PrintedStartHemisphere(r=TransverseRDS3225.R, Pose=pose)
             else:
                 joint = PrintedEndHemisphere(r=TransverseRDS3225.R, Pose=pose)

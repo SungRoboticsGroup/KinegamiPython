@@ -745,7 +745,7 @@ class Tip(Joint):
             # Scale the hemisphere
             x_scaled = self.r * x_sphere
             y_scaled = self.r * y_sphere
-            z_scaled = scale_z * (z_sphere if self.forward else -z_sphere)
+            z_scaled = scale_z * z_sphere
             
             # Transform to world coordinates based on path direction
             if self.forward:
@@ -796,23 +796,105 @@ class Tip(Joint):
                           surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
                           axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
         
-        # For simplicity, render the tip as a cylinder in Qt
-        # TODO: Implement proper hemisphere rendering for Qt
         if showSurface:
-            # Create a cylinder from ProximalFrame to DistalFrame
-            proxFrame = self.ProximalFrame()
-            distFrame = self.DistalFrame()
-            pathDir = self.pathDirection()
-            
-            from geometryHelpers import Cylinder
-            tipCylinder = Cylinder(self.r, proxFrame.t, pathDir, self.neutralLength)
-            tipCylinder.addToWidget(widget, color_list=linkColorList, is_joint=True)
+            # Render the tip as a stretched hemisphere, matching addToPlot logic
+            n_lat = 20   # latitude divisions
+            n_lon = 32   # longitude divisions
+
+            # Hemisphere theta range
+            if self.forward:
+                theta = np.linspace(0, np.pi/2, n_lat)
+            else:
+                theta = np.linspace(np.pi/2, np.pi, n_lat)
+            phi = np.linspace(0, 2*np.pi, n_lon, endpoint=False)
+
+            # Build vertex grid (n_lat x n_lon) + 1 pole vertex
+            vertices = []
+            for i in range(n_lat):
+                for j in range(n_lon):
+                    x_s = np.sin(theta[i]) * np.cos(phi[j])
+                    y_s = np.sin(theta[i]) * np.sin(phi[j])
+                    z_s = np.cos(theta[i])
+                    # Scale
+                    x_sc = self.r * x_s
+                    y_sc = self.r * y_s
+                    z_sc = self.neutralLength * z_s
+                    vertices.append([x_sc, y_sc, z_sc])
+
+            # Pole vertex (the closed tip of the hemisphere)
+            if self.forward:
+                # theta=0 pole: z_sphere=cos(0)=1
+                vertices.append([0, 0, self.neutralLength])
+            else:
+                # theta=pi pole: z_sphere=cos(pi)=-1
+                vertices.append([0, 0, -self.neutralLength])
+
+            pole_idx = n_lat * n_lon
+            vertices = np.array(vertices, dtype=np.float32)
+
+            # Build triangle faces
+            faces = []
+            for i in range(n_lat - 1):
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    v00 = i * n_lon + j
+                    v01 = i * n_lon + j_next
+                    v10 = (i + 1) * n_lon + j
+                    v11 = (i + 1) * n_lon + j_next
+                    faces.append([v00, v01, v11])
+                    faces.append([v00, v11, v10])
+
+            # Fan triangles connecting pole to the first ring (theta[0] row)
+            if self.forward:
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    faces.append([pole_idx, j_next, j])
+            else:
+                last_row = (n_lat - 1) * n_lon
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    faces.append([pole_idx, last_row + j, last_row + j_next])
+
+            faces = np.array(faces, dtype=np.int32)
+
+            # Transform vertices to world coordinates (same logic as addToPlot)
+            if self.forward:
+                base_frame = self.ProximalFrame()
+            else:
+                base_frame = self.DistalFrame()
+            R = base_frame.R
+
+            x_sc = vertices[:, 0]
+            y_sc = vertices[:, 1]
+            z_sc = vertices[:, 2]
+
+            if self.pidx == 0:
+                xw = base_frame.t[0] + z_sc * R[0, 0] + x_sc * R[0, 1] + y_sc * R[0, 2]
+                yw = base_frame.t[1] + z_sc * R[1, 0] + x_sc * R[1, 1] + y_sc * R[1, 2]
+                zw = base_frame.t[2] + z_sc * R[2, 0] + x_sc * R[2, 1] + y_sc * R[2, 2]
+            elif self.pidx == 1:
+                xw = base_frame.t[0] + x_sc * R[0, 0] + z_sc * R[0, 1] + y_sc * R[0, 2]
+                yw = base_frame.t[1] + x_sc * R[1, 0] + z_sc * R[1, 1] + y_sc * R[1, 2]
+                zw = base_frame.t[2] + x_sc * R[2, 0] + z_sc * R[2, 1] + y_sc * R[2, 2]
+            else:  # pidx == 2
+                xw = base_frame.t[0] + x_sc * R[0, 0] + y_sc * R[0, 1] + z_sc * R[0, 2]
+                yw = base_frame.t[1] + x_sc * R[1, 0] + y_sc * R[1, 1] + z_sc * R[1, 2]
+                zw = base_frame.t[2] + x_sc * R[2, 0] + y_sc * R[2, 1] + z_sc * R[2, 2]
+
+            world_verts = np.column_stack([xw, yw, zw]).astype(np.float32)
+
+            meshdata = gl.MeshData(vertexes=world_verts, faces=faces)
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(linkColorList),
+                                     shader='shaded', smooth=True)
+            meshitem.setGLOptions('translucent')
+            meshitem.setObjectName("Joint")
+            widget.plot_widget.addItem(meshitem)
         
 
 class StartTip(Tip):
     def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
-        super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)
+        super().__init__(r, Pose, length, closesForward=False, pathIndex=pathIndex)
 
 class EndTip(Tip):
     def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
-        super().__init__(r, Pose, length, closesForward=False, pathIndex=pathIndex)
+        super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)

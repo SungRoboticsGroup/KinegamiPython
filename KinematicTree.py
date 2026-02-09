@@ -162,6 +162,12 @@ class KinematicTree(Generic[F]):
                 if not isinstance(newJoint, fabrication_type):
                     raise TypeError(f"Joint must inherit from {fabrication_type.__name__}, got {type(newJoint).__name__}")
         
+        # A forward-closing Tip (end tip) must remain a leaf — no children allowed
+        parent = self.Joints[parentIndex]
+        if isinstance(parent, Tip) and parent.forward:
+            raise ValueError("Cannot add a child joint to an end tip (forward-closing Tip). "
+                             "End tips must remain leaf nodes.")
+        
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
                 safe and fixedPosition both True")
@@ -414,6 +420,13 @@ class KinematicTree(Generic[F]):
         """
         if parentIndex < 0 or parentIndex >= len(self.Joints):
             raise ValueError(f"Parent index {parentIndex} out of range [0, {len(self.Joints)-1}]")
+        
+        # A backward-closing Tip (start tip) must remain a root — it cannot become a non-root
+        # node by being grafted as a subtree under another joint
+        subtree_root = subtree.Joints[0]
+        if isinstance(subtree_root, Tip) and not subtree_root.forward:
+            raise ValueError("Cannot attach a subtree whose root is a start tip (backward-closing Tip). "
+                             "Start tips must remain root nodes.")
         
         # Map from old subtree indices to new indices in this tree
         index_mapping = {}

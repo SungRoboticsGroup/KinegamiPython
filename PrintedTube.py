@@ -127,10 +127,7 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         totalLength = cumulativeLengths[-1]
         ts = cumulativeLengths / totalLength if totalLength > 0 else np.zeros(cumulativeLengths.shape)
         rs = (1-ts) * startRadius + ts * endRadius
-
-        output = m3d.Manifold() # empty manifold
         innerExtendLength = self.DISTANCE_EPSILON if stabilize else 0
-
         output = m3d.Manifold() # empty manifold
 
         if self.elbow1:
