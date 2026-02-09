@@ -26,13 +26,14 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
     and then subtract 90 or 135 degrees from the joint state when commanding the servo.
 
     # TODO: edit hole placement in CAD model, update dimensions here
-    Dimensions: 
-    r = 30.0  # outer radius of tube in mm
-    wallThickness = 5.0  # wall thickness in mm
-    holeDiameter = 2.0 # We use M2 bolts
-    numHoles = 4
-    neutralLength = 76.791 # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
     """
+    # Dimensions from CAD model (mm) — update these when CAD changes
+    R = 33.0              # outer radius of tube in mm
+    WALL_THICKNESS = 3.0  # wall thickness in mm
+    HOLE_DIAMETER = 3.0   # We use M3 bolts
+    NUM_HOLES = 4
+    NEUTRAL_LENGTH = 76.791  # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
+
     def __init__(self, Pose : SE3, version : int | float | str, initialState : float = 0.0):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
             maxBendingAngle = np.pi
@@ -41,10 +42,10 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
         else:
             raise ValueError("version must be 180 or 270")
         
-        PrintedTube.__init__(self, wallThickness=5, holeDiameter=2, numHoles=4)
-        TransverseRevolute.__init__(self, r=30, Pose=Pose, 
+        PrintedTube.__init__(self, wallThickness=self.WALL_THICKNESS, holeDiameter=self.HOLE_DIAMETER, numHoles=self.NUM_HOLES)
+        TransverseRevolute.__init__(self, r=self.R, Pose=Pose, 
                                     minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
-                                    neutralLength=76.791, initialState=initialState,
+                                    neutralLength=self.NEUTRAL_LENGTH, initialState=initialState,
                                     checkCircleOverlap=False)
     
 class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
@@ -60,13 +61,14 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     and then subtract 90 or 135 degrees from the joint state when commanding the servo.
 
     # TODO: edit hole placement in CAD model, update dimensions here
-    Dimensions:
-    r = 30.0  # outer radius of tube in mm
-    wallThickness = 5.0  # wall thickness in mm
-    holeDiameter = 2.0 # We use M2 bolts
-    numHoles = 4
-    length = 64.5 
     """
+    # Dimensions from CAD model (mm) — update these when CAD changes
+    R = 33.0              # outer radius of tube in mm
+    WALL_THICKNESS = 3.0  # wall thickness in mm
+    HOLE_DIAMETER = 3.0   # We use M3 bolts
+    NUM_HOLES = 4
+    NEUTRAL_LENGTH = 62.4  # length in mm
+
     def __init__(self, Pose : SE3, version : [int, float, str], initialState : float = 0.0):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
             maxBendingAngle = np.pi
@@ -75,15 +77,14 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
         else:
             raise ValueError("version must be 180 or 270")
         
-        
-        PrintedTube.__init__(self, wallThickness=5, holeDiameter=2, numHoles=4)
-        CoaxialRevolute.__init__(self, r=30, Pose=Pose, neutralLength=64.5,
+        PrintedTube.__init__(self, wallThickness=self.WALL_THICKNESS, holeDiameter=self.HOLE_DIAMETER, numHoles=self.NUM_HOLES)
+        CoaxialRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH,
                                  minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
                                  initialState=initialState)
     
 class PrintedHemisphere(PrintedTube, Tip):
     def __init__(self, r : float, Pose : SE3, closesForward : bool, pathIndex : int = 2):
-        PrintedTube.__init__(self, wallThickness=2.0, holeDiameter=2.0, numHoles=4)
+        PrintedTube.__init__(self, wallThickness=3.0, holeDiameter=3.0, numHoles=4)
         Tip.__init__(self, r, Pose, length=r, closesForward=closesForward, pathIndex=pathIndex)
 
 class PrintedStartHemisphere(PrintedHemisphere):

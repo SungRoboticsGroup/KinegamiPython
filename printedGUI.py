@@ -770,7 +770,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.grid_on = True
 
         self.units = "Millimeter (mm)"
-        self.default_radius = 30
+        self.default_radius = TransverseRDS3225.R
 
         self.current_point = 0
         self.tree = None
@@ -3077,11 +3077,10 @@ class WindowKinegamiGUI(QMainWindow):
                 root = self.tree.Joints[0]
                 root_proximal_dubins = root.ProximalDubinsFrame()
                 r = root.r
-                neutralLength = 76.791  # TransverseRDS3225 neutralLength
-                distance = 4 * r + neutralLength / 2
+                distance = 4 * r + TransverseRDS3225.NEUTRAL_LENGTH / 2
                 pose = root_proximal_dubins @ SE3.Trans(-distance, 0, 0)
             else:
-                distance = 120  # Approximate spacing for printed joints
+                distance = 4 * TransverseRDS3225.R + TransverseRDS3225.NEUTRAL_LENGTH / 2
                 pose = SE3.Rt(SE3().R, np.array([distance, 0, 0]))
             joint = TransverseRDS3225(pose, version=270)
             self.add_joint(joint)
@@ -3097,11 +3096,10 @@ class WindowKinegamiGUI(QMainWindow):
                 root = self.tree.Joints[0]
                 root_proximal_dubins = root.ProximalDubinsFrame()
                 r = root.r
-                neutralLength = 64.5  # CoaxialRDS3225 neutralLength
-                distance = 4 * r + neutralLength / 2
+                distance = 4 * r + CoaxialRDS3225.NEUTRAL_LENGTH / 2
                 pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(math.pi/2).R, np.array([-distance, 0, 0]))
             else:
-                distance = 120  # Approximate spacing for printed joints
+                distance = 4 * CoaxialRDS3225.R + CoaxialRDS3225.NEUTRAL_LENGTH / 2
                 pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
             joint = CoaxialRDS3225(pose, version=270)
             self.add_joint(joint)
@@ -3124,9 +3122,9 @@ class WindowKinegamiGUI(QMainWindow):
                 distance = prevJoint.r * 4 + self.default_radius / 2
                 pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
             if self.add_to_root:
-                joint = PrintedStartHemisphere(r=30, Pose=pose)
+                joint = PrintedStartHemisphere(r=TransverseRDS3225.R, Pose=pose)
             else:
-                joint = PrintedEndHemisphere(r=30, Pose=pose)
+                joint = PrintedEndHemisphere(r=TransverseRDS3225.R, Pose=pose)
             self.add_joint(joint)
         except Exception as e:
             self.show_error(str(e))
