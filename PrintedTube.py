@@ -108,6 +108,18 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         self.startRadius = startRadius if startRadius is not None else r
         self.endRadius = endRadius if endRadius is not None else r
         
+    def newLinkTransformedBy(self, Transformation : SE3):
+        """Override to preserve PrintedLinkCSC type when transforming"""
+        return PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+                              Transformation @ self.EndDubinsPose,
+                              wallThickness = self.wallThickness,
+                              holeDiameter = self.holeDiameter,
+                              numHoles = self.numHoles,
+                              maxAnglePerElbow = self.maxAnglePerElbow, 
+                              path = self.path.newPathTransformedBy(Transformation),
+                              EPSILON = self.EPSILON,
+                              startRadius = self.startRadius,
+                              endRadius = self.endRadius)
 
     def manifold(self, startRadius : Optional[float] = None, endRadius : Optional[float] = None, 
                  numSides : int = 20,  hullBends : bool = False, stabilize : bool = True, 
