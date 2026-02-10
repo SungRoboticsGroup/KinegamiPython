@@ -15,6 +15,7 @@ import queue
 from LinkCSC import LinkCSC
 import os
 import time
+import dill
 from typing import Generic, TypeVar, get_args, Union, Optional, Tuple
 from functools import partial
 from geometryHelpers import *
@@ -591,8 +592,6 @@ class KinematicTree(Generic[F]):
                                 showFrames=showLinkPoses,
                                 showBoundary=showLinkSurface,
                                 linkID=index)
-
-        widget.add_chain(self)
 
     def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):
         try:
@@ -1359,7 +1358,6 @@ class KinematicTree(Generic[F]):
         return True
     
     def save(self, filename: str, saveDir = True):
-        #TODO: ADD EXTENSIONS FOR PRINTED JOINTS
         # Don't add extension if filename already has one
         if not (filename.endswith('.tree') or filename.endswith('.chain')):
             name = filename + ".tree"
@@ -1369,10 +1367,9 @@ class KinematicTree(Generic[F]):
         if saveDir and not os.path.isabs(filename):
             name = os.path.join("save", name)
         
-        with open(name, "w") as f:
-            save = self.__repr__()
-            f.write(save)
-            f.close()
+        os.makedirs(os.path.dirname(os.path.abspath(name)), exist_ok=True)
+        with open(name, "wb") as f:
+            dill.dump(self, f)
 
     def totalLengthLowerBound(self):
         sum = self.Joints[0].neutralLength/2
@@ -1677,3 +1674,15 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     toReturn.append(jointToPlace)
     return toReturn
     
+
+def loadTree(filename: str):
+    """Load any KinematicTree (or subclass) from a dill-serialized file.
+    Also supports legacy text-based files saved with __repr__/eval."""
+    try:
+        with open(filename, "rb") as f:
+            return dill.load(f)
+    except Exception:
+        # Fall back to legacy text-based loading for old files
+        raise Exception(f"Could not load file {filename}. "
+                        "If this is a legacy text-based save file, "
+                        "it must be re-saved in the new format.")

@@ -29,6 +29,7 @@ from spatialmath import SE3
 import math
 from PathCSC import *
 from PrintedTube import *
+from KinematicTree import loadTree
 import re
 from scipy.spatial.transform import Rotation as R
 from style import *
@@ -234,7 +235,7 @@ class EditGridWidget(QWidget):
 
         button_layout = QHBoxLayout()
 
-        # Apply button to create the chain
+        # Apply button to create the tree
         apply_button = QPushButton('Apply Changes', self)
         apply_button.clicked.connect(self.on_apply_clicked)
         button_layout.addWidget(apply_button)
@@ -1116,13 +1117,13 @@ class WindowKinegamiGUI(QMainWindow):
         file_dock_widget = QWidget()
         file_dock_layout = QVBoxLayout(file_dock_widget)
 
-        self.save_chain_button = QPushButton('Save Chain')
-        self.save_chain_button.clicked.connect(self.save_chain)
-        file_dock_layout.addWidget(self.save_chain_button)
+        self.save_tree_button = QPushButton('Save Tree')
+        self.save_tree_button.clicked.connect(self.save_tree)
+        file_dock_layout.addWidget(self.save_tree_button)
 
-        self.load_chain_button = QPushButton('Load Chain')
-        self.load_chain_button.clicked.connect(self.load_chain)
-        file_dock_layout.addWidget(self.load_chain_button)
+        self.load_tree_button = QPushButton('Load Tree')
+        self.load_tree_button.clicked.connect(self.load_tree)
+        file_dock_layout.addWidget(self.load_tree_button)
 
         self.export_link_modules_button = QPushButton('Export Link Modules')
         self.export_link_modules_button.clicked.connect(self.export_link_modules)  
@@ -1658,7 +1659,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.log_version()
     
     def set_configuration(self, config_index):
-        """Set the chain to a saved configuration"""
+        """Set the tree to a saved configuration"""
         if config_index >= len(self.saved_configurations):
             return
         
@@ -1910,8 +1911,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.versions = self.versions[:self.version_index + 1]
 
         if self.total_version_counter % autosave_frequency == 0 and not self.tree is None:
-            #self.save_chain(autosave_id=len(self.versions)//autosave_frequency)
-            self.save_chain(autosave_id=time.time()) #autosave with timestamp (seconds from unix epoch start)
+            #self.save_tree(autosave_id=len(self.versions)//autosave_frequency)
+            self.save_tree(autosave_id=time.time()) #autosave with timestamp (seconds from unix epoch start)
         if len(self.versions) < log_capacity:
             self.versions.append(copy.deepcopy(self.tree))
         else:
@@ -2134,7 +2135,7 @@ class WindowKinegamiGUI(QMainWindow):
                 self.tree.saveLinkModules(base_filename)
             self.tree.showLinkModules()
 
-    def save_chain(self, autosave_id=None):
+    def save_tree(self, autosave_id=None):
         # confusing why autosave_id is sometimes False
         if autosave_id is False:
             autosave_id = None
@@ -2159,7 +2160,7 @@ class WindowKinegamiGUI(QMainWindow):
             if file_path:
                 self.tree.save(file_path)
         
-    def load_chain(self):
+    def load_tree(self):
         options = QFileDialog.Options()
         try:
             base_path = sys._MEIPASS
@@ -2169,7 +2170,7 @@ class WindowKinegamiGUI(QMainWindow):
             self, "Open File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain);;All Files (*.*)", options=options
         )
         if file_path:
-            self.tree = loadOrigamiChain(file_path)
+            self.tree = loadTree(file_path)
             self.update_joint()
             self.log_version()
 
@@ -2362,8 +2363,8 @@ class WindowKinegamiGUI(QMainWindow):
         euler_angles = rot.as_euler('xyz', degrees=True)
         return euler_angles[axis]
     
-    def add_chain(self, chain):
-        self.tree = chain
+    def add_tree(self, tree):
+        self.tree = tree
         self.select_joint_options.blockSignals(True)
         self.select_joint_options.clear()
     
@@ -2443,18 +2444,18 @@ class WindowKinegamiGUI(QMainWindow):
             self.tree = new_tree
             self.selected_joint = self._selected_joint
             self.window().log_version()
-            self.show_success("Chain updated successfully!")
+            self.show_success("Tree updated successfully!")
         except Exception as e:
             self.tree = self._backup_tree
-            self.show_error("Error rebuilding chain: " + str(e))
+            self.show_error("Error rebuilding tree: " + str(e))
         
         self.update_joint(force_recreate_config_widget=True)
 
     def edit_joint_state(self):
         dialog = EditJointStateDialog(self) 
         if not self.tree:
-            self.show_error('Please initialize a chain.')
-            # error_dialog = ErrorDialog('Please initialize a chain.')
+            self.show_error('Please initialize a tree.')
+            # error_dialog = ErrorDialog('Please initialize a tree.')
             # error_dialog.exec_()
         if self.selected_joint == -1:
             self.show_error('Please select a joint.')
@@ -2727,7 +2728,7 @@ class WindowKinegamiGUI(QMainWindow):
     # Revolute joints are actually in radians, but used in degrees in the slider and text box.
     # Prismatic joints are actually in distance units and displayed as such in the text box, 
     # but the slider scales it by 100*r because it needs integer values.
-    # Returns None if the joint is a waypoint, no joint is selected, or no chain exists.
+    # Returns None if the joint is a waypoint, no joint is selected, or no tree exists.
     # The state used is the current joint state unless textboxStateInput is provided
     # (in which case it is interpreted as degrees for revolute joints and distance units for prismatic joints).
     def scaled_state_info(self, state=None):
@@ -2784,8 +2785,8 @@ class WindowKinegamiGUI(QMainWindow):
     def delete_joint(self):
         # dialog = DeleteDialog(self)
         if not self.tree:
-            self.show_error('Please initialize a chain.')
-            # error_dialog = ErrorDialog('Please initialize a chain.')
+            self.show_error('Please initialize a tree.')
+            # error_dialog = ErrorDialog('Please initialize a tree.')
             # error_dialog.exec_()
         if self.selected_joint == -1:
             self.show_error('Please select a joint.')
@@ -2867,6 +2868,7 @@ class WindowKinegamiGUI(QMainWindow):
                     lastJoint=self.last_joint,
                     showSpheres=False  # Don't show bounding spheres for printed joints
                 )
+                self.add_tree(self.tree)
 
         if self.mesh_selected and self.referenceMesh is not None:
             if self.control_type == "Translate":

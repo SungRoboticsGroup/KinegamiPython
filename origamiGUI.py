@@ -2368,7 +2368,7 @@ class WindowKinegamiGUI(QMainWindow):
             self, "Open File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain);;All Files (*.*)", options=options
         )
         if file_path:
-            self.chain = loadOrigamiChain(file_path)
+            self.chain = loadTree(file_path)
             self.radius = self.chain.r
             self.num_sides = self.chain.numSides
             self.chain_created = True
@@ -3069,6 +3069,7 @@ class WindowKinegamiGUI(QMainWindow):
                     selectedLink=self.selected_link,
                     lastJoint=self.last_joint
                 )
+                self.add_chain(self.chain)
 
         if self.mesh_selected and self.referenceMesh is not None:
             if self.control_type == "Translate":
