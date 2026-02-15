@@ -48,6 +48,347 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                                     neutralLength=self.NEUTRAL_LENGTH, initialState=initialState,
                                     checkCircleOverlap=False)
     
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
+             axisScale=jointAxisScaleDefault, showPoses=True):
+        """Override to display a simplified servo icon instead of the default revolute visualization.
+        
+        Draws a 40x40x18 box (narrow along z-axis of Pose) offset -11 in x from Pose center,
+        plus 9mm cylinders extending from the proximal and distal frames toward the Pose center.
+        Calls Joint.addToPlot (skipping TransverseRevolute/Revolute surface drawing).
+        """
+        # Call Joint.addToPlot directly to get frames/axis without revolute surface
+        plotHandles = Joint.addToPlot(self, ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, edgeColor=edgeColor,
+                          surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses)
+        
+        if showSurface:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            
+            xhat = self.Pose.R[:, 0]  # path direction
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]  # rotation axis
+            
+            # Box dimensions: 40 along x, 20 along y, 40 along z
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + (-11.0) * xhat
+            
+            # 8 corners of the box in local frame, then transform
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            # Transform to world: columns of R are [xhat, yhat, zhat]
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            # 6 faces of the box (indices into corners)
+            face_indices = [
+                [0, 1, 2, 3],  # -z face
+                [4, 5, 6, 7],  # +z face
+                [0, 1, 5, 4],  # -y face
+                [2, 3, 7, 6],  # +y face
+                [0, 3, 7, 4],  # -x face
+                [1, 2, 6, 5],  # +x face
+            ]
+            faces = [[corners[i] for i in face] for face in face_indices]
+            box_collection = Poly3DCollection(faces, alpha=surfaceOpacity,
+                                              facecolors='black',
+                                              edgecolors=edgeColor)
+            ax.add_collection3d(box_collection)
+            
+            # Cylinders: 9mm long, radius self.r, with solid end caps
+            cyl_length = 9.0
+            numCapPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
+            proximal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_xhat = distalFrame.R[:, 0]
+            distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
+            distal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            # End caps for solid cylinders
+            def _circle_points(center, normal, radius, n=32):
+                if abs(normal[0]) < 0.9:
+                    u = np.cross(normal, [1, 0, 0])
+                else:
+                    u = np.cross(normal, [0, 1, 0])
+                u = u / np.linalg.norm(u)
+                v = np.cross(normal, u)
+                angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+                return center + radius * (np.cos(angles)[:, None] * u + np.sin(angles)[:, None] * v)
+            
+            for cap_center, cap_normal in [
+                (proximal_pos + cyl_length * xhat, xhat),       # inner cap of proximal cyl
+                (distal_pos - cyl_length * distal_xhat, -distal_xhat),  # inner cap of distal cyl
+            ]:
+                cap_pts = _circle_points(cap_center, cap_normal, self.r, numCapPoints)
+                cap_face = Poly3DCollection([cap_pts], alpha=surfaceOpacity,
+                                            facecolors=surfaceColor, edgecolors=edgeColor)
+                ax.add_collection3d(cap_face)
+            
+            # Bracket dimensions
+            bracket_color = 'gray'
+            bracket_lw = 2
+            bracket_hy = 10.0  # half of 20 units wide in y
+            
+            # Proximal [-bracket: connects ±z edges of box's -x face to inner end of proximal cylinder
+            box_prox_face = box_center - hx * xhat  # center of box's -x face
+            prox_inner = proximal_pos + cyl_length * xhat  # inner end of proximal cylinder
+            # Draw two [ outlines at y = ±bracket_hy, plus connecting edges
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * yhat
+                prox_bracket = np.array([
+                    box_prox_face + hz * zhat + y_offset,
+                    prox_inner + hz * zhat + y_offset,
+                    prox_inner - hz * zhat + y_offset,
+                    box_prox_face - hz * zhat + y_offset,
+                ])
+                ax.plot(prox_bracket[:, 0], prox_bracket[:, 1], prox_bracket[:, 2],
+                        color=bracket_color, linewidth=bracket_lw)
+            # Connecting edges between the two y sides at the 4 bracket corners
+            for z_sign in [+1, -1]:
+                for x_pos in [box_prox_face, prox_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * yhat, corner - bracket_hy * yhat])
+                    ax.plot(edge[:, 0], edge[:, 1], edge[:, 2],
+                            color=bracket_color, linewidth=bracket_lw)
+            # Rectangular faces connecting +y and -y bracket outlines (3 segments of the [)
+            prox_bracket_faces = [
+                # Top horizontal: box_prox+z to prox_inner+z
+                [box_prox_face + hz*zhat + bracket_hy*yhat, prox_inner + hz*zhat + bracket_hy*yhat,
+                 prox_inner + hz*zhat - bracket_hy*yhat, box_prox_face + hz*zhat - bracket_hy*yhat],
+                # Vertical: prox_inner+z to prox_inner-z
+                [prox_inner + hz*zhat + bracket_hy*yhat, prox_inner - hz*zhat + bracket_hy*yhat,
+                 prox_inner - hz*zhat - bracket_hy*yhat, prox_inner + hz*zhat - bracket_hy*yhat],
+                # Bottom horizontal: prox_inner-z to box_prox-z
+                [prox_inner - hz*zhat + bracket_hy*yhat, box_prox_face - hz*zhat + bracket_hy*yhat,
+                 box_prox_face - hz*zhat - bracket_hy*yhat, prox_inner - hz*zhat - bracket_hy*yhat],
+            ]
+            prox_face_collection = Poly3DCollection(prox_bracket_faces, alpha=surfaceOpacity*0.5,
+                                                     facecolors=bracket_color, edgecolors=bracket_color)
+            ax.add_collection3d(prox_face_collection)
+            
+            # Distal [-bracket: connects from axis of motion (Pose.t) to inner end of distal cylinder, in distal frame
+            distal_inner = distal_pos - cyl_length * distal_xhat  # inner end of distal cylinder
+            distal_yhat = distalFrame.R[:, 1]
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * distal_yhat
+                distal_bracket = np.array([
+                    self.Pose.t + hz * zhat + y_offset,
+                    distal_inner + hz * zhat + y_offset,
+                    distal_inner - hz * zhat + y_offset,
+                    self.Pose.t - hz * zhat + y_offset,
+                ])
+                ax.plot(distal_bracket[:, 0], distal_bracket[:, 1], distal_bracket[:, 2],
+                        color=bracket_color, linewidth=bracket_lw)
+            # Connecting edges between the two y sides at the 4 bracket corners
+            for z_sign in [+1, -1]:
+                for x_pos in [self.Pose.t, distal_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * distal_yhat, corner - bracket_hy * distal_yhat])
+                    ax.plot(edge[:, 0], edge[:, 1], edge[:, 2],
+                            color=bracket_color, linewidth=bracket_lw)
+            # Rectangular faces connecting +y and -y bracket outlines (3 segments of the [)
+            distal_bracket_faces = [
+                # Top horizontal: Pose.t+z to distal_inner+z
+                [self.Pose.t + hz*zhat + bracket_hy*distal_yhat, distal_inner + hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner + hz*zhat - bracket_hy*distal_yhat, self.Pose.t + hz*zhat - bracket_hy*distal_yhat],
+                # Vertical: distal_inner+z to distal_inner-z
+                [distal_inner + hz*zhat + bracket_hy*distal_yhat, distal_inner - hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner - hz*zhat - bracket_hy*distal_yhat, distal_inner + hz*zhat - bracket_hy*distal_yhat],
+                # Bottom horizontal: distal_inner-z to Pose.t-z
+                [distal_inner - hz*zhat + bracket_hy*distal_yhat, self.Pose.t - hz*zhat + bracket_hy*distal_yhat,
+                 self.Pose.t - hz*zhat - bracket_hy*distal_yhat, distal_inner - hz*zhat - bracket_hy*distal_yhat],
+            ]
+            distal_face_collection = Poly3DCollection(distal_bracket_faces, alpha=surfaceOpacity*0.5,
+                                                       facecolors=bracket_color, edgecolors=bracket_color)
+            ax.add_collection3d(distal_face_collection)
+        
+        return plotHandles
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=revoluteColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        """Override to display a simplified servo icon in the pyqtgraph widget.
+        
+        Mirrors the addToPlot method: box, cylinders with inner caps, and [-brackets.
+        Calls Joint.addToWidget directly (skipping Revolute/TransverseRevolute surface).
+        """
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList
+        
+        # Call Joint.addToWidget directly for poses/axis without revolute surface
+        Joint.addToWidget(self, widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        
+        if showSurface:
+            xhat = self.Pose.R[:, 0]
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]
+            
+            # Box dimensions: 40 along x, 20 along y, 40 along z
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + (-11.0) * xhat
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            
+            # 8 corners of the box
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            # 12 triangles for 6 box faces
+            box_tris = np.array([
+                [0,1,2], [0,2,3],  # -z
+                [4,5,6], [4,6,7],  # +z
+                [0,1,5], [0,5,4],  # -y
+                [2,3,7], [2,7,6],  # +y
+                [0,3,7], [0,7,4],  # -x
+                [1,2,6], [1,6,5],  # +x
+            ])
+            box_mesh = gl.GLMeshItem(vertexes=corners, faces=box_tris,
+                                      color=(0, 0, 0, 0.6), smooth=False, 
+                                      drawEdges=True, edgeColor=(0.3, 0.3, 0.3, 1))
+            box_mesh.setGLOptions('opaque')
+            box_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(box_mesh)
+            
+            # Cylinders: 9mm long, radius self.r
+            cyl_length = 9.0
+            numCylPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
+            proximal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_xhat = distalFrame.R[:, 0]
+            distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
+            distal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            
+            # Inner end caps
+            def _circle_verts_and_tris(center, normal, radius, n=32):
+                if abs(normal[0]) < 0.9:
+                    u = np.cross(normal, [1, 0, 0])
+                else:
+                    u = np.cross(normal, [0, 1, 0])
+                u = u / np.linalg.norm(u)
+                v = np.cross(normal, u)
+                angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+                ring = center + radius * (np.cos(angles)[:, None] * u + np.sin(angles)[:, None] * v)
+                verts = np.vstack([center.reshape(1, 3), ring])  # index 0 = center
+                tris = np.array([[0, i + 1, (i % n) + 2] for i in range(n - 1)] + [[0, n, 1]])
+                return verts, tris
+            
+            for cap_center, cap_normal in [
+                (proximal_pos + cyl_length * xhat, xhat),
+                (distal_pos - cyl_length * distal_xhat, -distal_xhat),
+            ]:
+                cap_verts, cap_tris = _circle_verts_and_tris(cap_center, cap_normal, self.r, numCylPoints)
+                cap_mesh = gl.GLMeshItem(vertexes=cap_verts, faces=cap_tris,
+                                          color=tuple(revoluteColorList), smooth=True)
+                cap_mesh.setGLOptions('opaque')
+                cap_mesh.setObjectName("Joint")
+                widget.plot_widget.addItem(cap_mesh)
+            
+            # Bracket dimensions
+            bracket_color = (0.5, 0.5, 0.5, 0.8)
+            bracket_line_color = (0.5, 0.5, 0.5, 1.0)
+            bracket_hy = 10.0
+            
+            # Proximal [-bracket
+            box_prox_face = box_center - hx * xhat
+            prox_inner = proximal_pos + cyl_length * xhat
+            
+            # Bracket outlines at y = ±bracket_hy
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * yhat
+                pts = np.array([
+                    box_prox_face + hz * zhat + y_offset,
+                    prox_inner + hz * zhat + y_offset,
+                    prox_inner - hz * zhat + y_offset,
+                    box_prox_face - hz * zhat + y_offset,
+                ])
+                line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+            # Connecting edges
+            for z_sign in [+1, -1]:
+                for x_pos in [box_prox_face, prox_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * yhat, corner - bracket_hy * yhat])
+                    line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+            # Bracket face quads (as triangulated meshes)
+            prox_bracket_quads = [
+                [box_prox_face + hz*zhat + bracket_hy*yhat, prox_inner + hz*zhat + bracket_hy*yhat,
+                 prox_inner + hz*zhat - bracket_hy*yhat, box_prox_face + hz*zhat - bracket_hy*yhat],
+                [prox_inner + hz*zhat + bracket_hy*yhat, prox_inner - hz*zhat + bracket_hy*yhat,
+                 prox_inner - hz*zhat - bracket_hy*yhat, prox_inner + hz*zhat - bracket_hy*yhat],
+                [prox_inner - hz*zhat + bracket_hy*yhat, box_prox_face - hz*zhat + bracket_hy*yhat,
+                 box_prox_face - hz*zhat - bracket_hy*yhat, prox_inner - hz*zhat - bracket_hy*yhat],
+            ]
+            for quad in prox_bracket_quads:
+                verts = np.array(quad)
+                tris = np.array([[0, 1, 2], [0, 2, 3]])
+                mesh = gl.GLMeshItem(vertexes=verts, faces=tris, color=bracket_color, smooth=False)
+                mesh.setGLOptions('translucent')
+                mesh.setObjectName("Joint")
+                widget.plot_widget.addItem(mesh)
+            
+            # Distal [-bracket
+            distal_inner = distal_pos - cyl_length * distal_xhat
+            distal_yhat = distalFrame.R[:, 1]
+            
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * distal_yhat
+                pts = np.array([
+                    self.Pose.t + hz * zhat + y_offset,
+                    distal_inner + hz * zhat + y_offset,
+                    distal_inner - hz * zhat + y_offset,
+                    self.Pose.t - hz * zhat + y_offset,
+                ])
+                line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+            for z_sign in [+1, -1]:
+                for x_pos in [self.Pose.t, distal_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * distal_yhat, corner - bracket_hy * distal_yhat])
+                    line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+            distal_bracket_quads = [
+                [self.Pose.t + hz*zhat + bracket_hy*distal_yhat, distal_inner + hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner + hz*zhat - bracket_hy*distal_yhat, self.Pose.t + hz*zhat - bracket_hy*distal_yhat],
+                [distal_inner + hz*zhat + bracket_hy*distal_yhat, distal_inner - hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner - hz*zhat - bracket_hy*distal_yhat, distal_inner + hz*zhat - bracket_hy*distal_yhat],
+                [distal_inner - hz*zhat + bracket_hy*distal_yhat, self.Pose.t - hz*zhat + bracket_hy*distal_yhat,
+                 self.Pose.t - hz*zhat - bracket_hy*distal_yhat, distal_inner - hz*zhat - bracket_hy*distal_yhat],
+            ]
+            for quad in distal_bracket_quads:
+                verts = np.array(quad)
+                tris = np.array([[0, 1, 2], [0, 2, 3]])
+                mesh = gl.GLMeshItem(vertexes=verts, faces=tris, color=bracket_color, smooth=False)
+                mesh.setGLOptions('translucent')
+                mesh.setObjectName("Joint")
+                widget.plot_widget.addItem(mesh)
+
 class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     """
     RDS3225 Servo Motor with brackets and 3D-printed parts attached to make it attach coaxially to tubes.

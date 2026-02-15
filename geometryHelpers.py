@@ -491,9 +491,14 @@ class Ball:
     
     def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False):
         import pyqtgraph.opengl as gl
+        from OpenGL.GL import GL_FALSE
         md = gl.MeshData.sphere(rows=10, cols=10)
         sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
         sphere.setGLOptions('translucent')
+        # Don't write to depth buffer so items inside the sphere remain visible
+        sphere.updateGLOptions({'glDepthMask': (GL_FALSE,)})
+        # Render after opaque items so the sphere blends on top of them
+        sphere.setDepthValue(10)
         sphere.scale(self.r, self.r, self.r)
         sphere.translate(*self.c)
         if (is_waypoint):
@@ -671,12 +676,12 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, edgecolor=edgeColor)
     
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False):
+    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False, opaque=False):
         import pyqtgraph.opengl as gl
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
         meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
-        meshitem.setGLOptions('translucent')
+        meshitem.setGLOptions('opaque' if opaque else 'translucent')
         if (is_joint):
             meshitem.setObjectName("Joint")
         else:
