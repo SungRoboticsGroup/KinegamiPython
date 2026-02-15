@@ -18,9 +18,9 @@ import pyqtgraph.opengl as gl
 import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime
-from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3
+from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3, QKeySequence
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -1081,6 +1081,15 @@ class WindowKinegamiGUI(QMainWindow):
         self.redo_button = QPushButton("Redo")
         self.redo_button.clicked.connect(self.redo)
         self.options_layout.addWidget(self.redo_button)
+
+        # Keyboard shortcuts for undo/redo
+        # Ctrl+Z / Ctrl+Y on Windows/Linux, Cmd+Z / Cmd+Shift+Z on Mac
+        self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
+        self.undo_shortcut.activated.connect(self.undo)
+        self.redo_shortcut = QShortcut(QKeySequence.Redo, self)
+        self.redo_shortcut.activated.connect(self.redo)
+        self.redo_shortcut2 = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
+        self.redo_shortcut2.activated.connect(self.redo)
         
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
@@ -1922,7 +1931,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.version_index = len(self.versions) - 1
         self.total_version_counter += 1
 
-        print("LOG     version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
+        #print("LOG     version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
     def undo(self):
         if self.version_index > 0:
@@ -1934,7 +1943,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.tree = None
 
         self.update_joint()
-        print("UNDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
+        #print("UNDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
     def redo(self):
         if self.version_index + 1 < len(self.versions):
@@ -1942,7 +1951,7 @@ class WindowKinegamiGUI(QMainWindow):
             self.tree = copy.deepcopy(self.versions[self.version_index])
             self.update_joint()
 
-        print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
+        #print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
     def toggle_grid_func(self):
         if self.grid_on:
@@ -2064,7 +2073,9 @@ class WindowKinegamiGUI(QMainWindow):
             "Delete: Delete Joint",
             "X: Select X Axis",
             "Y: Select Y Axis",
-            "Z: Select Z Axis"
+            "Z: Select Z Axis",
+            "Ctrl+Z: Undo",
+            "Ctrl+Y / Ctrl+Shift+Z: Redo"
         ]
 
         spacing = "   "

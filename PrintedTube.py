@@ -32,7 +32,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
     WALL_THICKNESS = 3.0  # wall thickness in mm
     HOLE_DIAMETER = 3.0   # We use M3 bolts
     NUM_HOLES = 4
-    NEUTRAL_LENGTH = 76.791  # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
+    NEUTRAL_LENGTH = 93.783  # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
 
     def __init__(self, Pose : SE3, version : int | float | str, initialState : float = 0.0):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
