@@ -19,7 +19,7 @@ import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime, QEvent
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3, QKeySequence
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
@@ -745,7 +745,7 @@ class WindowKinegamiGUI(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Kinegami Interactive Editor")
+        self.setWindowTitle("Kinematic Tree Interactive Editor")
         self.setGeometry(0, 0, 1920, 1080)
 
         self.plot_widget = ClickableGLViewWidget(parent_window=self)
@@ -1139,7 +1139,7 @@ class WindowKinegamiGUI(QMainWindow):
         file_dock_layout.addWidget(self.export_link_modules_button) 
 
         self.units_layout = QHBoxLayout()
-        self.units_label = QLabel(f"Current units: {self.units}")
+        self.units_label = QLabel(f"Units: {self.units}")
         file_dock_layout.addWidget(self.units_label)
 
         self.edit_grid_button = QPushButton("Edit Grid")
@@ -1222,7 +1222,7 @@ class WindowKinegamiGUI(QMainWindow):
     @QtCore.pyqtSlot(str)
     def change_units(self, key):
         self.units = key
-        self.units_label.setText(f"Current units: {self.units}")
+        self.units_label.setText(f"Units: {self.units}")
         self.tree.units = key
         # self.log_version()
         self.update_joint()
@@ -1259,10 +1259,10 @@ class WindowKinegamiGUI(QMainWindow):
         text_box_layout = QHBoxLayout(container_widget)
         text_box_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create text boxes for real (non-Waypoint) joints
+        # Create text boxes for real (non-Waypoint, non-Tip) joints
         for actual_joint_index, joint in enumerate(self.tree.Joints):
-            # Skip Waypoint joints
-            if type(joint).__name__ in ['Waypoint', 'PrintedWaypoint']:
+            # Skip Waypoint and Tip joints (they have no movable state)
+            if isinstance(joint, (Waypoint, Tip)):
                 continue
 
             # Create a container widget for each joint
@@ -1281,6 +1281,7 @@ class WindowKinegamiGUI(QMainWindow):
             text_box.setAlignment(Qt.AlignCenter)
             # Connect to handler with lambda to capture the actual joint index
             text_box.returnPressed.connect(lambda idx=actual_joint_index: self.config_textbox_return(idx))
+            text_box.installEventFilter(self)
             
             # Create slider
             slider = QSlider(Qt.Horizontal)
@@ -1563,7 +1564,7 @@ class WindowKinegamiGUI(QMainWindow):
             # Add label above play/pause button
             animation_label = QLabel("Animate (s)")
             animation_label.setAlignment(Qt.AlignCenter)
-            animation_label.setFixedWidth(80)
+            animation_label.setFixedWidth(90)
             animation_layout.addWidget(animation_label, 0, Qt.AlignHCenter)
             
             # Create horizontal layout for play button and loop checkbox
@@ -1583,6 +1584,7 @@ class WindowKinegamiGUI(QMainWindow):
             
             # Loop checkbox next to play button
             self.animation_loop_checkbox = QCheckBox("Loop")
+            self.animation_loop_checkbox.setMinimumWidth(55)
             self.animation_loop_checkbox.setChecked(self.animation_loop)
             self.animation_loop_checkbox.stateChanged.connect(self.toggle_animation_loop)
             play_loop_layout.addWidget(self.animation_loop_checkbox)
@@ -2073,10 +2075,12 @@ class WindowKinegamiGUI(QMainWindow):
             "Delete: Delete Joint",
             "X: Select X Axis",
             "Y: Select Y Axis",
-            "Z: Select Z Axis",
-            "Ctrl+Z: Undo",
-            "Ctrl+Y / Ctrl+Shift+Z: Redo"
-        ]
+            "Z: Select Z Axis"
+        ] 
+        # ", Ctrl+Z: Undo",  "Ctrl+Y / Ctrl+Shift+Z: Redo" 
+        # Removed because it's standard enough to guess
+        # And it's different Ctrl vs Cmd on Windows vs Mac
+        # And we want to save space
 
         spacing = "   "
         for instruction in instructions:
@@ -2667,6 +2671,20 @@ class WindowKinegamiGUI(QMainWindow):
                 self.set_state_tools()
                 self.log_version()
 
+    def eventFilter(self, obj, event):
+        """Intercept Tab in config text boxes: apply value and advance to next."""
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Tab:
+            if hasattr(self, 'config_text_boxes') and obj in self.config_text_boxes:
+                idx = self.config_text_boxes.index(obj)
+                joint_index = self.config_joint_indices[idx]
+                self.config_textbox_return(joint_index)
+                # Move focus to next text box if not at the end
+                if idx + 1 < len(self.config_text_boxes):
+                    self.config_text_boxes[idx + 1].setFocus()
+                    self.config_text_boxes[idx + 1].selectAll()
+                return True  # consume the event
+        return super().eventFilter(obj, event)
+
     def config_textbox_return(self, joint_index):
         """Handle configuration textbox input for a specific joint"""
         if self.tree and 0 <= joint_index < len(self.tree.Joints):
@@ -2761,7 +2779,7 @@ class WindowKinegamiGUI(QMainWindow):
                     stateDegrees = state
                     stateRadians = math.radians(stateDegrees)
                 radians = (stateRange[0], stateRange[1], stateRadians)
-                degrees = (int(math.degrees(stateRange[0])), int(math.degrees(stateRange[1])), int(stateDegrees))
+                degrees = (round(math.degrees(stateRange[0])), round(math.degrees(stateRange[1])), round(stateDegrees))
                 actual, slider, textbox = radians, degrees, degrees
                 return (actual, slider, textbox)
             elif isinstance(joint, Waypoint):
@@ -2839,7 +2857,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
 
-        self.units_label.setText(f"Current units: {self.units}")
+        self.units_label.setText(f"Units: {self.units}")
         
         # Check if we need to recreate config widgets or just update values
         need_recreate_config_widget = force_recreate_config_widget
@@ -2850,7 +2868,7 @@ class WindowKinegamiGUI(QMainWindow):
                 need_recreate_config_widget = True
             else:
                 # Check if the number of real joints has changed
-                real_joint_count = sum(1 for j in self.tree.Joints if type(j).__name__ not in ['Waypoint', 'PrintedWaypoint'])
+                real_joint_count = sum(1 for j in self.tree.Joints if not isinstance(j, (Waypoint, Tip)))
                 if real_joint_count != len(self.config_joint_indices):
                     need_recreate_config_widget = True
         

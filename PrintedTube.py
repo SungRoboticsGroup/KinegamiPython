@@ -244,16 +244,17 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
         
         return plotHandles
 
+    
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, 
                     surfaceColor=revoluteColorDefault, 
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
-        """Override to display a simplified servo icon in the pyqtgraph widget.
+        #Override to display a simplified servo icon in the pyqtgraph widget.
         
-        Mirrors the addToPlot method: box, cylinders with inner caps, and [-brackets.
-        Calls Joint.addToWidget directly (skipping Revolute/TransverseRevolute surface).
-        """
+        #Mirrors the addToPlot method: box, cylinders with inner caps, and [-brackets.
+        #Calls Joint.addToWidget directly (skipping Revolute/TransverseRevolute surface).
+        
         import pyqtgraph.opengl as gl
         from style import revoluteColorList
         
@@ -417,7 +418,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 mesh.setGLOptions('translucent')
                 mesh.setObjectName("Joint")
                 widget.plot_widget.addItem(mesh)
-
+        
 class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     """
     RDS3225 Servo Motor with brackets and 3D-printed parts attached to make it attach coaxially to tubes.
@@ -563,17 +564,17 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
         
         return plotHandles
 
+    
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                     proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                     sphereColor=sphereColorDefault, showSphere=False, 
                     surfaceColor=revoluteColorDefault, 
                     showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
-        """Override to display a simplified coaxial servo icon in the pyqtgraph widget.
+        #Override to display a simplified coaxial servo icon in the pyqtgraph widget.
         
-        Mirrors the addToPlot method: black box, proximal cylinder (r), distal cylinder (r-wallThickness),
-        each with inner end caps.
-        Calls Joint.addToWidget directly (skipping Revolute/CoaxialRevolute surface).
-        """
+        #Mirrors the addToPlot method: black box, proximal cylinder (r), distal cylinder (r-wallThickness),
+        #each with inner end caps.
+        #Calls Joint.addToWidget directly (skipping Revolute/CoaxialRevolute surface).
         import pyqtgraph.opengl as gl
         from style import revoluteColorList
         
@@ -669,7 +670,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
                 line_pts = np.array([line_start, line_end])
                 line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
-
+    
 class PrintedHemisphere(PrintedTube, Tip):
     def __init__(self, r : float, Pose : SE3, closesForward : bool, pathIndex : int = 2):
         PrintedTube.__init__(self, wallThickness=3.0, holeDiameter=3.0, numHoles=4)
