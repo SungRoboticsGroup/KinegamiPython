@@ -3,6 +3,7 @@
 """
 
 import sys, os
+import dill
 
 if sys.stdout is None:
     class DummyStream:
@@ -1192,6 +1193,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.redo_shortcut.activated.connect(self.redo)
         self.redo_shortcut2 = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
         self.redo_shortcut2.activated.connect(self.redo)
+
+        # Ctrl+S: Save Chain, Ctrl+E: Export Crease Pattern
+        self.save_shortcut = QShortcut(QKeySequence.Save, self)
+        self.save_shortcut.activated.connect(self.save_chain)
+        self.export_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
+        self.export_shortcut.activated.connect(self.save_crease_pattern)
         
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
@@ -1228,11 +1235,11 @@ class WindowKinegamiGUI(QMainWindow):
         file_dock_widget = QWidget()
         file_dock_layout = QVBoxLayout(file_dock_widget)
 
-        self.save_chain_button = QPushButton('Save Chain')
+        self.save_chain_button = QPushButton('Save')
         self.save_chain_button.clicked.connect(self.save_chain)
         file_dock_layout.addWidget(self.save_chain_button)
 
-        self.load_chain_button = QPushButton('Load Chain')
+        self.load_chain_button = QPushButton('Load')
         self.load_chain_button.clicked.connect(self.load_chain)
         file_dock_layout.addWidget(self.load_chain_button)
 
@@ -1434,8 +1441,8 @@ class WindowKinegamiGUI(QMainWindow):
             self.config_sliders.append(slider)
             self.config_joint_indices.append(actual_joint_index)
         
-        # Add "Save Configuration" button
-        save_button = QPushButton("Save Configuration")
+        # Add "Define Configuration" button
+        save_button = QPushButton("Define Configuration")
         save_button.clicked.connect(self.save_current_configuration)
         text_box_layout.addWidget(save_button)
         
@@ -2349,6 +2356,115 @@ class WindowKinegamiGUI(QMainWindow):
             else:
                 crease_pattern.show()
 
+    def _gather_session_state(self):
+        """Collect all serializable editor state into a dict for .session files."""
+        state = {
+            'chain': self.chain,
+            'saved_configurations': self.saved_configurations,
+            'config_durations': self.config_durations,
+            'selected_joint': self.selected_joint,
+            'selected_frame': self.selected_frame,
+            'grid_color': self.grid_color,
+            'grid_spacing': self.grid_spacing,
+            'grid_size': self.grid_size,
+            'grid_on': self.grid_on,
+            'units': self.units,
+            'mesh_scale': self.mesh_scale,
+            'control_type': self.control_type,
+            'is_local': self.is_local,
+            'animation_loop': self.animation_loop,
+            'versions': self.versions,
+            'version_index': self.version_index,
+            'total_version_counter': self.total_version_counter,
+            'num_sides': self.num_sides,
+            'radius': self.radius,
+            # Camera state
+            'camera_distance': self.plot_widget.opts.get('distance', 15),
+            'camera_elevation': self.plot_widget.opts.get('elevation', 30),
+            'camera_azimuth': self.plot_widget.opts.get('azimuth', 45),
+        }
+        # Convert camera center from pyqtgraph.Vector to plain list for serialization
+        center = self.plot_widget.opts.get('center', None)
+        if center is not None:
+            state['camera_center'] = [float(center.x()), float(center.y()), float(center.z())]
+        # Reference mesh: save vertex/face data and pose if present
+        if self.referenceMesh is not None:
+            try:
+                md = self.referenceMesh.mesh.opts.get('meshdata', None)
+                if md is not None:
+                    state['reference_mesh'] = {
+                        'vertexes': md.vertexes(),
+                        'faces': md.faces(),
+                        'pose': self.referenceMesh.Pose,
+                        'r': self.referenceMesh.r,
+                    }
+            except Exception:
+                pass
+        return state
+
+    def _restore_session_state(self, state):
+        """Restore editor state from a session dict."""
+        self.chain = state.get('chain', None)
+        self.saved_configurations = state.get('saved_configurations', [])
+        self.config_durations = state.get('config_durations', [])
+        self.selected_joint = state.get('selected_joint', -1)
+        self.selected_frame = state.get('selected_frame', -1)
+        self.grid_color = state.get('grid_color', gridColorDefault)
+        self.grid_spacing = state.get('grid_spacing', 1.0)
+        self.grid_size = state.get('grid_size', 10)
+        self.grid_on = state.get('grid_on', True)
+        self.units = state.get('units', 'Centimeter (cm)')
+        self.mesh_scale = state.get('mesh_scale', 1.0)
+        self.control_type = state.get('control_type', 'Translate')
+        self.is_local = state.get('is_local', True)
+        self.animation_loop = state.get('animation_loop', False)
+        self.versions = state.get('versions', [])
+        self.version_index = state.get('version_index', -1)
+        self.total_version_counter = state.get('total_version_counter', 0)
+        self.num_sides = state.get('num_sides', 4)
+        self.radius = state.get('radius', 1.0)
+
+        if self.chain is not None:
+            self.chain_created = True
+
+        # Restore camera
+        self.plot_widget.opts['distance'] = state.get('camera_distance', self.grid_size * 1.5)
+        self.plot_widget.opts['elevation'] = state.get('camera_elevation', 30)
+        self.plot_widget.opts['azimuth'] = state.get('camera_azimuth', 45)
+        center = state.get('camera_center', None)
+        if center is not None:
+            self.plot_widget.opts['center'] = pg.Vector(*center)
+
+        # Restore grid
+        self.grid.setColor(self.grid_color)
+        self.grid.setSize(self.grid_size, self.grid_size, self.grid_size)
+        self.grid.setSpacing(self.grid_spacing, self.grid_spacing, self.grid_spacing)
+
+        # Restore units label
+        self.units_label.setText(f"Current units: {self.units}")
+
+        # Restore control type radio buttons
+        if self.control_type == 'Translate':
+            self.translate_joint_radio_button.setChecked(True)
+        else:
+            self.rotate_joint_radio_button.setChecked(True)
+        self.local_orient_slider_checkbox.setChecked(self.is_local)
+
+        # Restore reference mesh if present
+        if 'reference_mesh' in state:
+            try:
+                rm = state['reference_mesh']
+                meshdata = gl.MeshData(vertexes=rm['vertexes'], faces=rm['faces'])
+                mesh_item = gl.GLMeshItem(meshdata=meshdata, smooth=True, shader='shaded')
+                mesh_item.setObjectName("Mesh")
+                self.referenceMesh = ReferenceMesh(mesh=mesh_item)
+                self.referenceMesh.Pose = rm['pose']
+                self.referenceMesh.r = rm['r']
+            except Exception:
+                self.referenceMesh = None
+        else:
+            self.referenceMesh = None
+
     def save_chain(self, autosave_id=None):
         # confusing why autosave_id is sometimes False
         if autosave_id is False:
@@ -2362,17 +2478,30 @@ class WindowKinegamiGUI(QMainWindow):
                 except AttributeError:
                     base_path = os.path.abspath(".")  
                 file_path, _ = QFileDialog.getSaveFileName(
-                    self, "Save File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain)", options=options
+                    self, "Save File", os.path.join(base_path, "save"),
+                    "Session Files (*.session);;Tree Files (*.tree);;Chain Files (*.chain)",
+                    options=options
                 )
             else:
                 try:
                     base_path = sys._MEIPASS
                 except AttributeError:
                     base_path = os.path.abspath(".")
-                file_path = os.path.join(base_path, "save", "autosave", f"autosave_{autosave_id}.tree")
+                file_path = os.path.join(base_path, "save", "autosave", f"autosave_{autosave_id}.session")
 
             if file_path:
-                self.chain.save(file_path)
+                if file_path.endswith('.session'):
+                    session_state = self._gather_session_state()
+                    try:
+                        with open(file_path, 'wb') as f:
+                            dill.dump(session_state, f)
+                        if autosave_id is None:
+                            self.show_success(f'Session saved to {os.path.basename(file_path)}')
+                    except Exception as e:
+                        if autosave_id is None:
+                            self.show_error(f'Error saving session: {e}')
+                else:
+                    self.chain.save(file_path)
         
     def load_chain(self):
         options = QFileDialog.Options()
@@ -2381,19 +2510,32 @@ class WindowKinegamiGUI(QMainWindow):
         except AttributeError:
             base_path = os.path.abspath(".")
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open File", os.path.join(base_path, "save"), "Tree Files (*.tree);;Chain Files (*.chain);;All Files (*.*)", options=options
+            self, "Open File", os.path.join(base_path, "save"),
+            "Session Files (*.session);;Tree Files (*.tree);;Chain Files (*.chain);;All Files (*.*)",
+            options=options
         )
         if file_path:
-            self.chain = loadTree(file_path)
-            self.radius = self.chain.r
-            self.num_sides = self.chain.numSides
-            self.chain_created = True
-            
-            self.units = self.chain.units
-            self.units_label.setText(f"Current units: {self.units}")
+            if file_path.endswith('.session'):
+                try:
+                    with open(file_path, 'rb') as f:
+                        state = dill.load(f)
+                    self._restore_session_state(state)
+                    self.show_success(f'Session loaded from {os.path.basename(file_path)}')
+                except Exception as e:
+                    self.show_error(f'Error loading session: {e}')
+                    return
+            else:
+                self.chain = loadTree(file_path)
+                self.radius = self.chain.r
+                self.num_sides = self.chain.numSides
+                self.chain_created = True
+                
+                self.units = self.chain.units
+                self.units_label.setText(f"Current units: {self.units}")
 
             self.update_joint()
-            self.log_version()
+            if not file_path.endswith('.session'):
+                self.log_version()
 
     @QtCore.pyqtSlot(bool)
     def mesh_selected_slot(self, is_selected):
