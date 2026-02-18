@@ -112,6 +112,9 @@ class Joint(ABC):
     
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
+
+    def distalPathDirection(self) -> np.ndarray:
+        return self.DistalFrame().R[:,self.pathIndex()]
     
     def reverseZhat(self):
         self.Pose = self.Pose @ SE3.Rx(np.pi)
@@ -361,7 +364,7 @@ class Joint(ABC):
         return Circle3D(
             radius=self.r,
             center=self.distalPosition(),
-            normal=self.pathDirection() if forward else -self.pathDirection(),
+            normal=self.distalPathDirection() if forward else -self.distalPathDirection(),
             radialVector=self.DistalFrame().R[:,1]
         )
 
@@ -513,7 +516,7 @@ class Revolute(Joint):
                             self.neutralLength/2, self.ProximalDubinsFrame().R[:,1])
     
     def distalCylinder(self) -> Cylinder:
-        return Cylinder(self.r, self.distalPosition(), -self.DistalDubinsFrame().R[:,0], 
+        return Cylinder(self.r, self.distalPosition(), -self.distalPathDirection(), 
                             self.neutralLength/2, self.DistalDubinsFrame().R[:,1])
     
     def centerSphere(self) -> Ball:
@@ -530,7 +533,7 @@ class Revolute(Joint):
                 r = self.r)  # (N, 2)
         plane_sdfs = xp.stack([
             sdf_plane(xp, point, self.proximalPosition(), -self.pathDirection()),
-            sdf_plane(xp, point, self.distalPosition(), self.pathDirection())
+            sdf_plane(xp, point, self.distalPosition(), self.distalPathDirection())
         ], axis=1)  # (N, 2)
         return xp.min(xp.maximum(capsule_sdfs, plane_sdfs), axis=1)  # (N,)
 
@@ -694,7 +697,7 @@ class Tip(Joint):
                             r = self.r).flatten(),
             sdf_plane(xp, point, 
                             self.DistalDubinsFrame().t if self.forward else self.ProximalDubinsFrame().t,
-                            self.pathDirection() if self.forward else -self.pathDirection())
+                            self.pathDirection() if self.forward else -self.distalPathDirection())
         )
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 

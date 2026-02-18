@@ -721,8 +721,10 @@ class KinematicTree(Generic[F]):
             minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
             distance = min(minDist1to2, minDist2to1)
             # Smooth error function based on logistic function
-            k = 50 #steepness of the transition
-            totalError += 1 / (1 + np.exp(-k * distance))
+            # k = steepness of the transition
+            epsilon = 1e-6
+            k = np.log(1/epsilon - 1) / fineDistanceThreshold # transition over [0, fineDistanceThreshold]
+            totalError += 1 / (1 + np.exp(k * distance))
             if show:
                 self.show(block=False)
             if debug:
@@ -769,14 +771,14 @@ class KinematicTree(Generic[F]):
                 np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < tube2.r + coarseDistanceThreshold:
                     # Finer check
                     points1 = tube1.interpolate(density = fineDensity)
-                    dists1to2 = tube2.sdf(points1)
-                    minIdx1to2 = np.argmin(dists1to2)
-                    minDist1to2 = dists1to2[minIdx1to2]
+                    distsCenterline1toSurface2 = tube2.sdf(points1)
+                    minIdx1to2 = np.argmin(distsCenterline1toSurface2)
+                    minDist1to2 = distsCenterline1toSurface2[minIdx1to2] - tube1.r
                     points2 = tube2.interpolate(density = fineDensity)
-                    dists2to1 = tube1.sdf(points2)
-                    minIdx2to1 = np.argmin(dists2to1)
-                    minDist2to1 = dists2to1[minIdx2to1]
-                    if minDist1to2 < tube1.r + fineDistanceThreshold and minDist2to1 < tube2.r + fineDistanceThreshold:
+                    distsCenterline2toSurface1 = tube1.sdf(points2)
+                    minIdx2to1 = np.argmin(distsCenterline2toSurface1)
+                    minDist2to1 = distsCenterline2toSurface1[minIdx2to1] - tube2.r
+                    if minDist1to2 < fineDistanceThreshold and minDist2to1 < fineDistanceThreshold:
                         # Filter out collisions that are solely in the hemispherical end caps
                         # Check if both closest points are at endpoints
                         isEndpoint1 = (minIdx1to2 == 0 or minIdx1to2 == len(points1) - 1)
