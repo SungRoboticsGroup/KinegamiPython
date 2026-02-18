@@ -1607,6 +1607,113 @@ class HornTorus(Torus):
         super().__init__(radius, radius, center, axisDirection)
 
 
+def sdf_capsule(xp: ModuleType, p: ArrayLike, a: ArrayLike, b: ArrayLike, r) -> ArrayLike:
+    """
+    Vectorized signed distance from points to capsule(s).
+    
+    Parameters:
+        xp: Array module (np for numpy or cp for cupy)
+        p:  Query points, shape (N, 3)
+        a:  Capsule start(s), shape (L, 3)
+        b:  Capsule end(s), shape (L, 3)
+        r:  Tube radius, float or shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L). Negative inside, positive outside.
+    """
+    pa = p[:, None, :] - a[None, :, :]       # (N, L, 3)
+    ba = b[None, :, :] - a[None, :, :]       # (1, L, 3)
+    h = xp.sum(pa * ba, axis=2) / xp.sum(ba * ba, axis=2)  # (N, L)
+    h = xp.clip(h, 0.0, 1.0)                 # (N, L)
+    diff = pa - h[:, :, None] * ba            # (N, L, 3)
+    return xp.sqrt(xp.sum(diff * diff, axis=2)) - r  # (N, L)
+
+
+def sdf_plane(xp: ModuleType, p: ArrayLike, plane_point: ArrayLike, plane_normal: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points to a plane.
+    
+    Parameters:
+        xp: Array module (np for numpy or cp for cupy)
+        p:  Query points, shape (N, 3)
+        plane_point:  A point on the plane, shape (3,)
+        plane_normal: Normal direction of the plane, shape (3,)
+    
+    Returns:
+        Signed distances, shape (N,). Positive on the normal side.
+    """
+    dp = p - plane_point[None, :]             # (N, 3)
+    return xp.sum(dp * plane_normal[None, :], axis=1)  # (N,)
+
+
+def _sdf_torus_section_flat_ended_local(xp: ModuleType, localP: ArrayLike, sc: ArrayLike, ra: ArrayLike, rb: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points (in local frame) to a flat-ended torus section.
+    
+    Parameters:
+        xp:     Array module (np for numpy or cp for cupy)
+        localP: Points in local frame, shape (N, L, 3)
+        sc:     Sine/cosine of torus section half-angle, shape (L, 2)
+        ra:     Major radii, shape (L,)
+        rb:     Minor radii (tube radii), shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L).
+    """
+    px = xp.abs(localP[..., 0])  # (N, L)
+    py = localP[..., 1]          # (N, L)
+    pz = localP[..., 2]          # (N, L)
+
+    scx = sc[None, :, 0]         # (1, L)
+    scy = sc[None, :, 1]         # (1, L)
+    ra_ = ra[None, :]            # (1, L)
+    rb_ = rb[None, :]            # (1, L)
+
+    endCenter_x = ra_ * scx      # (1, L)
+    endCenter_y = ra_ * scy      # (1, L)
+    tangent_x = scy              # (1, L)
+    tangent_y = -scx             # (1, L)
+
+    toPoint_x = px - endCenter_x # (N, L)
+    toPoint_y = py - endCenter_y # (N, L)
+    pastEnd = toPoint_x * tangent_x + toPoint_y * tangent_y  # (N, L)
+
+    p_len = xp.sqrt(px * px + py * py)  # (N, L)
+    k = xp.where(scy * px > scx * py, scx * px + scy * py, p_len)  # (N, L)
+    # Clamp sqrt argument to prevent NaN from numerical precision issues
+    sqrt_arg = p_len * p_len + pz * pz + ra_ * ra_ - 2.0 * ra_ * k  # (N, L)
+    sqrt_arg = xp.maximum(sqrt_arg, 0.0)
+    base = xp.sqrt(sqrt_arg) - rb_  # (N, L)
+
+    radialInPlane = toPoint_x * scx + toPoint_y * scy  # (N, L)
+    discDist = xp.sqrt(radialInPlane * radialInPlane + pz * pz)  # (N, L)
+    outsideDisc = xp.maximum(discDist - rb_, 0.0)       # (N, L)
+    disc = xp.sqrt(pastEnd * pastEnd + outsideDisc * outsideDisc)  # (N, L)
+
+    return xp.where(pastEnd <= 0.0, base, disc)
+
+
+def sdf_torus_section_flat_ended(xp: ModuleType, p: ArrayLike, center: ArrayLike, R_w2l: ArrayLike, sc: ArrayLike, ra: ArrayLike, rb: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points to flat-ended torus section(s) in world frame.
+    
+    Parameters:
+        xp:    Array module (np for numpy or cp for cupy)
+        p:     Query points, shape (N, 3)
+        center: Torus center(s), shape (L, 3)
+        R_w2l: World-to-local rotation matrices, shape (L, 3, 3)
+        sc:    Sine/cosine of torus section half-angle, shape (L, 2)
+        ra:    Major radii, shape (L,)
+        rb:    Minor radii (tube radii), shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L).
+    """
+    dp = p[:, None, :] - center[None, :, :]           # (N, L, 3)
+    localP = xp.einsum("lij,nlj->nli", R_w2l, dp)    # (N, L, 3)
+    return _sdf_torus_section_flat_ended_local(xp, localP, sc, ra, rb)
+
+
 def sdf_aabb(
     min1: ArrayLike,
     max1: ArrayLike,

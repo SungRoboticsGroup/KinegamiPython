@@ -452,7 +452,9 @@ class Prismatic(Joint):
                           surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
                           axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
         if showSurface:
-            self.boundingCylinder().addToWidget(widget, color_list=prismaticColorList, is_joint=True)
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != prismaticColorDefault else prismaticColorList
+            self.boundingCylinder().addToWidget(widget, color_list=color, is_joint=True)
     
     def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
         # TODO: ADD PLANAR CUTOFFS
@@ -570,9 +572,11 @@ class Revolute(Joint):
                           surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
                           axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
         if showSurface:
-            self.proximalCylinder().addToWidget(widget, color_list=revoluteColorList, is_joint=True)
-            self.distalCylinder().addToWidget(widget, color_list=revoluteColorList, is_joint=True)
-            self.centerSphere().addToWidget(widget, color=revoluteColorList)
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            self.proximalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            self.distalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            self.centerSphere().addToWidget(widget, color=color)
 
 class TransverseRevolute(Revolute):
     def __init__(self, r : float, Pose : SE3, minAngle : float, maxAngle : float, 
@@ -887,7 +891,9 @@ class Tip(Joint):
             world_verts = np.column_stack([xw, yw, zw]).astype(np.float32)
 
             meshdata = gl.MeshData(vertexes=world_verts, faces=faces)
-            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(linkColorList),
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            tip_color = surfaceColor if surfaceColor != linkColorDefault else linkColorList
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(tip_color),
                                      shader='shaded', smooth=True)
             meshitem.setGLOptions('translucent')
             meshitem.setObjectName("Joint")

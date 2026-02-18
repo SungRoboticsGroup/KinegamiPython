@@ -554,17 +554,25 @@ class KinematicTree(Generic[F]):
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
                   showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None, 
-                  selectedJoint=None, selectedLink=None):
+                  selectedJoint=None, selectedLink=None,
+                  collidingJoints=None, collidingLinks=None):
         # TODO: IMPLEMENT showGlobalFrame
+        if collidingJoints is None:
+            collidingJoints = set()
+        if collidingLinks is None:
+            collidingLinks = set()
+        
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
             
         for index, joint in enumerate(self.Joints):
+            isColliding = index in collidingJoints
             if index == selectedJoint:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor=selectedJointColor, showSphere=True,
-                        surfaceColor=jointColor, showSurface=showJointSurface, 
+                        surfaceColor=jointColor,
+                        showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
             else:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
@@ -572,10 +580,25 @@ class KinematicTree(Generic[F]):
                         sphereColor, showSphere=showSpheres, 
                         surfaceColor=jointColor, showSurface=showJointSurface, 
                         axisScale=jointAxisScale, showPoses=showJointPoses)
+            # Overlay transparent red bounding geometry for colliding joints
+            if isColliding and isinstance(joint, Revolute):
+                joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+                joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+                joint.centerSphere().addToWidget(widget, color=collisionJointColor)
                 
         for index, link in enumerate(self.Links):
+            isColliding = index in collidingLinks
             if index == selectedLink:
-                link.addToWidget(widget, color=selectedLinkColor, 
+                link.addToWidget(widget, color=collisionLinkColor if isColliding else selectedLinkColor, 
+                                alpha=linkOpacityDefault,
+                                showPath=showLinkPath, 
+                                pathColor=pathColor,
+                                showPathCircles=showPathCircles, 
+                                showFrames=showLinkPoses,
+                                showBoundary=showLinkSurface,
+                                linkID=index)
+            elif isColliding:
+                link.addToWidget(widget, color=collisionLinkColor, 
                                 alpha=linkOpacityDefault,
                                 showPath=showLinkPath, 
                                 pathColor=pathColor,
@@ -641,6 +664,34 @@ class KinematicTree(Generic[F]):
         collisionMatrices = self.buildCollisionMatrices()
         numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
         return numCollisions
+
+    def getCollidingPairs(self, coarseDistanceThresholdRatio : float = 0.5,
+                          fineDistanceThresholdRatio : float = 0.001) -> list[Tuple[Tuple[int, str], Tuple[int, str]]]:
+        """
+        Return a list of all currently colliding pairs of objects.
+        
+        Each element is ((idx1, type1), (idx2, type2)) where type is 'Joint' or 'Link'.
+        """
+        coarseDistanceThreshold = self.r * coarseDistanceThresholdRatio
+        fineDistanceThreshold = self.r * fineDistanceThresholdRatio
+        
+        collisionMatrices = self.buildCollisionMatrices()
+        jj_pairs, jl_pairs, ll_pairs = self.getAllCollisionPairs(collisionMatrices)
+        
+        collidingPairs = []
+        for j1, j2 in jj_pairs.T:
+            if self.collision(self.Joints[j1], self.Joints[j2],
+                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
+                collidingPairs.append(((j1, 'Joint'), (j2, 'Joint')))
+        for j, l in jl_pairs.T:
+            if self.collision(self.Joints[j], self.Links[l],
+                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
+                collidingPairs.append(((j, 'Joint'), (l, 'Link')))
+        for l1, l2 in ll_pairs.T:
+            if self.collision(self.Links[l1], self.Links[l2],
+                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
+                collidingPairs.append(((l1, 'Link'), (l2, 'Link')))
+        return collidingPairs
 
     
     def collisionPairsFromMovingJoint(self, movingJointIndex : int, 
@@ -835,8 +886,13 @@ class KinematicTree(Generic[F]):
             # Check children
             children_indices = self.Children[joint_idx]
             for child_idx in children_indices:
-                if child_idx not in visited and isWaypoint(self.Joints[child_idx]):
-                    buildWaypointSet(child_idx, current_wp_set, current_link_set)
+                if child_idx not in visited:
+                    if isWaypoint(self.Joints[child_idx]):
+                        buildWaypointSet(child_idx, current_wp_set, current_link_set)
+                    else:
+                        # The link leading to a real joint child is still part of
+                        # this waypoint cluster (connected without crossing a real joint)
+                        current_link_set.append(child_idx)
         
         # Go through all joints and find waypoint sets
         for joint_idx in range(len(self.Joints)):

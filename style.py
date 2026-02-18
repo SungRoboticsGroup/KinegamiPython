@@ -35,8 +35,8 @@ sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
 # New colors for specific joint types (from merging-in-sdf-collisions branch)
 prismaticColorDefault = 'darkblue'
 prismaticEdgeColorDefault = 'darkblue'
-revoluteColorDefault = 'darkred'
-revoluteEdgeColorDefault = 'darkred'
+revoluteColorDefault = 'darkblue'
+revoluteEdgeColorDefault = 'darkblue'
 
 groundPlaneColorDefault = (0.0, 0.0, 0.0, 1.0)  # black 
 
@@ -62,7 +62,7 @@ elbowColorList = (1, 1, 1, 1)  # white
 compoundElbowColorList = (1, 1, 1, 0.5)  # white, 0.5 opacity
 linkColorList = (0.5, 0.5, 0.5, 1.0)  # gray
 prismaticColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
-revoluteColorList = (0.545, 0.0, 0.0, 1.0)  # darkred as RGB tuple
+revoluteColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
 
 xPoseColor = 'darkred'  # darkred
 yPoseColor = 'darkblue'  # darkblue
@@ -82,6 +82,9 @@ extendedCircleColors = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]  # red, 
 selectedLinkColor = (1.0, 1.0, 0.0, 0.5)  # yellow (0.5 opacity)
 selectedSphereColor = (1.0, 1.0, 0.5, 0.5)  # light yellow (0.5 opacity)
 selectedJointColor = (0.0, 0.0, 1.0, 0.1)  # blue (0.1 opacity)
+
+collisionJointColor = (1.0, 0.0, 0.0, 0.4)  # transparent red
+collisionLinkColor = (1.0, 0.0, 0.0, 0.7)  # bright red (0.7 opacity)
 
 pathStartColor = 'r'  # red
 pathEndColor = 'b'  # blue

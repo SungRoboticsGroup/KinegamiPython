@@ -1106,6 +1106,24 @@ class WindowKinegamiGUI(QMainWindow):
         self.options_dock.setWidget(self.options_widget)
         #self.options_dock.setMaximumSize(300, 150)
 
+        # Collision highlighting toggle
+        self.show_collisions = True
+        self.collision_toggle_button = QPushButton("Hide Collisions")
+        # Use a normal (non-checkable) button so it matches other option buttons
+        try:
+            self.collision_toggle_button.setAutoDefault(False)
+        except Exception:
+            pass
+        def _toggle_collision_highlighting():
+            self.show_collisions = not self.show_collisions
+            if self.show_collisions:
+                self.collision_toggle_button.setText("Hide Collisions")
+            else:
+                self.collision_toggle_button.setText("Show Collisions")
+            self.update_joint()
+        self.collision_toggle_button.clicked.connect(_toggle_collision_highlighting)
+        self.options_layout.addWidget(self.collision_toggle_button)
+
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
         self.camera_controls_dock = QDockWidget("Camera Controls", self)
         self.camera_options_widget = QWidget()
@@ -3028,14 +3046,33 @@ class WindowKinegamiGUI(QMainWindow):
                 self.plot_widget.addItem(self.referenceMesh.mesh)
 
             if self.tree is not None:
-                self.tree.addToWidget(
-                    self,
-                    selectedJoint=self.selected_joint,
-                    selectedLink=self.selected_link,
-                    lastJoint=self.last_joint,
-                    showSpheres=False  # Don't show bounding spheres for printed joints
-                )
-                self.add_tree(self.tree)
+                # Compute colliding pairs for highlighting
+                    collidingJoints = set()
+                    collidingLinks = set()
+                    if getattr(self, 'show_collisions', True):
+                        try:
+                            collidingPairs = self.tree.getCollidingPairs()
+                            for (idx1, type1), (idx2, type2) in collidingPairs:
+                                if type1 == 'Joint':
+                                    collidingJoints.add(idx1)
+                                else:
+                                    collidingLinks.add(idx1)
+                                if type2 == 'Joint':
+                                    collidingJoints.add(idx2)
+                                else:
+                                    collidingLinks.add(idx2)
+                        except Exception as e:
+                            print(f"Collision detection error: {e}")
+                    self.tree.addToWidget(
+                        self,
+                        selectedJoint=self.selected_joint,
+                        selectedLink=self.selected_link,
+                        lastJoint=self.last_joint,
+                        showSpheres=False,  # Don't show bounding spheres for printed joints
+                        collidingJoints=collidingJoints,
+                        collidingLinks=collidingLinks
+                    )
+                    self.add_tree(self.tree)
 
         if self.mesh_selected and self.referenceMesh is not None:
             if self.control_type == "Translate":
