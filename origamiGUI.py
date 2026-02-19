@@ -2856,8 +2856,8 @@ class WindowKinegamiGUI(QMainWindow):
             propogate = self.propogate_slider_checkbox.isChecked()
             localOrient = self.local_orient_slider_checkbox.isChecked()
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
-                self.update_joint()
-                self.old_rot_val = int(value)             
+                self.old_rot_val = int(value)
+                self.update_joint()             
                 self.rotation_slider.blockSignals(True)
                 self.rotation_slider.setDisabled(False)
                 self.rotation_slider.blockSignals(False)
@@ -2914,8 +2914,8 @@ class WindowKinegamiGUI(QMainWindow):
             if (self.selected_arrow == 2):
                 transformation = SE3.Tz(amount)
             if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
-                self.update_joint()
-                self.old_trans_val = actualVal                
+                self.old_trans_val = actualVal
+                self.update_joint()                
                 self.translation_slider.blockSignals(True)
                 self.translation_slider.setDisabled(False)
                 self.translation_slider.blockSignals(False)
@@ -2926,6 +2926,7 @@ class WindowKinegamiGUI(QMainWindow):
             else:
                 self.translation_slider.blockSignals(True)
                 self.translation_slider.setValue(int(self.old_trans_val * 10))
+                self.translation_slider.blockSignals(False)
     
     def translation_textbox_return(self):
         try:

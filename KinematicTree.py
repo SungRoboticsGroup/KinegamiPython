@@ -830,17 +830,32 @@ class KinematicTree(Generic[F]):
                     minIdx2to1 = np.argmin(distsCenterline2toSurface1)
                     minDist2to1 = distsCenterline2toSurface1[minIdx2to1] - tube2.r
                     if minDist1to2 < fineDistanceThreshold and minDist2to1 < fineDistanceThreshold:
-                        # Filter out collisions that are solely in the hemispherical end caps
-                        # Check if both closest points are at endpoints
-                        isEndpoint1 = (minIdx1to2 == 0 or minIdx1to2 == len(points1) - 1)
-                        isEndpoint2 = (minIdx2to1 == 0 or minIdx2to1 == len(points2) - 1)
+                        # Filter out collisions that are solely in the hemispherical end caps.
+                        # The SDF is point-to-surface, so a query point inside a tube's 
+                        # hemispherical cap appears as within r of the tube surface.
+                        # This happens where adjacent tubes connect. We filter these by
+                        # checking end-circle disc planes.
+                        # Use distance-based endpoint check (within r of start/end) 
+                        # rather than exact index, since the closest point may be 
+                        # slightly inward from the exact endpoint.
+                        startDist1 = norm(points1[minIdx1to2] - points1[0])
+                        endDist1 = norm(points1[minIdx1to2] - points1[-1])
+                        nearStart1 = startDist1 < tube1.r
+                        nearEnd1 = endDist1 < tube1.r
+                        isEndpoint1 = nearStart1 or nearEnd1
+                        
+                        startDist2 = norm(points2[minIdx2to1] - points2[0])
+                        endDist2 = norm(points2[minIdx2to1] - points2[-1])
+                        nearStart2 = startDist2 < tube2.r
+                        nearEnd2 = endDist2 < tube2.r
+                        isEndpoint2 = nearStart2 or nearEnd2
                         
                         isTrueCollision = True
                         if isEndpoint1 and isEndpoint2:
-                            # Both closest points are endpoints - need to check disc intersection
+                            # Both closest points are at/near endpoints - need to check disc intersection
                             # Get the circles at the relevant endpoints
-                            circle1 = tube1.startCircle(forward=False) if (minIdx1to2 == 0) else tube1.endCircle(forward=True)
-                            circle2 = tube2.startCircle(forward=False) if (minIdx2to1 == 0) else tube2.endCircle(forward=True)
+                            circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
+                            circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
                             
                             # It's definitely a true collision if it's on the inside side of either disc's plane
                             # Otherwise, check if the discs cross
@@ -1281,6 +1296,13 @@ class KinematicTree(Generic[F]):
                     print("Reverting chain to before outer call.")
                 self.setTo(backup)
                 return False
+            except Exception as err:
+                if printErrors:
+                    print("WARNING: Unexpected error in transformJoint:")
+                    print(err)
+                    print("Reverting chain to before outer call.")
+                self.setTo(backup)
+                return False
 
         else:
             self.Joints[jointIndex].transformPoseBy(Transformation)
@@ -1366,7 +1388,7 @@ class KinematicTree(Generic[F]):
             try:
                 self.translateJointAlongAxisOfMotion(jointIndex, distance, 
                             propogate, applyToPreviousWaypoint, safe = False)
-            except ValueError as err:
+            except Exception as err:
                 print("WARNING: something went wrong in translateJointAlongAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
@@ -1396,7 +1418,7 @@ class KinematicTree(Generic[F]):
             try:
                 self.rotateJointAboutAxisOfMotion(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
-            except ValueError as err:
+            except Exception as err:
                 print("WARNING: something went wrong in rotateJointAboutAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
