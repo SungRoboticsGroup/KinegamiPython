@@ -579,12 +579,12 @@ class Revolute(Joint):
             self.centerSphere().addToWidget(widget, color=color)
 
 class TransverseRevolute(Revolute):
-    def __init__(self, r : float, Pose : SE3, minAngle : float, maxAngle : float, 
+    def __init__(self, r : float, Pose : SE3, minAngle : Optional[float] = None, maxAngle : Optional[float] = None, 
                  neutralLength : Optional[float] = None, initialState : float = 0.0,
                  checkCircleOverlap : bool = True):
-        if minAngle is None or maxAngle is None:
-            raise ValueError("TransverseRevolute joints must have both minAngle and maxAngle specified")
         if neutralLength is None: 
+            if minAngle is None or maxAngle is None:
+                raise ValueError("TransverseRevolute joints must have either neutralLength or both minAngle and maxAngle specified")
             # compute neutralLength to achieve min and max angles
             # without the end circles overlapping
             largerAngle = max(abs(minAngle), abs(maxAngle))
@@ -592,6 +592,10 @@ class TransverseRevolute(Revolute):
         elif checkCircleOverlap:
             # check that the provided neutralLength is sufficient
             angleAtWhichCirclesTouch = 2 * np.arctan(neutralLength / (2*r))
+            if minAngle is None:
+                minAngle = -angleAtWhichCirclesTouch
+            if maxAngle is None:
+                maxAngle = angleAtWhichCirclesTouch
             if minAngle < -angleAtWhichCirclesTouch-1e-6 or maxAngle > angleAtWhichCirclesTouch+1e-6:
                 raise Warning("Provided neutralLength is too small to prevent end circle overlap for the given minAngle and maxAngle")
         Revolute.__init__(self, r, Pose, pathIndex=0, neutralLength=neutralLength, 

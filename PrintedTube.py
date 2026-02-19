@@ -41,7 +41,9 @@ class PrintedTube(Tube):
 class TransverseRDS3225(PrintedTube, TransverseRevolute):
     """
     RDS3225 Servo Motor with brackets and 3D-printed parts attached to make it attach transversely to tubes.
-    Works for 180 degree or 270 degree versions. Dimensions are from our CAD model of the 3D printed joint, in mm.
+    Can be set up for the 180 or 270 degree servo, but the 270 version actually has smaller 
+    range of motion (214.5 degrees) due to collisions of the proximal and distal attachments. 
+    Dimensions are from our CAD model of the 3D printed joint, in mm.
     In the future this parameterized model could be written in the manifold library so wallThickness, holeDiameter, 
     and numHoles could be adjusted as needed. Radius r is as small as possible to bound the servo.
 
@@ -50,7 +52,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
     When using this in a robot, attach the servo horn and brackets to face forward at 90 or 135 degrees respectively, 
     and then subtract 90 or 135 degrees from the joint state when commanding the servo.
 
-    # TODO: edit hole placement in CAD model, update dimensions here
+    
     """
     # Dimensions from CAD model (mm) — update these when CAD changes
     R = 33.0              # outer radius of tube in mm
@@ -63,15 +65,16 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
             maxBendingAngle = np.pi
         elif version == 270 or version == "270" or version == 270.0 or version == 3*np.pi/2:
-            maxBendingAngle = 3*np.pi/2
+            # 2*170.25 degrees is the largest range we can achieve without the proximal and distal attachments 
+            # colliding with each other (based on CAD model measurements) — this is less than 270 degrees but still more than 180 degrees
+            maxBendingAngle = 2 * np.deg2rad(107.25)
         else:
             raise ValueError("version must be 180 or 270")
         
         PrintedTube.__init__(self, wallThickness=self.WALL_THICKNESS, holeDiameter=self.HOLE_DIAMETER, numHoles=self.NUM_HOLES)
-        TransverseRevolute.__init__(self, r=self.R, Pose=Pose, 
-                                    minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
-                                    neutralLength=self.NEUTRAL_LENGTH, initialState=initialState,
-                                    checkCircleOverlap=False)
+        TransverseRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH, 
+                                    minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, checkCircleOverlap=True,
+                                    initialState=initialState)
     
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
