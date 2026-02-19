@@ -116,6 +116,20 @@ class KinematicTree(Generic[F]):
             self.Links, self.maxAnglePerElbow, \
             self.boundingBall, self.Children = data
 
+    def isConsistent(self, tolerance : float = 0.1) -> bool:
+        """Fast check that all links connect to their parent's distal
+        and their own joint's proximal Dubins frames within tolerance."""
+        for i in range(1, len(self.Joints)):
+            parent_distal = self.Joints[self.Parents[i]].DistalDubinsFrame().t
+            link_start = self.Links[i].StartDubinsPose.t
+            if np.linalg.norm(parent_distal - link_start) > tolerance:
+                return False
+            joint_proximal = self.Joints[i].ProximalDubinsFrame().t
+            link_end = self.Links[i].EndDubinsPose.t
+            if np.linalg.norm(joint_proximal - link_end) > tolerance:
+                return False
+        return True
+
     """
     Returns the new Joint's index. 
     relative - boolean: is newJoint input in parent-relative coordinates (True)

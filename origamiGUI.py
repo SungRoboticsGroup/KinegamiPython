@@ -756,7 +756,23 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (self.mesh_selected):
                     self.parent_window.referenceMesh.transform(transformation)
                 else:
+                    # Save backup before first drag transform
+                    if not hasattr(self, '_drag_backup') or self._drag_backup is None:
+                        self._drag_backup = self.parent_window.chain.dataDeepCopy()
+
                     self.parent_window.chain.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
+                    
+                    # Check consistency — revert and stop drag if broken
+                    if not self.parent_window.chain.isConsistent():
+                        print("WARNING: Tree became inconsistent during drag translation. Reverting.")
+                        self.parent_window.chain.setTo(self._drag_backup)
+                        self._drag_backup = None
+                        self.is_dragging = False
+                        self.selected_axis = None
+                        self.parent_window.update_joint()
+                        return
+                    # Keep a rolling backup of the last good state
+                    self._drag_backup = self.parent_window.chain.dataDeepCopy()
                 
                 self.parent_window.update_joint()
             elif (self.selected_torus):
@@ -767,7 +783,23 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (self.mesh_selected):
                     pass
                 else:
+                    # Save backup before first drag transform
+                    if not hasattr(self, '_drag_backup') or self._drag_backup is None:
+                        self._drag_backup = self.parent_window.chain.dataDeepCopy()
+
                     self.parent_window.rotate_joint(da, self.selected_axis_orig)
+
+                    # Check consistency — revert and stop drag if broken
+                    if not self.parent_window.chain.isConsistent():
+                        print("WARNING: Tree became inconsistent during drag rotation. Reverting.")
+                        self.parent_window.chain.setTo(self._drag_backup)
+                        self._drag_backup = None
+                        self.is_dragging = False
+                        self.selected_torus = None
+                        self.parent_window.update_joint()
+                        return
+                    # Keep a rolling backup of the last good state
+                    self._drag_backup = self.parent_window.chain.dataDeepCopy()
 
                 self.parent_window.update_joint()
             else:
@@ -786,6 +818,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
 
     def mouseReleaseEvent(self, event):
         if self.is_dragging and (self.selected_axis or self.selected_torus):
+            self._drag_backup = None  # Clear drag backup on release
             self.done_transforming.emit(True)
 
         if (self.selected_joint_temp != None):
@@ -2648,7 +2681,7 @@ class WindowKinegamiGUI(QMainWindow):
 
             self.update_joint()
         else: 
-            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=False, relative=True):
+            if self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, safe=True, relative=True):
                 self.update_joint()
                 self.reset_rotation_tools()
                 self.reset_translation_tools()
@@ -3190,7 +3223,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         # print(transformation)
 
-        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, safe=False, localOrient=localOrient)
+        self.chain.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, safe=True, localOrient=localOrient)
 
         # self.selected_joint.translate(-cnt[0], -cnt[1], -cnt[2])
         # self.selected_joint.rotate(angle, axis[0], axis[1], axis[2], local=False)
