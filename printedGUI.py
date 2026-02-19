@@ -747,7 +747,8 @@ class WindowKinegamiGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Kinematic Tree Interactive Editor")
-        self.setGeometry(0, 0, 1920, 1080)
+        # Default window to fill available screen space
+        self.setWindowState(Qt.WindowMaximized)
 
         self.plot_widget = ClickableGLViewWidget(parent_window=self)
         self.setCentralWidget(self.plot_widget)
