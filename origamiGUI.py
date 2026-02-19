@@ -979,6 +979,10 @@ class WindowKinegamiGUI(QMainWindow):
 
         add_joints_layout = QVBoxLayout()
         add_chain_layout = QVBoxLayout()
+        # Add-to-root checkbox moved here from Edit Joints
+        self.joint_add_root_button = QCheckBox("Add to Root")
+        self.joint_add_root_button.setChecked(False)
+        self.joint_add_root_button.stateChanged.connect(self.add_to_root_func)
         add_joints_layout.addWidget(self.add_prismatic)
         add_joints_layout.addWidget(self.add_prismatic_menu)
         add_joints_layout.addWidget(self.add_revolute)
@@ -988,6 +992,8 @@ class WindowKinegamiGUI(QMainWindow):
         add_joints_layout.addWidget(self.add_tip_menu)
         add_joints_layout.addWidget(self.edit_dimension_button)
         add_joints_layout.addWidget(self.edit_dimension_menu)
+        # place Add-to-root checkbox at bottom
+        add_joints_layout.addWidget(self.joint_add_root_button)
 
         add_chain_layout.addWidget(self.create_new_chain)
 
@@ -1045,16 +1051,13 @@ class WindowKinegamiGUI(QMainWindow):
         
         self.editing_widget.setLayout(self.joint_editing_layout)
 
-        self.joint_add_root_button = QCheckBox("Add to Root")
-        self.joint_add_root_button.setChecked(False)
-        self.joint_add_root_button.stateChanged.connect(self.add_to_root_func)
+        # "Add to Root" checkbox (moved to Add Joints dock)
         self.select_joint_options = QComboBox()
         self.select_link_options = QComboBox()
         self.delete_joint_button = QPushButton("Delete Joint")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
 
         #joint_layout = QVBoxLayout()
-        self.joint_editing_layout.addWidget(self.joint_add_root_button)
         self.joint_editing_layout.addWidget(self.select_joint_options)
         self.joint_editing_layout.addWidget(self.delete_joint_button)
         self.joint_editing_layout.addWidget(self.select_link_options)
