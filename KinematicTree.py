@@ -867,9 +867,17 @@ class KinematicTree(Generic[F]):
                         isTrueCollision = True
                         if isEndpoint1 and isEndpoint2:
                             # Both closest points are at/near endpoints - need to check disc intersection
-                            # Get the circles at the relevant endpoints
-                            circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
-                            circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
+                            # Get the circles at the relevant endpoints.
+                            # When both nearStart and nearEnd are true (tube shorter than r),
+                            # pick the closer endpoint to avoid choosing the wrong disc plane.
+                            if nearStart1 and nearEnd1:
+                                circle1 = tube1.startCircle(forward=False) if startDist1 <= endDist1 else tube1.endCircle(forward=True)
+                            else:
+                                circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
+                            if nearStart2 and nearEnd2:
+                                circle2 = tube2.startCircle(forward=False) if startDist2 <= endDist2 else tube2.endCircle(forward=True)
+                            else:
+                                circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
                             
                             # It's definitely a true collision if it's on the inside side of either disc's plane
                             # Otherwise, check if the discs cross
