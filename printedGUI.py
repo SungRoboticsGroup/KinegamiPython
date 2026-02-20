@@ -845,7 +845,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.key_bar = QWidget()
         self.key_bar_layout = QHBoxLayout(self.key_bar)  # Layout is initialized and set to the widget here
-        self.key_bar.setFixedHeight(40)
+        self.key_bar.setFixedHeight(46)
         self.init_key_bar()
 
         top_dock_widget.setWidget(self.key_bar)
@@ -1593,7 +1593,7 @@ class WindowKinegamiGUI(QMainWindow):
             
             slider_label = QLabel("Interpolate")
             slider_label.setAlignment(Qt.AlignCenter)
-            slider_label.setFixedWidth(80)
+            slider_label.setMinimumWidth(80)
             slider_layout.addWidget(slider_label, 0, Qt.AlignHCenter)
             
             self.config_interp_slider = QSlider(Qt.Vertical)
@@ -1626,7 +1626,7 @@ class WindowKinegamiGUI(QMainWindow):
             # Add label above play/pause button
             animation_label = QLabel("Animate (s)")
             animation_label.setAlignment(Qt.AlignCenter)
-            animation_label.setFixedWidth(90)
+            animation_label.setMinimumWidth(90)
             animation_layout.addWidget(animation_label, 0, Qt.AlignHCenter)
             
             # Create horizontal layout for play button and loop checkbox
