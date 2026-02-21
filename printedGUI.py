@@ -882,7 +882,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.animation_start_value = 0  # Slider value when animation started
         self.animation_loop = False  # Whether animation should loop
         
-        self.configurations_dock = QDockWidget("Configurations", self)
+        self.configurations_dock = QDockWidget("Configurations and Motion", self)
         self.configurations_dock.setWidget(self.configurations_widget)
         self.configurations_dock.setVisible(True)
 
@@ -1135,6 +1135,10 @@ class WindowKinegamiGUI(QMainWindow):
         self.export_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
         self.export_shortcut.activated.connect(self.export_link_modules)
         
+        self.edit_grid_button = QPushButton("Edit Grid")
+        self.edit_grid_button.clicked.connect(self.edit_grid_func)
+        self.options_layout.addWidget(self.edit_grid_button)
+
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
         self.options_layout.addWidget(self.toggle_grid)
@@ -1160,6 +1164,9 @@ class WindowKinegamiGUI(QMainWindow):
             self.update_joint()
         self.collision_toggle_button.clicked.connect(_toggle_collision_highlighting)
         self.options_layout.addWidget(self.collision_toggle_button)
+
+        self.units_label = QLabel(f"Units: {self.units}")
+        self.options_layout.addWidget(self.units_label)
 
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
         self.camera_controls_dock = QDockWidget("Camera Controls", self)
@@ -1199,14 +1206,6 @@ class WindowKinegamiGUI(QMainWindow):
         self.export_link_modules_button = QPushButton('Export Link Modules')
         self.export_link_modules_button.clicked.connect(self.export_link_modules)  
         file_dock_layout.addWidget(self.export_link_modules_button) 
-
-        self.units_layout = QHBoxLayout()
-        self.units_label = QLabel(f"Units: {self.units}")
-        file_dock_layout.addWidget(self.units_label)
-
-        self.edit_grid_button = QPushButton("Edit Grid")
-        self.edit_grid_button.clicked.connect(self.edit_grid_func)
-        file_dock_layout.addWidget(self.edit_grid_button)
 
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)

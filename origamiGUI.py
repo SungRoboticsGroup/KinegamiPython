@@ -977,7 +977,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.animation_start_value = 0  # Slider value when animation started
         self.animation_loop = False  # Whether animation should loop
         
-        self.configurations_dock = QDockWidget("Configurations", self)
+        self.configurations_dock = QDockWidget("Configurations and Motion", self)
         self.configurations_dock.setWidget(self.configurations_widget)
         self.configurations_dock.setVisible(True)
 
@@ -1237,9 +1237,20 @@ class WindowKinegamiGUI(QMainWindow):
         self.export_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
         self.export_shortcut.activated.connect(self.save_crease_pattern)
         
+        self.edit_grid_button = QPushButton("Edit Grid")
+        self.edit_grid_button.clicked.connect(self.edit_grid_func)
+        self.options_layout.addWidget(self.edit_grid_button)
+
         self.toggle_grid = QPushButton("Hide Grid")
         self.toggle_grid.clicked.connect(self.toggle_grid_func)
         self.options_layout.addWidget(self.toggle_grid)
+
+        self.units_label = QLabel(f"Current units: {self.units}")
+        self.options_layout.addWidget(self.units_label)
+
+        self.edit_dims_button = QPushButton("Edit Dimensions")
+        self.edit_dims_button.clicked.connect(self.edit_dims_func)
+        self.options_layout.addWidget(self.edit_dims_button)
 
         self.options_widget.setLayout(self.options_layout)
         self.options_dock.setWidget(self.options_widget)
@@ -1283,18 +1294,6 @@ class WindowKinegamiGUI(QMainWindow):
         self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         file_dock_layout.addWidget(self.save_crease_pattern_button) 
-
-        self.units_layout = QHBoxLayout()
-        self.units_label = QLabel(f"Current units: {self.units}")
-        file_dock_layout.addWidget(self.units_label)
-
-        self.edit_dims_button = QPushButton("Edit Dimensions")
-        self.edit_dims_button.clicked.connect(self.edit_dims_func)
-        file_dock_layout.addWidget(self.edit_dims_button)
-
-        self.edit_grid_button = QPushButton("Edit Grid")
-        self.edit_grid_button.clicked.connect(self.edit_grid_func)
-        file_dock_layout.addWidget(self.edit_grid_button)
 
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
