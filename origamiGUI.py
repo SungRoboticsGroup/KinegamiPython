@@ -1214,14 +1214,6 @@ class WindowKinegamiGUI(QMainWindow):
         #self.debug_btn.clicked.connect(self.debug)
         #self.options_layout.addWidget(self.debug_btn)
 
-        self.undo_button = QPushButton("Undo")
-        self.undo_button.clicked.connect(self.undo)
-        self.options_layout.addWidget(self.undo_button)
-
-        self.redo_button = QPushButton("Redo")
-        self.redo_button.clicked.connect(self.redo)
-        self.options_layout.addWidget(self.redo_button)
-
         # Keyboard shortcuts for undo/redo
         # Ctrl+Z / Ctrl+Y on Windows/Linux, Cmd+Z / Cmd+Shift+Z on Mac
         self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
@@ -1241,8 +1233,9 @@ class WindowKinegamiGUI(QMainWindow):
         self.edit_grid_button.clicked.connect(self.edit_grid_func)
         self.options_layout.addWidget(self.edit_grid_button)
 
-        self.toggle_grid = QPushButton("Hide Grid")
-        self.toggle_grid.clicked.connect(self.toggle_grid_func)
+        self.toggle_grid = QCheckBox("Grid Visibility")
+        self.toggle_grid.setChecked(True)
+        self.toggle_grid.toggled.connect(self.toggle_grid_func)
         self.options_layout.addWidget(self.toggle_grid)
 
         self.units_label = QLabel(f"Current units: {self.units}")
@@ -1294,6 +1287,14 @@ class WindowKinegamiGUI(QMainWindow):
         self.save_crease_pattern_button = QPushButton('Export Crease Pattern')
         self.save_crease_pattern_button.clicked.connect(self.save_crease_pattern)  
         file_dock_layout.addWidget(self.save_crease_pattern_button) 
+
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.clicked.connect(self.undo)
+        file_dock_layout.addWidget(self.undo_button)
+
+        self.redo_button = QPushButton("Redo")
+        self.redo_button.clicked.connect(self.redo)
+        file_dock_layout.addWidget(self.redo_button)
 
         file_dock_widget.setLayout(file_dock_layout)
         file_dock.setWidget(file_dock_widget)
@@ -2176,14 +2177,16 @@ class WindowKinegamiGUI(QMainWindow):
 
         #print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
-    def toggle_grid_func(self):
-        if self.grid_on:
-            self.plot_widget.removeItem(self.grid)
-            self.toggle_grid.setText("Show Grid")
-        else:
+    def toggle_grid_func(self, checked=None):
+        if checked is None:
+            # Called from keyboard shortcut — toggle the checkbox, which re-enters this method
+            self.toggle_grid.setChecked(not self.toggle_grid.isChecked())
+            return
+        if checked:
             self.plot_widget.addItem(self.grid)
-            self.toggle_grid.setText("Hide Grid")
-        self.grid_on = not self.grid_on
+        else:
+            self.plot_widget.removeItem(self.grid)
+        self.grid_on = checked
 
     # Success message method with timer
     def show_success(self, message):
