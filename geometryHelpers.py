@@ -321,6 +321,17 @@ class Circle3D:
         # 3d circle points
         return self.c + u @ uhat + v @ vhat
 
+    def addToWidget(self, widget, color=(0.0, 0.0, 1.0, 1.0), 
+                    width : float = 2, count : int = 64):
+        """Draw this circle as a closed line loop in a pyqtgraph GL widget."""
+        import pyqtgraph.opengl as gl
+        pts = self.interpolate(count=count)
+        # Close the loop by appending the first point
+        # pts = np.vstack([pts, pts[0:1]]) unnecessary since interpolate linspace is closed
+        line = gl.GLLinePlotItem(pos=pts.astype(np.float32), color=color, 
+                                 width=width, antialias=True)
+        widget.plot_widget.addItem(line)
+
 
 def line_sphere_intersection(line_point: np.ndarray, line_dir: np.ndarray, 
                              sphere_center: np.ndarray, sphere_radius: float,

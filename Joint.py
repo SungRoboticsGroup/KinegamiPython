@@ -669,6 +669,24 @@ class Waypoint(Joint):
         # SDF of a sphere centered at Pose.t with radius r
         return xp.linalg.norm(point - center, axis=1) - self.r
 
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        """Draw the waypoint as a circle with a small dot at the center."""
+        circle = Circle3D(self.r, self.Pose.t, self.Pose.R[:, self.pidx])
+        circle.addToWidget(widget, color=surfaceColor, width=0.05*self.r)
+        # Small dot at the waypoint center
+        dot = Ball(self.Pose.t, 0.05 * self.r)
+        dot.addToWidget(widget, color=surfaceColor)
+        # Call parent's addToWidget for poses and axis
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        
+
 class Tip(Joint):
     def __init__(self, r : float, Pose : SE3, length : float, 
                  closesForward : bool = True, pathIndex : int = 2):
