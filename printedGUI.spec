@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
 a = Analysis(
-    ['GUI.py'],
+    ['printedGUI.py'],
     pathex=['.'],
     binaries=[],
     datas=[
@@ -9,11 +9,8 @@ a = Analysis(
         ('ui/rotate_checked.png', 'ui'),
         ('ui/move_unchecked.png', 'ui'),
         ('ui/move_checked.png', 'ui'),
-        ('save/test.tree', 'save'),
-        ('save/test.chain', 'save'),
-        ('save/r.dxf', 'save'),
-        ('save/r.chain', 'save'),
-        ('save/autosave/autosave_0.chain', 'save/autosave'),
+        ('save/example_2joint.session', 'save'),
+        ('save/autosave/.gitkeep', 'save/autosave'),
         ('referenceMeshes/stanfordBunnyLowPoly.stl', 'referenceMeshes'),
         ('referenceMeshes/meshSources.txt', 'referenceMeshes'),
         ('referenceMeshes/legBones.stl', 'referenceMeshes'),
@@ -35,7 +32,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='GUI',
+    name='PrintedTubeBotGUI',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
