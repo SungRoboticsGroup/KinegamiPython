@@ -42,7 +42,7 @@ from IntersectionHelper import *
 import warnings
 warnings.filterwarnings("ignore")
 
-if hasattr(QtCore.Qt, 'AA_ENnableHighDpiScaling'):
+if hasattr(QtCore.Qt, 'AA_EnableHighDpiScaling'):
     PyQt5.QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
 
 if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
@@ -54,7 +54,9 @@ class DeleteWidget(QWidget):
         self.setWindowTitle('Confirm Delete')
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel('Are you sure you want to delete the joint?'))
+        delete_label = QLabel('Are you sure you want to delete the joint?')
+        delete_label.setWordWrap(True)
+        layout.addWidget(delete_label)
 
         self.apply_button = QPushButton('Confirm')
         self.apply_button.clicked.connect(self.on_apply_clicked)
@@ -213,26 +215,23 @@ class EditGridWidget(QWidget):
         layout = QVBoxLayout()
 
         # Input for line spacing
-        spacing_layout = QHBoxLayout()
-        spacing_label = QLabel("Grid line spacing: ")
+        spacing_header = QHBoxLayout()
+        spacing_label = QLabel("Grid line spacing")
         self.unit_label = QLabel("(cm)")
+        spacing_header.addWidget(spacing_label)
+        spacing_header.addWidget(self.unit_label)
+        spacing_header.addStretch()
+        layout.addLayout(spacing_header)
         self.spacing_input = QLineEdit()
         self.spacing_input.setPlaceholderText("Enter spacing")
-        spacing_layout.addWidget(spacing_label)
-        spacing_layout.addWidget(self.spacing_input)
-        spacing_layout.addWidget(self.unit_label)
-        layout.addLayout(spacing_layout)
+        layout.addWidget(self.spacing_input)
 
         # Input for the amount of lines
-        line_amt_layout = QHBoxLayout()
-        line_amt_label = QLabel("Size:")
+        line_amt_label = QLabel("Size (grid lines):")
+        layout.addWidget(line_amt_label)
         self.line_amt_input = QLineEdit()
-        grid_lines_label = QLabel("grid lines")
         self.line_amt_input.setPlaceholderText("Enter line amount")
-        line_amt_layout.addWidget(line_amt_label)
-        line_amt_layout.addWidget(self.line_amt_input)
-        line_amt_layout.addWidget(grid_lines_label)
-        layout.addLayout(line_amt_layout)
+        layout.addWidget(self.line_amt_input)
 
         button_layout = QHBoxLayout()
 
@@ -845,7 +844,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.key_bar = QWidget()
         self.key_bar_layout = QHBoxLayout(self.key_bar)  # Layout is initialized and set to the widget here
-        self.key_bar.setFixedHeight(46)
+        self.key_bar.setMinimumHeight(40)
         self.init_key_bar()
 
         top_dock_widget.setWidget(self.key_bar)
@@ -863,6 +862,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         # Create a label to display success/error messages
         self.status_label = QLabel('')
+        self.status_label.setWordWrap(True)
         self.message_display_dock.setWidget(self.status_label)
         
         # Initially hidden - will show when messages appear
@@ -901,6 +901,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.select_parent_prompt = QWidget()
         select_parent_layout = QVBoxLayout()
         self.select_parent_label = QLabel("Select a parent joint:")
+        self.select_parent_label.setWordWrap(True)
         self.select_parent_combo = QComboBox()
         self.select_parent_add_btn = QPushButton("Add")
         self.select_parent_cancel_btn = QPushButton("Cancel")
@@ -988,6 +989,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.select_link_options = QComboBox()
         self.delete_joint_button = QPushButton("Delete Joint")
         self.current_state_label = QLabel('Min State ≤ Current State ≤ Max State')
+        self.current_state_label.setWordWrap(True)
 
         #joint_layout = QVBoxLayout()
         self.joint_editing_layout.addWidget(self.select_joint_options)
@@ -1059,7 +1061,7 @@ class WindowKinegamiGUI(QMainWindow):
         state_slider_layout.addWidget(self.state_textbox)
         state_layout.addLayout(state_slider_layout)
 
-        checkbox_layout = QHBoxLayout() 
+        checkbox_layout = QVBoxLayout() 
         self.propogate_slider_checkbox = QCheckBox("Propagate")
         self.local_orient_slider_checkbox = QCheckBox("Local Orientation")
         self.propogate_slider_checkbox.setChecked(True)
@@ -1144,6 +1146,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.options_layout.addWidget(self.collision_toggle)
 
         self.units_label = QLabel(f"Units: {self.units}")
+        self.units_label.setWordWrap(True)
         self.options_layout.addWidget(self.units_label)
 
         self.options_widget.setLayout(self.options_layout)
@@ -1324,11 +1327,11 @@ class WindowKinegamiGUI(QMainWindow):
             
             joint_label = QLabel(f"J{actual_joint_index}")
             joint_label.setAlignment(Qt.AlignCenter)
-            joint_label.setFixedWidth(80)
+            joint_label.setMinimumWidth(40)
             
             text_box = QLineEdit()
             text_box.setPlaceholderText("0.0")
-            text_box.setFixedWidth(80)
+            text_box.setMinimumWidth(60)
             text_box.setAlignment(Qt.AlignCenter)
             # Connect to handler with lambda to capture the actual joint index
             text_box.returnPressed.connect(lambda idx=actual_joint_index: self.config_textbox_return(idx))
@@ -1336,7 +1339,7 @@ class WindowKinegamiGUI(QMainWindow):
             
             # Create slider
             slider = QSlider(Qt.Horizontal)
-            slider.setFixedWidth(80)
+            slider.setMinimumWidth(60)
             
             # Set slider range and value based on joint type
             if isinstance(joint, Prismatic):
@@ -1547,7 +1550,7 @@ class WindowKinegamiGUI(QMainWindow):
                 
                 value_label = QLabel(str(round(value, 2)))
                 value_label.setAlignment(Qt.AlignCenter)
-                value_label.setFixedWidth(80)
+                value_label.setMinimumWidth(60)
                 value_layout.addWidget(value_label)
                 
                 config_row_layout.addWidget(value_widget)
@@ -1635,7 +1638,7 @@ class WindowKinegamiGUI(QMainWindow):
             
             # Loop checkbox next to play button
             self.animation_loop_checkbox = QCheckBox("Loop")
-            self.animation_loop_checkbox.setMinimumWidth(55)
+            self.animation_loop_checkbox.setMinimumWidth(70)
             self.animation_loop_checkbox.setChecked(self.animation_loop)
             self.animation_loop_checkbox.stateChanged.connect(self.toggle_animation_loop)
             play_loop_layout.addWidget(self.animation_loop_checkbox)
@@ -2119,36 +2122,21 @@ class WindowKinegamiGUI(QMainWindow):
         self.update_joint()
 
     def init_key_bar(self):
-        # Create a spacer that will expand to push the content to the center
-        left_spacer = QWidget()
-        left_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.key_bar_layout.addWidget(left_spacer)
-
-        # Add instructions centered
-        instructions = [
-            "Middle Mouse / Shift+Drag: Pan Camera",
-            "T: Translate",
-            "R: Rotate",
-            "Delete: Delete Joint",
-            "X: Select X Axis",
-            "Y: Select Y Axis",
-            "Z: Select Z Axis"
-        ] 
-        # ", Ctrl+Z: Undo",  "Ctrl+Y / Ctrl+Shift+Z: Redo" 
+        # Add instructions as a single centered, word-wrapping label
+        instructions = (
+            "Middle Mouse / Shift+Drag: Pan Camera  |  "
+            "T: Translate  |  R: Rotate  |  Delete: Delete Joint  |  "
+            "X: Select X Axis  |  Y: Select Y Axis  |  Z: Select Z Axis"
+        )
+        # ", Ctrl+Z: Undo",  "Ctrl+Y / Ctrl+Shift+Z: Redo"
         # Removed because it's standard enough to guess
         # And it's different Ctrl vs Cmd on Windows vs Mac
         # And we want to save space
 
-        spacing = "   "
-        for instruction in instructions:
-            label = QLabel(spacing + instruction + spacing)
-            label.setAlignment(Qt.AlignCenter)
-            self.key_bar_layout.addWidget(label)
-
-        # Create a spacer that will expand to push the content to the center from the right side
-        right_spacer = QWidget()
-        right_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.key_bar_layout.addWidget(right_spacer)
+        label = QLabel(instructions)
+        label.setAlignment(Qt.AlignCenter)
+        label.setWordWrap(True)
+        self.key_bar_layout.addWidget(label)
 
     def local_orient_clicked(self):
         self.is_local = self.local_orient_slider_checkbox.isChecked()

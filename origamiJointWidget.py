@@ -1,5 +1,5 @@
 import numpy as np
-from PyQt5.QtWidgets import QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QDockWidget, QWidget, QLineEdit
+from PyQt5.QtWidgets import QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QDockWidget, QWidget, QLineEdit, QSizePolicy
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from spatialmath import SE3
@@ -68,31 +68,28 @@ class AddPrismaticMenu(AddJointMenu):
    def initUI(self):
        layout = QVBoxLayout()
       
-       length_layout = QHBoxLayout()
        length_label = QLabel("Neutral Length (default: 3r):")
+       length_label.setWordWrap(True)
+       layout.addWidget(length_label)
        self.length_input = QLineEdit()
        self.length_input.returnPressed.connect(self.onApplyClicked)
-       length_layout.addWidget(length_label)
-       length_layout.addWidget(self.length_input)
-       layout.addLayout(length_layout)
+       layout.addWidget(self.length_input)
 
 
-       numLayers_layout = QHBoxLayout()
        numLayers_label = QLabel("Number of Layers (default: 3):")
+       numLayers_label.setWordWrap(True)
+       layout.addWidget(numLayers_label)
        self.numLayers_input = QLineEdit()
        self.numLayers_input.returnPressed.connect(self.onApplyClicked)
-       numLayers_layout.addWidget(numLayers_label)
-       numLayers_layout.addWidget(self.numLayers_input)
-       layout.addLayout(numLayers_layout)
+       layout.addWidget(self.numLayers_input)
 
 
-       angle_layout = QHBoxLayout()
        angle_label = QLabel("Cone Angle (degrees, default: 60):")
+       angle_label.setWordWrap(True)
+       layout.addWidget(angle_label)
        self.angle_input = QLineEdit()
        self.angle_input.returnPressed.connect(self.onApplyClicked)
-       angle_layout.addWidget(angle_label)
-       angle_layout.addWidget(self.angle_input)
-       layout.addLayout(angle_layout)
+       layout.addWidget(self.angle_input)
 
 
        apply_button = QPushButton('Add Prismatic Joint')
@@ -162,13 +159,12 @@ class AddRevoluteMenu(AddJointMenu):
    def initUI(self):
        layout = QVBoxLayout()
       
-       angle_layout = QHBoxLayout()
        angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
+       angle_label.setWordWrap(True)
+       layout.addWidget(angle_label)
        self.angle_input = QLineEdit()
        self.angle_input.returnPressed.connect(self.onApplyClicked)
-       angle_layout.addWidget(angle_label)
-       angle_layout.addWidget(self.angle_input)
-       layout.addLayout(angle_layout)
+       layout.addWidget(self.angle_input)
 
 
        apply_button = QPushButton('Add Revolute Joint')
@@ -342,28 +338,25 @@ class EditDimensionMenu(AddJointMenu):
        new_layout = QVBoxLayout()
 
 
-       length_layout = QHBoxLayout()
        length_label = QLabel("Neutral Length (default: 3r):")
+       length_label.setWordWrap(True)
+       new_layout.addWidget(length_label)
        self.length_input = QLineEdit()
-       length_layout.addWidget(length_label)
-       length_layout.addWidget(self.length_input)
-       new_layout.addLayout(length_layout)
+       new_layout.addWidget(self.length_input)
 
 
-       numLayers_layout = QHBoxLayout()
        numLayers_label = QLabel("Number of Layers (default: 3):")
+       numLayers_label.setWordWrap(True)
+       new_layout.addWidget(numLayers_label)
        self.numLayers_input = QLineEdit()
-       numLayers_layout.addWidget(numLayers_label)
-       numLayers_layout.addWidget(self.numLayers_input)
-       new_layout.addLayout(numLayers_layout)
+       new_layout.addWidget(self.numLayers_input)
 
 
-       angle_layout = QHBoxLayout()
        angle_label = QLabel("Cone Angle (degrees, default: 60):")
+       angle_label.setWordWrap(True)
+       new_layout.addWidget(angle_label)
        self.angle_input = QLineEdit()
-       angle_layout.addWidget(angle_label)
-       angle_layout.addWidget(self.angle_input)
-       new_layout.addLayout(angle_layout)
+       new_layout.addWidget(self.angle_input)
 
 
        apply_button = QPushButton("Edit Prismatic Joint")
@@ -387,12 +380,11 @@ class EditDimensionMenu(AddJointMenu):
        new_layout = QVBoxLayout()
 
 
-       angle_layout = QHBoxLayout()
        angle_label = QLabel("Total Bending Angle (degrees, default: 180):")
+       angle_label.setWordWrap(True)
+       new_layout.addWidget(angle_label)
        self.angle_input = QLineEdit()
-       angle_layout.addWidget(angle_label)
-       angle_layout.addWidget(self.angle_input)
-       new_layout.addLayout(angle_layout)
+       new_layout.addWidget(self.angle_input)
 
 
        apply_button = QPushButton("Edit Revolute Joint")
@@ -416,12 +408,10 @@ class EditDimensionMenu(AddJointMenu):
        new_layout = QVBoxLayout()
 
 
-       length_layout = QHBoxLayout()
        length_label = QLabel("Length:")
+       new_layout.addWidget(length_label)
        self.length_input = QLineEdit()
-       length_layout.addWidget(length_label)
-       length_layout.addWidget(self.length_input)
-       new_layout.addLayout(length_layout)
+       new_layout.addWidget(self.length_input)
 
 
        apply_button = QPushButton("Edit Tip")

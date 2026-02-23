@@ -46,5 +46,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    name='GUI'
+    name='printed'
 )

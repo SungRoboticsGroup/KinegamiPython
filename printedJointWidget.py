@@ -44,6 +44,7 @@ class AddTransverseRevoluteMenu(AddJointMenu):
        layout = QVBoxLayout()
       
        info_label = QLabel("Add Transverse Revolute Joint (270°)")
+       info_label.setWordWrap(True)
        layout.addWidget(info_label)
 
        apply_button = QPushButton('Add Transverse Revolute Joint')
@@ -97,6 +98,7 @@ class AddCoaxialRevoluteMenu(AddJointMenu):
        layout = QVBoxLayout()
       
        info_label = QLabel("Add Coaxial Revolute Joint (270°)")
+       info_label.setWordWrap(True)
        layout.addWidget(info_label)
 
        apply_button = QPushButton('Add Coaxial Revolute Joint')
@@ -149,6 +151,7 @@ class AddTipMenu(AddJointMenu):
        layout = QVBoxLayout()
 
        info_label = QLabel("Add Tip (PrintedHemisphere)")
+       info_label.setWordWrap(True)
        layout.addWidget(info_label)
           
        apply_button = QPushButton('Add Tip')
