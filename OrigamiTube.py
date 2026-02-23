@@ -132,6 +132,69 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
                                               numPointsPerCircle=self.numSides)
         return plotHandles
 
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=revoluteColorDefault,
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList
+
+        if showSurface:
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            scale = self.creasePattern().baseSideLength / 2
+            centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
+                                      self.Pose.t + scale * self.Pose.R[:, 2]])
+
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+
+            # Proximal half
+            RevoluteProximalPose = self.RevoluteProximalFrame()
+            uhatProximal = RevoluteProximalPose.R[:, 1]
+            vhatProximal = RevoluteProximalPose.R[:, 2]
+            RevoluteProximalBase = np.array([RevoluteProximalPose.t + u[i] * uhatProximal + v[i] * vhatProximal
+                                             for i in range(radialCount - 1)])
+            ProximalPoints = np.vstack((RevoluteProximalBase, centerSegment))
+            ProximalHull = ConvexHull(ProximalPoints)
+            proxVertices = ProximalPoints[ProximalHull.vertices]
+            proxFaces = ProximalHull.simplices
+
+            meshdata = gl.MeshData(vertexes=proxVertices.astype(np.float32), faces=proxFaces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
+
+            # Distal half
+            RevoluteDistalPose = self.RevoluteDistalFrame()
+            uhatDistal = RevoluteDistalPose.R[:, 1]
+            vhatDistal = RevoluteDistalPose.R[:, 2]
+            DistalBase = np.array([RevoluteDistalPose.t + u[i] * uhatDistal + v[i] * vhatDistal
+                                   for i in range(radialCount - 1)])
+            DistalPoints = np.vstack((DistalBase, centerSegment))
+            DistalHull = ConvexHull(DistalPoints)
+            distalVertices = DistalPoints[DistalHull.vertices]
+            distalFaces = DistalHull.simplices
+
+            meshdata2 = gl.MeshData(vertexes=distalVertices.astype(np.float32), faces=distalFaces)
+            item2 = gl.GLMeshItem(meshdata=meshdata2, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item2.setGLOptions('translucent')
+            item2.setObjectName("Joint")
+            widget.plot_widget.addItem(item2)
+
+            # Tubular extensions
+            if self.outerLength > 0:
+                self.proximalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
+                self.distalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
+
+        # Call Joint base addToWidget for poses, axis, sphere
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+
 
 class OrigamiRevolute(OrigamiExtendedRevolute):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
@@ -177,7 +240,24 @@ class OrigamiPrismatic(OrigamiTube, Prismatic):
                                               edgeColor=edgeColor,
                                               numPointsPerCircle=self.numSides)            
         return plotHandles
-    
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False,
+                    surfaceColor=prismaticColorDefault,
+                    showSurface=True, showAxis=True, axisScale=10, showPoses=True, poseAxisScaleMultipler=None):
+        from style import prismaticColorList
+
+        # Call Joint base addToWidget for poses, axis, sphere
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+        if showSurface:
+            color = surfaceColor if surfaceColor != prismaticColorDefault else prismaticColorList
+            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
+                                                color_list=color, is_joint=True)
+
 class OrigamiTip(OrigamiTube, Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
                  closesForward : bool = True, pathIndex : int = 2):
@@ -253,6 +333,64 @@ class OrigamiTip(OrigamiTube, Tip):
                     ax.add_collection3d(tri)
             
         return plotHandles
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False,
+                    surfaceColor=linkColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import linkColorList
+
+        # Call Joint base addToWidget for poses, axis, sphere
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+
+        if showSurface:
+            color = surfaceColor if surfaceColor != linkColorDefault else linkColorList
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+            scale = self.creasePattern().baseSideLength / 2
+
+            match self.pidx:
+                case 0: tipSegmentIndex, uhatIndex, vhatIndex = 2, 1, 2
+                case 1: tipSegmentIndex, uhatIndex, vhatIndex = 0, 2, 0
+                case 2: tipSegmentIndex, uhatIndex, vhatIndex = 1, 0, 1
+
+            if self.forward:
+                DistalPose = self.DistalFrame()
+                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:, tipSegmentIndex],
+                                       DistalPose.t + scale * DistalPose.R[:, tipSegmentIndex]])
+                ProximalPose = self.ProximalFrame()
+                uhatProximal = ProximalPose.R[:, uhatIndex]
+                vhatProximal = ProximalPose.R[:, vhatIndex]
+                ProximalBase = np.array([ProximalPose.t + u[i] * uhatProximal + v[i] * vhatProximal
+                                         for i in range(radialCount - 1)])
+                tipPoints = np.vstack((ProximalBase, TipSegment))
+            else:
+                ProximalPose = self.ProximalFrame()
+                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:, tipSegmentIndex],
+                                       ProximalPose.t + scale * ProximalPose.R[:, tipSegmentIndex]])
+                DistalPose = self.DistalFrame()
+                uhatDistal = DistalPose.R[:, uhatIndex]
+                vhatDistal = DistalPose.R[:, vhatIndex]
+                DistalBase = np.array([DistalPose.t + u[i] * uhatDistal + v[i] * vhatDistal
+                                       for i in range(radialCount - 1)])
+                tipPoints = np.vstack((DistalBase, TipSegment))
+
+            hull = ConvexHull(tipPoints)
+            vertices = tipPoints[hull.vertices]
+            faces = hull.simplices
+
+            meshdata = gl.MeshData(vertexes=vertices.astype(np.float32), faces=faces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
 
 class OrigamiStartTip(OrigamiTip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):

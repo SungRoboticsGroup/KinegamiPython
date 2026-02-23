@@ -396,8 +396,10 @@ class TubularPattern():
             msp_properties.set_colors(mapPropertiesColor) # light gray #eaeaea
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
+            ax.set_aspect("equal", adjustable="box")
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
+            fig.canvas.draw()
             plt.show(block=block)
 
         return doc

@@ -2374,10 +2374,65 @@ class WindowKinegamiGUI(QMainWindow):
                 self, "Save File", os.path.join(base_path, "save"), "DXF Files (*.dxf)", options=options
             )
             crease_pattern = self.chain.creasePattern()
+            # Render crease pattern into a standalone Qt window using matplotlib
             if file_path:
-                crease_pattern.show(dxfName=file_path)
-            else:
-                crease_pattern.show()
+                crease_pattern.show(dxfName=file_path, show=False)
+            self._show_crease_pattern_window(crease_pattern)
+
+    def _show_crease_pattern_window(self, crease_pattern):
+        """Display the crease pattern in a dedicated Qt dialog with an embedded matplotlib canvas."""
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend for rendering
+        import matplotlib.pyplot as plt
+        from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+        from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+        import ezdxf
+        from ezdxf.addons.drawing import RenderContext, Frontend
+        from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
+        from ezdxf.addons.drawing.config import Configuration
+        from ezdxf.addons.drawing.properties import LayoutProperties
+        from style import mapPropertiesColor
+
+        # Build the DXF doc from the crease pattern (reuse save() logic without writing file)
+        doc = crease_pattern.show(show=False)
+
+        xmin = -0.5 * crease_pattern.baseSideLength
+        xmax = crease_pattern.width + 0.5 * crease_pattern.baseSideLength
+        ymin = crease_pattern.proximalMarker[0, 1]
+        ymax = ymin + crease_pattern.patternHeight
+        msp = doc.modelspace()
+
+        # Render into a matplotlib figure
+        config = Configuration()
+        fig = plt.Figure(figsize=(max(xmax - xmin, 4), max(ymax - ymin, 4)))
+        ax = fig.add_axes([0, 0, 1, 1])
+        ctx = RenderContext(doc)
+        out = MatplotlibBackend(ax, adjust_figure=False)
+        msp_properties = LayoutProperties.from_layout(msp)
+        msp_properties.set_colors(mapPropertiesColor)
+        Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
+                                                       layout_properties=msp_properties)
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_ylim(ymin, ymax)
+        ax.set_xlim(xmin, xmax)
+
+        # Create a standalone Qt dialog to host the figure
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Crease Pattern")
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.resize(900, 700)
+        layout = QVBoxLayout(dialog)
+        canvas = FigureCanvas(fig)
+        toolbar = NavigationToolbar(canvas, dialog)
+        layout.addWidget(toolbar)
+        layout.addWidget(canvas)
+        canvas.draw()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+        # Reset backend so future matplotlib usage isn't affected
+        matplotlib.use('QtAgg')
 
     def _gather_session_state(self):
         """Collect all serializable editor state into a dict for .session files."""
