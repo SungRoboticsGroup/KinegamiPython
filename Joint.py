@@ -827,8 +827,8 @@ class Tip(Joint):
         
         if showSurface:
             # Render the tip as a stretched hemisphere, matching addToPlot logic
-            n_lat = 20   # latitude divisions
-            n_lon = 32   # longitude divisions
+            n_lat = 6    # latitude divisions
+            n_lon = 8    # longitude divisions
 
             # Hemisphere theta range
             if self.forward:

@@ -13,7 +13,7 @@ Usage:
     python dancePartyViewer.py --env club
 """
 
-import sys, os, glob, copy, argparse, math
+import sys, os, glob, copy, argparse, math, time
 import numpy as np
 import dill
 
@@ -98,6 +98,28 @@ class RobotAnimator:
     def can_animate(self):
         return self.num_segments >= 1
 
+    def total_duration(self) -> float:
+        """Total time (seconds) for one complete loop."""
+        return sum(self._segment_duration(i) for i in range(self.num_segments))
+
+    def set_time(self, elapsed: float):
+        """Set the robot to the pose at *elapsed* seconds from the start, looping."""
+        if not self.can_animate():
+            return
+        total = self.total_duration()
+        if total <= 0:
+            return
+        elapsed = elapsed % total  # loop
+        t_acc = 0.0
+        for seg_idx in range(self.num_segments):
+            dur = self._segment_duration(seg_idx)
+            if t_acc + dur > elapsed:
+                t = (elapsed - t_acc) / dur
+                self._interpolate(seg_idx, t)
+                return
+            t_acc += dur
+        self._interpolate(self.num_segments - 1, 1.0)  # very end
+
     def reset(self, now: float):
         self.current_segment = 0
         self.segment_start_time = now
@@ -180,6 +202,18 @@ class DancePartyWindow(QMainWindow):
         self.play_button.clicked.connect(self._toggle_animation)
         selector_row.addWidget(self.play_button)
 
+        # Export Video button
+        self.export_button = QPushButton("Export Video")
+        self.export_button.setFixedWidth(100)
+        self.export_button.clicked.connect(self._export_video)
+        selector_row.addWidget(self.export_button)
+
+        # Profile button
+        self.profile_button = QPushButton("Profile")
+        self.profile_button.setFixedWidth(70)
+        self.profile_button.clicked.connect(self._profile_redraw)
+        selector_row.addWidget(self.profile_button)
+
         layout.addLayout(selector_row, 0)  # stretch=0: selector takes minimum height
 
         # ── GL view ──
@@ -191,13 +225,6 @@ class DancePartyWindow(QMainWindow):
         self.gl_widget = gl.GLViewWidget()
         self.gl_widget.setBackgroundColor(backgroundColorDefault)
         layout.addWidget(self.gl_widget, 1)  # stretch=1: GL view fills remaining space
-
-        # Ground-plane grid
-        self.grid = gl.GLGridItem()
-        self.grid.setSize(600, 600, 600)
-        self.grid.setSpacing(10, 10, 10)
-        self.grid.setColor(gridColorDefault)
-        self.gl_widget.addItem(self.grid)
 
         # The wrapper object that tree.addToWidget expects
         self.viewer = SimpleTreeViewer(self.gl_widget)
@@ -322,11 +349,10 @@ class DancePartyWindow(QMainWindow):
         )
 
     def _clear_scene(self):
-        """Remove all items from the GL widget except the grid."""
+        """Remove all items from the GL widget."""
         items = list(self.gl_widget.items)
         for item in items:
-            if item is not self.grid:
-                self.gl_widget.removeItem(item)
+            self.gl_widget.removeItem(item)
         self.trees = []
         self.tree_names = []
         self.animators = []
@@ -347,7 +373,7 @@ class DancePartyWindow(QMainWindow):
         for anim in self.animators:
             anim.reset(now)
         self.play_button.setText("⏸ Pause")
-        self.animation_timer.start(200)  # ~5 fps (full scene rebuild each frame)
+        self.animation_timer.start(80)  # ~12 fps
 
     def _stop_animation(self):
         self.is_animating = False
@@ -367,11 +393,10 @@ class DancePartyWindow(QMainWindow):
             self._redraw_trees()
 
     def _redraw_trees(self):
-        """Remove old tree visuals and re-add them (keeps grid and labels)."""
-        # Remove everything except grid and text labels
+        """Remove old tree visuals and re-add them (keeps labels)."""
+        # Remove everything except text labels
         items_to_remove = [item for item in self.gl_widget.items
-                           if item is not self.grid
-                           and not isinstance(item, gl.GLTextItem)]
+                           if not isinstance(item, gl.GLTextItem)]
         for item in items_to_remove:
             self.gl_widget.removeItem(item)
         # Re-add trees
@@ -382,6 +407,272 @@ class DancePartyWindow(QMainWindow):
                           showLinkPath=False,
                           showJointPoses=False,
                           showSpheres=False)
+
+    # ── Video export ─────────────────────────────────────────────────────
+
+    def _export_video(self):
+        """Render the dance animation offline and save as an MP4 file."""
+        try:
+            import imageio
+        except ImportError:
+            QtWidgets.QMessageBox.warning(
+                self, "Missing dependency",
+                "Please install imageio and imageio-ffmpeg:\n"
+                "  pip install imageio imageio-ffmpeg")
+            return
+
+        animatable = [a for a in self.animators if a.can_animate()]
+        if not self.trees or not animatable:
+            QtWidgets.QMessageBox.information(self, "Nothing to export",
+                                              "Load an environment with dance sequences first.")
+            return
+
+        # Stop live playback
+        was_animating = self.is_animating
+        if was_animating:
+            self._stop_animation()
+
+        # Choose save path
+        default_name = f"dance_{self.env_combo.currentText()}.mp4"
+        default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     default_name)
+        filepath, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Export Video", default_path, "MP4 Video (*.mp4)")
+        if not filepath:
+            return
+
+        # Parameters
+        fps = 30
+        width, height = 1280, 720
+        # Duration = one full cycle of the longest animation
+        max_dur = max(a.total_duration() for a in animatable)
+        num_frames = int(math.ceil(max_dur * fps))
+
+        # Progress dialog
+        progress = QtWidgets.QProgressDialog(
+            f"Rendering {num_frames} frames at {width}×{height} …",
+            "Cancel", 0, num_frames, self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+        QApplication.processEvents()
+
+        writer = imageio.get_writer(filepath, fps=fps,
+                                     codec='libx264',
+                                     quality=9,
+                                     output_params=['-pix_fmt', 'yuv420p'])
+        t_start = time.perf_counter()
+        try:
+            for frame_idx in range(num_frames):
+                if progress.wasCanceled():
+                    break
+
+                t = frame_idx / fps
+                for anim in self.animators:
+                    anim.set_time(t)
+
+                self._redraw_trees()
+                QApplication.processEvents()
+
+                img = self.gl_widget.renderToArray((width, height))
+                # pyqtgraph returns RGBA; video needs RGB
+                writer.append_data(img[:, :, :3])
+
+                progress.setValue(frame_idx + 1)
+        finally:
+            writer.close()
+            progress.close()
+
+        elapsed = time.perf_counter() - t_start
+        self.info_label.setText(
+            f"Exported {num_frames} frames in {elapsed:.1f}s → {os.path.basename(filepath)}")
+
+        # Restore the scene to current time
+        self._redraw_trees()
+
+    def _profile_redraw(self):
+        """Profile a single redraw cycle: measure time for each phase and
+        report vertex/face counts per GL item type."""
+        if not self.trees:
+            print("No trees loaded.")
+            return
+
+        was_animating = self.is_animating
+        if was_animating:
+            self._stop_animation()
+
+        print("\n" + "=" * 70)
+        print("REDRAW PROFILE")
+        print("=" * 70)
+
+        # ── Phase 1: remove old items ──
+        t0 = time.perf_counter()
+        items_to_remove = [item for item in self.gl_widget.items
+                           if not isinstance(item, gl.GLTextItem)]
+        num_removed = len(items_to_remove)
+        for item in items_to_remove:
+            self.gl_widget.removeItem(item)
+        t_remove = time.perf_counter() - t0
+        print(f"\nPhase 1 – Remove {num_removed} items: {t_remove*1000:.1f} ms")
+
+        # ── Phase 2: addToWidget per tree ──
+        tree_times = []
+        for i, t in enumerate(self.trees):
+            t1 = time.perf_counter()
+            before_count = len(self.gl_widget.items)
+            t.addToWidget(self.viewer,
+                          showJointSurface=True,
+                          showLinkSurface=True,
+                          showLinkPath=False,
+                          showJointPoses=False,
+                          showSpheres=False)
+            after_count = len(self.gl_widget.items)
+            dt = time.perf_counter() - t1
+            tree_times.append(dt)
+            name = self.tree_names[i] if i < len(self.tree_names) else f"tree_{i}"
+            print(f"\nPhase 2 – addToWidget '{name}': {dt*1000:.1f} ms  "
+                  f"({after_count - before_count} new items)")
+
+        t_add_total = sum(tree_times)
+        print(f"\nPhase 2 total: {t_add_total*1000:.1f} ms")
+
+        # ── Phase 3: inventory all GL items ──
+        print(f"\n{'Type':<30} {'Count':>6} {'Verts':>10} {'Faces':>10}")
+        print("-" * 60)
+        type_stats = {}  # type_name -> (count, total_verts, total_faces)
+        for item in self.gl_widget.items:
+            type_name = type(item).__name__
+            obj_name = item.objectName() if hasattr(item, 'objectName') else ""
+            key = f"{type_name}[{obj_name}]" if obj_name else type_name
+
+            verts = 0
+            faces = 0
+            # Try to extract mesh data
+            md = None
+            if hasattr(item, 'opts'):
+                md = item.opts.get('meshdata', None)
+            if md is None and hasattr(item, 'meshDataChanged'):
+                try:
+                    item.meshDataChanged()
+                    if hasattr(item, 'opts'):
+                        md = item.opts.get('meshdata', None)
+                except Exception:
+                    pass
+            if md is not None:
+                try:
+                    v = md.vertexes()
+                    if v is not None:
+                        verts = len(v)
+                except Exception:
+                    pass
+                try:
+                    f = md.faces()
+                    if f is not None:
+                        faces = len(f)
+                except Exception:
+                    pass
+            # For line items, count points
+            if hasattr(item, 'pos') and verts == 0:
+                try:
+                    p = item.pos
+                    if isinstance(p, np.ndarray):
+                        verts = len(p)
+                except Exception:
+                    pass
+
+            if key not in type_stats:
+                type_stats[key] = [0, 0, 0]
+            type_stats[key][0] += 1
+            type_stats[key][1] += verts
+            type_stats[key][2] += faces
+
+        # Sort by total faces descending (most geometry first)
+        for key, (count, verts, faces) in sorted(type_stats.items(),
+                                                  key=lambda x: -x[1][2]):
+            print(f"{key:<30} {count:>6} {verts:>10} {faces:>10}")
+
+        total_items = sum(s[0] for s in type_stats.values())
+        total_verts = sum(s[1] for s in type_stats.values())
+        total_faces = sum(s[2] for s in type_stats.values())
+        print("-" * 60)
+        print(f"{'TOTAL':<30} {total_items:>6} {total_verts:>10} {total_faces:>10}")
+        print(f"\nFull redraw time: {(t_remove + t_add_total)*1000:.1f} ms")
+
+        # ── Phase 4: detailed breakdown of Joint mesh items ──
+        print(f"\n{'─' * 70}")
+        print("JOINT MESH DETAIL  (individual GLMeshItem[Joint] items)")
+        print(f"{'─' * 70}")
+        print(f"{'Verts':>8} {'Faces':>8}  Description")
+        print(f"{'─'*8} {'─'*8}  {'─'*40}")
+
+        # Histogram: verts -> (count, faces)
+        joint_histogram = {}
+        joint_items_detail = []
+        for item in self.gl_widget.items:
+            obj_name = item.objectName() if hasattr(item, 'objectName') else ""
+            if obj_name != "Joint":
+                continue
+            md = None
+            if hasattr(item, 'opts'):
+                md = item.opts.get('meshdata', None)
+            verts = 0
+            faces = 0
+            if md is not None:
+                try:
+                    v = md.vertexes()
+                    if v is not None:
+                        verts = len(v)
+                except Exception:
+                    pass
+                try:
+                    f = md.faces()
+                    if f is not None:
+                        faces = len(f)
+                except Exception:
+                    pass
+            # Guess what it is based on geometry
+            if verts == 8 and faces == 12:
+                desc = "Box (servo body)"
+            elif faces == 2:
+                desc = "Bracket quad"
+            elif verts > 0 and faces > 0 and faces == verts - 2:
+                desc = f"End cap (fan, {verts} pts)"
+            elif verts > 0 and faces > 0:
+                # Likely a cylinder
+                # numCircles * numPointsPerCircle = verts
+                # (numCircles-1) * numPointsPerCircle * 2 = faces
+                # Solve: if faces = 2*(numCircles-1)*numPts and verts = numCircles*numPts
+                # Try numPts = 32 (default)
+                for npts in [32, 16, 10, 8]:
+                    if verts % npts == 0:
+                        nc = verts // npts
+                        expected_faces = 2 * (nc - 1) * npts
+                        if expected_faces == faces:
+                            desc = f"Cylinder ({npts} pts/circle × {nc} circles)"
+                            break
+                else:
+                    desc = f"Mesh ({verts}v, {faces}f)"
+            else:
+                desc = f"Unknown ({verts}v, {faces}f)"
+
+            joint_items_detail.append((verts, faces, desc))
+            key = (verts, faces, desc)
+            joint_histogram[key] = joint_histogram.get(key, 0) + 1
+
+        # Print histogram sorted by total faces contribution descending
+        print(f"\n{'Count':>6} {'Verts/ea':>9} {'Faces/ea':>9} {'Tot Faces':>10}  Description")
+        print(f"{'─'*6} {'─'*9} {'─'*9} {'─'*10}  {'─'*40}")
+        for (v, f, desc), count in sorted(joint_histogram.items(),
+                                           key=lambda x: -(x[0][1] * x[1])):
+            print(f"{count:>6} {v:>9} {f:>9} {f*count:>10}  {desc}")
+
+        tot_joint_items = len(joint_items_detail)
+        tot_joint_verts = sum(v for v, _, _ in joint_items_detail)
+        tot_joint_faces = sum(f for _, f, _ in joint_items_detail)
+        print(f"{'─'*6} {'─'*9} {'─'*9} {'─'*10}  {'─'*40}")
+        print(f"{tot_joint_items:>6} {'':>9} {'':>9} {tot_joint_faces:>10}  TOTAL Joint meshes ({tot_joint_verts} verts)")
+
+        print("=" * 70)
 
     # ── Camera ───────────────────────────────────────────────────────────
 

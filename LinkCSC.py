@@ -197,7 +197,7 @@ class LinkCSC:
         
         return allElbowHandleSets
     
-    def addToWidget(self, widget, numSides : int = 32, color : str = linkColorDefault, 
+    def addToWidget(self, widget, numSides : int = 8, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False, showPath : bool = True, 
                   pathColor : str = pathColorDefault,

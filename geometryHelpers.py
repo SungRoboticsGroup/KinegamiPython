@@ -687,7 +687,7 @@ class Cylinder:
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, edgecolor=edgeColor)
     
-    def addToWidget(self, widget, numPointsPerCircle=32, numCircles=10, color_list=cylinderColorList, is_joint=False, opaque=False):
+    def addToWidget(self, widget, numPointsPerCircle=16, numCircles=2, color_list=cylinderColorList, is_joint=False, opaque=False):
         import pyqtgraph.opengl as gl
         vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
         meshdata = gl.MeshData(vertexes=vertices, faces=indices)
