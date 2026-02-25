@@ -90,6 +90,33 @@ class RobotAnimator:
         self.joint_indices = real_joint_indices(tree)
         self.current_segment = 0
         self.segment_start_time = 0.0
+        # Forced-loop state
+        self._original_configs = list(saved_configs)
+        self._original_durations = list(config_durations)
+        self._forced_loop = False
+
+    def naturally_loops(self, tol: float = 1e-6) -> bool:
+        """Return True if the first and last configs are (nearly) identical."""
+        if len(self.saved_configs) < 2:
+            return True
+        first, last = self.saved_configs[0], self.saved_configs[-1]
+        return all(abs(a - b) < tol for a, b in zip(first, last))
+
+    def set_forced_loop(self, enabled: bool):
+        """When enabled, append a reversed copy of the dance so non-looping
+        dances return smoothly to the start configuration."""
+        if enabled == self._forced_loop:
+            return
+        self._forced_loop = enabled
+        if enabled and not self.naturally_loops():
+            # Append reversed configs (skip the duplicate endpoints)
+            reversed_configs = list(reversed(self._original_configs[:-1]))
+            reversed_durations = list(reversed(self._original_durations))
+            self.saved_configs = self._original_configs + reversed_configs
+            self.config_durations = self._original_durations + reversed_durations
+        else:
+            self.saved_configs = list(self._original_configs)
+            self.config_durations = list(self._original_durations)
 
     @property
     def num_segments(self):
@@ -226,6 +253,11 @@ class DancePartyWindow(QMainWindow):
         self.names_checkbox.toggled.connect(self._toggle_names)
         selector_row.addWidget(self.names_checkbox)
 
+        self.loop_checkbox = QCheckBox("Loop All")
+        self.loop_checkbox.setChecked(True)
+        self.loop_checkbox.toggled.connect(self._toggle_loop)
+        selector_row.addWidget(self.loop_checkbox)
+
         # Profile button
         self.profile_button = QPushButton("Profile")
         self.profile_button.setFixedWidth(70)
@@ -351,6 +383,7 @@ class DancePartyWindow(QMainWindow):
         anim_count = 0
         for t, cfgs, durs in zip(trees, session_configs, session_durations):
             anim = RobotAnimator(t, cfgs, durs)
+            anim.set_forced_loop(self.loop_checkbox.isChecked())
             self.animators.append(anim)
             if anim.can_animate():
                 anim_count += 1
@@ -451,6 +484,11 @@ class DancePartyWindow(QMainWindow):
             self._add_name_labels()
         else:
             self._remove_name_labels()
+
+    def _toggle_loop(self, checked: bool):
+        """Enable or disable forced looping for non-looping dances."""
+        for anim in self.animators:
+            anim.set_forced_loop(checked)
 
     # ── Video export ─────────────────────────────────────────────────────
 

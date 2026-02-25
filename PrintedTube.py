@@ -699,6 +699,98 @@ class PrintedHemisphere(PrintedTube, Tip):
         PrintedTube.__init__(self)
         Tip.__init__(self, r, Pose, length=r, closesForward=closesForward, pathIndex=pathIndex)
 
+    def connectableModule(self, numSides : int = 50) -> m3d.Manifold:
+        """Generate a connectable hemisphere module for 3D printing.
+        
+        Creates a hollow hemisphere with an inset or outset connection at
+        the open face, matching the link connection pattern.
+        
+        Forward tips (end caps) get an inset at the open (proximal) face.
+        Backward tips (start caps) get an outset at the open (distal) face.
+        """
+        connectionLength = 2 * self.holeDiameter
+        eps = 0.01 * self.r  # small epsilon for boolean clearance
+
+        # Build a hollow sphere at the origin, then trim and transform
+        outer = m3d.Manifold.sphere(self.r, circular_segments=numSides)
+        inner = m3d.Manifold.sphere(self.r - self.wallThickness, circular_segments=numSides)
+        shell = outer - inner
+
+        # The tree/link connection uses proximal frame for end caps and distal
+        # frame for start caps. Use that same open face frame for cap geometry.
+        openFrame = self.ProximalDubinsFrame() if self.forward else self.DistalDubinsFrame()
+        openCenter = openFrame.t
+
+        # Trim: keep the closed half relative to the open face center.
+        # Forward tip closes in +openFrame xhat; backward tip closes in -xhat.
+        openAxis = openFrame.R[:,0]
+        trim_normal = openAxis if self.forward else -openAxis
+        # trim_by_plane keeps the side in the direction of the normal.
+        # origin_offset = dot(normal, point_on_plane) positions the plane through openCenter.
+        shell = shell.translate(tuple(openCenter))
+        origin_offset = float(np.dot(trim_normal, openCenter))
+        shell = shell.trim_by_plane(tuple(trim_normal), origin_offset)
+
+        if self.forward:
+            # Forward tip: open face is proximal → receives an outset from the
+            # preceding link → needs an INSET at the open face.
+            # Inset holes use loose fit (bolts clear through).
+            holeSlicer = m3d.Manifold()
+            holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
+            for angle in holeAnglesDegrees:
+                hole = m3d.Manifold.cylinder(height=self.r + eps,
+                                             radius_low=self.holeDiameter/2 + self.looseFitTolerance,
+                                             radius_high=self.holeDiameter/2 + self.looseFitTolerance,
+                                             circular_segments=numSides)
+                hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+                holeSlicer += hole
+
+            inset = m3d.Manifold.cylinder(
+                height=2*connectionLength + 2*eps,
+                radius_low=self.r - self.wallThickness + eps,
+                radius_high=self.r - self.wallThickness + eps,
+                circular_segments=numSides)
+            shell -= inset.translate((0,0,-connectionLength-eps)) \
+                         .rotate((0,90,0)).transform(openFrame.A[:3,:])
+            shell -= holeSlicer.translate((0,0,self.holeDiameter)) \
+                               .rotate((0,90,0)).transform(openFrame.A[:3,:])
+        else:
+            # Backward tip: open face is distal → inserts into the following
+            # link's inset → needs an OUTSET at the open face.
+            # Outset holes use tight fit (bolts friction-fit in).
+            holeSlicer = m3d.Manifold()
+            holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
+            for angle in holeAnglesDegrees:
+                hole = m3d.Manifold.cylinder(height=self.r + eps,
+                                             radius_low=self.holeDiameter/2 + self.tightFitTolerance,
+                                             radius_high=self.holeDiameter/2 + self.tightFitTolerance,
+                                             circular_segments=numSides)
+                hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+                holeSlicer += hole
+
+            outsetRadius = self.r - self.wallThickness
+            outset = m3d.Manifold.cylinder(
+                height=2*connectionLength,
+                radius_low=outsetRadius - self.tightFitTolerance,
+                radius_high=outsetRadius - self.tightFitTolerance,
+                circular_segments=numSides)
+            outset += m3d.Manifold.cylinder(
+                height=connectionLength,
+                radius_low=outsetRadius + eps,
+                radius_high=outsetRadius + eps,
+                circular_segments=numSides)
+            outset -= m3d.Manifold.cylinder(
+                height=2*connectionLength,
+                radius_low=self.r - 2*self.wallThickness,
+                radius_high=self.r - 2*self.wallThickness,
+                circular_segments=numSides)
+            outset -= holeSlicer.translate((0,0,3*self.holeDiameter))
+            outset = outset.translate((0,0,-connectionLength)) \
+                           .rotate((0,90,0)).transform(openFrame.A[:3,:])
+            shell += outset
+
+        return shell
+
 class PrintedStartHemisphere(PrintedHemisphere):
     def __init__(self, r : float, Pose : SE3, pathIndex : int = 2):
         super().__init__(r, Pose, closesForward=False, pathIndex=pathIndex)
@@ -1071,10 +1163,18 @@ class PrintedKinematicTree(KinematicTree):
                 branchingModuleManifold = branchingModule(links, numSides, hullBends, maxSectionAngle)
                 branchingModules[jointIndex] = branchingModuleManifold
         return branchingModules
+
+    def getCapModules(self, numSides : int = 50) -> dict[int, m3d.Manifold]:
+        """Generate connectable cap modules for all PrintedHemisphere joints"""
+        capModules = {}
+        for jointIndex, joint in enumerate(self.Joints):
+            if isinstance(joint, PrintedHemisphere):
+                capModules[jointIndex] = joint.connectableModule(numSides=numSides)
+        return capModules
     
     def saveLinkModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10) -> None:
-        """Save connectable branching modules for all joints with children to files"""
+        """Save connectable branching modules and cap modules to files"""
         branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
         for linkIndex, module in branchingModules.items():
             filename = f"{baseFilename}_link{linkIndex}.stl"
@@ -1084,11 +1184,21 @@ class PrintedKinematicTree(KinematicTree):
             faces = mesh_data.tri_verts
             tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
             tri_mesh.export(filename)
+        capModules = self.getCapModules(numSides)
+        for jointIndex, module in capModules.items():
+            filename = f"{baseFilename}_cap{jointIndex}.stl"
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
+            faces = mesh_data.tri_verts
+            tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+            tri_mesh.export(filename)
     
     def showLinkModules(self, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10, block : bool = False) -> None:
-        """Display connectable branching modules for all joints with children in a 3D plot window"""
+        """Display connectable branching and cap modules in a 3D plot window"""
         branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
+        capModules = self.getCapModules(numSides)
         fig = plt.figure()
         ax: Axes3D = fig.add_subplot(projection='3d')
         for linkIndex, module in branchingModules.items():
@@ -1102,6 +1212,17 @@ class PrintedKinematicTree(KinematicTree):
             mesh_collection = Poly3DCollection(faces, alpha=0.5, 
                                               edgecolor='k',
                                               facecolors='cyan')
+            ax.add_collection3d(mesh_collection)
+        for jointIndex, module in capModules.items():
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]
+            triangles = mesh_data.tri_verts
+
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            faces = [vertices[tri] for tri in triangles]
+            mesh_collection = Poly3DCollection(faces, alpha=0.5,
+                                              edgecolor='k',
+                                              facecolors='orange')
             ax.add_collection3d(mesh_collection)
         ax.set_aspect('equal')
         plt.show(block=block)
