@@ -3451,9 +3451,7 @@ class WindowKinegamiGUI(QMainWindow):
                 self.tree.Parents[child_index] = waypoint_index
                 self.tree.Children[waypoint_index].append(child_index)
                 self.tree.Links[child_index] = PrintedLinkCSC(self.tree.r, waypoint.DistalDubinsFrame(), 
-                                                self.tree.Joints[child_index].ProximalDubinsFrame(),
-                                                self.tree.wallThickness, self.tree.holeDiameter, 
-                                                self.tree.numHoles)
+                                                self.tree.Joints[child_index].ProximalDubinsFrame())
             self.update_joint()
             self.log_version()
         elif self._can_add_joint_directly():

@@ -1,4 +1,5 @@
-﻿from Joint import *
+﻿import os
+from Joint import *
 from TubularPattern import *
 from TubularPattern import revoluteColorDefault, revoluteEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
 from geometryHelpers import revoluteColorDefault, revoluteEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
@@ -33,10 +34,35 @@ def _circle_verts_and_tris(center, normal, radius, n=32):
     return verts, tris
 
 class PrintedTube(Tube):
-    def __init__(self, wallThickness : float, holeDiameter : float, numHoles : int):
-        self.wallThickness = wallThickness
-        self.holeDiameter = holeDiameter
-        self.numHoles = numHoles
+    # Fabrication parameters — edit these in one place for all PrintedTube subclasses
+    WALL_THICKNESS = 3.0   # wall thickness in mm
+    HOLE_DIAMETER = 3.0    # We use M3 bolts
+    NUM_HOLES = 4
+    LOOSE_FIT_TOLERANCE = 0.1   # amount in mm to increase radius for loose fit (e.g. clearance holes)
+    TIGHT_FIT_TOLERANCE = 0.05  # amount in mm to reduce radius for tight fit (e.g. friction-fit inserts)
+
+    def __init__(self):
+        pass
+
+    @property
+    def wallThickness(self):
+        return self.WALL_THICKNESS
+
+    @property
+    def holeDiameter(self):
+        return self.HOLE_DIAMETER
+
+    @property
+    def numHoles(self):
+        return self.NUM_HOLES
+
+    @property
+    def looseFitTolerance(self):
+        return self.LOOSE_FIT_TOLERANCE
+
+    @property
+    def tightFitTolerance(self):
+        return self.TIGHT_FIT_TOLERANCE
     
 class TransverseRDS3225(PrintedTube, TransverseRevolute):
     """
@@ -56,9 +82,6 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
     """
     # Dimensions from CAD model (mm) — update these when CAD changes
     R = 33.0              # outer radius of tube in mm
-    WALL_THICKNESS = 3.0  # wall thickness in mm
-    HOLE_DIAMETER = 3.0   # We use M3 bolts
-    NUM_HOLES = 4
     NEUTRAL_LENGTH = 93.783  # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
 
     def __init__(self, Pose : SE3, version : int | float | str, initialState : float = 0.0):
@@ -71,7 +94,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
         else:
             raise ValueError("version must be 180 or 270")
         
-        PrintedTube.__init__(self, wallThickness=self.WALL_THICKNESS, holeDiameter=self.HOLE_DIAMETER, numHoles=self.NUM_HOLES)
+        PrintedTube.__init__(self)
         TransverseRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH, 
                                     minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, checkCircleOverlap=True,
                                     initialState=initialState)
@@ -438,9 +461,6 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     """
     # Dimensions from CAD model (mm) — update these when CAD changes
     R = 33.0              # outer radius of tube in mm
-    WALL_THICKNESS = 3.0  # wall thickness in mm
-    HOLE_DIAMETER = 3.0   # We use M3 bolts
-    NUM_HOLES = 4
     NEUTRAL_LENGTH = 62.4  # length in mm
 
     def __init__(self, Pose : SE3, version : [int, float, str], initialState : float = 0.0):
@@ -451,7 +471,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
         else:
             raise ValueError("version must be 180 or 270")
         
-        PrintedTube.__init__(self, wallThickness=self.WALL_THICKNESS, holeDiameter=self.HOLE_DIAMETER, numHoles=self.NUM_HOLES)
+        PrintedTube.__init__(self)
         CoaxialRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH,
                                  minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
                                  initialState=initialState)
@@ -676,7 +696,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     
 class PrintedHemisphere(PrintedTube, Tip):
     def __init__(self, r : float, Pose : SE3, closesForward : bool, pathIndex : int = 2):
-        PrintedTube.__init__(self, wallThickness=3.0, holeDiameter=3.0, numHoles=4)
+        PrintedTube.__init__(self)
         Tip.__init__(self, r, Pose, length=r, closesForward=closesForward, pathIndex=pathIndex)
 
 class PrintedStartHemisphere(PrintedHemisphere):
@@ -690,11 +710,10 @@ class PrintedEndHemisphere(PrintedHemisphere):
 
 class PrintedLinkCSC(PrintedTube, LinkCSC):
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
-                 wallThickness : float, holeDiameter : float, numHoles : int,
                  maxAnglePerElbow : float = np.pi/10, path : Optional[PathCSC] = None, 
                  EPSILON : float = 0.01, startRadius : Optional[float] = None, 
                  endRadius : Optional[float] = None):
-        PrintedTube.__init__(self, wallThickness, holeDiameter, numHoles)
+        PrintedTube.__init__(self)
         LinkCSC.__init__(self, r, StartDubinsPose, EndDubinsPose,
                             maxAnglePerElbow=maxAnglePerElbow, path=path, EPSILON=EPSILON)
         self.startRadius = startRadius if startRadius is not None else r
@@ -704,9 +723,6 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         """Override to preserve PrintedLinkCSC type when transforming"""
         return PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
                               Transformation @ self.EndDubinsPose,
-                              wallThickness = self.wallThickness,
-                              holeDiameter = self.holeDiameter,
-                              numHoles = self.numHoles,
                               maxAnglePerElbow = self.maxAnglePerElbow, 
                               path = self.path.newPathTransformedBy(Transformation),
                               EPSILON = self.EPSILON,
@@ -825,8 +841,8 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
         for angle in holeAnglesDegrees:
             hole = m3d.Manifold.cylinder(height=self.r+self.DISTANCE_EPSILON, 
-                                         radius_low=self.holeDiameter/2, 
-                                         radius_high=self.holeDiameter/2, 
+                                         radius_low=self.holeDiameter/2 + self.looseFitTolerance, 
+                                         radius_high=self.holeDiameter/2 + self.looseFitTolerance, 
                                          circular_segments=numSides)
             hole = hole.rotate((0,90,0)).rotate((0,0,angle))
             holeSlicer += hole
@@ -837,15 +853,23 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
                                        circular_segments=numSides)
         tube -= inset.translate((0,0,-connectionLength-self.DISTANCE_EPSILON)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
         tube -= holeSlicer.translate((0,0,self.holeDiameter)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
+        outsetRadius = self.endRadius-self.wallThickness
         outset = m3d.Manifold.cylinder(height=2*connectionLength, 
-                                       radius_low=self.endRadius-self.wallThickness+self.DISTANCE_EPSILON, 
-                                       radius_high=self.endRadius-self.wallThickness+self.DISTANCE_EPSILON,
+                                       radius_low=outsetRadius-self.tightFitTolerance, 
+                                       radius_high=outsetRadius-self.tightFitTolerance,
+                                       circular_segments=numSides)
+        outset += m3d.Manifold.cylinder(height=connectionLength, 
+                                       radius_low=outsetRadius+self.DISTANCE_EPSILON, 
+                                       radius_high=outsetRadius+self.DISTANCE_EPSILON,
                                        circular_segments=numSides)
         outset -= m3d.Manifold.cylinder(height=2*connectionLength, 
                                        radius_low=self.endRadius-2*self.wallThickness, 
                                        radius_high=self.endRadius-2*self.wallThickness,
                                        circular_segments=numSides)
         outset -= holeSlicer.translate((0,0,3*self.holeDiameter))
+
+
+
         outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(self.EndDubinsPose.A[:3,:])
 
         tube += outset
@@ -937,6 +961,8 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
     wallThickness = links[0].wallThickness
     holeDiameter = links[0].holeDiameter
     numHoles = links[0].numHoles
+    looseFitTolerance = links[0].looseFitTolerance
+    tightFitTolerance = links[0].tightFitTolerance
     r = links[0].r
     startRadius = links[0].startRadius
     
@@ -971,8 +997,8 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
     connectionLength = 2 * holeDiameter
     for angle in holeAnglesDegrees:
         hole = m3d.Manifold.cylinder(height=r+DISTANCE_EPSILON, 
-                                         radius_low=holeDiameter/2, 
-                                         radius_high=holeDiameter/2, 
+                                         radius_low=holeDiameter/2 + looseFitTolerance, 
+                                         radius_high=holeDiameter/2 + looseFitTolerance, 
                                          circular_segments=numSides)
         hole = hole.rotate((0,90,0)).rotate((0,0,angle))
         holeSlicer += hole
@@ -986,9 +1012,14 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
 
     # Create the outsets at each link end
     for link in links:
+        outsetRadius = link.endRadius-wallThickness
         outset = m3d.Manifold.cylinder(height=2*connectionLength, 
-                                       radius_low=link.endRadius-wallThickness+DISTANCE_EPSILON, 
-                                       radius_high=link.endRadius-wallThickness+DISTANCE_EPSILON,
+                                       radius_low=outsetRadius-tightFitTolerance, 
+                                       radius_high=outsetRadius-tightFitTolerance,
+                                       circular_segments=numSides)
+        outset += m3d.Manifold.cylinder(height=connectionLength, 
+                                       radius_low=outsetRadius+DISTANCE_EPSILON, 
+                                       radius_high=outsetRadius+DISTANCE_EPSILON,
                                        circular_segments=numSides)
         outset -= m3d.Manifold.cylinder(height=2*connectionLength, 
                                        radius_low=link.endRadius-2*wallThickness, 
@@ -1018,18 +1049,7 @@ class PrintedKinematicTree(KinematicTree):
     def _get_link_constructor(self):
         """Return callable that creates PrintedLinkCSC with proper fabrication parameters"""
         def make_printed_link(r, start_pose, end_pose, max_angle_per_elbow, path=None, epsilon=0.01):
-            # Infer fabrication parameters from existing joints
-            wallThickness = 5
-            holeDiameter = 2
-            numHoles = 4
-            for joint in self.Joints:
-                if isinstance(joint, PrintedTube):
-                    wallThickness = joint.wallThickness
-                    holeDiameter = joint.holeDiameter
-                    numHoles = joint.numHoles
-                    break
-            return PrintedLinkCSC(r, start_pose, end_pose, wallThickness, 
-                                  holeDiameter, numHoles, max_angle_per_elbow, path, epsilon)
+            return PrintedLinkCSC(r, start_pose, end_pose, max_angle_per_elbow, path, epsilon)
         return make_printed_link
     
     def getLinkModules(self, numSides : int = 50, hullBends : bool = False,
@@ -1049,6 +1069,7 @@ class PrintedKinematicTree(KinematicTree):
         branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
         for linkIndex, module in branchingModules.items():
             filename = f"{baseFilename}_link{linkIndex}.stl"
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
             mesh_data = module.to_mesh()
             vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
             faces = mesh_data.tri_verts
