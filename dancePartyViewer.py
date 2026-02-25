@@ -208,6 +208,24 @@ class DancePartyWindow(QMainWindow):
         self.export_button.clicked.connect(self._export_video)
         selector_row.addWidget(self.export_button)
 
+        # Debug Export button (low-res, 5 frames)
+        self.debug_export_button = QPushButton("Debug Export")
+        self.debug_export_button.setFixedWidth(100)
+        self.debug_export_button.clicked.connect(lambda: self._export_video(debug=True))
+        selector_row.addWidget(self.debug_export_button)
+
+        # Show Names checkbox
+        from PyQt5.QtWidgets import QCheckBox
+        self.axes_checkbox = QCheckBox("Axes")
+        self.axes_checkbox.setChecked(False)
+        self.axes_checkbox.toggled.connect(lambda: self._redraw_trees())
+        selector_row.addWidget(self.axes_checkbox)
+
+        self.names_checkbox = QCheckBox("Names")
+        self.names_checkbox.setChecked(False)
+        self.names_checkbox.toggled.connect(self._toggle_names)
+        selector_row.addWidget(self.names_checkbox)
+
         # Profile button
         self.profile_button = QPushButton("Profile")
         self.profile_button.setFixedWidth(70)
@@ -313,24 +331,20 @@ class DancePartyWindow(QMainWindow):
             t.transformAll(SE3.Rt(np.eye(3), np.array([xpos - x_offset, 0.0, 0.0])))
             t.recomputeBoundingBall()
 
-        # Add name labels (rendered as tiny text items near each robot)
-        for t, name, xpos in zip(trees, names, x_positions):
-            label_pos = t.boundingBall.c.copy()
-            label_pos[2] += t.boundingBall.r + 2.0  # above the robot
-            text_item = gl.GLTextItem(pos=label_pos, text=name, color=(0, 0, 0, 255))
-            self.gl_widget.addItem(text_item)
-
         # Render trees into the GL widget
+        show_axes = self.axes_checkbox.isChecked()
         for t in trees:
             t.addToWidget(self.viewer,
                           showJointSurface=True,
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
+                          showJointAxis=show_axes,
                           showSpheres=False)
 
         self.trees = trees
         self.tree_names = names
+        self.name_labels: list[gl.GLTextItem] = []
 
         # Create per-robot animators
         self.animators = []
@@ -355,6 +369,7 @@ class DancePartyWindow(QMainWindow):
             self.gl_widget.removeItem(item)
         self.trees = []
         self.tree_names = []
+        self.name_labels = []
         self.animators = []
 
     # ── Animation ────────────────────────────────────────────────────────
@@ -393,25 +408,78 @@ class DancePartyWindow(QMainWindow):
             self._redraw_trees()
 
     def _redraw_trees(self):
-        """Remove old tree visuals and re-add them (keeps labels)."""
-        # Remove everything except text labels
-        items_to_remove = [item for item in self.gl_widget.items
-                           if not isinstance(item, gl.GLTextItem)]
+        """Remove old tree visuals and re-add them."""
+        items_to_remove = list(self.gl_widget.items)
         for item in items_to_remove:
             self.gl_widget.removeItem(item)
         # Re-add trees
+        show_axes = self.axes_checkbox.isChecked()
         for t in self.trees:
             t.addToWidget(self.viewer,
                           showJointSurface=True,
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
+                          showJointAxis=show_axes,
                           showSpheres=False)
+        # Re-add name labels if enabled
+        if self.names_checkbox.isChecked():
+            self._add_name_labels()
+
+    def _add_name_labels(self):
+        """Create and add GLTextItem labels above each robot."""
+        self._remove_name_labels()
+        for t, name in zip(self.trees, self.tree_names):
+            label_pos = t.boundingBall.c.copy()
+            label_pos[2] += t.boundingBall.r + 2.0
+            text_item = gl.GLTextItem(pos=label_pos, text=name, color=(0, 0, 0, 255))
+            self.gl_widget.addItem(text_item)
+            self.name_labels.append(text_item)
+
+    def _remove_name_labels(self):
+        """Remove any existing name label items from the scene."""
+        for item in self.name_labels:
+            try:
+                self.gl_widget.removeItem(item)
+            except ValueError:
+                pass
+        self.name_labels.clear()
+
+    def _toggle_names(self, checked: bool):
+        """Show or hide robot name labels."""
+        if checked:
+            self._add_name_labels()
+        else:
+            self._remove_name_labels()
 
     # ── Video export ─────────────────────────────────────────────────────
 
-    def _export_video(self):
-        """Render the dance animation offline and save as an MP4 file."""
+    def _grab_frame(self, target_width: int = 0, target_height: int = 0) -> np.ndarray:
+        """Capture the GL widget's current framebuffer and return as an RGB
+        numpy array.
+
+        If target_width/target_height are non-zero the image is scaled;
+        otherwise the native framebuffer resolution is used (pixel-perfect).
+        """
+        qimg = self.gl_widget.grabFramebuffer()          # exact on-screen content
+        if target_width > 0 and target_height > 0:
+            qimg = qimg.scaled(target_width, target_height,
+                               Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        qimg = qimg.convertToFormat(qimg.Format_RGB888)
+        w, h = qimg.width(), qimg.height()
+        ptr = qimg.constBits()
+        ptr.setsize(h * w * 3)
+        arr = np.array(ptr, dtype=np.uint8).reshape(h, w, 3).copy()
+        return arr
+
+    def _export_video(self, *, debug: bool = False):
+        """Render the dance animation offline and save as an MP4 file.
+
+        Parameters
+        ----------
+        debug : bool
+            If True, render only 5 frames at 320×240 for fast iteration.
+        """
         try:
             import imageio
         except ImportError:
@@ -443,10 +511,22 @@ class DancePartyWindow(QMainWindow):
 
         # Parameters
         fps = 30
-        width, height = 1280, 720
-        # Duration = one full cycle of the longest animation
-        max_dur = max(a.total_duration() for a in animatable)
-        num_frames = int(math.ceil(max_dur * fps))
+
+        if debug:
+            width, height = 320, 240
+            num_frames = 5
+        else:
+            # Use native framebuffer resolution (pixel-perfect, no scaling).
+            # Grab one test frame to get the actual pixel dimensions.
+            test_img = self._grab_frame()
+            height, width = test_img.shape[:2]
+            # H.264 prefers even dimensions; crop by 1px if needed.
+            if width % 2 != 0:
+                width -= 1
+            if height % 2 != 0:
+                height -= 1
+            max_dur = max(a.total_duration() for a in animatable)
+            num_frames = int(math.ceil(max_dur * fps))
 
         # Progress dialog
         progress = QtWidgets.QProgressDialog(
@@ -474,9 +554,10 @@ class DancePartyWindow(QMainWindow):
                 self._redraw_trees()
                 QApplication.processEvents()
 
-                img = self.gl_widget.renderToArray((width, height))
-                # pyqtgraph returns RGBA; video needs RGB
-                writer.append_data(img[:, :, :3])
+                frame = self._grab_frame(width, height) if debug else self._grab_frame()
+                # Crop to even dimensions if native size is odd
+                frame = frame[:height, :width, :]
+                writer.append_data(frame)
 
                 progress.setValue(frame_idx + 1)
         finally:
@@ -507,8 +588,7 @@ class DancePartyWindow(QMainWindow):
 
         # ── Phase 1: remove old items ──
         t0 = time.perf_counter()
-        items_to_remove = [item for item in self.gl_widget.items
-                           if not isinstance(item, gl.GLTextItem)]
+        items_to_remove = list(self.gl_widget.items)
         num_removed = len(items_to_remove)
         for item in items_to_remove:
             self.gl_widget.removeItem(item)
@@ -525,6 +605,7 @@ class DancePartyWindow(QMainWindow):
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
+                          showJointAxis=False,
                           showSpheres=False)
             after_count = len(self.gl_widget.items)
             dt = time.perf_counter() - t1

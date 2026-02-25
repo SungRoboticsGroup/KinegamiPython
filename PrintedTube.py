@@ -992,23 +992,32 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
     tube = outer - inner
 
     # Create the inset at the base
-    holeSlicer = m3d.Manifold()
+    holeSlicerLoose = m3d.Manifold()
     holeAnglesDegrees = np.linspace(0, 360, numHoles, endpoint=False)
     connectionLength = 2 * holeDiameter
     for angle in holeAnglesDegrees:
-        hole = m3d.Manifold.cylinder(height=r+DISTANCE_EPSILON, 
+        hole = m3d.Manifold.cylinder(height=1.5*r, 
                                          radius_low=holeDiameter/2 + looseFitTolerance, 
                                          radius_high=holeDiameter/2 + looseFitTolerance, 
                                          circular_segments=numSides)
         hole = hole.rotate((0,90,0)).rotate((0,0,angle))
-        holeSlicer += hole
+        holeSlicerLoose += hole
+    
+    holeSlicerTight = m3d.Manifold()
+    for angle in holeAnglesDegrees:
+        hole = m3d.Manifold.cylinder(height=1.5*r, 
+                                         radius_low=holeDiameter/2 + tightFitTolerance, 
+                                         radius_high=holeDiameter/2 + tightFitTolerance, 
+                                         circular_segments=numSides)
+        hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+        holeSlicerTight += hole
     
     inset = m3d.Manifold.cylinder(height=2*connectionLength+2*DISTANCE_EPSILON, 
                                        radius_low=startRadius-wallThickness+DISTANCE_EPSILON, 
                                        radius_high=startRadius-wallThickness+DISTANCE_EPSILON,
                                        circular_segments=numSides)
     tube -= inset.translate((0,0,-connectionLength-DISTANCE_EPSILON)).rotate((0,90,0)).transform(startPose.A[:3,:])
-    tube -= holeSlicer.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(startPose.A[:3,:])
+    tube -= holeSlicerLoose.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(startPose.A[:3,:])
 
     # Create the outsets at each link end
     for link in links:
@@ -1025,7 +1034,7 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
                                        radius_low=link.endRadius-2*wallThickness, 
                                        radius_high=link.endRadius-2*wallThickness,
                                        circular_segments=numSides)
-        outset -= holeSlicer.translate((0,0,3*holeDiameter))
+        outset -= holeSlicerTight.translate((0,0,3*holeDiameter))
         outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(link.EndDubinsPose.A[:3,:])
         tube += outset
     

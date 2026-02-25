@@ -563,7 +563,7 @@ class KinematicTree(Generic[F]):
     def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
                   proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                   showJointSurface=True, jointColor=jointColorDefault,
-                  jointAxisScale=jointAxisScaleDefault, showJointPoses=False,
+                  jointAxisScale=jointAxisScaleDefault, showJointAxis=True, showJointPoses=False,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
@@ -586,16 +586,16 @@ class KinematicTree(Generic[F]):
                         proximalColor, centerColor, distalColor, 
                         sphereColor=selectedJointColor, showSphere=True,
                         surfaceColor=jointColor,
-                        showSurface=showJointSurface, 
+                        showSurface=showJointSurface, showAxis=showJointAxis,
                         axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
             else:
                 joint.addToWidget(widget, xColor, yColor, zColor, 
                         proximalColor, centerColor, distalColor, 
                         sphereColor, showSphere=showSpheres, 
-                        surfaceColor=jointColor, showSurface=showJointSurface, 
+                        surfaceColor=jointColor, showSurface=showJointSurface, showAxis=showJointAxis,
                         axisScale=jointAxisScale, showPoses=showJointPoses)
             # Overlay transparent red bounding geometry for colliding joints
-            if isColliding and isinstance(joint, Revolute):
+            if isColliding and (isinstance(joint, Revolute) or isinstance(joint, Prismatic)):
                 joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
                 joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
                 joint.centerSphere().addToWidget(widget, color=collisionJointColor)
