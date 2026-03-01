@@ -122,6 +122,20 @@ class LinkCSC:
         self._gl_ref_pose: SE3 | None = None  # StartDubinsPose when meshes were built
         self._gl_shape_dirty: bool = True     # True => must rebuild meshes
 
+    # GL cache attributes that hold pyqtgraph GL objects (cannot be pickled)
+    _GL_CACHE_KEYS = frozenset({'_gl_items', '_gl_ref_pose', '_gl_shape_dirty'})
+
+    def __getstate__(self):
+        """Exclude GL cache from pickling / deepcopy."""
+        return {k: v for k, v in self.__dict__.items()
+                if k not in LinkCSC._GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._gl_items = []
+        self._gl_ref_pose = None
+        self._gl_shape_dirty = True
+
     def __repr__(self):
         return (
             "LinkCSC("

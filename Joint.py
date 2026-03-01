@@ -50,6 +50,28 @@ class Joint(ABC):
         self._gl_ref_pose: SE3 | None = None
         self._gl_ref_distal: SE3 | None = None
         self._gl_shape_dirty: bool = True
+
+    # GL cache attributes that hold pyqtgraph GL objects (cannot be pickled)
+    _GL_CACHE_KEYS = frozenset({
+        '_gl_items_proximal', '_gl_items_center', '_gl_items_distal',
+        '_gl_ref_proximal', '_gl_ref_pose', '_gl_ref_distal', '_gl_shape_dirty',
+    })
+
+    def __getstate__(self):
+        """Exclude GL cache from pickling / deepcopy."""
+        return {k: v for k, v in self.__dict__.items()
+                if k not in Joint._GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Restore GL cache to clean defaults
+        self._gl_items_proximal = []
+        self._gl_items_center = []
+        self._gl_items_distal = []
+        self._gl_ref_proximal = None
+        self._gl_ref_pose = None
+        self._gl_ref_distal = None
+        self._gl_shape_dirty = True
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
