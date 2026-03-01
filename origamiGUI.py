@@ -896,6 +896,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.chain_created = False
         self.stl_generated = False
         self.referenceMesh = None
+        self._lightweight_dirty = False  # True when link geometry is stale from lightweight updates
 
         self.control_type = "Translate"
         self.is_local = True
@@ -1814,13 +1815,18 @@ class WindowKinegamiGUI(QMainWindow):
             else:
                 continue
             
-            self.chain.setJointState(joint_index, actualState)
+            self.chain.setJointState(joint_index, actualState, lightweight=True)
         
-        self.update_joint()
+        # Fast path: just move existing GL items instead of full rebuild
+        if not self._fast_update_gl():
+            # Cache miss — fall back to full redraw (first frame after addToWidget)
+            self.chain.resyncFromLightweight()
+            self.update_joint()
         self.set_state_tools()
     
     def interpolation_slider_released(self):
-        """Handle when interpolation slider is released"""
+        """Handle when interpolation slider is released — rebuild geometry."""
+        self._resync_after_lightweight()
         self.log_version()
     
     def set_configuration(self, config_index):
@@ -1939,6 +1945,14 @@ class WindowKinegamiGUI(QMainWindow):
         
         self.is_animating = True
         
+        # Hide selection sphere and gizmo during animation
+        self._pre_anim_selected_joint = self.selected_joint
+        self._pre_anim_selected_arrow = self.selected_arrow
+        self.selected_joint = -1
+        self.selected_arrow = -1
+        # Redraw once without gizmo so the GL cache is clean
+        self.update_joint()
+        
         # Create timer if it doesn't exist
         if self.animation_timer is None:
             self.animation_timer = qc.QTimer()
@@ -1968,6 +1982,13 @@ class WindowKinegamiGUI(QMainWindow):
         
         if self.animation_timer is not None:
             self.animation_timer.stop()
+        
+        # Rebuild full geometry after lightweight animation
+        # Restore selection state before resync so gizmo reappears
+        if hasattr(self, '_pre_anim_selected_joint'):
+            self.selected_joint = self._pre_anim_selected_joint
+            self.selected_arrow = self._pre_anim_selected_arrow
+        self._resync_after_lightweight()
         
         # Update button to play icon
         self.play_pause_button.setText("▶")
@@ -3041,8 +3062,10 @@ class WindowKinegamiGUI(QMainWindow):
             else: # Waypoint (but it shouldn't let you move the slider in the first place in that case)
                 print("Warning: Tried to move state slider on a waypoint, which should not be possible.")
                 return
-            if self.chain.setJointState(self.selected_joint, actualState):
-                self.update_joint()
+            if self.chain.setJointState(self.selected_joint, actualState, lightweight=True):
+                if not self._fast_update_gl():
+                    self.chain.resyncFromLightweight()
+                    self.update_joint()
                 self.set_state_tools()
             else:
                 self.state_slider.blockSignals(True)
@@ -3152,9 +3175,11 @@ class WindowKinegamiGUI(QMainWindow):
             else:
                 return
             
-            if self.chain.setJointState(joint_index, actualState):
-                # Update the visual representation without recreating widgets
-                self.update_joint()
+            if self.chain.setJointState(joint_index, actualState, lightweight=True):
+                # Fast GL update during slider drag
+                if not self._fast_update_gl():
+                    self.chain.resyncFromLightweight()
+                    self.update_joint()
                 # Update the corresponding text box
                 try:
                     text_box_index = self.config_joint_indices.index(joint_index)
@@ -3167,10 +3192,12 @@ class WindowKinegamiGUI(QMainWindow):
     
     def config_slider_released(self, joint_index):
         """Handle configuration slider release for a specific joint"""
+        self._resync_after_lightweight()
         self.set_state_tools()
         self.log_version()
 
     def state_slider_released(self):
+        self._resync_after_lightweight()
         self.set_state_tools()
         self.log_version()
     
@@ -3275,7 +3302,33 @@ class WindowKinegamiGUI(QMainWindow):
         #     a.rotate(angle, axis[0], axis[1], axis[2], local=False)
         #     a.translate(cnt[0], cnt[1], cnt[2])
 
+    def _fast_update_gl(self) -> bool:
+        """Try to update GL items via model-matrix transforms (fast path).
+        Returns True if the fast path succeeded, False if a full redraw is needed.
+        Skips collision detection, sidebar updates, arrows, etc."""
+        if self.chain is None:
+            return False
+        if not self.chain.updateGLTransforms():
+            return False
+        self._lightweight_dirty = True
+        self.plot_widget.update()
+        return True
+
+    def _resync_after_lightweight(self):
+        """Rebuild link geometry after lightweight animation, then do a full
+        update_joint so collision capsules, bounding balls, and sidebar
+        widgets are all consistent."""
+        if self.chain is not None:
+            self.chain.resyncFromLightweight()
+        self._lightweight_dirty = False
+        self.update_joint()
+
     def update_joint(self, force_recreate_config_widget : bool = False):
+        # If link geometry is stale from lightweight updates, rebuild first
+        if self._lightweight_dirty and self.chain is not None:
+            self.chain.resyncFromLightweight()
+            self._lightweight_dirty = False
+
         self.edit_dimension_menu.setVisible(False)
         self.edit_dimension_button.setVisible(True)
         self.select_joint_options.blockSignals(True)

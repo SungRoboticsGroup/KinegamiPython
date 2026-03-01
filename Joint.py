@@ -280,7 +280,11 @@ class Joint(ABC):
                     group.append(line)
 
         if showSphere:
+            items_before = list(widget.plot_widget.items)
             self.boundingBall().addToWidget(widget, sphereColor)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_center.append(item)
 
         # Store reference frames for each group
         self._gl_ref_proximal = SE3(self.ProximalFrame().A.copy())
@@ -508,13 +512,13 @@ class Prismatic(Joint):
         """Fixed-length cylinder on the proximal side (for rendering)."""
         uhat = (self.Pose @ SE3.Rz(np.pi/2)).R[:,1]
         return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(),
-                        self.neutralLength / 2, uhat)
+                        self.minLength, uhat)
 
     def distalCylinder(self) -> Cylinder:
         """Fixed-length cylinder on the distal side (translates with state)."""
         uhat = (self.Pose @ SE3.Rz(np.pi/2)).R[:,1]
         return Cylinder(self.r, self.DistalFrame().t, -self.distalPathDirection(),
-                        self.neutralLength / 2, uhat)
+                        self.minLength, uhat)
 
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',

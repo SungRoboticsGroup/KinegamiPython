@@ -504,18 +504,20 @@ class Ball:
         import pyqtgraph.opengl as gl
         from OpenGL.GL import GL_FALSE
         md = gl.MeshData.sphere(rows=10, cols=10)
+        # Pre-transform vertices to world space (radius * vertex + center)
+        # so the item's local transform stays identity, compatible with
+        # the GL-cache fast path (setTransform applies a rigid-body delta).
+        verts = md.vertexes().copy() * self.r + np.asarray(self.c)
+        md = gl.MeshData(vertexes=verts, faces=md.faces())
         sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
         sphere.setGLOptions('translucent')
         # Don't write to depth buffer so items inside the sphere remain visible
         sphere.updateGLOptions({'glDepthMask': (GL_FALSE,)})
         # Render after opaque items so the sphere blends on top of them
         sphere.setDepthValue(10)
-        sphere.scale(self.r, self.r, self.r)
-        sphere.translate(*self.c)
         if (is_waypoint):
             sphere.setObjectName("Waypoint")
             sphere.setGLOptions('opaque')
-            sphere.scale(self.r, self.r, self.r)
         widget.plot_widget.addItem(sphere)
     
     def show(self, color='black', alpha=1, frame=False, block=blockDefault):
