@@ -139,6 +139,12 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
         import pyqtgraph.opengl as gl
         from style import revoluteColorList
 
+        # Call Joint base addToWidget first (resets cache groups, adds pose/axis)
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+
         if showSurface:
             color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
             scale = self.creasePattern().baseSideLength / 2
@@ -150,7 +156,7 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
             u = self.r * np.cos(angle)
             v = self.r * np.sin(angle)
 
-            # Proximal half
+            # Proximal half → proximal group
             RevoluteProximalPose = self.RevoluteProximalFrame()
             uhatProximal = RevoluteProximalPose.R[:, 1]
             vhatProximal = RevoluteProximalPose.R[:, 2]
@@ -166,8 +172,9 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
             item.setGLOptions('translucent')
             item.setObjectName("Joint")
             widget.plot_widget.addItem(item)
+            self._gl_items_proximal.append(item)
 
-            # Distal half
+            # Distal half → distal group
             RevoluteDistalPose = self.RevoluteDistalFrame()
             uhatDistal = RevoluteDistalPose.R[:, 1]
             vhatDistal = RevoluteDistalPose.R[:, 2]
@@ -183,17 +190,20 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
             item2.setGLOptions('translucent')
             item2.setObjectName("Joint")
             widget.plot_widget.addItem(item2)
+            self._gl_items_distal.append(item2)
 
             # Tubular extensions
             if self.outerLength > 0:
+                items_before = list(widget.plot_widget.items)
                 self.proximalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
+                for it in widget.plot_widget.items:
+                    if it not in items_before:
+                        self._gl_items_proximal.append(it)
+                items_before = list(widget.plot_widget.items)
                 self.distalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
-
-        # Call Joint base addToWidget for poses, axis, sphere
-        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
-                          centerColor, distalColor, sphereColor, showSphere,
-                          surfaceColor, False, showAxis,
-                          axisScale, showPoses, poseAxisScaleMultipler)
+                for it in widget.plot_widget.items:
+                    if it not in items_before:
+                        self._gl_items_distal.append(it)
 
 
 class OrigamiRevolute(OrigamiExtendedRevolute):
@@ -248,15 +258,27 @@ class OrigamiPrismatic(OrigamiTube, Prismatic):
                     showSurface=True, showAxis=True, axisScale=10, showPoses=True, poseAxisScaleMultipler=None):
         from style import prismaticColorList
 
-        # Call Joint base addToWidget for poses, axis, sphere
+        # Call Joint base addToWidget for poses, axis, sphere (resets cache groups)
         Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
                           centerColor, distalColor, sphereColor, showSphere,
                           surfaceColor, False, showAxis,
                           axisScale, showPoses, poseAxisScaleMultipler)
         if showSurface:
             color = surfaceColor if surfaceColor != prismaticColorDefault else prismaticColorList
-            self.boundingCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
+            # Proximal cylinder → proximal group
+            items_before = list(widget.plot_widget.items)
+            self.proximalCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
                                                 color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            # Distal cylinder → distal group
+            items_before = list(widget.plot_widget.items)
+            self.distalCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
+                                              color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
 
 class OrigamiTip(OrigamiTube, Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
@@ -391,6 +413,12 @@ class OrigamiTip(OrigamiTube, Tip):
             item.setGLOptions('translucent')
             item.setObjectName("Joint")
             widget.plot_widget.addItem(item)
+            # Forward tip built from ProximalFrame base → proximal;
+            # backward tip built from DistalFrame base → distal
+            if self.forward:
+                self._gl_items_proximal.append(item)
+            else:
+                self._gl_items_distal.append(item)
 
 class OrigamiStartTip(OrigamiTip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float):

@@ -630,6 +630,57 @@ class KinematicTree(Generic[F]):
                                 showBoundary=showLinkSurface,
                                 linkID=index)
 
+    def updateGLTransforms(self):
+        """Fast-update all cached GL items by applying model-matrix transforms.
+        Only works when all joints and links have a valid GL cache
+        (i.e. addToWidget was called earlier and shapes haven't changed).
+        Returns True if the fast path succeeded, False if a full redraw is needed."""
+        for joint in self.Joints:
+            if joint is None:
+                continue
+            if not joint.hasGLCache():
+                return False
+            joint.updateCachedGLTransforms()
+        for link in self.Links:
+            if link is None:
+                continue
+            if not link.hasGLCache():
+                return False
+            link.updateCachedGLTransforms()
+        return True
+
+    def clearAllGLCaches(self):
+        """Clear GL cache on all joints and links (before a full rebuild)."""
+        for joint in self.Joints:
+            if joint is not None:
+                joint.clearGLCache()
+        for link in self.Links:
+            if link is not None:
+                link.clearGLCache()
+
+    def resyncFromLightweight(self):
+        """Rebuild link geometry from current joint poses after lightweight
+        animation.  Call this when switching from animation back to editing
+        or export so that elbows, cylinders, path objects, bounding balls,
+        and collision capsules are all consistent again."""
+        link_constructor = self._get_link_constructor()
+        for i, link in enumerate(self.Links):
+            if link is None or i == 0:
+                continue
+            parent_idx = self.Parents[i]
+            parent = self.Joints[parent_idx]
+            joint = self.Joints[i]
+            self.Links[i] = link_constructor(
+                self.r, parent.DistalDubinsFrame(),
+                joint.ProximalDubinsFrame(),
+                self.maxAnglePerElbow)
+            # Transfer GL cache from old link to new one
+            if not getattr(link, '_gl_shape_dirty', True):
+                self.Links[i]._gl_items = link._gl_items
+                self.Links[i]._gl_ref_pose = link._gl_ref_pose
+                self.Links[i]._gl_shape_dirty = False
+        self.recomputeBoundingBall()
+
     def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):
         try:
             newTree = KinematicTree(copy.deepcopy(self.Joints[self.Parents[self.Parents[isolateJoint]]]), self.maxAnglePerElbow)
@@ -1288,7 +1339,8 @@ class KinematicTree(Generic[F]):
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall : bool = True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True, relative : bool = False, localOrient : bool = True, printErrors=False) -> bool:
+                       safe : bool = True, relative : bool = False, localOrient : bool = True,
+                       printErrors=False, lightweight : bool = False) -> bool:
         if relative:
             if localOrient:
                 # Use the joint's full orientation for the transformation
@@ -1329,7 +1381,11 @@ class KinematicTree(Generic[F]):
         else:
             self.Joints[jointIndex].transformPoseBy(Transformation)
             joint = self.Joints[jointIndex]
-            if recomputeLinkPath and jointIndex > 0:
+            if lightweight:
+                # Fast path: only update link poses for GL transform, skip
+                # full link reconstruction (elbows, cylinders, path objects)
+                self.Links[jointIndex].transformPosesInPlace(Transformation)
+            elif recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
                 link_constructor = self._get_link_constructor()
                 self.Links[jointIndex] = link_constructor(self.r, parent.DistalDubinsFrame(), 
@@ -1337,7 +1393,7 @@ class KinematicTree(Generic[F]):
                                         self.maxAnglePerElbow)
             else:
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
-            if jointIndex == 0 and not self.Links[0].length() == 0:
+            if not lightweight and jointIndex == 0 and not self.Links[0].length() == 0:
                 raise ValueError("Error in transformJoint: Link 0 is supposed to stay empty (length 0).")
             
             if propogate:
@@ -1345,9 +1401,11 @@ class KinematicTree(Generic[F]):
                     self.transformJoint(c, Transformation, propogate=True, 
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
-                                        safe=False, relative=False)
+                                        safe=False, relative=False,
+                                        lightweight=lightweight)
                 
-                self.recursivelyRecomputeCollisionCapsules(jointIndex)
+                if not lightweight:
+                    self.recursivelyRecomputeCollisionCapsules(jointIndex)
             else:
                 link_constructor = self._get_link_constructor()
                 for c in self.Children[jointIndex]:
@@ -1364,7 +1422,7 @@ class KinematicTree(Generic[F]):
 
         return True
                 
-    def setJointState(self, jointIndex : int, newState : float) -> bool:
+    def setJointState(self, jointIndex : int, newState : float, lightweight : bool = False) -> bool:
         joint = self.Joints[jointIndex]
 
         if joint is None:
@@ -1386,10 +1444,11 @@ class KinematicTree(Generic[F]):
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
             self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=False,
-                                recomputeBoundingBall=False, safe=False)
-        self.recomputeBoundingBall()
-
-        self.recursivelyRecomputeCollisionCapsules(jointIndex)
+                                recomputeBoundingBall=False, safe=False,
+                                lightweight=lightweight)
+        if not lightweight:
+            self.recomputeBoundingBall()
+            self.recursivelyRecomputeCollisionCapsules(jointIndex)
         return True
     
     def recursivelyRecomputeCollisionCapsules(self, index):

@@ -324,27 +324,39 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
             box_mesh.setGLOptions('opaque')
             box_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(box_mesh)
+            self._gl_items_center.append(box_mesh)
             
-            # Cylinders: 9mm long, radius self.r
+            # Proximal cylinder: 9mm long, radius self.r → proximal group
             cyl_length = 9.0
             numCylPoints = 32
             proximal_pos = self.ProximalFrame().t
             proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
+            items_before = list(widget.plot_widget.items)
             proximal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
             
+            # Distal cylinder → distal group
             distalFrame = self.DistalFrame()
             distal_pos = distalFrame.t
             distal_xhat = distalFrame.R[:, 0]
             distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
+            items_before = list(widget.plot_widget.items)
             distal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
             
-            # 4 vertical lines along each cylinder at ±y/±z in the respective frames
+            # 4 vertical lines along proximal cylinder → proximal group
             line_color = (0.3, 0.3, 0.3, 1.0)
             prox_inner = proximal_pos + cyl_length * xhat
             for direction in [yhat, -yhat, zhat, -zhat]:
                 line_pts = np.array([proximal_pos + self.r * direction, prox_inner + self.r * direction])
                 line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_proximal.append(line)
+            # 4 vertical lines along distal cylinder → distal group
             distal_inner_pos = distal_pos - cyl_length * distal_xhat
             distal_yhat = distalFrame.R[:, 1]
             distal_zhat = distalFrame.R[:, 2]
@@ -352,20 +364,28 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 line_pts = np.array([distal_pos + self.r * direction, distal_inner_pos + self.r * direction])
                 line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
             
-            # Inner end caps
-            for cap_center, cap_normal in [
-                (proximal_pos + cyl_length * xhat, xhat),
-                (distal_pos - cyl_length * distal_xhat, -distal_xhat),
-            ]:
-                cap_verts, cap_tris = _circle_verts_and_tris(cap_center, cap_normal, self.r, numCylPoints)
-                cap_mesh = gl.GLMeshItem(vertexes=cap_verts, faces=cap_tris,
+            # Inner end caps: proximal → proximal group, distal → distal group
+            prox_cap_center = proximal_pos + cyl_length * xhat
+            prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, xhat, self.r, numCylPoints)
+            prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
                                           color=tuple(revoluteColorList), smooth=True)
-                cap_mesh.setGLOptions('opaque')
-                cap_mesh.setObjectName("Joint")
-                widget.plot_widget.addItem(cap_mesh)
+            prox_cap_mesh.setGLOptions('opaque')
+            prox_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(prox_cap_mesh)
+            self._gl_items_proximal.append(prox_cap_mesh)
+
+            dist_cap_center = distal_pos - cyl_length * distal_xhat
+            dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_xhat, self.r, numCylPoints)
+            dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
+                                          color=tuple(revoluteColorList), smooth=True)
+            dist_cap_mesh.setGLOptions('opaque')
+            dist_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(dist_cap_mesh)
+            self._gl_items_distal.append(dist_cap_mesh)
             
-            # Bracket dimensions
+            # Bracket dimensions — brackets span Pose + cylinders, assign to center group
             bracket_color = (0.5, 0.5, 0.5, 0.8)
             bracket_line_color = (0.5, 0.5, 0.5, 1.0)
             bracket_hy = 10.0
@@ -385,6 +405,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 ])
                 line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_center.append(line)
             # Connecting edges
             for z_sign in [+1, -1]:
                 for x_pos in [box_prox_face, prox_inner]:
@@ -392,6 +413,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                     edge = np.array([corner + bracket_hy * yhat, corner - bracket_hy * yhat])
                     line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
                     widget.plot_widget.addItem(line)
+                    self._gl_items_center.append(line)
             # Bracket face quads (as triangulated meshes)
             prox_bracket_quads = [
                 [box_prox_face + hz*zhat + bracket_hy*yhat, prox_inner + hz*zhat + bracket_hy*yhat,
@@ -408,6 +430,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 mesh.setGLOptions('translucent')
                 mesh.setObjectName("Joint")
                 widget.plot_widget.addItem(mesh)
+                self._gl_items_center.append(mesh)
             
             # Distal [-bracket
             distal_inner = distal_pos - cyl_length * distal_xhat
@@ -423,12 +446,14 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 ])
                 line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
             for z_sign in [+1, -1]:
                 for x_pos in [self.Pose.t, distal_inner]:
                     corner = x_pos + z_sign * hz * zhat
                     edge = np.array([corner + bracket_hy * distal_yhat, corner - bracket_hy * distal_yhat])
                     line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
                     widget.plot_widget.addItem(line)
+                    self._gl_items_distal.append(line)
             distal_bracket_quads = [
                 [self.Pose.t + hz*zhat + bracket_hy*distal_yhat, distal_inner + hz*zhat + bracket_hy*distal_yhat,
                  distal_inner + hz*zhat - bracket_hy*distal_yhat, self.Pose.t + hz*zhat - bracket_hy*distal_yhat],
@@ -444,6 +469,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                 mesh.setGLOptions('translucent')
                 mesh.setObjectName("Joint")
                 widget.plot_widget.addItem(mesh)
+                self._gl_items_distal.append(mesh)
         
 class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     """
@@ -613,7 +639,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             yhat = self.Pose.R[:, 1]
             zhat = self.Pose.R[:, 2]  # path direction for coaxial
             
-            # --- Servo box: 40x20x40 centered at (11, 0, -1.95) in Pose frame ---
+            # --- Servo box: 40x20x40 centered at (11, 0, -1.95) in Pose frame → center group ---
             bx, by, bz = 40.0, 20.0, 40.0
             box_center = self.Pose.t + 11.0 * xhat + (-1.95) * zhat
             hx, hy, hz = bx / 2, by / 2, bz / 2
@@ -639,15 +665,20 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             box_mesh.setGLOptions('opaque')
             box_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(box_mesh)
+            self._gl_items_center.append(box_mesh)
             
-            # --- Proximal cylinder: radius self.r, 9mm long, from ProximalFrame along zhat ---
+            # --- Proximal cylinder: radius self.r, 9mm long → proximal group ---
             prox_cyl_length = 9.0
             numCylPoints = 32
             proximal_pos = self.ProximalFrame().t
             proximal_cyl = Cylinder(self.r, proximal_pos, zhat, prox_cyl_length)
+            items_before = list(widget.plot_widget.items)
             proximal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
             
-            # Inner cap for proximal cylinder
+            # Inner cap for proximal cylinder → proximal group
             prox_cap_center = proximal_pos + prox_cyl_length * zhat
             prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, zhat, self.r, numCylPoints)
             prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
@@ -655,8 +686,9 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             prox_cap_mesh.setGLOptions('opaque')
             prox_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(prox_cap_mesh)
+            self._gl_items_proximal.append(prox_cap_mesh)
             
-            # 4 vertical lines along the proximal cylinder at ±x/±y in the Pose frame
+            # 4 vertical lines along the proximal cylinder → proximal group
             line_color = (0.3, 0.3, 0.3, 1.0)
             for direction in [xhat, -xhat, yhat, -yhat]:
                 line_start = proximal_pos + self.r * direction
@@ -664,17 +696,22 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
                 line_pts = np.array([line_start, line_end])
                 line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_proximal.append(line)
             
-            # --- Distal cylinder: radius (r - wallThickness), 12.9mm long, in distal frame ---
+            # --- Distal cylinder: radius (r - wallThickness), 12.9mm long → distal group ---
             dist_cyl_length = 12.9
             distalFrame = self.DistalFrame()
             distal_pos = distalFrame.t
             distal_zhat = distalFrame.R[:, 2]  # path direction in distal frame
             distal_r = self.r - self.wallThickness
             distal_cyl = Cylinder(distal_r, distal_pos, -distal_zhat, dist_cyl_length)
+            items_before = list(widget.plot_widget.items)
             distal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
             
-            # Inner cap for distal cylinder
+            # Inner cap for distal cylinder → distal group
             dist_cap_center = distal_pos - dist_cyl_length * distal_zhat
             dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_zhat, distal_r, numCylPoints)
             dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
@@ -682,8 +719,9 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             dist_cap_mesh.setGLOptions('opaque')
             dist_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(dist_cap_mesh)
+            self._gl_items_distal.append(dist_cap_mesh)
             
-            # 4 vertical lines along the distal cylinder at ±x/±y in the distal frame
+            # 4 vertical lines along the distal cylinder → distal group
             distal_xhat = distalFrame.R[:, 0]
             distal_yhat = distalFrame.R[:, 1]
             line_color = (0.3, 0.3, 0.3, 1.0)
@@ -693,6 +731,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
                 line_pts = np.array([line_start, line_end])
                 line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
                 widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
     
 class PrintedHemisphere(PrintedTube, Tip):
     def __init__(self, r : float, Pose : SE3, closesForward : bool, pathIndex : int = 2):
@@ -813,13 +852,19 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         
     def newLinkTransformedBy(self, Transformation : SE3):
         """Override to preserve PrintedLinkCSC type when transforming"""
-        return PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+        newLink = PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
                               Transformation @ self.EndDubinsPose,
                               maxAnglePerElbow = self.maxAnglePerElbow, 
                               path = self.path.newPathTransformedBy(Transformation),
                               EPSILON = self.EPSILON,
                               startRadius = self.startRadius,
                               endRadius = self.endRadius)
+        # Transfer GL cache: the shape hasn't changed, only the pose
+        if not getattr(self, '_gl_shape_dirty', True):
+            newLink._gl_items = self._gl_items
+            newLink._gl_ref_pose = self._gl_ref_pose
+            newLink._gl_shape_dirty = False
+        return newLink
 
     def manifold(self, startRadius : Optional[float] = None, endRadius : Optional[float] = None, 
                  numSides : int = 20,  hullBends : bool = False, stabilize : bool = True, 

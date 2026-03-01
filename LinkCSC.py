@@ -117,6 +117,11 @@ class LinkCSC:
 
         self.collisionCapsules = self.getCapsules()
 
+        # GL mesh cache for fast animation (populated by addToWidget)
+        self._gl_items: list = []          # cached GLMeshItem / GLLinePlotItem refs
+        self._gl_ref_pose: SE3 | None = None  # StartDubinsPose when meshes were built
+        self._gl_shape_dirty: bool = True     # True => must rebuild meshes
+
     def __repr__(self):
         return (
             "LinkCSC("
@@ -150,11 +155,17 @@ class LinkCSC:
         return [twist1Deg, theta1Deg, self.r, self.path.tMag, twist2Deg, theta2Deg, self.r]
 
     def newLinkTransformedBy(self, Transformation : SE3):
-        return LinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+        newLink = LinkCSC(self.r, Transformation @ self.StartDubinsPose, 
                        Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
+        # Transfer GL cache: the shape hasn't changed, only the pose
+        if not getattr(self, '_gl_shape_dirty', True):
+            newLink._gl_items = self._gl_items
+            newLink._gl_ref_pose = self._gl_ref_pose
+            newLink._gl_shape_dirty = False
+        return newLink
         
     def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -205,6 +216,10 @@ class LinkCSC:
                   showElbowBoundingBalls : bool = False, linkID : int = None):
         import pyqtgraph.opengl as gl
         from meshHelpers import LinkMesh
+        # Reset GL cache for this rebuild
+        self._gl_items = []
+        self._gl_ref_pose = SE3(self.StartDubinsPose.A.copy())
+        self._gl_shape_dirty = False
         allElbowHandleSets = []
         if showBoundary:
             vertices = []
@@ -240,6 +255,7 @@ class LinkCSC:
                 meshitem.setObjectName("Link")
                 meshitem.setGLOptions('translucent')
                 widget.plot_widget.addItem(meshitem)
+                self._gl_items.append(meshitem)
         elif showFrames:
             # show the start and end frames
             startFrameHandles = addPosesToWidget(np.array([self.StartDubinsPose]), widget, 
@@ -257,6 +273,34 @@ class LinkCSC:
         
         return allElbowHandleSets
     
+    def updateCachedGLTransforms(self):
+        """Apply the rigid-body delta between cached and current pose
+        to all cached GL items via setTransform (GPU model matrix, zero-cost).
+        Call this instead of removing + re-adding items when only the pose changed."""
+        if not self._gl_items or self._gl_ref_pose is None:
+            return
+        from pyqtgraph import Transform3D
+        delta = self.StartDubinsPose @ self._gl_ref_pose.inv()
+        mat = Transform3D(delta.A)
+        for item in self._gl_items:
+            item.setTransform(mat)
+
+    def clearGLCache(self):
+        """Discard cached GL items (e.g. before a full rebuild)."""
+        self._gl_items = []
+        self._gl_ref_pose = None
+        self._gl_shape_dirty = True
+
+    def hasGLCache(self) -> bool:
+        return not self._gl_shape_dirty
+
+    def transformPosesInPlace(self, Transformation : SE3):
+        """Lightweight pose update: only move start/end poses without
+        rebuilding path, elbows, or cylinder geometry.  Sufficient for
+        updateCachedGLTransforms() which only reads StartDubinsPose."""
+        self.StartDubinsPose = Transformation @ self.StartDubinsPose
+        self.EndDubinsPose = Transformation @ self.EndDubinsPose
+
     def endBoundingBalls2r(self):
         startBall = Ball(self.path.circleCenter1, 2*self.r) if self.elbow1 else Ball(self.StartDubinsPose.t, self.r)
         endBall = Ball(self.path.circleCenter2, 2*self.r) if self.elbow2 else Ball(self.EndDubinsPose.t, self.r)

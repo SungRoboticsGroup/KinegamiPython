@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
-                              QComboBox, QLabel, QHBoxLayout, QPushButton)
+                              QComboBox, QLabel, QHBoxLayout, QPushButton, QSpinBox)
 from PyQt5.QtCore import Qt, QTimer, QTime
 from PyQt5.QtGui import QSurfaceFormat
 import pyqtgraph as pg
@@ -129,7 +129,7 @@ class RobotAnimator:
         """Total time (seconds) for one complete loop."""
         return sum(self._segment_duration(i) for i in range(self.num_segments))
 
-    def set_time(self, elapsed: float):
+    def set_time(self, elapsed: float, lightweight: bool = False):
         """Set the robot to the pose at *elapsed* seconds from the start, looping."""
         if not self.can_animate():
             return
@@ -142,16 +142,16 @@ class RobotAnimator:
             dur = self._segment_duration(seg_idx)
             if t_acc + dur > elapsed:
                 t = (elapsed - t_acc) / dur
-                self._interpolate(seg_idx, t)
+                self._interpolate(seg_idx, t, lightweight=lightweight)
                 return
             t_acc += dur
-        self._interpolate(self.num_segments - 1, 1.0)  # very end
+        self._interpolate(self.num_segments - 1, 1.0, lightweight=lightweight)  # very end
 
     def reset(self, now: float):
         self.current_segment = 0
         self.segment_start_time = now
 
-    def step(self, now: float):
+    def step(self, now: float, lightweight: bool = False):
         """Advance animation, looping. Returns True if tree was updated."""
         if not self.can_animate():
             return False
@@ -170,7 +170,7 @@ class RobotAnimator:
             self.segment_start_time = now - leftover
             t = leftover / dur if dur > 0 else 0.0
 
-        self._interpolate(self.current_segment, t)
+        self._interpolate(self.current_segment, t, lightweight=lightweight)
         return True
 
     # ── internals ──
@@ -180,8 +180,9 @@ class RobotAnimator:
             return max(self.config_durations[seg_idx], 0.01)
         return 1.0  # fallback
 
-    def _interpolate(self, seg_idx: int, t: float):
-        """Set tree joint states to interpolation between config seg_idx and seg_idx+1."""
+    def _interpolate(self, seg_idx: int, t: float, lightweight: bool = False):
+        """Set tree joint states to interpolation between config seg_idx and seg_idx+1.
+        When lightweight=True, skip link rebuilds and collision (for animation fast-path)."""
         config_a = self.saved_configs[seg_idx]
         config_b = self.saved_configs[seg_idx + 1]
         for i, joint_idx in enumerate(self.joint_indices):
@@ -193,7 +194,7 @@ class RobotAnimator:
             joint = self.tree.Joints[joint_idx]
             if isinstance(joint, Revolute):
                 val = math.radians(val)
-            self.tree.setJointState(joint_idx, val)
+            self.tree.setJointState(joint_idx, val, lightweight=lightweight)
 
 
 # ── Main window ──────────────────────────────────────────────────────────────
@@ -257,6 +258,14 @@ class DancePartyWindow(QMainWindow):
         self.loop_checkbox.setChecked(True)
         self.loop_checkbox.toggled.connect(self._toggle_loop)
         selector_row.addWidget(self.loop_checkbox)
+
+        selector_row.addWidget(QLabel("Export Iterations:"))
+        self.export_iterations_spin = QSpinBox()
+        self.export_iterations_spin.setMinimum(1)
+        self.export_iterations_spin.setMaximum(999)
+        self.export_iterations_spin.setValue(1)
+        self.export_iterations_spin.setFixedWidth(60)
+        selector_row.addWidget(self.export_iterations_spin)
 
         # Profile button
         self.profile_button = QPushButton("Profile")
@@ -427,6 +436,9 @@ class DancePartyWindow(QMainWindow):
         self.is_animating = False
         self.animation_timer.stop()
         self.play_button.setText("▶  Play")
+        # Resync link geometry after lightweight animation
+        for t in self.trees:
+            t.resyncFromLightweight()
 
     def _animation_step(self):
         """Called by timer – advance every robot and re-render."""
@@ -435,16 +447,29 @@ class DancePartyWindow(QMainWindow):
         now = QTime.currentTime().msecsSinceStartOfDay() / 1000.0
         any_updated = False
         for anim in self.animators:
-            if anim.step(now):
+            if anim.step(now, lightweight=True):
                 any_updated = True
         if any_updated:
-            self._redraw_trees()
+            self._fast_update_trees()
+
+    def _fast_update_trees(self):
+        """Try to update GL items via model-matrix transforms (fast path).
+        Falls back to full redraw if any tree lacks a valid GL cache."""
+        for t in self.trees:
+            if not t.updateGLTransforms():
+                # Cache miss — do a full redraw (which re-populates caches)
+                self._redraw_trees()
+                return
+        self.gl_widget.update()
 
     def _redraw_trees(self):
-        """Remove old tree visuals and re-add them."""
+        """Remove old tree visuals and re-add them (full rebuild)."""
         items_to_remove = list(self.gl_widget.items)
         for item in items_to_remove:
             self.gl_widget.removeItem(item)
+        # Clear caches so they get rebuilt
+        for t in self.trees:
+            t.clearAllGLCaches()
         # Re-add trees
         show_axes = self.axes_checkbox.isChecked()
         for t in self.trees:
@@ -553,6 +578,8 @@ class DancePartyWindow(QMainWindow):
         if debug:
             width, height = 320, 240
             num_frames = 5
+            export_iterations = 1
+            longest_loop_duration = 0.0
         else:
             # Use native framebuffer resolution (pixel-perfect, no scaling).
             # Grab one test frame to get the actual pixel dimensions.
@@ -563,12 +590,20 @@ class DancePartyWindow(QMainWindow):
                 width -= 1
             if height % 2 != 0:
                 height -= 1
-            max_dur = max(a.total_duration() for a in animatable)
-            num_frames = int(math.ceil(max_dur * fps))
+            export_iterations = self.export_iterations_spin.value()
+            longest_loop_duration = max(a.total_duration() for a in animatable)
+            num_frames = int(math.ceil(longest_loop_duration * export_iterations * fps))
 
         # Progress dialog
+        if debug:
+            progress_text = f"Rendering {num_frames} frames at {width}×{height} …"
+        else:
+            progress_text = (
+                f"Rendering {num_frames} frames at {width}×{height} "
+                f"({export_iterations}× longest loop) …"
+            )
         progress = QtWidgets.QProgressDialog(
-            f"Rendering {num_frames} frames at {width}×{height} …",
+            progress_text,
             "Cancel", 0, num_frames, self)
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
@@ -587,9 +622,9 @@ class DancePartyWindow(QMainWindow):
 
                 t = frame_idx / fps
                 for anim in self.animators:
-                    anim.set_time(t)
+                    anim.set_time(t, lightweight=True)
 
-                self._redraw_trees()
+                self._fast_update_trees()
                 QApplication.processEvents()
 
                 frame = self._grab_frame(width, height) if debug else self._grab_frame()
@@ -790,6 +825,43 @@ class DancePartyWindow(QMainWindow):
         tot_joint_faces = sum(f for _, f, _ in joint_items_detail)
         print(f"{'─'*6} {'─'*9} {'─'*9} {'─'*10}  {'─'*40}")
         print(f"{tot_joint_items:>6} {'':>9} {'':>9} {tot_joint_faces:>10}  TOTAL Joint meshes ({tot_joint_verts} verts)")
+
+        # ── Phase 5: profile fast path (updateGLTransforms) ──
+        print(f"\n{'─' * 70}")
+        print("FAST PATH PROFILE  (setTransform model-matrix update)")
+        print(f"{'─' * 70}")
+        # Advance animation by one step to change poses, then time the fast update
+        if self.animators:
+            # Time the animation interpolation (setJointState math)
+            # Time lightweight interpolation
+            t_interp_start = time.perf_counter()
+            for anim in self.animators:
+                anim.set_time(0.5, lightweight=True)  # arbitrary time to change poses
+            t_interp = time.perf_counter() - t_interp_start
+            print(f"Animation interpolation (lightweight setJointState): {t_interp*1000:.3f} ms")
+            
+            # Time just the GL transform update
+            t_fast_start = time.perf_counter()
+            fast_ok = True
+            for ti, t_tree in enumerate(self.trees):
+                if not t_tree.updateGLTransforms():
+                    fast_ok = False
+                    break
+            t_gl = time.perf_counter() - t_fast_start
+            if fast_ok:
+                self.gl_widget.update()
+            t_fast = t_interp + t_gl
+            if fast_ok:
+                print(f"GL updateGLTransforms: {t_gl*1000:.3f} ms")
+                print(f"Total fast path: {t_fast*1000:.3f} ms")
+                speedup = (t_remove + t_add_total) / t_fast if t_fast > 0 else float('inf')
+                print(f"Speedup vs full redraw: {speedup:.0f}x")
+            else:
+                print("Fast path FAILED (cache miss) — would fall back to full redraw")
+            # Reset to original time (lightweight to stay consistent)
+            for anim in self.animators:
+                anim.set_time(0.0, lightweight=True)
+            self._fast_update_trees()
 
         print("=" * 70)
 
