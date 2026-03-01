@@ -970,6 +970,14 @@ class KinematicTree(Generic[F]):
             if parent_idx is not None and parent_idx != -1 and parent_idx not in visited:
                 if isWaypoint(self.Joints[parent_idx]):
                     buildWaypointSet(parent_idx, current_wp_set, current_link_set)
+                else:
+                    # Parent is a real joint (branch point). Merge sibling waypoints
+                    # into the same cluster — they share the same origin and should
+                    # not be collision-checked against each other.
+                    for sibling_idx in self.Children[parent_idx]:
+                        if sibling_idx != joint_idx and sibling_idx not in visited:
+                            if isWaypoint(self.Joints[sibling_idx]):
+                                buildWaypointSet(sibling_idx, current_wp_set, current_link_set)
             
             # Check children
             children_indices = self.Children[joint_idx]
