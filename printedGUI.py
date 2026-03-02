@@ -882,6 +882,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.animation_start_value = 0  # Slider value when animation started
         self.animation_loop = False  # Whether animation should loop
         self._lightweight_dirty = False  # True when link geometry is stale from lightweight updates
+        self._collision_colors_cleared = False  # True when collision highlights have been removed for motion
         
         self.configurations_dock = QDockWidget("Configurations and Motion", self)
         self.configurations_dock.setWidget(self.configurations_widget)
@@ -3073,6 +3074,17 @@ class WindowKinegamiGUI(QMainWindow):
             return False
         if not self.tree.updateGLTransforms():
             return False
+        # On the first lightweight frame, clear collision highlighting.
+        # Link geometry is stale during lightweight mode so collision
+        # results would be incorrect; colors are restored on resync.
+        if not self._collision_colors_cleared:
+            if getattr(self, 'show_collisions', True):
+                from style import linkColorDefault
+                for link in self.tree.Links:
+                    for item in getattr(link, '_gl_items', []):
+                        if hasattr(item, 'setColor'):
+                            item.setColor(linkColorDefault)
+            self._collision_colors_cleared = True
         self._lightweight_dirty = True
         self.plot_widget.update()
         return True
@@ -3084,6 +3096,7 @@ class WindowKinegamiGUI(QMainWindow):
         if self.tree is not None:
             self.tree.resyncFromLightweight()
         self._lightweight_dirty = False
+        self._collision_colors_cleared = False
         self.update_joint()
 
     def update_joint(self, force_recreate_config_widget : bool = False):
