@@ -1791,10 +1791,17 @@ class WindowKinegamiGUI(QMainWindow):
                 self.saved_configurations[config_index + 1], self.saved_configurations[config_index]
             self.display_saved_configurations()
     
-    def update_saved_configs_for_joint_added(self):
-        """Add state 0 to all saved configurations when a joint is added"""
+    def update_saved_configs_for_joint_added(self, config_position : int = -1):
+        """Insert state 0 into all saved configurations when a joint is added.
+        
+        config_position: index in the config list where the new joint's state
+        should go.  -1 (default) appends at the end.
+        """
         for config in self.saved_configurations:
-            config.append(0.0)
+            if config_position < 0 or config_position >= len(config):
+                config.append(0.0)
+            else:
+                config.insert(config_position, 0.0)
     
     def update_saved_configs_for_joint_deleted(self, deleted_joint_index):
         """Remove the state for a deleted joint from all saved configurations"""
@@ -2127,6 +2134,7 @@ class WindowKinegamiGUI(QMainWindow):
         if self.referenceMesh is not None:
             self.plot_widget.addItem(self.referenceMesh.mesh)
 
+        self.update_joint()
         self.log_version()
         self.show_success('Tree cleared!')
 
@@ -3089,17 +3097,20 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.units_label.setText(f"Units: {self.units}")
         
-        # Check if we need to recreate config widgets or just update values
+        # Check if we need to recreate config widgets or just update values.
+        # Compare actual real-joint indices, not just count, so that operations
+        # that shift indices (add-to-root, waypoint insert, undo/redo, load)
+        # are detected even when the number of real joints stays the same.
         need_recreate_config_widget = force_recreate_config_widget
         if not need_recreate_config_widget:
             if self.tree is None:
-                need_recreate_config_widget = True
+                need_recreate_config_widget = len(getattr(self, 'config_joint_indices', [])) > 0
             elif not hasattr(self, 'config_joint_indices'):
                 need_recreate_config_widget = True
             else:
-                # Check if the number of real joints has changed
-                real_joint_count = sum(1 for j in self.tree.Joints if not isinstance(j, (Waypoint, Tip)))
-                if real_joint_count != len(self.config_joint_indices):
+                current_real_indices = [i for i, j in enumerate(self.tree.Joints)
+                                        if not isinstance(j, (Waypoint, Tip))]
+                if current_real_indices != self.config_joint_indices:
                     need_recreate_config_widget = True
         
         if need_recreate_config_widget:
@@ -3240,7 +3251,14 @@ class WindowKinegamiGUI(QMainWindow):
 
         # Update saved configurations if a real joint was added
         if is_real_joint:
-            self.update_saved_configs_for_joint_added()
+            # Determine the config-list position of the newly added joint.
+            # config_joint_indices hasn't been refreshed yet, but we can
+            # compute where the new joint will land among the real joints.
+            new_joint_index = self.selected_joint  # set above for every path
+            real_indices = [i for i, j in enumerate(self.tree.Joints)
+                           if not isinstance(j, (Waypoint, Tip))]
+            config_pos = real_indices.index(new_joint_index) if new_joint_index in real_indices else len(real_indices) - 1
+            self.update_saved_configs_for_joint_added(config_pos)
 
         self.update_joint()
         self.log_version()
