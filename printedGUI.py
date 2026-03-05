@@ -870,7 +870,10 @@ class WindowKinegamiGUI(QMainWindow):
 
         # //////////////////////////////////    CONFIGURATIONS    ///////////////////////////////////
         self.configurations_widget = QWidget()
+        self.configurations_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         self.configurations_layout = QVBoxLayout(self.configurations_widget)
+        self.configurations_layout.setSpacing(2)
+        self.configurations_layout.setContentsMargins(0, 0, 0, 0)
         self.config_text_boxes = []  # List to store text boxes for joint states
         self.config_sliders = []  # List to store sliders for joint states
         self.config_joint_indices = []  # List to map text box index to actual joint index
@@ -1523,49 +1526,50 @@ class WindowKinegamiGUI(QMainWindow):
             return
         
         # Create vertical layout for configuration rows
-        configs_column = QVBoxLayout()
+        configs_column_widget = QWidget()
+        configs_column = QVBoxLayout(configs_column_widget)
+        configs_column.setSpacing(0)
+        configs_column.setContentsMargins(0, 0, 0, 0)
         
         # Display each saved configuration
         for config_index, config in enumerate(self.saved_configurations):
             container_widget = QWidget()
+            container_widget.setFixedHeight(24)
+            container_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             config_row_layout = QHBoxLayout(container_widget)
             config_row_layout.setContentsMargins(0, 0, 0, 0)
+            config_row_layout.setSpacing(0)
             
             # Add up/down buttons for reordering (at the left)
             up_button = QPushButton("▲")
-            up_button.setFixedWidth(30)
+            up_button.setFixedSize(30, 22)
             up_button.setEnabled(config_index > 0)  # Disable if already at top
             up_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_up(idx))
             config_row_layout.addWidget(up_button)
             
             down_button = QPushButton("▼")
-            down_button.setFixedWidth(30)
+            down_button.setFixedSize(30, 22)
             down_button.setEnabled(config_index < len(self.saved_configurations) - 1)  # Disable if already at bottom
             down_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_down(idx))
             config_row_layout.addWidget(down_button)
             
             # Add value labels for each joint, aligned with the text boxes above
             for value in config:
-                value_widget = QWidget()
-                value_layout = QVBoxLayout(value_widget)
-                value_layout.setContentsMargins(5, 0, 5, 0)
-                
                 value_label = QLabel(str(round(value, 2)))
                 value_label.setAlignment(Qt.AlignCenter)
                 value_label.setMinimumWidth(60)
-                value_layout.addWidget(value_label)
-                
-                config_row_layout.addWidget(value_widget)
+                value_label.setContentsMargins(5, 0, 5, 0)
+                config_row_layout.addWidget(value_label)
             
             # Add "Set" button
             set_button = QPushButton("Set")
-            set_button.setFixedWidth(60)
+            set_button.setFixedSize(60, 22)
             set_button.clicked.connect(lambda checked, idx=config_index: self.set_configuration(idx))
             config_row_layout.addWidget(set_button)
             
             # Add delete button (red X)
             delete_button = QPushButton("✗")
-            delete_button.setFixedWidth(30)
+            delete_button.setFixedSize(30, 22)
             delete_button.setStyleSheet("background-color: #FF4444; color: white; font-weight: bold;")
             delete_button.clicked.connect(lambda checked, idx=config_index: self.delete_configuration(idx))
             config_row_layout.addWidget(delete_button)
@@ -1573,9 +1577,12 @@ class WindowKinegamiGUI(QMainWindow):
             # Add the row to the configs column
             configs_column.addWidget(container_widget)
         
+        # Size the wrapper to fit its contents tightly
+        configs_column_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        
         # Add configs column to the container
         self.saved_configs_container.addStretch()
-        self.saved_configs_container.addLayout(configs_column)
+        self.saved_configs_container.addWidget(configs_column_widget)
         self.saved_configs_container.addStretch()
         
         # Add interpolation slider on the right
@@ -1604,7 +1611,6 @@ class WindowKinegamiGUI(QMainWindow):
             
             self.config_interp_slider.setTickPosition(QSlider.TicksBothSides)
             self.config_interp_slider.setTickInterval(100)  # Tick at each configuration
-            self.config_interp_slider.setMinimumHeight(200)
             self.config_interp_slider.sliderMoved.connect(self.interpolate_configurations)
             self.config_interp_slider.sliderReleased.connect(self.interpolation_slider_released)
             slider_layout.addWidget(self.config_interp_slider, 0, Qt.AlignHCenter)
@@ -1634,7 +1640,7 @@ class WindowKinegamiGUI(QMainWindow):
             else:
                 self.play_pause_button = QPushButton("▶")
                 self.play_pause_button.setToolTip("Play")
-            self.play_pause_button.setFixedSize(40, 40)
+            self.play_pause_button.setFixedSize(30, 24)
             self.play_pause_button.clicked.connect(self.toggle_animation)
             play_loop_layout.addWidget(self.play_pause_button)
             
@@ -1657,11 +1663,10 @@ class WindowKinegamiGUI(QMainWindow):
             # Add duration text boxes aligned with bottom of each interval (configuration row)
             for i in range(num_segments):
                 # Add spacing to align with the configuration row at the END of this interval
-                # First config row appears after some initial spacing
                 if i == 0:
-                    animation_layout.addSpacing(30)  # Align with first config row
+                    animation_layout.addSpacing(0)
                 else:
-                    animation_layout.addSpacing(40)  # Full row height to next config
+                    animation_layout.addSpacing(2)  # Match configs_column spacing
                 
                 duration_box = QLineEdit(str(self.config_durations[i]))
                 duration_box.setFixedWidth(50)
