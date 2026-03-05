@@ -933,7 +933,8 @@ class WindowKinegamiGUI(QMainWindow):
 
         self.key_bar = QWidget()
         self.key_bar_layout = QHBoxLayout(self.key_bar)  # Layout is initialized and set to the widget here
-        self.key_bar.setMinimumHeight(40)
+        self.key_bar_layout.setContentsMargins(0, 0, 0, 0)
+        self.key_bar.setFixedHeight(20)
         self.init_key_bar()
 
         top_dock_widget.setWidget(self.key_bar)
@@ -1416,8 +1417,12 @@ class WindowKinegamiGUI(QMainWindow):
         container_widget = QWidget()
         text_box_layout = QHBoxLayout(container_widget)
         text_box_layout.setContentsMargins(0, 0, 0, 0)
+        text_box_layout.setSpacing(0)
         
-        # Create text boxes for real (non-Waypoint) joints
+        # Add left spacer to align with config row value labels (matches ▲▼ buttons width)
+        left_spacer = QWidget()
+        left_spacer.setFixedWidth(60)
+        text_box_layout.addWidget(left_spacer)
         for actual_joint_index, joint in enumerate(self.chain.Joints):
             # Skip Waypoint joints
             if type(joint).__name__ in ['Waypoint', 'PrintedWaypoint']:
@@ -1425,17 +1430,17 @@ class WindowKinegamiGUI(QMainWindow):
             
             # Create a container widget for each joint
             joint_widget = QWidget()
+            joint_widget.setFixedWidth(55)
             joint_layout = QVBoxLayout(joint_widget)
-            joint_layout.setContentsMargins(5, 0, 5, 0)
+            joint_layout.setContentsMargins(2, 0, 2, 0)
             joint_layout.setSpacing(2)
             
             joint_label = QLabel(f"J{actual_joint_index}")
             joint_label.setAlignment(Qt.AlignCenter)
-            joint_label.setMinimumWidth(40)
             
             text_box = QLineEdit()
             text_box.setPlaceholderText("0.0")
-            text_box.setMinimumWidth(60)
+            text_box.setFixedWidth(50)
             text_box.setAlignment(Qt.AlignCenter)
             # Connect to handler with lambda to capture the actual joint index
             text_box.returnPressed.connect(lambda idx=actual_joint_index: self.config_textbox_return(idx))
@@ -1443,7 +1448,7 @@ class WindowKinegamiGUI(QMainWindow):
             
             # Create slider
             slider = QSlider(Qt.Horizontal)
-            slider.setMinimumWidth(60)
+            slider.setFixedWidth(50)
             
             # Set slider range and value based on joint type
             if isinstance(joint, Prismatic):
@@ -1480,18 +1485,15 @@ class WindowKinegamiGUI(QMainWindow):
             self.config_sliders.append(slider)
             self.config_joint_indices.append(actual_joint_index)
         
-        # Add "Define Configuration" button
+        # Add "Define Configuration" button to the right of the joint widgets
         save_button = QPushButton("Define Configuration")
         save_button.clicked.connect(self.save_current_configuration)
+        save_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         text_box_layout.addWidget(save_button)
+        text_box_layout.addStretch()
         
-        # Center the container in the main layout
-        center_layout = QHBoxLayout()
-        center_layout.addStretch()
-        center_layout.addWidget(container_widget)
-        center_layout.addStretch()
-        
-        self.configurations_layout.addLayout(center_layout)
+        # Store the textbox row for display_saved_configurations to use
+        self.config_textbox_row = container_widget
         
         # Create horizontal layout for saved configs and interpolation slider
         self.saved_configs_container = QHBoxLayout()
@@ -1610,6 +1612,9 @@ class WindowKinegamiGUI(QMainWindow):
             saved_slider_value = self.config_interp_slider.value()
         
         # Clear the saved configs container
+        # First, reparent the textbox row so it's not destroyed with the combined widget
+        if hasattr(self, 'config_textbox_row') and self.config_textbox_row is not None:
+            self.config_textbox_row.setParent(None)
         while self.saved_configs_container.count():
             item = self.saved_configs_container.takeAt(0)
             if item.widget():
@@ -1622,7 +1627,24 @@ class WindowKinegamiGUI(QMainWindow):
                 item.layout().deleteLater()
         
         if not self.saved_configurations:
+            # Even with no configs, show the textbox row centered
+            self.saved_configs_container.addStretch()
+            combined_widget = QWidget()
+            combined_layout = QVBoxLayout(combined_widget)
+            combined_layout.setContentsMargins(0, 0, 0, 0)
+            combined_layout.setSpacing(0)
+            combined_layout.addWidget(self.config_textbox_row)
+            combined_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            self.saved_configs_container.addWidget(combined_widget)
+            self.saved_configs_container.addStretch()
             return
+        
+        # Create a combined widget for textbox row + config rows (so they center together)
+        combined_widget = QWidget()
+        combined_layout = QVBoxLayout(combined_widget)
+        combined_layout.setContentsMargins(0, 0, 0, 0)
+        combined_layout.setSpacing(0)
+        combined_layout.addWidget(self.config_textbox_row)
         
         # Create vertical layout for configuration rows
         configs_column_widget = QWidget()
@@ -1656,8 +1678,7 @@ class WindowKinegamiGUI(QMainWindow):
             for value in config:
                 value_label = QLabel(str(round(value, 2)))
                 value_label.setAlignment(Qt.AlignCenter)
-                value_label.setMinimumWidth(60)
-                value_label.setContentsMargins(5, 0, 5, 0)
+                value_label.setFixedWidth(55)
                 config_row_layout.addWidget(value_label)
             
             # Add "Set" button
@@ -1679,10 +1700,13 @@ class WindowKinegamiGUI(QMainWindow):
         # Size the wrapper to fit its contents tightly
         configs_column_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         
-        # Add configs column to the container
+        # Add config rows to the combined widget
+        combined_layout.addWidget(configs_column_widget)
+        combined_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        
+        # Center the combined textbox+configs, with interpolation/animation to the right
         self.saved_configs_container.addStretch()
-        self.saved_configs_container.addWidget(configs_column_widget)
-        self.saved_configs_container.addStretch()
+        self.saved_configs_container.addWidget(combined_widget)
         
         # Add interpolation slider on the right
         if len(self.saved_configurations) > 1:
@@ -1776,6 +1800,8 @@ class WindowKinegamiGUI(QMainWindow):
             
             animation_layout.addStretch()
             self.saved_configs_container.addWidget(animation_widget)
+        
+        self.saved_configs_container.addStretch()
     
     def interpolate_configurations(self, slider_value):
         """Interpolate between saved configurations based on slider value"""
@@ -2352,7 +2378,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         label = QLabel(instructions)
         label.setAlignment(Qt.AlignCenter)
-        label.setWordWrap(True)
+        label.setWordWrap(False)
         self.key_bar_layout.addWidget(label)
 
     def local_orient_clicked(self):
