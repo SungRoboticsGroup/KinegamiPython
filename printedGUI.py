@@ -19,7 +19,7 @@ import pyqtgraph.opengl as gl
 import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut, QGridLayout
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime, QEvent
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3, QKeySequence
 from pyqtgraph.Qt import QtCore
@@ -1314,16 +1314,8 @@ class WindowKinegamiGUI(QMainWindow):
         if self.tree is None:
             return
         
-        # Create a widget to hold the centered content
-        container_widget = QWidget()
-        text_box_layout = QHBoxLayout(container_widget)
-        text_box_layout.setContentsMargins(0, 0, 0, 0)
-        text_box_layout.setSpacing(0)
-        
-        # Add left spacer to align with config row value labels (matches ▲▼ buttons width)
-        left_spacer = QWidget()
-        left_spacer.setFixedWidth(60)
-        text_box_layout.addWidget(left_spacer)
+        # Build individual joint column widgets (stored for grid-based layout)
+        self.config_joint_widgets = []
         for actual_joint_index, joint in enumerate(self.tree.Joints):
             # Skip Waypoint and Tip joints (they have no movable state)
             if isinstance(joint, (Waypoint, Tip)):
@@ -1333,7 +1325,7 @@ class WindowKinegamiGUI(QMainWindow):
             joint_widget = QWidget()
             joint_widget.setFixedWidth(55)
             joint_layout = QVBoxLayout(joint_widget)
-            joint_layout.setContentsMargins(2, 0, 2, 0)
+            joint_layout.setContentsMargins(0, 0, 0, 0)
             joint_layout.setSpacing(2)
             
             joint_label = QLabel(f"J{actual_joint_index}")
@@ -1377,24 +1369,19 @@ class WindowKinegamiGUI(QMainWindow):
             text_box.setText(str(round(display_state, 2)))
             
             joint_layout.addWidget(joint_label)
-            joint_layout.addWidget(text_box)
-            joint_layout.addWidget(slider)
+            joint_layout.addWidget(text_box, 0, Qt.AlignHCenter)
+            joint_layout.addWidget(slider, 0, Qt.AlignHCenter)
             joint_layout.addStretch()
             
-            text_box_layout.addWidget(joint_widget)
+            self.config_joint_widgets.append(joint_widget)
             self.config_text_boxes.append(text_box)
             self.config_sliders.append(slider)
             self.config_joint_indices.append(actual_joint_index)
         
-        # Add "Define Configuration" button to the right of the joint widgets
-        save_button = QPushButton("Define Configuration")
-        save_button.clicked.connect(self.save_current_configuration)
-        save_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        text_box_layout.addWidget(save_button)
-        text_box_layout.addStretch()
-        
-        # Store the textbox row for display_saved_configurations to use
-        self.config_textbox_row = container_widget
+        # Create "Define Configuration" button (stored for grid-based layout)
+        self.config_save_button = QPushButton("Define Configuration")
+        self.config_save_button.clicked.connect(self.save_current_configuration)
+        self.config_save_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         
         # Create horizontal layout for saved configs and interpolation slider
         self.saved_configs_container = QHBoxLayout()
@@ -1513,9 +1500,12 @@ class WindowKinegamiGUI(QMainWindow):
             saved_slider_value = self.config_interp_slider.value()
         
         # Clear the saved configs container
-        # First, reparent the textbox row so it's not destroyed with the combined widget
-        if hasattr(self, 'config_textbox_row') and self.config_textbox_row is not None:
-            self.config_textbox_row.setParent(None)
+        # First, reparent joint widgets and save button so they're not destroyed
+        if hasattr(self, 'config_joint_widgets'):
+            for w in self.config_joint_widgets:
+                w.setParent(None)
+        if hasattr(self, 'config_save_button') and self.config_save_button is not None:
+            self.config_save_button.setParent(None)
         while self.saved_configs_container.count():
             item = self.saved_configs_container.takeAt(0)
             if item.widget():
@@ -1527,85 +1517,77 @@ class WindowKinegamiGUI(QMainWindow):
                         child.widget().deleteLater()
                 item.layout().deleteLater()
         
+        num_joints = len(self.config_joint_widgets)
+        
         if not self.saved_configurations:
-            # Even with no configs, show the textbox row centered
+            # Even with no configs, show the textbox row centered using a grid
             self.saved_configs_container.addStretch()
             combined_widget = QWidget()
-            combined_layout = QVBoxLayout(combined_widget)
-            combined_layout.setContentsMargins(0, 0, 0, 0)
-            combined_layout.setSpacing(0)
-            combined_layout.addWidget(self.config_textbox_row)
+            grid = QGridLayout(combined_widget)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setSpacing(0)
+            # Row 0: empty cols 0-1, joint widgets, save button
+            for i, jw in enumerate(self.config_joint_widgets):
+                grid.addWidget(jw, 0, i + 2)
+            grid.addWidget(self.config_save_button, 0, num_joints + 2, 1, 2)
             combined_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
             self.saved_configs_container.addWidget(combined_widget)
             self.saved_configs_container.addStretch()
             return
         
-        # Create a combined widget for textbox row + config rows (so they center together)
+        # Create a combined widget using QGridLayout for perfect column alignment
         combined_widget = QWidget()
-        combined_layout = QVBoxLayout(combined_widget)
-        combined_layout.setContentsMargins(0, 0, 0, 0)
-        combined_layout.setSpacing(0)
-        combined_layout.addWidget(self.config_textbox_row)
+        grid = QGridLayout(combined_widget)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(0)
         
-        # Create vertical layout for configuration rows
-        configs_column_widget = QWidget()
-        configs_column = QVBoxLayout(configs_column_widget)
-        configs_column.setSpacing(0)
-        configs_column.setContentsMargins(0, 0, 0, 0)
+        # Row 0: header row with joint widgets
+        # Cols 0-1 are empty (reserved for ▲▼ buttons in config rows)
+        for i, jw in enumerate(self.config_joint_widgets):
+            grid.addWidget(jw, 0, i + 2)
+        grid.addWidget(self.config_save_button, 0, num_joints + 2, 1, 2)
         
-        # Display each saved configuration
+        # Rows 1+: saved configuration rows
         for config_index, config in enumerate(self.saved_configurations):
-            container_widget = QWidget()
-            container_widget.setFixedHeight(24)
-            container_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-            config_row_layout = QHBoxLayout(container_widget)
-            config_row_layout.setContentsMargins(0, 0, 0, 0)
-            config_row_layout.setSpacing(0)
+            row = config_index + 1
             
-            # Add up/down buttons for reordering (at the left)
+            # ▲ button
             up_button = QPushButton("▲")
             up_button.setFixedSize(30, 22)
-            up_button.setEnabled(config_index > 0)  # Disable if already at top
+            up_button.setEnabled(config_index > 0)
             up_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_up(idx))
-            config_row_layout.addWidget(up_button)
+            grid.addWidget(up_button, row, 0)
             
+            # ▼ button
             down_button = QPushButton("▼")
             down_button.setFixedSize(30, 22)
-            down_button.setEnabled(config_index < len(self.saved_configurations) - 1)  # Disable if already at bottom
+            down_button.setEnabled(config_index < len(self.saved_configurations) - 1)
             down_button.clicked.connect(lambda checked, idx=config_index: self.move_configuration_down(idx))
-            config_row_layout.addWidget(down_button)
+            grid.addWidget(down_button, row, 1)
             
-            # Add value labels for each joint, aligned with the text boxes above
-            for value in config:
+            # Value labels aligned with joint widgets above
+            for j, value in enumerate(config):
                 value_label = QLabel(str(round(value, 2)))
                 value_label.setAlignment(Qt.AlignCenter)
                 value_label.setFixedWidth(55)
-                config_row_layout.addWidget(value_label)
+                grid.addWidget(value_label, row, j + 2)
             
-            # Add "Set" button
+            # "Set" button
             set_button = QPushButton("Set")
             set_button.setFixedSize(60, 22)
             set_button.clicked.connect(lambda checked, idx=config_index: self.set_configuration(idx))
-            config_row_layout.addWidget(set_button)
+            grid.addWidget(set_button, row, num_joints + 2)
             
-            # Add delete button (red X)
+            # Delete button (red X)
             delete_button = QPushButton("✗")
             delete_button.setFixedSize(30, 22)
             delete_button.setStyleSheet("background-color: #FF4444; color: white; font-weight: bold;")
             delete_button.clicked.connect(lambda checked, idx=config_index: self.delete_configuration(idx))
-            config_row_layout.addWidget(delete_button)
-            
-            # Add the row to the configs column
-            configs_column.addWidget(container_widget)
+            grid.addWidget(delete_button, row, num_joints + 3)
         
-        # Size the wrapper to fit its contents tightly
-        configs_column_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        
-        # Add config rows to the combined widget
-        combined_layout.addWidget(configs_column_widget)
         combined_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         
-        # Center the combined textbox+configs, with interpolation/animation to the right
+        # Center the combined widget, with interpolation/animation to the right
         self.saved_configs_container.addStretch()
         self.saved_configs_container.addWidget(combined_widget)
         
