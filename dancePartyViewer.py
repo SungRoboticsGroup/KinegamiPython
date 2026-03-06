@@ -22,20 +22,66 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget,
-                              QComboBox, QLabel, QHBoxLayout, QPushButton, QSpinBox)
+                              QComboBox, QLabel, QHBoxLayout, QPushButton, QSpinBox,
+                              QFileDialog)
 from PyQt5.QtCore import Qt, QTimer, QTime
-from PyQt5.QtGui import QSurfaceFormat
+from PyQt5.QtGui import QSurfaceFormat, QVector3D, QImage
+import json
 import pyqtgraph as pg
 import pyqtgraph.opengl as gl
+from OpenGL.GL import (glDisable, glEnable, GL_DEPTH_TEST,
+                        glClearColor, glClear, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT,
+                        glGenTextures, glDeleteTextures, glBindTexture,
+                        glTexImage2D, glTexParameteri,
+                        GL_TEXTURE_2D, GL_RGBA, GL_UNSIGNED_BYTE, GL_LINEAR,
+                        GL_TEXTURE_MIN_FILTER, GL_TEXTURE_MAG_FILTER,
+                        glMatrixMode, GL_PROJECTION, GL_MODELVIEW,
+                        glPushMatrix, glPopMatrix, glLoadIdentity,
+                        glOrtho, glBegin, glEnd, glVertex2f, glTexCoord2f,
+                        GL_QUADS, glColor4f, glViewport)
 
 from spatialmath import SE3
 from KinematicTree import KinematicTree
 from Joint import Prismatic, Revolute, Waypoint, Tip
+from IntersectionHelper import (compute_cylinder_intersection,
+                                 compute_torus_intersection,
+                                 compute_closest_point_on_axis,
+                                 compute_plane_intersection,
+                                 compute_sphere_intersection)
 from style import *
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 ENVIRONMENTS = ["ballroom", "beach", "club"]
+
+# Colour palette for per-tree joint / link colouring
+COLOR_PALETTE = {
+    "Blue":        (0.0, 0.0, 1.0, 1.0),
+    "Red":         (1.0, 0.0, 0.0, 1.0),
+    "Green":       (0.0, 0.7, 0.0, 1.0),
+    "Orange":      (1.0, 0.5, 0.0, 1.0),
+    "Purple":      (0.6, 0.0, 0.8, 1.0),
+    "Cyan":        (0.0, 0.8, 0.8, 1.0),
+    "Yellow":      (0.9, 0.9, 0.0, 1.0),
+    "Pink":        (1.0, 0.4, 0.7, 1.0),
+    "Dark Gray":   (0.3, 0.3, 0.3, 1.0),
+    "Light Gray":  (0.7, 0.7, 0.7, 1.0),
+    "White":       (1.0, 1.0, 1.0, 1.0),
+    "Black":       (0.0, 0.0, 0.0, 1.0),
+    "Sky Blue":    (0.4, 0.7, 1.0, 1.0),
+    "Lime":        (0.5, 1.0, 0.2, 1.0),
+    "Coral":       (1.0, 0.5, 0.5, 1.0),
+    "Lavender":    (0.7, 0.5, 1.0, 1.0),
+    "Mint":        (0.4, 1.0, 0.7, 1.0),
+    "Gold":        (1.0, 0.84, 0.0, 1.0),
+    "Hot Pink":    (1.0, 0.2, 0.6, 1.0),
+    "Peach":       (1.0, 0.8, 0.6, 1.0),
+    "Aqua":        (0.0, 1.0, 1.0, 1.0),
+    "Salmon":      (1.0, 0.6, 0.4, 1.0),
+}
+COLOR_NAMES = list(COLOR_PALETTE.keys())
+DEFAULT_JOINT_COLOR = "Blue"
+DEFAULT_LINK_COLOR = "Dark Gray"
 
 def session_dir():
     """Return the absolute path to the dance_party_study folder."""
@@ -70,6 +116,415 @@ class SimpleTreeViewer:
     """
     def __init__(self, gl_widget: gl.GLViewWidget):
         self.plot_widget = gl_widget
+
+
+# ── Overlay line (drawn on top of depth buffer) ─────────────────────────────
+
+class OverlayLine(gl.GLLinePlotItem):
+    """A GLLinePlotItem that renders on top of everything (no depth test)."""
+    def paint(self):
+        glDisable(GL_DEPTH_TEST)
+        super().paint()
+        glEnable(GL_DEPTH_TEST)
+
+
+# ── Interactive GL widget with per-tree translate / rotate gizmos ────────────
+
+class DancePartyGLWidget(gl.GLViewWidget):
+    """GLViewWidget subclass that lets the user click to select a robot,
+    then drag translation arrows or rotation rings to reposition it."""
+
+    GIZMO_ARROW_PX = 80     # arrow length in screen pixels
+    GIZMO_THICK_PX = 10     # hit-test thickness in screen pixels
+    AXIS_COLORS = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]
+    SELECTED_COLOR = (1, 1, 0, 1)
+
+    def __init__(self, parent_window, **kwargs):
+        super().__init__(**kwargs)
+        self.parent_window = parent_window
+        self.orbit_speed = 0.3
+
+        # Interaction state
+        self.selected_tree_index = -1   # index into parent_window.trees
+        self.control_mode = "Translate"  # "Translate" or "Rotate"
+        self._is_dragging = False
+        self._drag_start_pos = None
+        self._selected_axis = None       # QVector3D – translation axis
+        self._selected_torus = None      # QVector3D – rotation axis normal
+        self._drag_prev_vector = None
+        self._facing_same_dir = False
+        self._gizmo_items: list = []     # overlay GL items for the gizmo
+
+        # Background image state
+        self._bg_texture_id = None
+        self._pending_bg_path = ...  # sentinel: no pending change
+
+    # ── Background image ─────────────────────────────────────────────────
+
+    def set_background_image(self, image_path):
+        """Queue an image to be uploaded as a GL texture on the next paint.
+        Pass None to remove the background image."""
+        self._pending_bg_path = image_path
+        self.update()
+
+    def _upload_bg_texture(self, image_path):
+        """Upload *image_path* as an OpenGL texture (called inside paintGL)."""
+        # Delete old texture
+        if self._bg_texture_id is not None:
+            glDeleteTextures([self._bg_texture_id])
+            self._bg_texture_id = None
+        if image_path is None:
+            return
+        img = QImage(image_path)
+        if img.isNull():
+            return
+        img = img.convertToFormat(QImage.Format_RGBA8888).mirrored()
+        w, h = img.width(), img.height()
+        ptr = img.bits()
+        ptr.setsize(w * h * 4)
+        data = bytes(ptr)
+        tex_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, data)
+        glBindTexture(GL_TEXTURE_2D, 0)
+        self._bg_texture_id = tex_id
+
+    def _render_bg_quad(self):
+        """Draw a fullscreen textured quad with the background image."""
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, 1, 0, 1, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+        glEnable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, self._bg_texture_id)
+        glColor4f(1, 1, 1, 1)
+        glBegin(GL_QUADS)
+        glTexCoord2f(0, 0); glVertex2f(0, 0)
+        glTexCoord2f(1, 0); glVertex2f(1, 0)
+        glTexCoord2f(1, 1); glVertex2f(1, 1)
+        glTexCoord2f(0, 1); glVertex2f(0, 1)
+        glEnd()
+        glDisable(GL_TEXTURE_2D)
+        glBindTexture(GL_TEXTURE_2D, 0)
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
+    def paintGL(self, region=None, viewport=None, useItemNames=False):
+        # Process any pending background-image change
+        if self._pending_bg_path is not ...:
+            self._upload_bg_texture(self._pending_bg_path)
+            self._pending_bg_path = ...
+
+        # If no background image, use default pipeline
+        if self._bg_texture_id is None:
+            super().paintGL(region, viewport, useItemNames)
+            return
+
+        # Replicate pyqtgraph's paintGL with background image inserted
+        if hasattr(self, 'prepareForPaint'):
+            self.prepareForPaint()
+        if viewport is not None:
+            glViewport(*viewport)
+        else:
+            self.setProjection(region=region)
+        self.setModelview()
+        bg = self.opts.get('backgroundColor', self.opts.get('bgcolor', (0, 0, 0, 1)))
+        if hasattr(bg, 'getRgbF'):
+            bgcolor = bg.getRgbF()
+        else:
+            bgcolor = bg
+        glClearColor(*bgcolor)
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT)
+        self._render_bg_quad()
+        glClear(GL_DEPTH_BUFFER_BIT)  # clear depth so 3D items render on top
+        self.drawItemTree(useItemNames=useItemNames)
+
+    # ── Gizmo drawing ────────────────────────────────────────────────────
+
+    def _gizmo_center(self) -> np.ndarray | None:
+        """Return the world-space center of the selected tree's bounding ball."""
+        if self.selected_tree_index < 0:
+            return None
+        trees = self.parent_window.trees
+        if self.selected_tree_index >= len(trees):
+            return None
+        return trees[self.selected_tree_index].boundingBall.c.copy()
+
+    def draw_gizmo(self):
+        """Draw translation arrows or rotation rings at the selected tree's center."""
+        self.clear_gizmo()
+        center = self._gizmo_center()
+        if center is None:
+            return
+        rad = self._world_len(self.GIZMO_ARROW_PX)
+        axes = [np.array([1, 0, 0]), np.array([0, 1, 0]), np.array([0, 0, 1])]
+
+        if self.control_mode == "Translate":
+            for i, a in enumerate(axes):
+                col = self.AXIS_COLORS[i]
+                pts = np.array([center, center + rad * a])
+                item = OverlayLine(pos=pts, color=col, width=8, antialias=True)
+                self.addItem(item)
+                self._gizmo_items.append(item)
+        else:  # Rotate
+            thick = self._world_len(self.GIZMO_THICK_PX)
+            for i, axis in enumerate(axes):
+                helper = np.array([1.0, 0.0, 0.0])
+                if abs(np.dot(axis, helper)) > 0.9:
+                    helper = np.array([0.0, 1.0, 0.0])
+                u = np.cross(axis, helper)
+                u /= np.linalg.norm(u)
+                v = np.cross(axis, u)
+                pts = np.array([
+                    center + (rad + thick) * (u * np.cos(t) + v * np.sin(t))
+                    for t in np.linspace(0, 2 * math.pi, 64)
+                ])
+                col = self.AXIS_COLORS[i]
+                item = OverlayLine(pos=pts, color=col, width=8, antialias=True)
+                self.addItem(item)
+                self._gizmo_items.append(item)
+
+    def clear_gizmo(self):
+        for item in self._gizmo_items:
+            try:
+                self.removeItem(item)
+            except ValueError:
+                pass
+        self._gizmo_items.clear()
+
+    # ── Raycasting helpers ───────────────────────────────────────────────
+
+    def _world_len(self, px: float) -> float:
+        dist = self.opts['distance']
+        fov = math.radians(self.opts.get('fov', 60))
+        h = self.height()
+        if h == 0:
+            return 1.0
+        return dist * math.tan(fov * (px / h))
+
+    def _get_ray(self, event):
+        """Return (origin: QVector3D, direction: QVector3D) for a mouse event."""
+        pos = event.localPos() if hasattr(event, 'localPos') else event.position()
+        ndc_x = (2.0 * pos.x()) / self.width() - 1.0
+        ndc_y = 1.0 - (2.0 * pos.y()) / self.height()
+        view = self.viewMatrix()
+        proj = self.projectionMatrix()
+        inv = (proj * view).inverted()[0]
+        camera_pos = self.cameraPosition()
+        world_pt = inv.map(QVector3D(ndc_x, ndc_y, 0.0))
+        direction = world_pt - camera_pos
+        direction.normalize()
+        return camera_pos, direction
+
+    def _hit_test_trees(self, origin, direction) -> int:
+        """Return index of the closest tree whose root joint sphere (5× enlarged) is hit, or -1."""
+        best_dist = float('inf')
+        best_idx = -1
+        for i, tree in enumerate(self.parent_window.trees):
+            if not tree.Joints:
+                continue
+            root_ball = tree.Joints[0].boundingBall()
+            c = root_ball.c
+            r = root_ball.r * 5.0
+            d = compute_sphere_intersection(
+                [origin.x(), origin.y(), origin.z()],
+                [direction.x(), direction.y(), direction.z()],
+                c, r)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
+        return best_idx
+
+    def _hit_test_translate(self, origin, direction, center_q):
+        """Test ray against the three translation arrows. Returns axis index or -1."""
+        rad = self._world_len(self.GIZMO_ARROW_PX)
+        thick = self._world_len(self.GIZMO_THICK_PX)
+        axes = [QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)]
+        best = float('inf')
+        best_idx = -1
+        for i, ax in enumerate(axes):
+            d = compute_cylinder_intersection(origin, direction, center_q, ax, thick, rad)
+            if d < best:
+                best = d
+                best_idx = i
+        if best_idx >= 0:
+            return best_idx, axes[best_idx]
+        return -1, None
+
+    def _hit_test_rotate(self, origin, direction, center_q):
+        """Test ray against the three rotation tori. Returns axis index or -1."""
+        rad = self._world_len(self.GIZMO_ARROW_PX)
+        thick = self._world_len(self.GIZMO_THICK_PX)
+        axes = [QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)]
+        best = float('inf')
+        best_idx = -1
+        for i, ax in enumerate(axes):
+            d = compute_torus_intersection(origin, direction, center_q, ax,
+                                           major_radius=rad, minor_radius=thick)
+            if d < best:
+                best = d
+                best_idx = i
+        if best_idx >= 0:
+            return best_idx, axes[best_idx]
+        return -1, None
+
+    # ── Mouse events ─────────────────────────────────────────────────────
+
+    def mousePressEvent(self, event):
+        self._drag_start_pos = event.pos()
+
+        if event.button() == Qt.LeftButton:
+            origin, direction = self._get_ray(event)
+            self._is_dragging = False
+            self._selected_axis = None
+            self._selected_torus = None
+
+            # If a tree is selected, test gizmo hit first
+            center = self._gizmo_center()
+            if center is not None:
+                center_q = QVector3D(center[0], center[1], center[2])
+                if self.control_mode == "Translate":
+                    idx, axis = self._hit_test_translate(origin, direction, center_q)
+                    if idx >= 0:
+                        self._selected_axis = axis
+                        self._is_dragging = True
+                        return
+                else:
+                    idx, axis = self._hit_test_rotate(origin, direction, center_q)
+                    if idx >= 0:
+                        self._selected_torus = axis
+                        self._is_dragging = True
+                        # Initialise rotation tracking
+                        npos = compute_plane_intersection(origin, direction, axis, center_q)
+                        if npos is not None:
+                            pv = npos - center_q
+                            pv.normalize()
+                            self._drag_prev_vector = pv
+                        dot = QVector3D.dotProduct(direction, axis)
+                        self._facing_same_dir = (dot > 0)
+                        return
+
+            # No gizmo hit — test for tree selection
+            hit = self._hit_test_trees(origin, direction)
+            if hit != self.selected_tree_index:
+                self.selected_tree_index = hit
+                self.draw_gizmo()
+                self.parent_window._sync_color_combos()
+                self.update()
+
+        # Fall through to default camera controls for middle button / unhandled
+        if event.button() != Qt.LeftButton or not self._is_dragging:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._is_dragging and self._selected_axis:
+            # Translation drag
+            origin, direction = self._get_ray(event)
+            center = self._gizmo_center()
+            if center is None:
+                return
+            center_q = QVector3D(center[0], center[1], center[2])
+            new_pt = compute_closest_point_on_axis(origin, direction, center_q, self._selected_axis)
+            delta = new_pt - center_q
+            T = SE3.Trans(delta.x(), delta.y(), delta.z())
+            tree = self.parent_window.trees[self.selected_tree_index]
+            tree.transformAll(T)
+            self.parent_window._redraw_trees()
+            return
+
+        if self._is_dragging and self._selected_torus:
+            # Rotation drag
+            origin, direction = self._get_ray(event)
+            center = self._gizmo_center()
+            if center is None:
+                return
+            center_q = QVector3D(center[0], center[1], center[2])
+            npos = compute_plane_intersection(origin, direction, self._selected_torus, center_q)
+            if npos is None:
+                return
+            plane_vector = npos - center_q
+            plane_vector.normalize()
+            prev = self._drag_prev_vector
+            if prev is None:
+                self._drag_prev_vector = plane_vector
+                return
+            d = QVector3D.dotProduct(plane_vector, prev)
+            prod = plane_vector.length() * prev.length()
+            if prod == 0:
+                return
+            d = max(-1.0, min(1.0, d / prod))
+            angle = math.acos(d)
+            cross = QVector3D.crossProduct(prev, plane_vector)
+            normal = QVector3D.dotProduct(direction, self._selected_torus) * self._selected_torus
+            normal.normalize()
+            if QVector3D.dotProduct(cross, normal) < 0:
+                angle = -angle
+            if not self._facing_same_dir:
+                angle = -angle
+            self._drag_prev_vector = plane_vector
+
+            # Build rotation about the tree center
+            axis_np = np.array([self._selected_torus.x(),
+                                self._selected_torus.y(),
+                                self._selected_torus.z()])
+            center_np = self._gizmo_center()
+            T_to_origin = SE3.Trans(*(-center_np))
+            T_rotate = SE3.AngleAxis(math.degrees(angle), axis_np, unit='deg')
+            T_back = SE3.Trans(*center_np)
+            T = T_back @ T_rotate @ T_to_origin
+
+            tree = self.parent_window.trees[self.selected_tree_index]
+            tree.transformAll(T)
+            self.parent_window._redraw_trees()
+            return
+
+        # Default camera orbit / pan
+        if event.buttons() == Qt.LeftButton and self._drag_start_pos is not None:
+            curr = event.position() if hasattr(event, 'position') else event.localPos()
+            prev = self._last_drag_pos if self._last_drag_pos is not None else self._drag_start_pos
+            diff = curr - prev
+            self._last_drag_pos = curr
+            if event.modifiers() & Qt.ShiftModifier:
+                self.pan(diff.x(), diff.y(), 0, relative='view')
+            else:
+                self.orbit(-diff.x() * self.orbit_speed, diff.y() * self.orbit_speed)
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        was_dragging_gizmo = self._is_dragging and (self._selected_axis or self._selected_torus)
+        self._is_dragging = False
+        self._selected_axis = None
+        self._selected_torus = None
+        self._drag_prev_vector = None
+        self._last_drag_pos = None
+        if was_dragging_gizmo:
+            # Redraw gizmo at new position
+            self.draw_gizmo()
+            self.update()
+        else:
+            super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_T:
+            self.parent_window._set_translate_mode()
+        elif event.key() == Qt.Key_R:
+            self.parent_window._set_rotate_mode()
+        elif event.key() == Qt.Key_Escape:
+            self.selected_tree_index = -1
+            self.clear_gizmo()
+            self.parent_window._sync_color_combos()
+            self.update()
+        else:
+            super().keyPressEvent(event)
 
 
 # ── Per-robot animation state ────────────────────────────────────────────────
@@ -267,6 +722,53 @@ class DancePartyWindow(QMainWindow):
         self.export_iterations_spin.setFixedWidth(60)
         selector_row.addWidget(self.export_iterations_spin)
 
+        # Background selector
+        selector_row.addWidget(QLabel("Background:"))
+        self.bg_combo = QComboBox()
+        self.bg_combo.addItems(["White", "Green Screen", "Environment Image"])
+        self.bg_combo.currentTextChanged.connect(self._on_bg_changed)
+        selector_row.addWidget(self.bg_combo)
+
+        # Translate / Rotate mode buttons
+        self.translate_button = QPushButton("Translate (T)")
+        self.translate_button.setFixedWidth(100)
+        self.translate_button.setCheckable(True)
+        self.translate_button.setChecked(True)
+        self.translate_button.clicked.connect(self._set_translate_mode)
+        selector_row.addWidget(self.translate_button)
+
+        self.rotate_button = QPushButton("Rotate (R)")
+        self.rotate_button.setFixedWidth(100)
+        self.rotate_button.setCheckable(True)
+        self.rotate_button.clicked.connect(self._set_rotate_mode)
+        selector_row.addWidget(self.rotate_button)
+
+        # Joint / Link colour selectors (apply to the selected tree)
+        selector_row.addWidget(QLabel("Joint:"))
+        self.joint_color_combo = QComboBox()
+        self.joint_color_combo.addItems(COLOR_NAMES)
+        self.joint_color_combo.setCurrentText(DEFAULT_JOINT_COLOR)
+        self.joint_color_combo.currentTextChanged.connect(self._on_joint_color_changed)
+        selector_row.addWidget(self.joint_color_combo)
+
+        selector_row.addWidget(QLabel("Link:"))
+        self.link_color_combo = QComboBox()
+        self.link_color_combo.addItems(COLOR_NAMES)
+        self.link_color_combo.setCurrentText(DEFAULT_LINK_COLOR)
+        self.link_color_combo.currentTextChanged.connect(self._on_link_color_changed)
+        selector_row.addWidget(self.link_color_combo)
+
+        # Save / Load scene buttons
+        self.save_scene_button = QPushButton("Save Scene")
+        self.save_scene_button.setFixedWidth(90)
+        self.save_scene_button.clicked.connect(self._save_scene)
+        selector_row.addWidget(self.save_scene_button)
+
+        self.load_scene_button = QPushButton("Load Scene")
+        self.load_scene_button.setFixedWidth(90)
+        self.load_scene_button.clicked.connect(self._load_scene)
+        selector_row.addWidget(self.load_scene_button)
+
         # Profile button
         self.profile_button = QPushButton("Profile")
         self.profile_button.setFixedWidth(70)
@@ -281,7 +783,7 @@ class DancePartyWindow(QMainWindow):
         fmt.setProfile(QSurfaceFormat.CompatibilityProfile)
         QSurfaceFormat.setDefaultFormat(fmt)
 
-        self.gl_widget = gl.GLViewWidget()
+        self.gl_widget = DancePartyGLWidget(parent_window=self)
         self.gl_widget.setBackgroundColor(backgroundColorDefault)
         layout.addWidget(self.gl_widget, 1)  # stretch=1: GL view fills remaining space
 
@@ -291,6 +793,8 @@ class DancePartyWindow(QMainWindow):
         # Storage
         self.trees: list[KinematicTree] = []
         self.tree_names: list[str] = []
+        self.tree_joint_colors: list[str] = []   # per-tree joint colour name
+        self.tree_link_colors: list[str] = []    # per-tree link colour name
         self.animators: list[RobotAnimator] = []
         self.is_animating = False
 
@@ -374,17 +878,24 @@ class DancePartyWindow(QMainWindow):
 
         # Render trees into the GL widget
         show_axes = self.axes_checkbox.isChecked()
-        for t in trees:
+        for i, t in enumerate(trees):
+            jc = COLOR_PALETTE[DEFAULT_JOINT_COLOR]
+            lc = COLOR_PALETTE[DEFAULT_LINK_COLOR]
             t.addToWidget(self.viewer,
                           showJointSurface=True,
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
                           showJointAxis=show_axes,
-                          showSpheres=False)
+                          showSpheres=False,
+                          jointColor=jc,
+                          linkColor=lc,
+                          linkOpacity=lc[3])
 
         self.trees = trees
         self.tree_names = names
+        self.tree_joint_colors = [DEFAULT_JOINT_COLOR] * len(trees)
+        self.tree_link_colors = [DEFAULT_LINK_COLOR] * len(trees)
         self.name_labels: list[gl.GLTextItem] = []
 
         # Create per-robot animators
@@ -399,6 +910,8 @@ class DancePartyWindow(QMainWindow):
 
         # Set camera to see everything
         self._fit_camera()
+        # Refresh background in case "Environment Image" is selected
+        self._on_bg_changed()
         self.info_label.setText(
             f"Loaded {len(trees)} robots for '{env}' "
             f"({anim_count} with dance sequences)"
@@ -411,8 +924,74 @@ class DancePartyWindow(QMainWindow):
             self.gl_widget.removeItem(item)
         self.trees = []
         self.tree_names = []
+        self.tree_joint_colors = []
+        self.tree_link_colors = []
         self.name_labels = []
         self.animators = []
+
+    # ── Background ────────────────────────────────────────────────────
+
+    def _on_bg_changed(self, text=None):
+        if text is None:
+            text = self.bg_combo.currentText()
+        if text == "White":
+            self.gl_widget.set_background_image(None)
+            self.gl_widget.setBackgroundColor((255, 255, 255, 255))
+        elif text == "Green Screen":
+            self.gl_widget.set_background_image(None)
+            self.gl_widget.setBackgroundColor((0, 177, 64, 255))
+        elif text == "Environment Image":
+            env = self.env_combo.currentText()
+            img_path = os.path.join(session_dir(), f"{env}.jpg")
+            if os.path.isfile(img_path):
+                self.gl_widget.set_background_image(img_path)
+            else:
+                self.gl_widget.set_background_image(None)
+                self.gl_widget.setBackgroundColor((255, 255, 255, 255))
+        self.gl_widget.update()
+
+    # ── Per-tree colours ──────────────────────────────────────────────
+
+    def _sync_color_combos(self):
+        """Update the colour combo boxes to reflect the selected tree."""
+        idx = self.gl_widget.selected_tree_index
+        if 0 <= idx < len(self.trees):
+            self.joint_color_combo.blockSignals(True)
+            self.joint_color_combo.setCurrentText(self.tree_joint_colors[idx])
+            self.joint_color_combo.blockSignals(False)
+            self.link_color_combo.blockSignals(True)
+            self.link_color_combo.setCurrentText(self.tree_link_colors[idx])
+            self.link_color_combo.blockSignals(False)
+
+    def _on_joint_color_changed(self, name: str):
+        idx = self.gl_widget.selected_tree_index
+        if idx < 0 or idx >= len(self.trees):
+            return
+        self.tree_joint_colors[idx] = name
+        self._redraw_trees()
+
+    def _on_link_color_changed(self, name: str):
+        idx = self.gl_widget.selected_tree_index
+        if idx < 0 or idx >= len(self.trees):
+            return
+        self.tree_link_colors[idx] = name
+        self._redraw_trees()
+
+    # ── Transform modes ────────────────────────────────────────────────
+
+    def _set_translate_mode(self):
+        self.gl_widget.control_mode = "Translate"
+        self.translate_button.setChecked(True)
+        self.rotate_button.setChecked(False)
+        self.gl_widget.draw_gizmo()
+        self.info_label.setText("Mode: Translate")
+
+    def _set_rotate_mode(self):
+        self.gl_widget.control_mode = "Rotate"
+        self.translate_button.setChecked(False)
+        self.rotate_button.setChecked(True)
+        self.gl_widget.draw_gizmo()
+        self.info_label.setText("Mode: Rotate")
 
     # ── Animation ────────────────────────────────────────────────────────
 
@@ -460,6 +1039,7 @@ class DancePartyWindow(QMainWindow):
                 # Cache miss — do a full redraw (which re-populates caches)
                 self._redraw_trees()
                 return
+        self.gl_widget.draw_gizmo()
         self.gl_widget.update()
 
     def _redraw_trees(self):
@@ -472,17 +1052,28 @@ class DancePartyWindow(QMainWindow):
             t.clearAllGLCaches()
         # Re-add trees
         show_axes = self.axes_checkbox.isChecked()
-        for t in self.trees:
+        for i, t in enumerate(self.trees):
+            jc = COLOR_PALETTE.get(
+                self.tree_joint_colors[i] if i < len(self.tree_joint_colors) else DEFAULT_JOINT_COLOR,
+                COLOR_PALETTE[DEFAULT_JOINT_COLOR])
+            lc = COLOR_PALETTE.get(
+                self.tree_link_colors[i] if i < len(self.tree_link_colors) else DEFAULT_LINK_COLOR,
+                COLOR_PALETTE[DEFAULT_LINK_COLOR])
             t.addToWidget(self.viewer,
                           showJointSurface=True,
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
                           showJointAxis=show_axes,
-                          showSpheres=False)
+                          showSpheres=False,
+                          jointColor=jc,
+                          linkColor=lc,
+                          linkOpacity=lc[3])
         # Re-add name labels if enabled
         if self.names_checkbox.isChecked():
             self._add_name_labels()
+        # Re-add gizmo overlay if a tree is selected
+        self.gl_widget.draw_gizmo()
 
     def _add_name_labels(self):
         """Create and add GLTextItem labels above each robot."""
@@ -673,13 +1264,22 @@ class DancePartyWindow(QMainWindow):
         for i, t in enumerate(self.trees):
             t1 = time.perf_counter()
             before_count = len(self.gl_widget.items)
+            jc = COLOR_PALETTE.get(
+                self.tree_joint_colors[i] if i < len(self.tree_joint_colors) else DEFAULT_JOINT_COLOR,
+                COLOR_PALETTE[DEFAULT_JOINT_COLOR])
+            lc = COLOR_PALETTE.get(
+                self.tree_link_colors[i] if i < len(self.tree_link_colors) else DEFAULT_LINK_COLOR,
+                COLOR_PALETTE[DEFAULT_LINK_COLOR])
             t.addToWidget(self.viewer,
                           showJointSurface=True,
                           showLinkSurface=True,
                           showLinkPath=False,
                           showJointPoses=False,
                           showJointAxis=False,
-                          showSpheres=False)
+                          showSpheres=False,
+                          jointColor=jc,
+                          linkColor=lc,
+                          linkOpacity=lc[3])
             after_count = len(self.gl_widget.items)
             dt = time.perf_counter() - t1
             tree_times.append(dt)
@@ -884,6 +1484,116 @@ class DancePartyWindow(QMainWindow):
         self.gl_widget.opts["distance"] = max_dist * 3.0
         self.gl_widget.opts["elevation"] = 25
         self.gl_widget.opts["azimuth"] = 45
+
+    # ── Save / Load scene ────────────────────────────────────────────────
+
+    def _gather_scene_state(self) -> dict:
+        """Collect all scene state into a serializable dict."""
+        # Per-tree: capture the 4x4 pose of the root joint as the world transform
+        tree_states = []
+        for i, t in enumerate(self.trees):
+            root_pose = t.Joints[0].Pose.A.tolist() if t.Joints else np.eye(4).tolist()
+            tree_states.append({
+                "root_pose": root_pose,
+                "joint_color": self.tree_joint_colors[i] if i < len(self.tree_joint_colors) else DEFAULT_JOINT_COLOR,
+                "link_color": self.tree_link_colors[i] if i < len(self.tree_link_colors) else DEFAULT_LINK_COLOR,
+            })
+        # Camera
+        center = self.gl_widget.opts["center"]
+        camera = {
+            "center": [center.x(), center.y(), center.z()],
+            "distance": float(self.gl_widget.opts["distance"]),
+            "elevation": float(self.gl_widget.opts["elevation"]),
+            "azimuth": float(self.gl_widget.opts["azimuth"]),
+        }
+        return {
+            "environment": self.env_combo.currentText(),
+            "background": self.bg_combo.currentText(),
+            "trees": tree_states,
+            "camera": camera,
+        }
+
+    def _save_scene(self):
+        """Save the current scene arrangement to a JSON file."""
+        if not self.trees:
+            QtWidgets.QMessageBox.information(self, "Nothing to save",
+                                              "Load an environment first.")
+            return
+        default_name = f"scene_{self.env_combo.currentText()}.dpscene"
+        default_path = os.path.join(session_dir(), default_name)
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Scene", default_path,
+            "Dance Party Scene (*.dpscene)")
+        if not filepath:
+            return
+        state = self._gather_scene_state()
+        with open(filepath, "w") as f:
+            json.dump(state, f, indent=2)
+        self.info_label.setText(f"Scene saved to {os.path.basename(filepath)}")
+
+    def _load_scene(self):
+        """Load a scene arrangement from a JSON file."""
+        default_path = session_dir()
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Load Scene", default_path,
+            "Dance Party Scene (*.dpscene)")
+        if not filepath:
+            return
+        with open(filepath, "r") as f:
+            state = json.load(f)
+
+        env = state.get("environment", "")
+        if env not in ENVIRONMENTS:
+            QtWidgets.QMessageBox.warning(self, "Invalid scene",
+                                          f"Unknown environment '{env}'.")
+            return
+
+        # Load the environment (resets trees to default layout)
+        self.env_combo.blockSignals(True)
+        self.env_combo.setCurrentText(env)
+        self.env_combo.blockSignals(False)
+        self._on_env_changed(env)
+
+        saved_trees = state.get("trees", [])
+        if len(saved_trees) != len(self.trees):
+            QtWidgets.QMessageBox.warning(
+                self, "Mismatch",
+                f"Scene has {len(saved_trees)} trees but environment "
+                f"loaded {len(self.trees)}. Applying what matches.")
+
+        # Apply saved transforms and colors
+        count = min(len(saved_trees), len(self.trees))
+        for i in range(count):
+            ts = saved_trees[i]
+            # Compute delta from current root pose to saved root pose
+            saved_pose = SE3(np.array(ts["root_pose"]))
+            current_pose = self.trees[i].Joints[0].Pose if self.trees[i].Joints else SE3()
+            delta = saved_pose * current_pose.inv()
+            self.trees[i].transformAll(delta)
+            self.trees[i].recomputeBoundingBall()
+            # Colors
+            if i < len(self.tree_joint_colors):
+                self.tree_joint_colors[i] = ts.get("joint_color", DEFAULT_JOINT_COLOR)
+            if i < len(self.tree_link_colors):
+                self.tree_link_colors[i] = ts.get("link_color", DEFAULT_LINK_COLOR)
+
+        # Restore camera
+        cam = state.get("camera", {})
+        if cam:
+            c = cam.get("center", [0, 0, 0])
+            self.gl_widget.opts["center"] = pg.Vector(c[0], c[1], c[2])
+            self.gl_widget.opts["distance"] = cam.get("distance", 500)
+            self.gl_widget.opts["elevation"] = cam.get("elevation", 25)
+            self.gl_widget.opts["azimuth"] = cam.get("azimuth", 45)
+
+        # Restore background
+        bg = state.get("background", "White")
+        self.bg_combo.setCurrentText(bg)
+
+        # Sync color combos and redraw
+        self._sync_color_combos()
+        self._redraw_trees()
+        self.info_label.setText(f"Scene loaded from {os.path.basename(filepath)}")
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────

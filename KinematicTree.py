@@ -564,7 +564,7 @@ class KinematicTree(Generic[F]):
                   proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                   showJointSurface=True, jointColor=jointColorDefault,
                   jointAxisScale=jointAxisScaleDefault, showJointAxis=True, showJointPoses=False,
-                  linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
+                  linkColor=linkColorDefault, linkOpacity=linkOpacityDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
                   showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None, 
@@ -621,8 +621,8 @@ class KinematicTree(Generic[F]):
                                 showBoundary=showLinkSurface,
                                 linkID=index)
             else:
-                link.addToWidget(widget, color=linkColorDefault, 
-                                alpha=linkOpacityDefault,
+                link.addToWidget(widget, color=linkColor, 
+                                alpha=linkOpacity,
                                 showPath=showLinkPath, 
                                 pathColor=pathColor,
                                 showPathCircles=showPathCircles, 

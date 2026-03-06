@@ -282,7 +282,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
         #Calls Joint.addToWidget directly (skipping Revolute/TransverseRevolute surface).
         
         import pyqtgraph.opengl as gl
-        from style import revoluteColorList
+        from style import revoluteColorList, revoluteColorDefault
         
         # Call Joint.addToWidget directly for poses/axis without revolute surface
         Joint.addToWidget(self, widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
@@ -292,6 +292,8 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
                           axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
         
         if showSurface:
+            # Use surfaceColor override if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
             xhat = self.Pose.R[:, 0]
             yhat = self.Pose.R[:, 1]
             zhat = self.Pose.R[:, 2]
@@ -332,7 +334,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
             proximal_pos = self.ProximalFrame().t
             proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
             items_before = list(widget.plot_widget.items)
-            proximal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            proximal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
             for item in widget.plot_widget.items:
                 if item not in items_before:
                     self._gl_items_proximal.append(item)
@@ -343,7 +345,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
             distal_xhat = distalFrame.R[:, 0]
             distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
             items_before = list(widget.plot_widget.items)
-            distal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            distal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
             for item in widget.plot_widget.items:
                 if item not in items_before:
                     self._gl_items_distal.append(item)
@@ -370,7 +372,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
             prox_cap_center = proximal_pos + cyl_length * xhat
             prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, xhat, self.r, numCylPoints)
             prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
-                                          color=tuple(revoluteColorList), smooth=True)
+                                          color=tuple(color), smooth=True)
             prox_cap_mesh.setGLOptions('opaque')
             prox_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(prox_cap_mesh)
@@ -379,7 +381,7 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
             dist_cap_center = distal_pos - cyl_length * distal_xhat
             dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_xhat, self.r, numCylPoints)
             dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
-                                          color=tuple(revoluteColorList), smooth=True)
+                                          color=tuple(color), smooth=True)
             dist_cap_mesh.setGLOptions('opaque')
             dist_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(dist_cap_mesh)
@@ -625,7 +627,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
         #each with inner end caps.
         #Calls Joint.addToWidget directly (skipping Revolute/CoaxialRevolute surface).
         import pyqtgraph.opengl as gl
-        from style import revoluteColorList
+        from style import revoluteColorList, revoluteColorDefault
         
         # Call Joint.addToWidget directly for poses/axis without revolute surface
         Joint.addToWidget(self, widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
@@ -635,6 +637,8 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
                           axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
         
         if showSurface:
+            # Use surfaceColor override if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
             xhat = self.Pose.R[:, 0]
             yhat = self.Pose.R[:, 1]
             zhat = self.Pose.R[:, 2]  # path direction for coaxial
@@ -673,7 +677,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             proximal_pos = self.ProximalFrame().t
             proximal_cyl = Cylinder(self.r, proximal_pos, zhat, prox_cyl_length)
             items_before = list(widget.plot_widget.items)
-            proximal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            proximal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
             for item in widget.plot_widget.items:
                 if item not in items_before:
                     self._gl_items_proximal.append(item)
@@ -682,7 +686,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             prox_cap_center = proximal_pos + prox_cyl_length * zhat
             prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, zhat, self.r, numCylPoints)
             prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
-                                           color=tuple(revoluteColorList), smooth=True)
+                                           color=tuple(color), smooth=True)
             prox_cap_mesh.setGLOptions('opaque')
             prox_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(prox_cap_mesh)
@@ -706,7 +710,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             distal_r = self.r - self.wallThickness
             distal_cyl = Cylinder(distal_r, distal_pos, -distal_zhat, dist_cyl_length)
             items_before = list(widget.plot_widget.items)
-            distal_cyl.addToWidget(widget, color_list=revoluteColorList, is_joint=True, opaque=True)
+            distal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
             for item in widget.plot_widget.items:
                 if item not in items_before:
                     self._gl_items_distal.append(item)
@@ -715,7 +719,7 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
             dist_cap_center = distal_pos - dist_cyl_length * distal_zhat
             dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_zhat, distal_r, numCylPoints)
             dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
-                                           color=tuple(revoluteColorList), smooth=True)
+                                           color=tuple(color), smooth=True)
             dist_cap_mesh.setGLOptions('opaque')
             dist_cap_mesh.setObjectName("Joint")
             widget.plot_widget.addItem(dist_cap_mesh)

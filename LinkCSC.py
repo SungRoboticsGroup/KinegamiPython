@@ -265,9 +265,18 @@ class LinkCSC:
 
             if (len(vertices) > 0 and len(faces) > 0):
                 meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
-                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=color, drawEdges=wireFrame, shader='shaded', smooth=True)
+                # Apply alpha to color if it's an RGBA tuple
+                draw_color = color
+                if isinstance(color, (tuple, list)) and len(color) >= 4:
+                    draw_color = (color[0], color[1], color[2], alpha)
+                link_shader = None if alpha >= 1.0 else 'shaded'
+                draw_edges = True if alpha >= 1.0 else wireFrame
+                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=draw_color, drawEdges=draw_edges, shader=link_shader, smooth=True)
                 meshitem.setObjectName("Link")
-                meshitem.setGLOptions('translucent')
+                if alpha >= 1.0:
+                    meshitem.setGLOptions('opaque')
+                else:
+                    meshitem.setGLOptions('translucent')
                 widget.plot_widget.addItem(meshitem)
                 self._gl_items.append(meshitem)
         elif showFrames:
