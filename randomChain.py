@@ -1,4 +1,5 @@
 from optimizationFunctions import *
+from optimizationFunctions import set_collision_penalty_log_file
 from makeKinematicTree import *
 from KinematicTree import *
 from KinematicChain import *
@@ -29,6 +30,10 @@ base_dir = "Trials Before Experiments"
 experiment_name = f"{timestamp}_Joints{jointCount}_Chains{chainCount}_Seed{seed}"
 results_dir = os.path.join(os.getcwd(), base_dir, experiment_name)
 os.makedirs(results_dir, exist_ok=True)
+
+# Set up collision penalty logging to a file in the results directory
+collision_log_path = os.path.join(results_dir, "collision_penalty_log.txt")
+set_collision_penalty_log_file(collision_log_path)
 
 def generateRandomChain(nJoints):
     bounds = (-cubeSize/2, cubeSize/2)
@@ -79,15 +84,15 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 
 def test():
     versions = [
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "DFS Outward Shortest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "DFS Inward Shortest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "DFS Outward Shortest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "DFS Inward Shortest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "BFS Outward Shortest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
     ]
     optimizations = [v[0] for v in versions]
     labels = [v[1] for v in versions]
