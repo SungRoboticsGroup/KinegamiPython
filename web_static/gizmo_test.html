@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kinegami — Gizmo Test</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; overflow: hidden; }
+    canvas { display: block; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      color: #ccc; font-family: monospace; font-size: 13px;
+      pointer-events: none; line-height: 1.7;
+    }
+    #info span {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      background: #333; margin-right: 4px;
+    }
+    #mode {
+      position: absolute; bottom: 12px; left: 12px;
+      color: #aaa; font-family: monospace; font-size: 12px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <span>T</span> Translate &nbsp;
+    <span>R</span> Rotate &nbsp;
+    <span>S</span> Scale &nbsp;
+    <span>Space</span> Toggle local/world &nbsp;
+    <span>Esc</span> Deselect
+  </div>
+  <div id="mode">Mode: translate · Space = local frame</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls }    from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+    // ── Scene ─────────────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    // Grid for spatial reference
+    const grid = new THREE.GridHelper(600, 12, 0x444444, 0x333333);
+    scene.add(grid);
+
+    const camera = new THREE.PerspectiveCamera(
+      45, window.innerWidth / window.innerHeight, 0.1, 50000);
+    camera.position.set(300, 250, 300);
+    camera.lookAt(0, 0, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(300, 500, 300);
+    scene.add(sun);
+
+    // ── Test object: cube with one color per face ─────────────────────────────
+    // BoxGeometry has 6 face groups in ±X ±Y ±Z order
+    const cubeMaterials = [
+      new THREE.MeshPhongMaterial({ color: 0xdd2222 }),  // +X  red
+      new THREE.MeshPhongMaterial({ color: 0x22aadd }),  // -X  cyan
+      new THREE.MeshPhongMaterial({ color: 0x22dd22 }),  // +Y  green
+      new THREE.MeshPhongMaterial({ color: 0xddaa22 }),  // -Y  orange
+      new THREE.MeshPhongMaterial({ color: 0xaa22dd }),  // +Z  purple
+      new THREE.MeshPhongMaterial({ color: 0xdddd22 }),  // -Z  yellow
+    ];
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(100, 100, 100),
+      cubeMaterials
+    );
+    cube.position.set(0, 50, 0);
+    scene.add(cube);
+
+    // ── Orbit controls ────────────────────────────────────────────────────────
+    const orbit = new OrbitControls(camera, renderer.domElement);
+    orbit.enableDamping  = true;
+    orbit.dampingFactor  = 0.08;
+    orbit.target.set(0, 50, 0);
+    orbit.update();
+
+    // ── Transform gizmo ───────────────────────────────────────────────────────
+    const gizmo = new TransformControls(camera, renderer.domElement);
+    gizmo.attach(cube);
+    scene.add(gizmo);
+
+    // Disable orbit while dragging the gizmo, re-enable when done
+    gizmo.addEventListener('dragging-changed', e => {
+      orbit.enabled = !e.value;
+    });
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    const modeEl  = document.getElementById('mode');
+    let localFrame = false;
+
+    function updateModeLabel() {
+      const frameStr = localFrame ? 'local frame' : 'world frame';
+      modeEl.textContent = `Mode: ${gizmo.mode} · Space = ${frameStr}`;
+    }
+
+    window.addEventListener('keydown', e => {
+      switch (e.key.toLowerCase()) {
+        case 't':
+          gizmo.setMode('translate');
+          break;
+        case 'r':
+          gizmo.setMode('rotate');
+          break;
+        case 's':
+          gizmo.setMode('scale');
+          break;
+        case ' ':
+          e.preventDefault();
+          localFrame = !localFrame;
+          gizmo.setSpace(localFrame ? 'local' : 'world');
+          break;
+        case 'escape':
+          gizmo.detach();
+          break;
+      }
+      updateModeLabel();
+    });
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      orbit.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

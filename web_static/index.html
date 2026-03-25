@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kinegami</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; overflow: hidden; }
+    canvas { display: block; cursor: grab; }
+    canvas:active { cursor: grabbing; }
+    #info {
+      position: absolute; top: 12px; left: 12px;
+      color: #ccc; font-family: monospace; font-size: 13px;
+      pointer-events: none; line-height: 1.8;
+    }
+    #info span {
+      display: inline-block; padding: 1px 5px; border-radius: 3px;
+      background: #333; margin-right: 3px;
+    }
+    #status {
+      position: absolute; bottom: 12px; left: 12px;
+      color: #888; font-family: monospace; font-size: 12px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    Click to select joint &nbsp;|&nbsp;
+    <span>T</span> translate &nbsp;
+    <span>R</span> rotate &nbsp;
+    <span>Space</span> local/world &nbsp;
+    <span>Esc</span> deselect
+  </div>
+  <div id="status">Loading...</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+    // ── Scene ─────────────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+
+    const camera = new THREE.PerspectiveCamera(
+      45, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.set(600, 400, 600);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(600, 900, 600);
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0x8888ff, 0.4);
+    fill.position.set(-400, -200, -400);
+    scene.add(fill);
+
+    // ── Orbit controls ────────────────────────────────────────────────────────
+    const orbit = new OrbitControls(camera, renderer.domElement);
+    orbit.enableDamping = true;
+    orbit.dampingFactor = 0.08;
+
+    // ── Transform gizmo ───────────────────────────────────────────────────────
+    // gizmoPivot is an invisible Object3D positioned at the selected joint.
+    // TransformControls moves it; on drag-end we read its new world pose.
+    const gizmoPivot = new THREE.Object3D();
+    scene.add(gizmoPivot);
+
+    const gizmo = new TransformControls(camera, renderer.domElement);
+    scene.add(gizmo);
+
+    let gizmoMode  = 'translate';
+    let gizmoSpace = 'world';
+    gizmo.setMode(gizmoMode);
+    gizmo.setSpace(gizmoSpace);
+
+    // Disable orbit while the gizmo is being dragged; on release send to server
+    gizmo.addEventListener('dragging-changed', e => {
+      orbit.enabled = !e.value;
+      if (!e.value && selectedJointIndex >= 0) sendMoveJoint();
+    });
+
+    // ── Selection state ───────────────────────────────────────────────────────
+    const HIGHLIGHT   = new THREE.Color(0xff4400);
+    const NO_EMISSIVE = new THREE.Color(0x000000);
+
+    const jointMeshMap   = new Map();  // joint_index → visible meshes (for highlight)
+    const allJointMeshes = [];         // all joint meshes including pick-only (raycaster)
+    let   jointInfo      = {};         // joint_index → {position, quaternion, type}
+    let   selectedJointIndex = -1;
+
+    const treeObjects = [];  // all scene objects from the tree (cleared on rebuild)
+    const status = document.getElementById('status');
+
+    function updateStatus(note = '') {
+      let s;
+      if (selectedJointIndex >= 0) {
+        const t = jointInfo[selectedJointIndex]?.type ?? '?';
+        s = `Joint ${selectedJointIndex} (${t}) · ${gizmoMode} · ${gizmoSpace}`;
+      } else {
+        s = `${treeObjects.filter(o => o.isMesh && !o.userData.pickOnly).length} meshes`;
+      }
+      status.textContent = note ? `${s} — ${note}` : s;
+    }
+
+    function positionGizmo(idx) {
+      const info = jointInfo[idx];
+      if (!info) return;
+      const [x, y, z]         = info.position;
+      const [qx, qy, qz, qw]  = info.quaternion;
+      gizmoPivot.position.set(x, y, z);
+      gizmoPivot.quaternion.set(qx, qy, qz, qw);
+      gizmoPivot.updateMatrixWorld(true);
+      gizmo.attach(gizmoPivot);
+    }
+
+    function selectJoint(idx) {
+      // Restore previous highlight
+      if (selectedJointIndex >= 0)
+        for (const m of (jointMeshMap.get(selectedJointIndex) ?? []))
+          m.material.emissive.copy(NO_EMISSIVE);
+
+      selectedJointIndex = idx;
+
+      if (idx >= 0) {
+        for (const m of (jointMeshMap.get(idx) ?? []))
+          m.material.emissive.copy(HIGHLIGHT);
+        positionGizmo(idx);
+      } else {
+        gizmo.detach();
+      }
+      updateStatus();
+    }
+
+    // ── Build / rebuild scene from geometry JSON ──────────────────────────────
+    function buildScene(geo) {
+      // Remove previous tree objects
+      for (const obj of treeObjects) scene.remove(obj);
+      treeObjects.length = 0;
+      jointMeshMap.clear();
+      allJointMeshes.length = 0;
+
+      // Update joint metadata
+      jointInfo = {};
+      for (const j of (geo.joints ?? [])) jointInfo[j.index] = j;
+
+      for (const m of geo.meshes) {
+        const positions = new Float32Array(m.vertices.flat());
+        const indices   = new Uint32Array(m.faces.flat());
+
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geom.setIndex(new THREE.BufferAttribute(indices, 1));
+        geom.computeVertexNormals();
+
+        const [r, g, b, a] = m.color;
+        const mat = new THREE.MeshPhongMaterial({
+          color:       new THREE.Color(r, g, b),
+          emissive:    NO_EMISSIVE.clone(),
+          opacity:     m.pick_only ? 0 : a,
+          transparent: m.pick_only || a < 0.99,
+          depthWrite:  !m.pick_only,
+          side:        THREE.DoubleSide,
+          shininess:   60,
+        });
+
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.userData.pickOnly = !!m.pick_only;
+
+        if (m.joint_index !== undefined && m.joint_index >= 0) {
+          mesh.userData.jointIndex = m.joint_index;
+          if (!jointMeshMap.has(m.joint_index)) jointMeshMap.set(m.joint_index, []);
+          if (!m.pick_only) jointMeshMap.get(m.joint_index).push(mesh);
+          allJointMeshes.push(mesh);
+        }
+
+        scene.add(mesh);
+        treeObjects.push(mesh);
+      }
+
+      for (const ln of geo.lines) {
+        const positions = new Float32Array(ln.points.flat());
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const [r, g, b, a] = ln.color;
+        const mat = new THREE.LineBasicMaterial({
+          color: new THREE.Color(r, g, b), opacity: a, transparent: a < 0.99,
+        });
+        const line = new THREE.Line(geom, mat);
+        scene.add(line);
+        treeObjects.push(line);
+      }
+
+      // Restore selection highlight and gizmo
+      if (selectedJointIndex >= 0 && jointInfo[selectedJointIndex]) {
+        for (const m of (jointMeshMap.get(selectedJointIndex) ?? []))
+          m.material.emissive.copy(HIGHLIGHT);
+        positionGizmo(selectedJointIndex);
+      } else {
+        gizmo.detach();
+      }
+
+      updateStatus();
+    }
+
+    // ── Initial geometry load ─────────────────────────────────────────────────
+    async function loadInitialGeometry() {
+      status.textContent = 'Loading geometry...';
+      try {
+        const res = await fetch('/geometry');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buildScene(await res.json());
+
+        // Fit camera to loaded geometry
+        const box = new THREE.Box3();
+        for (const obj of treeObjects) box.expandByObject(obj);
+        const center = box.getCenter(new THREE.Vector3());
+        const size   = box.getSize(new THREE.Vector3()).length();
+        orbit.target.copy(center);
+        camera.position.copy(center).addScaledVector(
+          new THREE.Vector3(1, 0.7, 1).normalize(), size * 1.2);
+        camera.near = size * 0.001;
+        camera.far  = size * 10;
+        camera.updateProjectionMatrix();
+        orbit.update();
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`;
+        console.error(err);
+      }
+    }
+
+    // ── Send gizmo result to server ───────────────────────────────────────────
+    async function sendMoveJoint() {
+      if (selectedJointIndex < 0) return;
+
+      gizmoPivot.updateMatrixWorld(true);
+      const pos  = new THREE.Vector3();
+      const quat = new THREE.Quaternion();
+      const scl  = new THREE.Vector3();
+      gizmoPivot.matrixWorld.decompose(pos, quat, scl);
+
+      updateStatus('updating…');
+      try {
+        const res = await fetch('/move_joint', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            joint_index: selectedJointIndex,
+            position:    [pos.x,  pos.y,  pos.z],
+            quaternion:  [quat.x, quat.y, quat.z, quat.w],
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        buildScene(await res.json());
+      } catch (err) {
+        updateStatus(`server error: ${err.message}`);
+        console.error(err);
+      }
+    }
+
+    // ── Click → raycast select ────────────────────────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    const ndcMouse  = new THREE.Vector2();
+    let mouseDownX = 0, mouseDownY = 0;
+
+    renderer.domElement.addEventListener('mousedown', e => {
+      mouseDownX = e.clientX; mouseDownY = e.clientY;
+    });
+
+    renderer.domElement.addEventListener('click', e => {
+      const dx = e.clientX - mouseDownX, dy = e.clientY - mouseDownY;
+      if (Math.sqrt(dx*dx + dy*dy) > 5) return;  // was a drag
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      ndcMouse.set(
+        ((e.clientX - rect.left) / rect.width)  *  2 - 1,
+        ((e.clientY - rect.top)  / rect.height) * -2 + 1
+      );
+      raycaster.setFromCamera(ndcMouse, camera);
+      const hits = raycaster.intersectObjects(allJointMeshes, false);
+      selectJoint(hits.length > 0 ? hits[0].object.userData.jointIndex : -1);
+    });
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    window.addEventListener('keydown', e => {
+      // Ignore if focus is on an input element
+      if (e.target !== document.body && e.target !== document.documentElement) return;
+      switch (e.key.toLowerCase()) {
+        case 't': gizmoMode = 'translate'; gizmo.setMode('translate'); break;
+        case 'r': gizmoMode = 'rotate';    gizmo.setMode('rotate');    break;
+        case ' ':
+          e.preventDefault();
+          gizmoSpace = gizmoSpace === 'world' ? 'local' : 'world';
+          gizmo.setSpace(gizmoSpace);
+          break;
+        case 'escape': selectJoint(-1); return;
+      }
+      updateStatus();
+    });
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      orbit.update();
+      renderer.render(scene, camera);
+    }
+
+    loadInitialGeometry();
+    animate();
+  </script>
+</body>
+</html>
