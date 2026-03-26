@@ -94,17 +94,36 @@
     gizmo.addEventListener('dragging-changed', e => {
       orbit.enabled = !e.value;
       if (e.value) {
-        // Drag started: hide server links, show instant Bezier preview
+        // Drag started — snapshot the gizmo's current transform so we can
+        // revert if the user releases in an invalid configuration.
         if (selectedJointIndex >= 0) {
+          _dragIsValid = true;
+          _dragStartPos.copy(gizmoPivot.position);
+          _dragStartQuat.copy(gizmoPivot.quaternion);
+          _lastValidPos.copy(gizmoPivot.position);
+          _lastValidQuat.copy(gizmoPivot.quaternion);
+          _liveTubeMat.color.copy(LIVE_COLOR_OK);
           _setServerLinksVisible(selectedJointIndex, false);
           _updateLiveTubes(selectedJointIndex);
         }
       } else {
-        // Drag ended: keep live tubes visible until server responds.
-        // buildScene() (called inside sendMoveJoint) will remove them and
-        // rebuild everything from the authoritative server geometry.
+        // Drag ended
         if (selectedJointIndex >= 0) {
-          sendMoveJoint();
+          if (_dragIsValid) {
+            // Valid position — keep live tubes visible until server responds;
+            // buildScene() (called inside sendMoveJoint) will tear them down.
+            sendMoveJoint();
+          } else {
+            // Invalid position — revert gizmo pivot to last valid drag position,
+            // then commit that position to the server (live tubes stay visible
+            // until buildScene replaces them).
+            gizmoPivot.position.copy(_lastValidPos);
+            gizmoPivot.quaternion.copy(_lastValidQuat);
+            gizmoPivot.updateMatrixWorld(true);
+            _dragIsValid = true;
+            _liveTubeMat.color.copy(LIVE_COLOR_OK);
+            sendMoveJoint();
+          }
         }
       }
     });
@@ -121,6 +140,15 @@
     const _liveSolutions = new Map();
     // maxAnglePerElbow parsed from server geometry response
     let maxAnglePerElbow = Math.PI / 12;
+
+    // Drag-validity state — used to prevent releasing in an invalid configuration
+    let _dragIsValid   = true;
+    const _dragStartPos  = new THREE.Vector3();   // gizmoPivot position at drag start
+    const _dragStartQuat = new THREE.Quaternion(); // gizmoPivot quaternion at drag start
+    const _lastValidPos  = new THREE.Vector3();   // gizmoPivot position at last valid frame
+    const _lastValidQuat = new THREE.Quaternion(); // gizmoPivot quaternion at last valid frame
+
+    const LIVE_COLOR_OK  = new THREE.Color(0.5,  0.5,  0.5);
 
     const _liveTubeMat = new THREE.MeshPhongMaterial({
       color: new THREE.Color(0.5, 0.5, 0.5), side: THREE.DoubleSide, shininess: 40,
@@ -198,37 +226,50 @@
       const moved     = _transformByGizmo(idx);
       const parentIdx = parentsArray[idx];
 
-      // Link: parent's distal → this joint's proximal  (link_index = idx)
+      // ── First pass: try computing all affected links ───────────────────────
+      const tryResults = new Map();
+      let allValid = true;
+
       if (parentIdx !== undefined && parentIdx >= 0 && jointInfo[parentIdx]) {
         const pi = jointInfo[parentIdx];
         const startPose = {
-          t: pi.distal_dubins_pos,
-          x: pi.distal_dubins_xhat,
-          y: pi.distal_dubins_yhat,
-          z: pi.distal_dubins_zhat,
+          t: pi.distal_dubins_pos,  x: pi.distal_dubins_xhat,
+          y: pi.distal_dubins_yhat, z: pi.distal_dubins_zhat,
         };
         const result = buildLinkGeometry(
           moved.r, startPose, moved.proxPose,
           maxAnglePerElbow, 8, _liveSolutions.get(idx) ?? null);
-        if (result) _liveSolutions.set(idx, result.solution);
-        _updateOrCreateLiveMesh(idx, result);
+        if (result) tryResults.set(idx, result); else allValid = false;
       }
 
-      // Links: this joint's distal → each child's proximal  (link_index = child)
       for (let c = 0; c < parentsArray.length; c++) {
         if (parentsArray[c] !== idx || !jointInfo[c]) continue;
         const ci = jointInfo[c];
         const endPose = {
-          t: ci.proximal_dubins_pos,
-          x: ci.proximal_dubins_xhat,
-          y: ci.proximal_dubins_yhat,
-          z: ci.proximal_dubins_zhat,
+          t: ci.proximal_dubins_pos,  x: ci.proximal_dubins_xhat,
+          y: ci.proximal_dubins_yhat, z: ci.proximal_dubins_zhat,
         };
         const result = buildLinkGeometry(
           moved.r, moved.distPose, endPose,
           maxAnglePerElbow, 8, _liveSolutions.get(c) ?? null);
-        if (result) _liveSolutions.set(c, result.solution);
-        _updateOrCreateLiveMesh(c, result);
+        if (result) tryResults.set(c, result); else allValid = false;
+      }
+
+      // ── Second pass: commit or freeze ─────────────────────────────────────
+      if (allValid) {
+        // All links solved — update geometry and warm-start cache
+        for (const [li, result] of tryResults) {
+          _liveSolutions.set(li, result.solution);
+          _updateOrCreateLiveMesh(li, result);
+        }
+        _dragIsValid = true;
+        _liveTubeMat.color.copy(LIVE_COLOR_OK);
+        _lastValidPos.copy(gizmoPivot.position);
+        _lastValidQuat.copy(gizmoPivot.quaternion);
+      } else {
+        // At least one link failed — freeze tubes at last valid geometry, no visual change
+        _dragIsValid = false;
+        // _liveSolutions intentionally not updated (preserve last valid warm-start)
       }
     }
 
@@ -473,6 +514,19 @@
             quaternion:  [quat.x, quat.y, quat.z, quat.w],
           }),
         });
+
+        if (res.status === 422) {
+          // Server rejected the move (link reconstruction failed) —
+          // revert gizmo and display to the pre-drag state.
+          gizmoPivot.position.copy(_dragStartPos);
+          gizmoPivot.quaternion.copy(_dragStartQuat);
+          gizmoPivot.updateMatrixWorld(true);
+          _removeLiveTubes();
+          _setServerLinksVisible(selectedJointIndex, true);
+          updateStatus('move rejected — no valid path');
+          return;
+        }
+
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         buildScene(await res.json());
       } catch (err) {

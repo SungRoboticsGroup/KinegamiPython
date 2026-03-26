@@ -394,7 +394,7 @@ export function buildLinkGeometry(r, startPose, endPose, maxAnglePerElbow,
   const path = shortestCSC(r, startPose.t, startPose.x,
                                 endPose.t,  endPose.x, prevSolution);
 
-  if (vnorm(path.error) > 0.005 * r) return null;
+  if (vnorm(path.error) > 0.005 * r || path.theta1 >= Math.PI || path.theta2 >= Math.PI) return null;
 
   const solution = { tUnit: path.tUnit, tMag: path.tMag,
                      c1s: path.c1s,   c2s: path.c2s };

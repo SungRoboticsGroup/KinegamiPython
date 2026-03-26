@@ -9,7 +9,7 @@ Then open http://localhost:8000 in a browser.
 import os
 import numpy as np
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
@@ -94,6 +94,7 @@ class MoveJointRequest(BaseModel):
 
 @app.post("/move_joint")
 def move_joint(data: MoveJointRequest):
+    import copy
     from scipy.spatial.transform import Rotation
     from spatialmath import SE3
     from webGeometry import getTreeGeometry, geometryToJson
@@ -101,39 +102,60 @@ def move_joint(data: MoveJointRequest):
     tree  = get_tree()
     joint = tree.Joints[data.joint_index]
 
+    # Save previous pose so we can revert if any link rebuild fails
+    old_pose           = copy.deepcopy(joint.Pose)
+    old_proximal_dubins = getattr(joint, 'proximalDubins', None)
+    old_distal_dubins   = getattr(joint, 'distalDubins',   None)
+
     # Apply new world pose
     R = Rotation.from_quat(data.quaternion).as_matrix()
     T = np.eye(4)
     T[:3, :3] = R
     T[:3,  3] = data.position
     joint.Pose = SE3(T)
-    # Refresh cached Dubins frames
     joint.proximalDubins = joint.ProximalDubinsFrame()
     joint.distalDubins   = joint.DistalDubinsFrame()
 
-    # Rebuild link from parent → this joint (warm-started)
+    # Attempt to rebuild all affected links (transactional: revert on failure)
+    new_links = {}
+    failure   = None
+
     parent_idx = tree.Parents[data.joint_index]
     if parent_idx >= 0:
         parent = tree.Joints[parent_idx]
         try:
-            tree.Links[data.joint_index] = _rebuild_link_warm(
+            new_links[data.joint_index] = _rebuild_link_warm(
                 tree, data.joint_index,
                 parent.DistalDubinsFrame(), joint.ProximalDubinsFrame())
         except Exception as e:
-            print(f"[move_joint] could not rebuild link to joint "
-                  f"{data.joint_index}: {e}")
+            failure = str(e)
 
-    # Rebuild links from this joint → each child (warm-started)
-    for child_idx, p in enumerate(tree.Parents):
-        if p == data.joint_index:
+    if failure is None:
+        for child_idx, p in enumerate(tree.Parents):
+            if p != data.joint_index:
+                continue
             child = tree.Joints[child_idx]
             try:
-                tree.Links[child_idx] = _rebuild_link_warm(
+                new_links[child_idx] = _rebuild_link_warm(
                     tree, child_idx,
                     joint.DistalDubinsFrame(), child.ProximalDubinsFrame())
             except Exception as e:
-                print(f"[move_joint] could not rebuild link to child "
-                      f"{child_idx}: {e}")
+                failure = str(e)
+                break
+
+    if failure is not None:
+        # Revert joint pose — server state is unchanged
+        joint.Pose = old_pose
+        if old_proximal_dubins is not None:
+            joint.proximalDubins = old_proximal_dubins
+        if old_distal_dubins is not None:
+            joint.distalDubins = old_distal_dubins
+        print(f"[move_joint] rejected (link rebuild failed): {failure}")
+        return JSONResponse(status_code=422, content={"error": failure})
+
+    # All links rebuilt — commit
+    for idx, link in new_links.items():
+        tree.Links[idx] = link
 
     return geometryToJson(getTreeGeometry(tree))
 
