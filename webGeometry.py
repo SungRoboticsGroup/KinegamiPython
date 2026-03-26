@@ -641,17 +641,44 @@ def getTreeGeometry(tree,
             item["link_index"] = i
         geo = _merge(geo, link_geo)
 
-    # Per-joint metadata so the client can position gizmos
+    # Per-joint metadata so the client can position gizmos and draw live tubes
     from scipy.spatial.transform import Rotation as _Rot
-    geo["joints"] = [
-        {
+    joints_meta = []
+    for i, joint in enumerate(tree.Joints):
+        try:
+            prox_d = joint.ProximalDubinsFrame()
+            dist_d = joint.DistalDubinsFrame()
+            prox_pos  = prox_d.t.tolist()
+            prox_xhat = prox_d.R[:, 0].tolist()
+            prox_yhat = prox_d.R[:, 1].tolist()
+            prox_zhat = prox_d.R[:, 2].tolist()
+            dist_pos  = dist_d.t.tolist()
+            dist_xhat = dist_d.R[:, 0].tolist()
+            dist_yhat = dist_d.R[:, 1].tolist()
+            dist_zhat = dist_d.R[:, 2].tolist()
+        except Exception:
+            prox_pos  = dist_pos  = joint.Pose.t.tolist()
+            prox_xhat = dist_xhat = joint.Pose.R[:, 0].tolist()
+            prox_yhat = dist_yhat = joint.Pose.R[:, 1].tolist()
+            prox_zhat = dist_zhat = joint.Pose.R[:, 2].tolist()
+        joints_meta.append({
             "index": i,
             "type":  type(joint).__name__,
             "position":   joint.Pose.t.tolist(),
             "quaternion": _Rot.from_matrix(joint.Pose.R).as_quat().tolist(),
-        }
-        for i, joint in enumerate(tree.Joints)
-    ]
+            "r":          float(joint.r),
+            "proximal_dubins_pos":  prox_pos,
+            "proximal_dubins_xhat": prox_xhat,
+            "proximal_dubins_yhat": prox_yhat,
+            "proximal_dubins_zhat": prox_zhat,
+            "distal_dubins_pos":    dist_pos,
+            "distal_dubins_xhat":   dist_xhat,
+            "distal_dubins_yhat":   dist_yhat,
+            "distal_dubins_zhat":   dist_zhat,
+        })
+    geo["joints"]  = joints_meta
+    geo["parents"] = [int(p) for p in tree.Parents]
+    geo["maxAnglePerElbow"] = float(tree.maxAnglePerElbow)
 
     return geo
 
@@ -659,6 +686,19 @@ def getTreeGeometry(tree,
 # ---------------------------------------------------------------------------
 # JSON serialisation helper
 # ---------------------------------------------------------------------------
+
+def getAffectedLinksGeometry(tree, link_indices, linkColor=_LINK_COLOR, numSides=8):
+    """Return geometry for only the specified link indices (tagged with link_index)."""
+    geo = _empty()
+    for i in link_indices:
+        if i <= 0 or i >= len(tree.Links):
+            continue
+        link_geo = getLinkGeometry(tree.Links[i], linkColor, numSides)
+        for item in link_geo["meshes"] + link_geo["lines"]:
+            item["link_index"] = i
+        geo = _merge(geo, link_geo)
+    return geo
+
 
 def geometryToJson(geo):
     """
@@ -679,5 +719,7 @@ def geometryToJson(geo):
             {k: arr_to_list(v) for k, v in ln.items()}
             for ln in geo["lines"]
         ],
-        "joints": geo.get("joints", []),
+        "joints":          geo.get("joints", []),
+        "parents":         geo.get("parents", []),
+        "maxAnglePerElbow": geo.get("maxAnglePerElbow", 3.14159265 / 12),
     }

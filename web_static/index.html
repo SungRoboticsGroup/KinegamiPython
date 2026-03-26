@@ -47,6 +47,7 @@
     import * as THREE from 'three';
     import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
     import { TransformControls } from 'three/addons/controls/TransformControls.js';
+    import { buildLinkGeometry } from './dubinsCSC.js';
 
     // ── Scene ─────────────────────────────────────────────────────────────────
     const scene = new THREE.Scene();
@@ -76,8 +77,9 @@
     orbit.dampingFactor = 0.08;
 
     // ── Transform gizmo ───────────────────────────────────────────────────────
-    // gizmoPivot is an invisible Object3D positioned at the selected joint.
-    // TransformControls moves it; on drag-end we read its new world pose.
+    // gizmoPivot sits at the selected joint's center.
+    // When a joint is selected, all its scene objects are reparented here via
+    // attach(), so they move with the gizmo in real time.
     const gizmoPivot = new THREE.Object3D();
     scene.add(gizmoPivot);
 
@@ -89,22 +91,176 @@
     gizmo.setMode(gizmoMode);
     gizmo.setSpace(gizmoSpace);
 
-    // Disable orbit while the gizmo is being dragged; on release send to server
     gizmo.addEventListener('dragging-changed', e => {
       orbit.enabled = !e.value;
-      if (!e.value && selectedJointIndex >= 0) sendMoveJoint();
+      if (e.value) {
+        // Drag started: hide server links, show instant Bezier preview
+        if (selectedJointIndex >= 0) {
+          _setServerLinksVisible(selectedJointIndex, false);
+          _updateLiveTubes(selectedJointIndex);
+        }
+      } else {
+        // Drag ended: keep live tubes visible until server responds.
+        // buildScene() (called inside sendMoveJoint) will remove them and
+        // rebuild everything from the authoritative server geometry.
+        if (selectedJointIndex >= 0) {
+          sendMoveJoint();
+        }
+      }
     });
+
+    gizmo.addEventListener('change', () => {
+      if (selectedJointIndex >= 0 && gizmo.dragging)
+        _updateLiveTubes(selectedJointIndex);
+    });
+
+    // ── Real-time Dubins CSC link preview (zero-latency during drag) ─────────
+    // link_index → THREE.Mesh  (replaces server-computed links while dragging)
+    const _liveTubes     = new Map();
+    // link_index → { tUnit, tMag, c1s, c2s }  (warm-start for next frame)
+    const _liveSolutions = new Map();
+    // maxAnglePerElbow parsed from server geometry response
+    let maxAnglePerElbow = Math.PI / 12;
+
+    const _liveTubeMat = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(0.5, 0.5, 0.5), side: THREE.DoubleSide, shininess: 40,
+    });
+
+    // Apply the gizmo's current world transform to points/directions that were
+    // in world space at the joint's original pose, returning full SE3 objects.
+    function _transformByGizmo(idx) {
+      const info       = jointInfo[idx];
+      const oldPos     = new THREE.Vector3(...info.position);
+      const oldQuatInv = new THREE.Quaternion(...info.quaternion).invert();
+      gizmoPivot.updateMatrixWorld(true);
+      const newPos  = new THREE.Vector3();
+      const newQuat = new THREE.Quaternion();
+      gizmoPivot.matrixWorld.decompose(newPos, newQuat, new THREE.Vector3());
+
+      // Transform a world-space point
+      const tp = p => {
+        const v = new THREE.Vector3(...p).sub(oldPos)
+                    .applyQuaternion(oldQuatInv).applyQuaternion(newQuat).add(newPos);
+        return [v.x, v.y, v.z];
+      };
+      // Transform a world-space direction
+      const td = d => {
+        const v = new THREE.Vector3(...d).applyQuaternion(oldQuatInv).applyQuaternion(newQuat);
+        return [v.x, v.y, v.z];
+      };
+
+      return {
+        proxPose: {
+          t: tp(info.proximal_dubins_pos),
+          x: td(info.proximal_dubins_xhat),
+          y: td(info.proximal_dubins_yhat),
+          z: td(info.proximal_dubins_zhat),
+        },
+        distPose: {
+          t: tp(info.distal_dubins_pos),
+          x: td(info.distal_dubins_xhat),
+          y: td(info.distal_dubins_yhat),
+          z: td(info.distal_dubins_zhat),
+        },
+        r: info.r,
+      };
+    }
+
+    function _setServerLinksVisible(idx, visible) {
+      const p = parentsArray[idx];
+      if (p >= 0)
+        for (const obj of (linkObjectMap.get(idx) ?? [])) obj.visible = visible;
+      for (let c = 0; c < parentsArray.length; c++)
+        if (parentsArray[c] === idx)
+          for (const obj of (linkObjectMap.get(c) ?? [])) obj.visible = visible;
+    }
+
+    function _updateOrCreateLiveMesh(li, result) {
+      if (!result || result.vertices.length === 0) return;
+      const positions = new Float32Array(result.vertices.flat());
+      const indices   = new Uint32Array(result.faces.flat());
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geom.setIndex(new THREE.BufferAttribute(indices, 1));
+      geom.computeVertexNormals();
+      if (_liveTubes.has(li)) {
+        const m = _liveTubes.get(li);
+        m.geometry.dispose();
+        m.geometry = geom;
+      } else {
+        const m = new THREE.Mesh(geom, _liveTubeMat);
+        scene.add(m);
+        _liveTubes.set(li, m);
+      }
+    }
+
+    function _updateLiveTubes(idx) {
+      const moved     = _transformByGizmo(idx);
+      const parentIdx = parentsArray[idx];
+
+      // Link: parent's distal → this joint's proximal  (link_index = idx)
+      if (parentIdx !== undefined && parentIdx >= 0 && jointInfo[parentIdx]) {
+        const pi = jointInfo[parentIdx];
+        const startPose = {
+          t: pi.distal_dubins_pos,
+          x: pi.distal_dubins_xhat,
+          y: pi.distal_dubins_yhat,
+          z: pi.distal_dubins_zhat,
+        };
+        const result = buildLinkGeometry(
+          moved.r, startPose, moved.proxPose,
+          maxAnglePerElbow, 8, _liveSolutions.get(idx) ?? null);
+        if (result) _liveSolutions.set(idx, result.solution);
+        _updateOrCreateLiveMesh(idx, result);
+      }
+
+      // Links: this joint's distal → each child's proximal  (link_index = child)
+      for (let c = 0; c < parentsArray.length; c++) {
+        if (parentsArray[c] !== idx || !jointInfo[c]) continue;
+        const ci = jointInfo[c];
+        const endPose = {
+          t: ci.proximal_dubins_pos,
+          x: ci.proximal_dubins_xhat,
+          y: ci.proximal_dubins_yhat,
+          z: ci.proximal_dubins_zhat,
+        };
+        const result = buildLinkGeometry(
+          moved.r, moved.distPose, endPose,
+          maxAnglePerElbow, 8, _liveSolutions.get(c) ?? null);
+        if (result) _liveSolutions.set(c, result.solution);
+        _updateOrCreateLiveMesh(c, result);
+      }
+    }
+
+    function _removeLiveTubes() {
+      for (const m of _liveTubes.values()) {
+        scene.remove(m);
+        m.geometry.dispose();
+      }
+      _liveTubes.clear();
+      _liveSolutions.clear();
+    }
 
     // ── Selection state ───────────────────────────────────────────────────────
     const HIGHLIGHT   = new THREE.Color(0xff4400);
     const NO_EMISSIVE = new THREE.Color(0x000000);
 
-    const jointMeshMap   = new Map();  // joint_index → visible meshes (for highlight)
-    const allJointMeshes = [];         // all joint meshes including pick-only (raycaster)
-    let   jointInfo      = {};         // joint_index → {position, quaternion, type}
-    let   selectedJointIndex = -1;
+    // joint_index → [visible meshes]  (for emissive highlight)
+    const jointMeshMap   = new Map();
+    // joint_index → [all scene objects: meshes + lines]  (for reparenting)
+    const jointObjectMap = new Map();
+    // link_index → [all scene objects for that link]  (for live replacement)
+    const linkObjectMap  = new Map();
+    // flat list of all joint meshes including pick-only (for raycaster)
+    const allJointMeshes = [];
 
-    const treeObjects = [];  // all scene objects from the tree (cleared on rebuild)
+    let jointInfo          = {};   // joint_index → {position, quaternion, type, r, dubins…}
+    let parentsArray       = [];   // parentsArray[i] = parent joint index of joint i
+    let selectedJointIndex = -1;
+
+    // All objects added to the scene from tree geometry — cleared on rebuild
+    const treeObjects = [];
+
     const status = document.getElementById('status');
 
     function updateStatus(note = '') {
@@ -113,7 +269,8 @@
         const t = jointInfo[selectedJointIndex]?.type ?? '?';
         s = `Joint ${selectedJointIndex} (${t}) · ${gizmoMode} · ${gizmoSpace}`;
       } else {
-        s = `${treeObjects.filter(o => o.isMesh && !o.userData.pickOnly).length} meshes`;
+        const n = treeObjects.filter(o => o.isMesh && !o.userData.pickOnly).length;
+        s = `${n} meshes`;
       }
       status.textContent = note ? `${s} — ${note}` : s;
     }
@@ -121,8 +278,8 @@
     function positionGizmo(idx) {
       const info = jointInfo[idx];
       if (!info) return;
-      const [x, y, z]         = info.position;
-      const [qx, qy, qz, qw]  = info.quaternion;
+      const [x, y, z]          = info.position;
+      const [qx, qy, qz, qw]   = info.quaternion;
       gizmoPivot.position.set(x, y, z);
       gizmoPivot.quaternion.set(qx, qy, qz, qw);
       gizmoPivot.updateMatrixWorld(true);
@@ -130,17 +287,29 @@
     }
 
     function selectJoint(idx) {
-      // Restore previous highlight
-      if (selectedJointIndex >= 0)
+      // ── Deselect previous ──────────────────────────────────────────────────
+      if (selectedJointIndex >= 0) {
+        // Move objects back to scene, preserving world transforms
+        for (const obj of (jointObjectMap.get(selectedJointIndex) ?? []))
+          scene.attach(obj);
         for (const m of (jointMeshMap.get(selectedJointIndex) ?? []))
           m.material.emissive.copy(NO_EMISSIVE);
+      }
 
       selectedJointIndex = idx;
 
       if (idx >= 0) {
+        // ── Select new ────────────────────────────────────────────────────────
+        // Position gizmo pivot at joint's pose center
+        positionGizmo(idx);
+
+        // Reparent all joint objects to pivot — they move with the gizmo for free
+        for (const obj of (jointObjectMap.get(idx) ?? []))
+          gizmoPivot.attach(obj);   // preserves world position, changes parent
+
+        // Highlight visible meshes
         for (const m of (jointMeshMap.get(idx) ?? []))
           m.material.emissive.copy(HIGHLIGHT);
-        positionGizmo(idx);
       } else {
         gizmo.detach();
       }
@@ -149,16 +318,32 @@
 
     // ── Build / rebuild scene from geometry JSON ──────────────────────────────
     function buildScene(geo) {
-      // Remove previous tree objects
-      for (const obj of treeObjects) scene.remove(obj);
+      // 0. Tear down any live preview tubes from the previous drag
+      _removeLiveTubes();
+
+      // 1. Return any joint objects currently parented to the pivot back to scene
+      //    (scene.attach preserves world transform)
+      for (const child of [...gizmoPivot.children])
+        scene.attach(child);
+
+      // 2. Remove all tree objects from the scene
+      for (const obj of treeObjects)
+        if (obj.parent) obj.parent.remove(obj);
       treeObjects.length = 0;
+
+      // 3. Clear per-joint maps
       jointMeshMap.clear();
+      jointObjectMap.clear();
+      linkObjectMap.clear();
       allJointMeshes.length = 0;
 
-      // Update joint metadata
-      jointInfo = {};
+      // 4. Update joint metadata
+      jointInfo    = {};
+      parentsArray = geo.parents ?? [];
+      if (geo.maxAnglePerElbow !== undefined) maxAnglePerElbow = geo.maxAnglePerElbow;
       for (const j of (geo.joints ?? [])) jointInfo[j.index] = j;
 
+      // 5. Build meshes
       for (const m of geo.meshes) {
         const positions = new Float32Array(m.vertices.flat());
         const indices   = new Uint32Array(m.faces.flat());
@@ -182,17 +367,26 @@
         const mesh = new THREE.Mesh(geom, mat);
         mesh.userData.pickOnly = !!m.pick_only;
 
-        if (m.joint_index !== undefined && m.joint_index >= 0) {
-          mesh.userData.jointIndex = m.joint_index;
-          if (!jointMeshMap.has(m.joint_index)) jointMeshMap.set(m.joint_index, []);
-          if (!m.pick_only) jointMeshMap.get(m.joint_index).push(mesh);
+        const ji = m.joint_index;
+        if (ji !== undefined && ji >= 0) {
+          mesh.userData.jointIndex = ji;
+          if (!jointMeshMap.has(ji))   jointMeshMap.set(ji, []);
+          if (!jointObjectMap.has(ji)) jointObjectMap.set(ji, []);
+          if (!m.pick_only) jointMeshMap.get(ji).push(mesh);
+          jointObjectMap.get(ji).push(mesh);
           allJointMeshes.push(mesh);
+        }
+        const li = m.link_index;
+        if (li !== undefined && li >= 0) {
+          if (!linkObjectMap.has(li)) linkObjectMap.set(li, []);
+          linkObjectMap.get(li).push(mesh);
         }
 
         scene.add(mesh);
         treeObjects.push(mesh);
       }
 
+      // 6. Build lines
       for (const ln of geo.lines) {
         const positions = new Float32Array(ln.points.flat());
         const geom = new THREE.BufferGeometry();
@@ -202,15 +396,29 @@
           color: new THREE.Color(r, g, b), opacity: a, transparent: a < 0.99,
         });
         const line = new THREE.Line(geom, mat);
+
+        const ji = ln.joint_index;
+        if (ji !== undefined && ji >= 0) {
+          if (!jointObjectMap.has(ji)) jointObjectMap.set(ji, []);
+          jointObjectMap.get(ji).push(line);
+        }
+        const li = ln.link_index;
+        if (li !== undefined && li >= 0) {
+          if (!linkObjectMap.has(li)) linkObjectMap.set(li, []);
+          linkObjectMap.get(li).push(line);
+        }
+
         scene.add(line);
         treeObjects.push(line);
       }
 
-      // Restore selection highlight and gizmo
+      // 7. Restore selection: highlight + reparent + reposition gizmo
       if (selectedJointIndex >= 0 && jointInfo[selectedJointIndex]) {
         for (const m of (jointMeshMap.get(selectedJointIndex) ?? []))
           m.material.emissive.copy(HIGHLIGHT);
         positionGizmo(selectedJointIndex);
+        for (const obj of (jointObjectMap.get(selectedJointIndex) ?? []))
+          gizmoPivot.attach(obj);
       } else {
         gizmo.detach();
       }
@@ -226,7 +434,7 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         buildScene(await res.json());
 
-        // Fit camera to loaded geometry
+        // Fit camera to scene
         const box = new THREE.Box3();
         for (const obj of treeObjects) box.expandByObject(obj);
         const center = box.getCenter(new THREE.Vector3());
@@ -244,7 +452,7 @@
       }
     }
 
-    // ── Send gizmo result to server ───────────────────────────────────────────
+    // ── Send gizmo result to server, rebuild links ────────────────────────────
     async function sendMoveJoint() {
       if (selectedJointIndex < 0) return;
 
@@ -284,7 +492,7 @@
 
     renderer.domElement.addEventListener('click', e => {
       const dx = e.clientX - mouseDownX, dy = e.clientY - mouseDownY;
-      if (Math.sqrt(dx*dx + dy*dy) > 5) return;  // was a drag
+      if (Math.sqrt(dx*dx + dy*dy) > 5) return;
 
       const rect = renderer.domElement.getBoundingClientRect();
       ndcMouse.set(
@@ -298,7 +506,6 @@
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
     window.addEventListener('keydown', e => {
-      // Ignore if focus is on an input element
       if (e.target !== document.body && e.target !== document.documentElement) return;
       switch (e.key.toLowerCase()) {
         case 't': gizmoMode = 'translate'; gizmo.setMode('translate'); break;

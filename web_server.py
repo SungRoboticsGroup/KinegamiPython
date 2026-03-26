@@ -45,6 +45,45 @@ def get_geometry():
     return geometryToJson(getTreeGeometry(get_tree()))
 
 
+# ── Warm-start link rebuilder ─────────────────────────────────────────────────
+
+def _rebuild_link_warm(tree, link_idx, start_pose, end_pose):
+    """
+    Rebuild tree.Links[link_idx] using the existing path as a warm-start guess.
+    Falls back to a cold solve if the warm-start produces an invalid path.
+    """
+    import warnings
+    from scipy.optimize import fsolve as sp_fsolve
+    from numpy.linalg import norm as np_norm
+
+    mk_link = tree._get_link_constructor()
+    r       = tree.r
+    max_ang = tree.maxAnglePerElbow
+
+    prev = getattr(tree.Links[link_idx], 'path', None)
+    if prev is not None:
+        try:
+            from PathCSC import pathErrorCSC, PathCSC
+            x0 = np.append(prev.tUnit, prev.tMag)
+            sp = start_pose.t;  sd = start_pose.R[:, 0]
+            ep = end_pose.t;    ed = end_pose.R[:, 0]
+            with warnings.catch_warnings(action="ignore"):
+                sol = sp_fsolve(pathErrorCSC, x0=x0,
+                                args=(r, sp, sd, ep, ed,
+                                      prev.circle1sign, prev.circle2sign))
+            candidate = PathCSC(sol, r, sp, sd, ep, ed,
+                                prev.circle1sign, prev.circle2sign)
+            eps = 0.01
+            if (np_norm(candidate.error) <= 0.005 * r and
+                    candidate.theta1 >= -eps and candidate.theta1 < np.pi and
+                    candidate.theta2 >= -eps and candidate.theta2 < np.pi):
+                return mk_link(r, start_pose, end_pose, max_ang, path=candidate)
+        except Exception:
+            pass
+
+    return mk_link(r, start_pose, end_pose, max_ang)
+
+
 # ── Move-joint endpoint ───────────────────────────────────────────────────────
 
 class MoveJointRequest(BaseModel):
@@ -72,37 +111,77 @@ def move_joint(data: MoveJointRequest):
     joint.proximalDubins = joint.ProximalDubinsFrame()
     joint.distalDubins   = joint.DistalDubinsFrame()
 
-    mk_link = tree._get_link_constructor()
-
-    # Rebuild link from parent → this joint
+    # Rebuild link from parent → this joint (warm-started)
     parent_idx = tree.Parents[data.joint_index]
     if parent_idx >= 0:
         parent = tree.Joints[parent_idx]
         try:
-            tree.Links[data.joint_index] = mk_link(
-                tree.r,
-                parent.DistalDubinsFrame(),
-                joint.ProximalDubinsFrame(),
-                tree.maxAnglePerElbow)
+            tree.Links[data.joint_index] = _rebuild_link_warm(
+                tree, data.joint_index,
+                parent.DistalDubinsFrame(), joint.ProximalDubinsFrame())
         except Exception as e:
             print(f"[move_joint] could not rebuild link to joint "
                   f"{data.joint_index}: {e}")
 
-    # Rebuild links from this joint → each child
+    # Rebuild links from this joint → each child (warm-started)
     for child_idx, p in enumerate(tree.Parents):
         if p == data.joint_index:
             child = tree.Joints[child_idx]
             try:
-                tree.Links[child_idx] = mk_link(
-                    tree.r,
-                    joint.DistalDubinsFrame(),
-                    child.ProximalDubinsFrame(),
-                    tree.maxAnglePerElbow)
+                tree.Links[child_idx] = _rebuild_link_warm(
+                    tree, child_idx,
+                    joint.DistalDubinsFrame(), child.ProximalDubinsFrame())
             except Exception as e:
                 print(f"[move_joint] could not rebuild link to child "
                       f"{child_idx}: {e}")
 
     return geometryToJson(getTreeGeometry(tree))
+
+
+# ── Live link-update endpoint (called every frame during drag) ────────────────
+
+@app.post("/update_links")
+def update_links(data: MoveJointRequest):
+    from scipy.spatial.transform import Rotation
+    from spatialmath import SE3
+    from webGeometry import getAffectedLinksGeometry, geometryToJson
+
+    tree  = get_tree()
+    joint = tree.Joints[data.joint_index]
+
+    R = Rotation.from_quat(data.quaternion).as_matrix()
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3,  3] = data.position
+    joint.Pose = SE3(T)
+    joint.proximalDubins = joint.ProximalDubinsFrame()
+    joint.distalDubins   = joint.DistalDubinsFrame()
+
+    affected = []
+
+    parent_idx = tree.Parents[data.joint_index]
+    if parent_idx >= 0:
+        parent = tree.Joints[parent_idx]
+        try:
+            tree.Links[data.joint_index] = _rebuild_link_warm(
+                tree, data.joint_index,
+                parent.DistalDubinsFrame(), joint.ProximalDubinsFrame())
+            affected.append(data.joint_index)
+        except Exception as e:
+            print(f"[update_links] parent link error: {e}")
+
+    for child_idx, p in enumerate(tree.Parents):
+        if p == data.joint_index:
+            child = tree.Joints[child_idx]
+            try:
+                tree.Links[child_idx] = _rebuild_link_warm(
+                    tree, child_idx,
+                    joint.DistalDubinsFrame(), child.ProximalDubinsFrame())
+                affected.append(child_idx)
+            except Exception as e:
+                print(f"[update_links] child link error: {e}")
+
+    return geometryToJson(getAffectedLinksGeometry(tree, affected))
 
 
 # ── Static files (index.html, gizmo_test.html, …) ────────────────────────────
