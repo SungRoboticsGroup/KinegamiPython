@@ -524,12 +524,64 @@ def _getCoaxialRDS3225Geometry(joint, color, xColor, yColor, zColor,
                                 showSurface, showAxis, showPoses, axisScale,
                                 numCylPoints=32):
     """
-    Mirrors CoaxialRDS3225.addToWidget — falls back to generic revolute display
-    since CoaxialRDS3225 doesn't override addToWidget in PrintedTube.py.
+    Mirrors CoaxialRDS3225.addToWidget: servo box + proximal cylinder + distal cylinder.
+    Path direction for CoaxialRevolute is zhat (pathIndex=2).
     """
-    return _getRevoluteGeometry(
-        joint, color, xColor, yColor, zColor, proximalColor, centerColor, distalColor,
-        showSurface, showAxis, showPoses, axisScale, numCylPoints)
+    geo = _empty()
+    geo["lines"].extend(_getBaseJointLines(
+        joint, xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+        showAxis, showPoses, axisScale))
+
+    if not showSurface:
+        return geo
+
+    from geometryHelpers import Cylinder
+    xhat = joint.Pose.R[:, 0]
+    yhat = joint.Pose.R[:, 1]
+    zhat = joint.Pose.R[:, 2]  # path direction for coaxial
+
+    # --- Servo box: 40×20×40 centered at (11, 0, -1.95) in Pose frame ---
+    box_center = joint.Pose.t + 11.0 * xhat + (-1.95) * zhat
+    box_v, box_f = _box_verts_faces(box_center, xhat, yhat, zhat, 40.0, 20.0, 40.0)
+    geo["meshes"].append(_mesh(box_v, box_f, (0.0, 0.0, 0.0, 0.6), "servo_box"))
+
+    # --- Proximal cylinder: radius r, 9mm along zhat from ProximalFrame ---
+    prox_cyl_length = 9.0
+    proximal_pos = joint.ProximalFrame().t
+    proximal_cyl = Cylinder(joint.r, proximal_pos, zhat, prox_cyl_length)
+    geo = _merge(geo, getCylinderGeometry(proximal_cyl, color, numCylPoints))
+
+    prox_cap_center = proximal_pos + prox_cyl_length * zhat
+    cv, cf = _circle_disc_verts_faces(prox_cap_center, zhat, joint.r, numCylPoints)
+    geo["meshes"].append(_mesh(cv, cf, color, "prox_cap"))
+
+    line_color = (0.3, 0.3, 0.3, 1.0)
+    for direction in [xhat, -xhat, yhat, -yhat]:
+        pts = np.array([proximal_pos + joint.r * direction,
+                        prox_cap_center + joint.r * direction])
+        geo["lines"].append(_line(pts, line_color, "prox_line"))
+
+    # --- Distal cylinder: radius (r - wallThickness), 12.9mm along -distal_zhat ---
+    dist_cyl_length = 12.9
+    distal_frame = joint.DistalFrame()
+    distal_pos = distal_frame.t
+    distal_zhat = distal_frame.R[:, 2]
+    distal_r = joint.r - joint.wallThickness
+    distal_cyl = Cylinder(distal_r, distal_pos, -distal_zhat, dist_cyl_length)
+    geo = _merge(geo, getCylinderGeometry(distal_cyl, color, numCylPoints))
+
+    dist_cap_center = distal_pos - dist_cyl_length * distal_zhat
+    dv, df = _circle_disc_verts_faces(dist_cap_center, -distal_zhat, distal_r, numCylPoints)
+    geo["meshes"].append(_mesh(dv, df, color, "dist_cap"))
+
+    distal_xhat = distal_frame.R[:, 0]
+    distal_yhat = distal_frame.R[:, 1]
+    for direction in [distal_xhat, -distal_xhat, distal_yhat, -distal_yhat]:
+        pts = np.array([distal_pos + distal_r * direction,
+                        dist_cap_center + distal_r * direction])
+        geo["lines"].append(_line(pts, line_color, "dist_line"))
+
+    return geo
 
 
 # ---------------------------------------------------------------------------
