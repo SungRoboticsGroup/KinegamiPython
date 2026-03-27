@@ -5,34 +5,115 @@
   <title>Kinegami</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a1a2e; overflow: hidden; }
-    canvas { display: block; cursor: grab; }
-    canvas:active { cursor: grabbing; }
-    #info {
-      position: absolute; top: 12px; left: 12px;
-      color: #ccc; font-family: monospace; font-size: 13px;
-      pointer-events: none; line-height: 1.8;
+    body {
+      display: flex; flex-direction: column;
+      width: 100vw; height: 100vh; overflow: hidden;
+      background: #1a1a2e; color: #ccc;
+      font-family: monospace; font-size: 12px;
     }
-    #info span {
-      display: inline-block; padding: 1px 5px; border-radius: 3px;
-      background: #333; margin-right: 3px;
+    /* ── Top hint bar ── */
+    #topbar {
+      flex: 0 0 26px; display: flex; align-items: center;
+      background: #0f0f1e; border-bottom: 1px solid #333;
+      padding: 0 10px; gap: 14px; color: #777;
     }
+    .kbd {
+      display: inline-block; padding: 0 4px; border-radius: 2px;
+      background: #252540; color: #bbb; border: 1px solid #444; font-size: 11px;
+    }
+    /* ── Main row ── */
+    #main { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+    /* ── Panels ── */
+    .panel {
+      flex: 0 0 200px; overflow-y: auto; overflow-x: hidden;
+      background: #12122a; padding: 4px;
+    }
+    #left-panel  { border-right: 1px solid #2a2a4a; }
+    #right-panel { border-left:  1px solid #2a2a4a; }
+    .sec-title {
+      font-size: 10px; color: #666; text-transform: uppercase;
+      letter-spacing: .06em; padding: 6px 4px 3px;
+      border-bottom: 1px solid #1e1e3a; margin-bottom: 4px;
+    }
+    .panel-sec { margin-bottom: 10px; }
+    button {
+      background: #252540; color: #ccc; border: 1px solid #3a3a5a;
+      border-radius: 3px; padding: 3px 8px; cursor: pointer;
+      font-family: monospace; font-size: 11px;
+    }
+    button:hover { background: #353560; }
+    button.full  { width: 100%; margin: 2px 0; text-align: left; }
+    button.danger { border-color: #6a2222; color: #e88; }
+    button.danger:hover { background: #3a1a1a; }
+    input[type=number], select {
+      background: #1a1a2e; color: #ccc; border: 1px solid #3a3a5a;
+      border-radius: 3px; padding: 2px 4px; font-family: monospace; font-size: 11px;
+    }
+    select { width: 100%; }
+    .row { display: flex; gap: 4px; align-items: center; margin: 2px 0; }
+    label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 11px; }
+    /* ── Viewport ── */
+    #viewport { flex: 1; position: relative; overflow: hidden; min-width: 0; }
+    #viewport canvas { display: block; cursor: grab; }
+    #viewport canvas:active { cursor: grabbing; }
     #status {
-      position: absolute; bottom: 12px; left: 12px;
-      color: #888; font-family: monospace; font-size: 12px;
-      pointer-events: none;
+      position: absolute; bottom: 8px; left: 8px;
+      color: #666; font-size: 11px; pointer-events: none;
     }
   </style>
 </head>
 <body>
-  <div id="info">
-    Click to select joint &nbsp;|&nbsp;
-    <span>T</span> translate &nbsp;
-    <span>R</span> rotate &nbsp;
-    <span>Space</span> local/world &nbsp;
-    <span>Esc</span> deselect
+  <div id="topbar">
+    <span><span class="kbd">T</span> Translate</span>
+    <span><span class="kbd">R</span> Rotate</span>
+    <span><span class="kbd">Space</span> Local/World</span>
+    <span><span class="kbd">Esc</span> Deselect</span>
+    <span><span class="kbd">Del</span> Delete</span>
   </div>
-  <div id="status">Loading...</div>
+
+  <div id="main">
+    <!-- Left panel (future: file, options) -->
+    <div id="left-panel" class="panel">
+      <div class="sec-title">File</div>
+      <button class="full" id="btn-undo">↩ Undo</button>
+      <button class="full" id="btn-redo">↪ Redo</button>
+      <button class="full" id="btn-save" style="margin-top:6px">Save Tree</button>
+      <button class="full" id="btn-load">Load Tree…</button>
+      <input type="file" id="load-file-input" accept=".pkl" style="display:none">
+      <button class="full" id="btn-export">Export STL Modules</button>
+    </div>
+
+    <!-- 3D viewport -->
+    <div id="viewport">
+      <div id="status">Loading…</div>
+    </div>
+
+    <!-- Right panel -->
+    <div id="right-panel" class="panel">
+      <div class="panel-sec">
+        <div class="sec-title">Add Joints</div>
+        <button class="full" id="btn-add-transverse">+ Transverse Revolute</button>
+        <button class="full" id="btn-add-coaxial">+ Coaxial Revolute</button>
+        <button class="full" id="btn-add-tip">+ Tip (Hemisphere)</button>
+        <button class="full danger" id="btn-clear-tree" style="margin-top:8px">Clear Tree</button>
+      </div>
+
+      <div class="panel-sec">
+        <div class="sec-title">Edit Joints</div>
+        <div class="row">
+          <select id="joint-select" style="flex:1"></select>
+          <button id="btn-delete" class="danger" title="Delete selected joint">✕</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <label><input type="radio" name="gmode" value="translate" checked> Translate</label>
+          <label><input type="radio" name="gmode" value="rotate"> Rotate</label>
+        </div>
+        <label style="margin-top:4px">
+          <input type="checkbox" id="gizmo-local"> Local frame
+        </label>
+      </div>
+    </div>
+  </div>
 
   <script type="importmap">
   {
@@ -59,8 +140,15 @@
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    const viewportEl = document.getElementById('viewport');
+    viewportEl.appendChild(renderer.domElement);
+    const ro = new ResizeObserver(() => {
+      const w = viewportEl.clientWidth, h = viewportEl.clientHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    });
+    ro.observe(viewportEl);
 
     // ── Lighting ──────────────────────────────────────────────────────────────
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
@@ -339,6 +427,10 @@
 
       selectedJointIndex = idx;
 
+      // Sync dropdown
+      const jSel = document.getElementById('joint-select');
+      if (jSel) jSel.value = idx >= 0 ? String(idx) : '';
+
       if (idx >= 0) {
         // ── Select new ────────────────────────────────────────────────────────
         // Position gizmo pivot at joint's pose center
@@ -464,6 +556,7 @@
         gizmo.detach();
       }
 
+      populateJointSelectors();
       updateStatus();
     }
 
@@ -475,18 +568,7 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         buildScene(await res.json());
 
-        // Fit camera to scene
-        const box = new THREE.Box3();
-        for (const obj of treeObjects) box.expandByObject(obj);
-        const center = box.getCenter(new THREE.Vector3());
-        const size   = box.getSize(new THREE.Vector3()).length();
-        orbit.target.copy(center);
-        camera.position.copy(center).addScaledVector(
-          new THREE.Vector3(1, 0.7, 1).normalize(), size * 1.2);
-        camera.near = size * 0.001;
-        camera.far  = size * 10;
-        camera.updateProjectionMatrix();
-        orbit.update();
+        fitCamera();
       } catch (err) {
         status.textContent = `Error: ${err.message}`;
         console.error(err);
@@ -560,25 +642,159 @@
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
     window.addEventListener('keydown', e => {
-      if (e.target !== document.body && e.target !== document.documentElement) return;
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') { e.preventDefault(); undo(); return; }
+        if (e.key === 'y') { e.preventDefault(); redo(); return; }
+        return;
+      }
       switch (e.key.toLowerCase()) {
-        case 't': gizmoMode = 'translate'; gizmo.setMode('translate'); break;
-        case 'r': gizmoMode = 'rotate';    gizmo.setMode('rotate');    break;
+        case 't':
+          gizmoMode = 'translate'; gizmo.setMode('translate');
+          document.querySelector('input[name="gmode"][value="translate"]').checked = true;
+          break;
+        case 'r':
+          gizmoMode = 'rotate'; gizmo.setMode('rotate');
+          document.querySelector('input[name="gmode"][value="rotate"]').checked = true;
+          break;
         case ' ':
           e.preventDefault();
           gizmoSpace = gizmoSpace === 'world' ? 'local' : 'world';
           gizmo.setSpace(gizmoSpace);
+          document.getElementById('gizmo-local').checked = (gizmoSpace === 'local');
           break;
+        case 'delete':
+          if (selectedJointIndex >= 0) document.getElementById('btn-delete').click();
+          return;
         case 'escape': selectJoint(-1); return;
       }
       updateStatus();
     });
 
-    // ── Resize ────────────────────────────────────────────────────────────────
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+    // ── Camera fit ────────────────────────────────────────────────────────────
+    function fitCamera() {
+      if (treeObjects.length === 0) return;  // nothing to fit
+      const box = new THREE.Box3();
+      for (const obj of treeObjects) box.expandByObject(obj);
+      if (box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const size   = box.getSize(new THREE.Vector3()).length();
+      orbit.target.copy(center);
+      camera.position.copy(center).addScaledVector(
+        new THREE.Vector3(1, 0.7, 1).normalize(), size * 1.8);
+      camera.near = size * 0.001;
+      camera.far  = size * 20;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      orbit.update();
+    }
+
+    // ── Panel helpers ─────────────────────────────────────────────────────────
+
+    async function apiPost(url, data) {
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      return json;
+    }
+
+    function populateJointSelectors() {
+      const jSel = document.getElementById('joint-select');
+      jSel.innerHTML = '';
+      const idxs = Object.keys(jointInfo).map(Number).sort((a,b) => a-b);
+      for (const i of idxs) {
+        jSel.add(new Option(`${i}: ${jointInfo[i].type}`, i));
+      }
+      jSel.value = selectedJointIndex >= 0 ? String(selectedJointIndex) : '';
+    }
+
+    // Keep joint-select in sync when a joint is clicked in viewport
+    const _origSelectJoint = selectJoint;
+
+    // ── Add Joints panel ──────────────────────────────────────────────────────
+    async function addJoint(type) {
+      // If tree is non-empty, a joint must be selected to act as parent
+      const treeHasJoints = Object.keys(jointInfo).length > 0;
+      if (treeHasJoints && selectedJointIndex < 0) {
+        updateStatus('Select a parent joint first (click one or use the dropdown)');
+        return;
+      }
+      const parentIdx = treeHasJoints ? selectedJointIndex : 0;
+      try {
+        updateStatus(`Adding ${type}…`);
+        const geo = await apiPost('/add_joint', { joint_type: type, parent_index: parentIdx });
+        buildScene(geo);
+        fitCamera();
+        // auto-select the new joint (last index)
+        const newIdx = Math.max(...Object.keys(jointInfo).map(Number));
+        selectJoint(newIdx);
+      } catch (err) { updateStatus(`Add failed: ${err.message}`); }
+    }
+
+    document.getElementById('btn-add-transverse').addEventListener('click', () => addJoint('TransverseRevolute'));
+    document.getElementById('btn-add-coaxial').addEventListener('click',    () => addJoint('CoaxialRevolute'));
+    document.getElementById('btn-add-tip').addEventListener('click',        () => addJoint('Tip'));
+
+    document.getElementById('btn-clear-tree').addEventListener('click', async () => {
+      if (!confirm('Clear the tree and start fresh?')) return;
+      try {
+        const geo = await apiPost('/clear_tree', {});
+        selectedJointIndex = -1;
+        buildScene(geo);
+      } catch (err) { updateStatus(`Clear failed: ${err.message}`); }
+    });
+
+    // ── Edit Joints panel ─────────────────────────────────────────────────────
+    document.getElementById('joint-select').addEventListener('change', e => {
+      selectJoint(parseInt(e.target.value));
+    });
+
+    document.getElementById('btn-delete').addEventListener('click', async () => {
+      if (selectedJointIndex < 0) return;
+      try {
+        updateStatus('Deleting…');
+        const geo = await apiPost('/delete_joint', { joint_index: selectedJointIndex });
+        selectedJointIndex = -1;
+        buildScene(geo);
+      } catch (err) { updateStatus(`Delete failed: ${err.message}`); }
+    });
+
+    document.querySelectorAll('input[name="gmode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        gizmoMode = r.value; gizmo.setMode(gizmoMode); updateStatus();
+      });
+    });
+
+    document.getElementById('gizmo-local').addEventListener('change', e => {
+      gizmoSpace = e.target.checked ? 'local' : 'world';
+      gizmo.setSpace(gizmoSpace); updateStatus();
+    });
+
+    // ── File panel ────────────────────────────────────────────────────────────
+    async function undo() {
+      try { buildScene(await apiPost('/undo', {})); } catch { updateStatus('Nothing to undo'); }
+    }
+    async function redo() {
+      try { buildScene(await apiPost('/redo', {})); } catch { updateStatus('Nothing to redo'); }
+    }
+    document.getElementById('btn-undo').addEventListener('click', undo);
+    document.getElementById('btn-redo').addEventListener('click', redo);
+    document.getElementById('btn-save').addEventListener('click', () => { window.location.href = '/save_tree'; });
+    document.getElementById('btn-export').addEventListener('click', () => { window.location.href = '/export_link_modules'; });
+    document.getElementById('btn-load').addEventListener('click', () => document.getElementById('load-file-input').click());
+    document.getElementById('load-file-input').addEventListener('change', async e => {
+      const file = e.target.files[0]; if (!file) return;
+      const fd = new FormData(); fd.append('file', file);
+      try {
+        updateStatus('Loading…');
+        const res = await fetch('/load_tree', { method: 'POST', body: fd });
+        const geo = await res.json();
+        if (!res.ok) throw new Error(geo.error);
+        selectedJointIndex = -1; buildScene(geo);
+      } catch (err) { updateStatus(`Load failed: ${err.message}`); }
     });
 
     // ── Render loop ───────────────────────────────────────────────────────────

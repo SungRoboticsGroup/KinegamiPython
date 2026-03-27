@@ -661,6 +661,7 @@ def getTreeGeometry(tree,
             prox_xhat = dist_xhat = joint.Pose.R[:, 0].tolist()
             prox_yhat = dist_yhat = joint.Pose.R[:, 1].tolist()
             prox_zhat = dist_zhat = joint.Pose.R[:, 2].tolist()
+        has_state  = hasattr(joint, 'minAngle') and hasattr(joint, 'maxAngle')
         joints_meta.append({
             "index": i,
             "type":  type(joint).__name__,
@@ -675,6 +676,10 @@ def getTreeGeometry(tree,
             "distal_dubins_xhat":   dist_xhat,
             "distal_dubins_yhat":   dist_yhat,
             "distal_dubins_zhat":   dist_zhat,
+            "hasState": has_state,
+            "state":    float(getattr(joint, 'state', 0)),
+            "minState": float(joint.minAngle) if has_state else None,
+            "maxState": float(joint.maxAngle) if has_state else None,
         })
     geo["joints"]  = joints_meta
     geo["parents"] = [int(p) for p in tree.Parents]

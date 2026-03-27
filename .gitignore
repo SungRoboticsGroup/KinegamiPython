@@ -9,4 +9,7 @@ dist/
 .vscode/
 save/*.chain
 save/*.tree
-
+.claude/*
+collision_commits_summary.txt
+examples/testHemisphere.py
+debug_collisions.py
