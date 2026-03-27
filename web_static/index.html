@@ -95,6 +95,7 @@
         <button class="full" id="btn-add-transverse">+ Transverse Revolute</button>
         <button class="full" id="btn-add-coaxial">+ Coaxial Revolute</button>
         <button class="full" id="btn-add-tip">+ Tip (Hemisphere)</button>
+        <button class="full" id="btn-add-waypoint">+ Waypoint</button>
         <button class="full danger" id="btn-clear-tree" style="margin-top:8px">Clear Tree</button>
       </div>
 
@@ -144,7 +145,7 @@
     viewportEl.appendChild(renderer.domElement);
     const ro = new ResizeObserver(() => {
       const w = viewportEl.clientWidth, h = viewportEl.clientHeight;
-      renderer.setSize(w, h, false);
+      renderer.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
     });
@@ -673,16 +674,33 @@
     });
 
     // ── Camera fit ────────────────────────────────────────────────────────────
+    // Tweak these three values to adjust the initial camera placement:
+    //   CAM_X_OFFSET  — left/right offset from bounding-box center (multiples of scene size)
+    //   CAM_Y_OFFSET  — up/down offset from bounding-box center
+    //   CAM_Z_OFFSET  — forward/back distance (positive = toward viewer)
+    const CAM_X_OFFSET = 0.0;
+    const CAM_Y_OFFSET = 1;
+    const CAM_Z_OFFSET = 4;
+
     function fitCamera() {
-      if (treeObjects.length === 0) return;  // nothing to fit
+      if (treeObjects.length === 0) return;
+      // Use only visible (non-pick-only) meshes to avoid axis lines inflating the box
       const box = new THREE.Box3();
-      for (const obj of treeObjects) box.expandByObject(obj);
+      for (const obj of treeObjects) {
+        if (obj.isMesh && !obj.userData.pickOnly) box.expandByObject(obj);
+      }
+      if (box.isEmpty()) {
+        for (const obj of treeObjects) box.expandByObject(obj);
+      }
       if (box.isEmpty()) return;
       const center = box.getCenter(new THREE.Vector3());
       const size   = box.getSize(new THREE.Vector3()).length();
       orbit.target.copy(center);
-      camera.position.copy(center).addScaledVector(
-        new THREE.Vector3(1, 0.7, 1).normalize(), size * 1.8);
+      camera.position.set(
+        center.x + size * CAM_X_OFFSET,
+        center.y + size * CAM_Y_OFFSET,
+        center.z + size * CAM_Z_OFFSET,
+      );
       camera.near = size * 0.001;
       camera.far  = size * 20;
       camera.updateProjectionMatrix();
@@ -737,6 +755,7 @@
     document.getElementById('btn-add-transverse').addEventListener('click', () => addJoint('TransverseRevolute'));
     document.getElementById('btn-add-coaxial').addEventListener('click',    () => addJoint('CoaxialRevolute'));
     document.getElementById('btn-add-tip').addEventListener('click',        () => addJoint('Tip'));
+    document.getElementById('btn-add-waypoint').addEventListener('click',   () => addJoint('Waypoint'));
 
     document.getElementById('btn-clear-tree').addEventListener('click', async () => {
       if (!confirm('Clear the tree and start fresh?')) return;

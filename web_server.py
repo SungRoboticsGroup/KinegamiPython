@@ -216,7 +216,7 @@ def update_links(data: MoveJointRequest):
 # ── Add joint endpoint ────────────────────────────────────────────────────────
 
 class AddJointRequest(BaseModel):
-    joint_type:   str   # "TransverseRevolute" | "CoaxialRevolute" | "Tip"
+    joint_type:   str   # "TransverseRevolute" | "CoaxialRevolute" | "Tip" | "Waypoint"
     parent_index: int = 0
 
 
@@ -233,8 +233,8 @@ def add_joint_ep(data: AddJointRequest):
 
         if data.joint_type == "TransverseRevolute":
             if tree_empty:
-                # Root: point along +X, matching the demo tree convention
-                pose = SE3.Ry(-_math.pi / 2)
+                # Root: path direction (col 0) = +Y (upward in world frame)
+                pose = SE3.Ry(_math.pi / 2) @ SE3.Rz(_math.pi / 2)
             else:
                 # Child: 4r + half neutral-length in front along distal dubins X axis
                 distance = 4 * TransverseRDS3225.R + TransverseRDS3225.NEUTRAL_LENGTH / 2
@@ -243,7 +243,7 @@ def add_joint_ep(data: AddJointRequest):
 
         elif data.joint_type == "CoaxialRevolute":
             if tree_empty:
-                pose = SE3()
+                pose = SE3.Rx(_math.pi / 2)
             else:
                 distance = 4 * CoaxialRDS3225.R + CoaxialRDS3225.NEUTRAL_LENGTH / 2
                 pose = SE3.Rt(SE3.Ry(_math.pi / 2).R, np.array([distance, 0, 0]))
@@ -251,12 +251,23 @@ def add_joint_ep(data: AddJointRequest):
 
         elif data.joint_type == "Tip":
             if tree_empty:
-                pose = SE3()
+                pose = SE3.Rx(_math.pi / 2)
             else:
                 parent_r = _tree.Joints[data.parent_index].r
                 distance = parent_r * 4 + TransverseRDS3225.R / 2
                 pose = SE3.Rt(SE3.Ry(_math.pi / 2).R, np.array([distance, 0, 0]))
             new_joint = PrintedEndHemisphere(r=TransverseRDS3225.R, Pose=pose)
+
+        elif data.joint_type == "Waypoint":
+            from Joint import Waypoint
+            if tree_empty:
+                pose = SE3.Rx(_math.pi / 2)
+                new_joint = Waypoint(TransverseRDS3225.R, pose)
+            else:
+                parent_r = _tree.Joints[data.parent_index].r
+                distance = 4 * parent_r
+                pose = SE3.Rt(SE3.Ry(_math.pi / 2).R, np.array([distance, 0, 0]))
+                new_joint = Waypoint(parent_r, pose)
 
         else:
             return JSONResponse(status_code=400,
