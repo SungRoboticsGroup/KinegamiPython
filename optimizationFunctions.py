@@ -27,17 +27,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
     original_includeCollisionPenalty = includeCollisionPenalty
     verbose = True
     if original_includeCollisionPenalty and not retryingWithPenalty:
-        try:
-            if verbose:
-                print("Trying optimization without collision penalty...")
-            
-            # Temporarily disable collision penalty for first attempt
-            includeCollisionPenalty = False
-            
-        except Exception as e:
-            if verbose:
-                print(f"Setup for no-penalty optimization failed: {str(e)}")
-            includeCollisionPenalty = True
+        # Temporarily disable collision penalty for first attempt
+        includeCollisionPenalty = False
 
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
@@ -71,6 +62,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
 
         #try just moving it
         if tree.transformJoint(index, transform, propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+            print(f"Before linkLossSameZhat, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
             linkLossSameZhat = linkLoss(tree, 
                                         index, 
                                         power=power,
@@ -90,6 +82,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
             tree2.Joints[index].reverseZhat()
             if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, 
                                     propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+                print(f"Before linkLossReversedZhat (1), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
                 linkLossReversedZhat = linkLoss(tree2, 
                                                 index, 
                                                 power=power,
@@ -101,6 +94,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
             else:
                 linkLossReversedZhat = pathNonExistancePenalty
         else:
+            print(f"Before linkLossReversedZhat (2), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
             linkLossReversedZhat = linkLoss(tree, 
                                             index, 
                                             power=power,
@@ -244,12 +238,14 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
             if verbose:
                 log_collision_penalty(f"Collision detected for joint {index}, retrying with collision penalty")
             # Retry with collision penalty enabled
+            includeCollisionPenalty = True  # Ensure penalty is enabled for retry
+            retryingWithPenalty = True
             final_tree, final_loss = optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                                         childFraction, ignoreLater,
                                         parallelize, verbose, power,
-                                        includeCollisionPenalty=True, 
+                                        includeCollisionPenalty=includeCollisionPenalty, 
                                         configurations=configurations,
-                                        retryingWithPenalty=True)
+                                        retryingWithPenalty=retryingWithPenalty)
         
             if final_tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
                 log_collision_penalty(f"Collision still detected for joint {index} after retrying with penalty. Final tree: {final_tree}")
@@ -318,7 +314,8 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                                    propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
             return failurePenalty * len(subject.Joints) * (len(subject.Children) + 1)
         
-        return linkLoss(tree, index, includeCollisionPenalty=True, configurations=configurations, 
+        print(f"Waypoint optimization, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
+        return linkLoss(tree, index, includeCollisionPenalty=includeCollisionPenalty, configurations=configurations, 
                         collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
                         collisionErrorWeight=failurePenalty) + \
             np.linalg.norm(np.array(params[3:6]) - SE3.Rt(transform.R, np.zeros(3)).eul()) * 10

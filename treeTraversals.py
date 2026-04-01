@@ -45,8 +45,14 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
         if collisionMatrices is None:
             collisionMatrices = tree.buildCollisionMatrices()
         for i in range(0, len(configurations)):
+            print("Current loss = ", loss)
             tree.setConfiguration(configurations[i])
-            loss += tree.collisionsCountAndError(movedJointIndex, collisionMatrices)[1] * collisionErrorWeight
+            collisionCount, collisionError = tree.collisionsCountAndError(movedJointIndex, collisionMatrices)
+            print(f"Collision count: {collisionCount}, Collision error: {collisionError}")
+            print(f"Collision error weight: {collisionErrorWeight}")
+            newAmount = collisionError * collisionErrorWeight
+            print(f"Collision penalty to add: {newAmount}")
+            loss += newAmount
     
     # print("Loss with collision penalty:", loss)
     return loss 

@@ -2022,11 +2022,11 @@ for i in range(0, len(dfsBrokenExample.Joints)):
         failurePenalty = length
 
 loss = linkLoss(dfsBrokenExample, 
-                index=9,
+                index=6,
                 collisionMatrices=collisionMatrices, 
                 includeCollisionPenalty=True,
                 configurations=[currentConfiguration],
-                collisionErrorWeight=1)
+                collisionErrorWeight=1.0)
 
 print(f"Loss: {loss}, Failure Penalty: {failurePenalty}")
 
