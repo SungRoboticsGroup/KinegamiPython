@@ -2153,8 +2153,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.mesh_scale = scale
 
     def log_version(self):
-        log_capacity = 100 #this is what's stored in runtime for undo/redo
-        autosave_frequency = 1 #saving everything for analysis: in other circumstances this should be more like 10
+        log_capacity = 20 #this is what's stored in runtime for undo/redo
+        autosave_frequency = 10 #saving everything for analysis: in other circumstances this should be more like 10
 
         # clear redo history on new version (include version index)
         self.versions = self.versions[:self.version_index + 1]

@@ -560,75 +560,123 @@ class KinematicTree(Generic[F]):
             ax.scatter(plotPoint[0,:], plotPoint[1,:], plotPoint[2,:], color='red', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
-    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+    def _addOneJoint(self, widget, index, selectedJoint, collidingJoints,
+                     xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                     sphereColor, showSpheres, jointColor, showJointSurface,
+                     showJointAxis, jointAxisScale, showJointPoses):
+        """Add GL items for a single joint (used by addToWidget and incremental updates)."""
+        joint = self.Joints[index]
+        if joint is None:
+            return
+        isColliding = index in collidingJoints
+        if index == selectedJoint:
+            joint.addToWidget(widget, xColor, yColor, zColor,
+                    proximalColor, centerColor, distalColor,
+                    sphereColor=selectedJointColor, showSphere=True,
+                    surfaceColor=jointColor,
+                    showSurface=showJointSurface, showAxis=showJointAxis,
+                    axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
+        else:
+            joint.addToWidget(widget, xColor, yColor, zColor,
+                    proximalColor, centerColor, distalColor,
+                    sphereColor, showSphere=showSpheres,
+                    surfaceColor=jointColor, showSurface=showJointSurface, showAxis=showJointAxis,
+                    axisScale=jointAxisScale, showPoses=showJointPoses)
+        if isColliding and (isinstance(joint, Revolute) or isinstance(joint, Prismatic)):
+            joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+            joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+            joint.centerSphere().addToWidget(widget, color=collisionJointColor)
+
+    def _addOneLink(self, widget, index, selectedLink, collidingLinks,
+                    linkColor, linkOpacity, showLinkPath, pathColor,
+                    showPathCircles, showLinkPoses, showLinkSurface):
+        """Add GL items for a single link (used by addToWidget and incremental updates)."""
+        link = self.Links[index]
+        if link is None:
+            return
+        isColliding = index in collidingLinks
+        if index == selectedLink:
+            color = collisionLinkColor if isColliding else selectedLinkColor
+        elif isColliding:
+            color = collisionLinkColor
+        else:
+            color = linkColor
+        link.addToWidget(widget, color=color,
+                        alpha=linkOpacityDefault,
+                        showPath=showLinkPath,
+                        pathColor=pathColor,
+                        showPathCircles=showPathCircles,
+                        showFrames=showLinkPoses,
+                        showBoundary=showLinkSurface,
+                        linkID=index)
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
                   proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
                   showJointSurface=True, jointColor=jointColorDefault,
                   jointAxisScale=jointAxisScaleDefault, showJointAxis=True, showJointPoses=False,
-                  linkColor=linkColorDefault, linkOpacity=linkOpacityDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
+                  linkColor=linkColorDefault, linkOpacity=linkOpacityDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True,
                   showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
                   showPathCircles=False, sphereColor=sphereColorDefault,
-                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None, 
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None,
                   selectedJoint=None, selectedLink=None,
-                  collidingJoints=None, collidingLinks=None):
+                  collidingJoints=None, collidingLinks=None,
+                  only_rebuild_index=None):
         # TODO: IMPLEMENT showGlobalFrame
         if collidingJoints is None:
             collidingJoints = set()
         if collidingLinks is None:
             collidingLinks = set()
-        
+
+        if only_rebuild_index is not None:
+            # Incremental mode: remove old GL items for only_rebuild_index, rebuild those,
+            # and apply model-matrix updates to everything else.
+            joint = self.Joints[only_rebuild_index]
+            link = self.Links[only_rebuild_index]
+            if joint is not None:
+                for item in (getattr(joint, '_gl_items_proximal', []) +
+                             getattr(joint, '_gl_items_center', []) +
+                             getattr(joint, '_gl_items_distal', [])):
+                    try:
+                        widget.plot_widget.removeItem(item)
+                    except Exception:
+                        pass
+                joint.clearGLCache()
+                self._addOneJoint(widget, only_rebuild_index, selectedJoint, collidingJoints,
+                                   xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                                   sphereColor, showSpheres, jointColor, showJointSurface,
+                                   showJointAxis, jointAxisScale, showJointPoses)
+            if link is not None:
+                for item in getattr(link, '_gl_items', []):
+                    try:
+                        widget.plot_widget.removeItem(item)
+                    except Exception:
+                        pass
+                link.clearGLCache()
+                self._addOneLink(widget, only_rebuild_index, selectedLink, collidingLinks,
+                                  linkColor, linkOpacity, showLinkPath, pathColor,
+                                  showPathCircles, showLinkPoses, showLinkSurface)
+            # Model-matrix update for all other joints and links
+            for i, j in enumerate(self.Joints):
+                if j is not None and i != only_rebuild_index:
+                    j.updateCachedGLTransforms()
+            for i, lnk in enumerate(self.Links):
+                if lnk is not None and i != only_rebuild_index:
+                    lnk.updateCachedGLTransforms()
+            return
+
         if showSpheres:
             self.boundingBall.addToWidget(widget, color=sphereColor)
-            
+
         for index, joint in enumerate(self.Joints):
-            isColliding = index in collidingJoints
-            if index == selectedJoint:
-                joint.addToWidget(widget, xColor, yColor, zColor, 
-                        proximalColor, centerColor, distalColor, 
-                        sphereColor=selectedJointColor, showSphere=True,
-                        surfaceColor=jointColor,
-                        showSurface=showJointSurface, showAxis=showJointAxis,
-                        axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
-            else:
-                joint.addToWidget(widget, xColor, yColor, zColor, 
-                        proximalColor, centerColor, distalColor, 
-                        sphereColor, showSphere=showSpheres, 
-                        surfaceColor=jointColor, showSurface=showJointSurface, showAxis=showJointAxis,
-                        axisScale=jointAxisScale, showPoses=showJointPoses)
-            # Overlay transparent red bounding geometry for colliding joints
-            if isColliding and (isinstance(joint, Revolute) or isinstance(joint, Prismatic)):
-                joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
-                joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
-                joint.centerSphere().addToWidget(widget, color=collisionJointColor)
-                
+            self._addOneJoint(widget, index, selectedJoint, collidingJoints,
+                               xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                               sphereColor, showSpheres, jointColor, showJointSurface,
+                               showJointAxis, jointAxisScale, showJointPoses)
+
         for index, link in enumerate(self.Links):
-            isColliding = index in collidingLinks
-            if index == selectedLink:
-                link.addToWidget(widget, color=collisionLinkColor if isColliding else selectedLinkColor, 
-                                alpha=linkOpacityDefault,
-                                showPath=showLinkPath, 
-                                pathColor=pathColor,
-                                showPathCircles=showPathCircles, 
-                                showFrames=showLinkPoses,
-                                showBoundary=showLinkSurface,
-                                linkID=index)
-            elif isColliding:
-                link.addToWidget(widget, color=collisionLinkColor, 
-                                alpha=linkOpacityDefault,
-                                showPath=showLinkPath, 
-                                pathColor=pathColor,
-                                showPathCircles=showPathCircles, 
-                                showFrames=showLinkPoses,
-                                showBoundary=showLinkSurface,
-                                linkID=index)
-            else:
-                link.addToWidget(widget, color=linkColor, 
-                                alpha=linkOpacity,
-                                showPath=showLinkPath, 
-                                pathColor=pathColor,
-                                showPathCircles=showPathCircles, 
-                                showFrames=showLinkPoses,
-                                showBoundary=showLinkSurface,
-                                linkID=index)
+            self._addOneLink(widget, index, selectedLink, collidingLinks,
+                             linkColor, linkOpacity, showLinkPath, pathColor,
+                             showPathCircles, showLinkPoses, showLinkSurface)
 
     def updateGLTransforms(self):
         """Fast-update all cached GL items by applying model-matrix transforms.

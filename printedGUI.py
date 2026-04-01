@@ -1,5 +1,9 @@
 import sys, os
 import dill
+import time as _time_module
+import cProfile as _cProfile
+import pstats as _pstats
+import threading as _threading
 
 if sys.stdout is None:
     class DummyStream:
@@ -520,32 +524,37 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.selected_torus = None
 
     def mousePressEvent(self, event):
-        # check to see if link or mesh is selected 
+        _prof = getattr(self.parent_window, '_profiling_enabled', False)
+        _mpe_t0 = _time_module.perf_counter() if _prof else None
+
+        # check to see if link or mesh is selected
         lpos = event.position() if hasattr(event, 'position') else event.localPos()
         region = [lpos.x()-5, lpos.y()-5, 10, 10]
         dpr = self.devicePixelRatioF()
         region = tuple([x * dpr for x in region])
 
-        links = []
         mesh = []
 
-        # Suppress pyqtgraph's "Error while drawing" messages during the
-        # GL_SELECT picking pass — GLMeshItem shaders are incompatible with
-        # selection mode, but the errors are non-fatal.
-        import io
-        _old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-        try:
-            picked_items = list(self.itemsAt(region))
-        finally:
-            sys.stdout = _old_stdout
+        # itemsAt does a full GL_SELECT re-render (~150ms) just to detect mesh clicks.
+        # Skip it entirely when no reference mesh is loaded — there's nothing to detect.
+        if not self.is_dragging and self.parent_window.referenceMesh is not None:
+            import io
+            _old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                picked_items = list(self.itemsAt(region))
+            finally:
+                sys.stdout = _old_stdout
 
-        for item in picked_items:
-            if (item.objectName() == "Link"):
-                links.append(item)
+            if _prof:
+                _items_at_ms = (_time_module.perf_counter() - _mpe_t0) * 1000
+                print(f"[PROF] mousePressEvent itemsAt={_items_at_ms:.1f}ms  items={len(picked_items)}")
 
-            if (item.objectName() == "Mesh"):
-                mesh.append(item)
+            for item in picked_items:
+                if (item.objectName() == "Mesh"):
+                    mesh.append(item)
+        elif _prof:
+            print(f"[PROF] mousePressEvent itemsAt=SKIPPED (no mesh loaded)")
 
         if (not self.is_dragging):
             if (len(mesh) == 0):
@@ -651,52 +660,110 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                 if (self.mesh_selected):
                     self.parent_window.referenceMesh.transform(transformation)
                 else:
-                    # Save backup before first drag transform
+                    # Throttle: skip stale queued events to prevent Qt event-queue
+                    # backlog.  If the user drags for 2 s at 100 events/s and each
+                    # frame takes 25 ms, 200 events queue up → 5 s freeze on release.
+                    # Skipped events cost ~0.001 ms (just a timestamp check), so the
+                    # backlog drains in <1 ms instead of seconds.
+                    _now = _time_module.perf_counter()
+                    if _now - getattr(self.parent_window, '_last_drag_frame_t', 0.0) < 0.200:
+                        return
+                    self.parent_window._last_drag_frame_t = _now
+
+                    # Start cProfile on first processed drag frame if armed.
+                    if getattr(self.parent_window, '_drag_profile_armed', False):
+                        if getattr(self.parent_window, '_drag_profiler', None) is None:
+                            self.parent_window._drag_profiler = _cProfile.Profile()
+                        self.parent_window._drag_profiler.enable()
+
+                    _prof = getattr(self.parent_window, '_profiling_enabled', False)
+                    _drag_t0 = _time_module.perf_counter() if _prof else None
+
+                    # Save backup before first drag transform (for reversion on error)
                     if not hasattr(self, '_drag_backup') or self._drag_backup is None:
                         self._drag_backup = self.parent_window.tree.dataDeepCopy()
+                    if _prof: print(f"[PROF drag-trans] backup1: {(_time_module.perf_counter()-_drag_t0)*1000:.1f}ms")
 
-                    self.parent_window.tree.transformJoint(self.parent_window.selected_joint, transformation, propogate=propogate, relative=False)
-                    
-                    # Check consistency — revert and stop drag if broken
-                    if not self.parent_window.tree.isConsistent():
-                        print("WARNING: Tree became inconsistent during drag translation. Reverting.")
-                        self.parent_window.tree.setTo(self._drag_backup)
-                        self._drag_backup = None
-                        self.is_dragging = False
-                        self.selected_axis = None
+                    # Capture old link GL items NOW — transformJoint replaces the
+                    # Link object entirely, so after the call _gl_items is gone.
+                    _sidx = self.parent_window.selected_joint
+                    _old_link_items = list(getattr(
+                        self.parent_window.tree.Links[_sidx], '_gl_items', []))
+
+                    # Real transform, no bounding-ball recompute per frame.
+                    # Incremental GL update rebuilds only the moved joint+link.
+                    try:
+                        self.parent_window.tree.transformJoint(
+                            _sidx, transformation,
+                            propogate=propogate, relative=False, safe=False,
+                            lightweight=False, recomputeBoundingBall=False)
+                    except Exception as _drag_err:
+                        if _prof: print(f"[PROF drag-trans] transformJoint failed: {_drag_err}")
+                        if self._drag_backup is not None:
+                            self.parent_window.tree.setTo(self._drag_backup)
                         self.parent_window.update_joint()
                         return
-                    # Keep a rolling backup of the last good state
-                    self._drag_backup = self.parent_window.tree.dataDeepCopy()
-                
-                self.parent_window.update_joint()
+                    if _prof: print(f"[PROF drag-trans] transformJoint: {(_time_module.perf_counter()-_drag_t0)*1000:.1f}ms")
+
+                if not self.parent_window._incremental_drag_update_gl(_sidx, _old_link_items):
+                    self.parent_window.update_joint()
             elif (self.selected_torus):
+                # Throttle: same backlog-prevention as translation drag.
+                # Crucially, we return BEFORE calling get_axis_angle_delta so
+                # that last_drag_pos is NOT updated on skipped frames — the next
+                # processed frame then computes da = full accumulated mouse motion.
+                _now = _time_module.perf_counter()
+                if _now - getattr(self.parent_window, '_last_drag_frame_t', 0.0) < 0.200:
+                    return
+                self.parent_window._last_drag_frame_t = _now
+
+                # Start cProfile on first processed drag frame if armed.
+                if getattr(self.parent_window, '_drag_profile_armed', False):
+                    if getattr(self.parent_window, '_drag_profiler', None) is None:
+                        self.parent_window._drag_profiler = _cProfile.Profile()
+                    self.parent_window._drag_profiler.enable()
+
                 da, normal = self.get_axis_angle_delta(event)
                 if (not self.facing_same_dir):
                     da = -da
-                
+
                 if (self.mesh_selected):
                     pass
                 else:
-                    # Save backup before first drag transform
+                    _prof = getattr(self.parent_window, '_profiling_enabled', False)
+                    _drag_t0 = _time_module.perf_counter() if _prof else None
+
+                    # Save backup before first drag transform (for reversion on error)
                     if not hasattr(self, '_drag_backup') or self._drag_backup is None:
                         self._drag_backup = self.parent_window.tree.dataDeepCopy()
+                    if _prof: print(f"[PROF drag-rot] backup1: {(_time_module.perf_counter()-_drag_t0)*1000:.1f}ms")
 
-                    self.parent_window.rotate_joint(da, self.selected_axis_orig)
+                    # Capture old link GL items before transformJoint replaces the object.
+                    _sidx = self.parent_window.selected_joint
+                    _old_link_items = list(getattr(
+                        self.parent_window.tree.Links[_sidx], '_gl_items', []))
 
-                    # Check consistency — revert and stop drag if broken
-                    if not self.parent_window.tree.isConsistent():
-                        print("WARNING: Tree became inconsistent during drag rotation. Reverting.")
-                        self.parent_window.tree.setTo(self._drag_backup)
-                        self._drag_backup = None
-                        self.is_dragging = False
-                        self.selected_torus = None
+                    # Real transform, no bounding-ball recompute per frame.
+                    # Incremental GL update rebuilds only the moved joint+link.
+                    _axis = self.selected_axis_orig
+                    _transformation_rot = SE3.AngleAxis(da, [_axis[0], _axis[1], _axis[2]], unit='deg')
+                    _propogate = self.parent_window.propogate_slider_checkbox.isChecked()
+                    _localOrient = self.parent_window.local_orient_slider_checkbox.isChecked()
+                    try:
+                        self.parent_window.tree.transformJoint(
+                            _sidx, _transformation_rot,
+                            propogate=_propogate, relative=True, localOrient=_localOrient,
+                            safe=False, lightweight=False, recomputeBoundingBall=False)
+                    except Exception as _drag_err:
+                        if _prof: print(f"[PROF drag-rot] transformJoint failed: {_drag_err}")
+                        if self._drag_backup is not None:
+                            self.parent_window.tree.setTo(self._drag_backup)
                         self.parent_window.update_joint()
                         return
-                    # Keep a rolling backup of the last good state
-                    self._drag_backup = self.parent_window.tree.dataDeepCopy()
+                    if _prof: print(f"[PROF drag-rot] transformJoint: {(_time_module.perf_counter()-_drag_t0)*1000:.1f}ms")
 
-                self.parent_window.update_joint()
+                if not self.parent_window._incremental_drag_update_gl(_sidx, _old_link_items):
+                    self.parent_window.update_joint()
             else:
                 curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
 
@@ -720,6 +787,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     def mouseReleaseEvent(self, event):
         if self.is_dragging and (self.selected_axis or self.selected_torus):
             self._drag_backup = None  # Clear drag backup on release
+            self.parent_window._last_drag_frame_t = 0.0  # Reset throttle for next drag
             self.done_transforming.emit(True)
 
         if (self.selected_joint_temp != None):
@@ -887,6 +955,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.animation_loop = False  # Whether animation should loop
         self._lightweight_dirty = False  # True when link geometry is stale from lightweight updates
         self._collision_colors_cleared = False  # True when collision highlights have been removed for motion
+        self._profiling_enabled = False  # Toggle with Ctrl+Shift+P to print update_joint timings
+        self._prof_call_count = 0
+        self._collision_dirty = True   # Recompute collisions on next update_joint
+        self._cached_colliding_joints = set()
+        self._cached_colliding_links = set()
+        self._gizmo_gl_items = []      # GL items for the translate/rotate gizmo arrows
         
         self.configurations_dock = QDockWidget("Configurations and Motion", self)
         self.configurations_dock.setWidget(self.configurations_widget)
@@ -1134,6 +1208,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.save_shortcut.activated.connect(self.save_tree)
         self.export_shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
         self.export_shortcut.activated.connect(self.export_link_modules)
+        self.profile_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
+        self.profile_shortcut.activated.connect(self.toggle_profiling)
+        self.drag_profile_shortcut = QShortcut(QKeySequence("Ctrl+Shift+D"), self)
+        self.drag_profile_shortcut.activated.connect(self._start_drag_profile)
+        self._drag_profile_armed = False
+        self._drag_profiler = None
         
         self.edit_grid_button = QPushButton("Edit Grid")
         self.edit_grid_button.clicked.connect(self.edit_grid_func)
@@ -2019,7 +2099,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         if self.total_version_counter % autosave_frequency == 0 and not self.tree is None:
             #self.save_tree(autosave_id=len(self.versions)//autosave_frequency)
-            self.save_tree(autosave_id=time.time()) #autosave with timestamp (seconds from unix epoch start)
+            self.save_tree(autosave_id=time.time())  #autosave with timestamp (seconds from unix epoch start)
         if len(self.versions) < log_capacity:
             self.versions.append(copy.deepcopy(self.tree))
         else:
@@ -2040,6 +2120,7 @@ class WindowKinegamiGUI(QMainWindow):
                 self.version_index = -1
             self.tree = None
 
+        self._mark_collision_dirty()
         self.update_joint()
         #print("UNDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
 
@@ -2047,6 +2128,7 @@ class WindowKinegamiGUI(QMainWindow):
         if self.version_index + 1 < len(self.versions):
             self.version_index += 1
             self.tree = copy.deepcopy(self.versions[self.version_index])
+            self._mark_collision_dirty()
             self.update_joint()
 
         #print("REDO    version: " + str(self.total_version_counter) + ", size: " + str(len(self.versions)) + ", index: " + str(self.version_index))
@@ -2106,14 +2188,15 @@ class WindowKinegamiGUI(QMainWindow):
             try:
                 # Update saved configs before deleting
                 self.update_saved_configs_for_joint_deleted(deleted_index)
-                
+
                 # Delete joint with recursive=False (re-parents children)
                 self.tree.deleteJoint(self.selected_joint, recursive=False)
-                
+
                 # Update the selected joint
                 if self.selected_joint >= len(self.tree.Joints):
                     self.selected_joint = len(self.tree.Joints) - 1
-                
+
+                self._mark_collision_dirty()
                 self.update_joint()
                 self.show_success('Joint successfully deleted!')
             except Exception as e:
@@ -2238,8 +2321,10 @@ class WindowKinegamiGUI(QMainWindow):
                 self.tree.saveLinkModules(base_filename)
             self.tree.showLinkModules()
 
-    def _gather_session_state(self):
-        """Collect all serializable editor state into a dict for .session files."""
+    def _gather_session_state(self, autosave=False):
+        """Collect all serializable editor state into a dict for .session files.
+        When autosave=True, undo/redo history is excluded to keep the file small
+        and avoid serializing up to 100 deep-copies of the tree on every action."""
         state = {
             'tree': self.tree,
             'saved_configurations': self.saved_configurations,
@@ -2255,7 +2340,7 @@ class WindowKinegamiGUI(QMainWindow):
             'control_type': self.control_type,
             'is_local': self.is_local,
             'animation_loop': self.animation_loop,
-            'versions': self.versions,
+            'versions': [] if autosave else self.versions,
             'version_index': self.version_index,
             'total_version_counter': self.total_version_counter,
             # Camera state
@@ -2369,14 +2454,28 @@ class WindowKinegamiGUI(QMainWindow):
 
             if file_path:
                 if file_path.endswith('.session'):
-                    session_state = self._gather_session_state()
-                    try:
-                        with open(file_path, 'wb') as f:
-                            dill.dump(session_state, f)
-                        if autosave_id is None:
+                    is_autosave = autosave_id is not None
+                    session_state = self._gather_session_state(autosave=is_autosave)
+                    if is_autosave:
+                        # Run dill serialize+write on a background thread so the
+                        # UI is never blocked.  Autosaves don't need a success dialog.
+                        def _do_autosave(state, path):
+                            try:
+                                with open(path, 'wb') as f:
+                                    dill.dump(state, f)
+                            except Exception as e:
+                                print(f"[autosave] error: {e}")
+                        _threading.Thread(
+                            target=_do_autosave,
+                            args=(session_state, file_path),
+                            daemon=True,
+                        ).start()
+                    else:
+                        try:
+                            with open(file_path, 'wb') as f:
+                                dill.dump(session_state, f)
                             self.show_success(f'Session saved to {os.path.basename(file_path)}')
-                    except Exception as e:
-                        if autosave_id is None:
+                        except Exception as e:
                             self.show_error(f'Error saving session: {e}')
                 else:
                     self.tree.save(file_path)
@@ -2404,14 +2503,16 @@ class WindowKinegamiGUI(QMainWindow):
                     return
             else:
                 self.tree = loadTree(file_path)
+            self._mark_collision_dirty()
             self.update_joint()
             if not file_path.endswith('.session'):
                 self.log_version()
 
     @QtCore.pyqtSlot(bool)
     def mesh_selected_slot(self, is_selected):
-        self.mesh_selected = is_selected
-        self.update_joint()
+        if is_selected != self.mesh_selected:
+            self.mesh_selected = is_selected
+            self.update_joint()
 
     @QtCore.pyqtSlot(int)
     def joint_selection_changed(self, index, force : bool = False):
@@ -2495,6 +2596,18 @@ class WindowKinegamiGUI(QMainWindow):
     def done_transforming(self, done):
         if done:
             self.log_version()
+            # Phase 1: fast visual update using cached collision result so the
+            # joint snaps to its final position immediately (~50 ms).
+            self.update_joint()
+            # Phase 2: recompute collision detection, then redraw with highlights.
+            # Deferred via QTimer so Phase 1 can render before the ~500 ms check.
+            self._mark_collision_dirty()
+            def _phase2():
+                self.update_joint()
+                # If cProfile drag capture was active, stop it now (after full redraw).
+                if getattr(self, '_drag_profiler', None) is not None:
+                    self._stop_drag_profile()
+            QTimer.singleShot(0, _phase2)
 
     @QtCore.pyqtSlot(float)
     def drag_rotate(self, new_rotation):
@@ -2682,7 +2795,8 @@ class WindowKinegamiGUI(QMainWindow):
         except Exception as e:
             self.tree = self._backup_tree
             self.show_error("Error rebuilding tree: " + str(e))
-        
+
+        self._mark_collision_dirty()
         self.update_joint(force_recreate_config_widget=True)
 
     def edit_joint_state(self):
@@ -2700,6 +2814,7 @@ class WindowKinegamiGUI(QMainWindow):
             if edit is not None:
 
                 if self.tree.setJointState(self.selected_joint, math.radians(edit)):
+                    self._mark_collision_dirty()
                     self.update_joint()
                     self.show_success('Joint state successfully edited!')
                     # success_dialog = SuccessDialog('Joint state successfully edited!')
@@ -2727,9 +2842,16 @@ class WindowKinegamiGUI(QMainWindow):
                 transformation = SE3.Rz(angle_radians)
             propogate = self.propogate_slider_checkbox.isChecked()
             localOrient = self.local_orient_slider_checkbox.isChecked()
-            if self.tree.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
+            _prof = getattr(self, '_profiling_enabled', False)
+            if _prof:
+                _t0 = _time_module.perf_counter()
+            result = self.tree.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient)
+            if _prof:
+                print(f"[PROF adjust_rotation] transformJoint: {(_time_module.perf_counter()-_t0)*1000:.1f}ms  result={result}")
+            if result:
                 self.old_rot_val = int(value)
-                self.update_joint()             
+                self._mark_collision_dirty()
+                self.update_joint()
                 self.rotation_slider.blockSignals(True)
                 self.rotation_slider.setDisabled(False)
                 self.rotation_slider.blockSignals(False)
@@ -2785,9 +2907,16 @@ class WindowKinegamiGUI(QMainWindow):
                 transformation = SE3.Ty(amount)
             if (self.selected_arrow == 2):
                 transformation = SE3.Tz(amount)
-            if self.tree.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient):
+            _prof = getattr(self, '_profiling_enabled', False)
+            if _prof:
+                _t0 = _time_module.perf_counter()
+            result = self.tree.transformJoint(self.selected_joint, transformation, propogate=propogate, relative=True, localOrient=localOrient)
+            if _prof:
+                print(f"[PROF adjust_translation] transformJoint: {(_time_module.perf_counter()-_t0)*1000:.1f}ms  result={result}")
+            if result:
                 self.old_trans_val = actualVal
-                self.update_joint()                
+                self._mark_collision_dirty()
+                self.update_joint()
                 self.translation_slider.blockSignals(True)
                 self.translation_slider.setDisabled(False)
                 self.translation_slider.blockSignals(False)
@@ -2889,6 +3018,7 @@ class WindowKinegamiGUI(QMainWindow):
                 print("Warning: Tried to edit state textbox on a waypoint, which should not be possible.")
                 return
             if self.tree.setJointState(self.selected_joint, actualState):
+                self._mark_collision_dirty()
                 self.update_joint()
                 self.set_state_tools()
                 self.log_version()
@@ -2932,6 +3062,7 @@ class WindowKinegamiGUI(QMainWindow):
                 return
             
             if self.tree.setJointState(joint_index, actualState):
+                self._mark_collision_dirty()
                 self.update_joint()
                 self.set_state_tools()
                 self.log_version()
@@ -3102,6 +3233,66 @@ class WindowKinegamiGUI(QMainWindow):
         self.plot_widget.update()
         return True
 
+    def _incremental_drag_update_gl(self, selected_joint: int, old_link_items=None) -> bool:
+        """Incremental GL update during drag: remove/rebuild only the selected
+        joint and its incoming link, then model-matrix update everything else.
+        No scene clear, no collision detection, no sidebar update.
+        Returns True on success, False if a full redraw is needed instead.
+
+        old_link_items must be the GL items from the link object *before*
+        transformJoint was called — transformJoint replaces the Link object
+        entirely, so by call time self.tree.Links[selected_joint] is already
+        a new object with an empty _gl_items list."""
+        if self.tree is None:
+            return False
+        # All unaffected joints/links must have a valid GL cache for model-matrix update
+        for i, j in enumerate(self.tree.Joints):
+            if j is not None and i != selected_joint and not j.hasGLCache():
+                return False
+        for i, lnk in enumerate(self.tree.Links):
+            if lnk is not None and i != selected_joint and not lnk.hasGLCache():
+                return False
+        # Remove the old link's GL items before addToWidget rebuilds them.
+        # (The new link object has an empty _gl_items, so addToWidget won't find them.)
+        if old_link_items:
+            for item in old_link_items:
+                try:
+                    self.plot_widget.removeItem(item)
+                except Exception:
+                    pass
+        self.tree.addToWidget(
+            self,
+            selectedJoint=self.selected_joint,
+            selectedLink=self.selected_link,
+            lastJoint=self.last_joint,
+            showSpheres=False,
+            collidingJoints=set(),
+            collidingLinks=set(),
+            only_rebuild_index=selected_joint,
+        )
+
+        # Remove old gizmo items and re-add at the joint's new position.
+        for item in getattr(self, '_gizmo_gl_items', []):
+            try:
+                self.plot_widget.removeItem(item)
+            except Exception:
+                pass
+        self._gizmo_gl_items = []
+        if self.selected_joint != -1:
+            joint = self.tree.Joints[self.selected_joint]
+            frame_pose = self.tree.Joints[self.selected_frame].Pose if self.selected_frame >= 0 else None
+            _items_before = list(self.plot_widget.items)
+            if self.control_type == "Translate":
+                joint.addTranslateArrows(self, selectedArrow=self.selected_arrow,
+                                         local=self.is_local, frame=frame_pose)
+            else:
+                joint.addRotateArrows(self, selectedArrow=self.selected_arrow,
+                                      local=self.is_local, frame=frame_pose)
+            self._gizmo_gl_items = [it for it in self.plot_widget.items if it not in _items_before]
+
+        self.plot_widget.update()
+        return True
+
     def _resync_after_lightweight(self):
         """Rebuild link geometry after lightweight animation, then do a full
         update_joint so collision capsules, bounding balls, and sidebar
@@ -3110,19 +3301,43 @@ class WindowKinegamiGUI(QMainWindow):
             self.tree.resyncFromLightweight()
         self._lightweight_dirty = False
         self._collision_colors_cleared = False
+        self._mark_collision_dirty()
         self.update_joint()
 
     def update_joint(self, force_recreate_config_widget : bool = False):
+        # ── PROFILING ────────────────────────────────────────────────────────
+        _prof = getattr(self, '_profiling_enabled', False)
+        _t0 = _time_module.perf_counter() if _prof else None
+        _timings = {} if _prof else None
+        if _prof:
+            import traceback as _tb
+            _stack = _tb.extract_stack()
+            # Show the 2 frames above update_joint (its direct caller and grandcaller)
+            _caller_frames = [f"{f.name}:{f.lineno}" for f in _stack[-4:-1]]
+            _caller_str = " <- ".join(reversed(_caller_frames))
+        def _mark(label):
+            if _prof:
+                _timings[label] = _time_module.perf_counter() - _t0
+        # ─────────────────────────────────────────────────────────────────────
+
         # If link geometry is stale from lightweight updates, rebuild first
         if self._lightweight_dirty and self.tree is not None:
-            self.tree.resyncFromLightweight()
+            try:
+                self.tree.resyncFromLightweight()
+            except Exception as _resync_err:
+                print(f"[WARNING] Drag resync failed ({_resync_err}), reverting to pre-drag state.")
+                _drag_backup = getattr(self.plot_widget, '_drag_backup', None)
+                if _drag_backup is not None:
+                    self.tree.setTo(_drag_backup)
+                    self.plot_widget._drag_backup = None
             self._lightweight_dirty = False
+        _mark('resync')
 
         self.select_joint_options.blockSignals(True)
         self.select_link_options.blockSignals(True)
 
         self.units_label.setText(f"Units: {self.units}")
-        
+
         # Check if we need to recreate config widgets or just update values.
         # Compare actual real-joint indices, not just count, so that operations
         # that shift indices (add-to-root, waypoint insert, undo/redo, load)
@@ -3138,14 +3353,16 @@ class WindowKinegamiGUI(QMainWindow):
                                         if not isinstance(j, (Waypoint, Tip))]
                 if current_real_indices != self.config_joint_indices:
                     need_recreate_config_widget = True
-        
+
         if need_recreate_config_widget:
             self.update_configurations()
         else:
             self.update_config_values()
+        _mark('config_widgets')
 
         if (not self.stl_generated):
             self.plot_widget.clear()
+            _mark('gl_clear')
             self.select_joint_options.clear()
             self.select_link_options.clear()
             self.setCentralWidget(self.plot_widget)
@@ -3157,23 +3374,33 @@ class WindowKinegamiGUI(QMainWindow):
                 self.plot_widget.addItem(self.referenceMesh.mesh)
 
             if self.tree is not None:
-                # Compute colliding pairs for highlighting
+                # Compute colliding pairs for highlighting — use cache when geometry hasn't
+                # changed, and skip recompute during drag (fast visual feedback during drag,
+                # fresh check once after drag ends via done_transforming).
                     collidingJoints = set()
                     collidingLinks = set()
                     if getattr(self, 'show_collisions', True):
                         try:
-                            collidingPairs = self.tree.getCollidingPairs()
-                            for (idx1, type1), (idx2, type2) in collidingPairs:
-                                if type1 == 'Joint':
-                                    collidingJoints.add(idx1)
-                                else:
-                                    collidingLinks.add(idx1)
-                                if type2 == 'Joint':
-                                    collidingJoints.add(idx2)
-                                else:
-                                    collidingLinks.add(idx2)
+                            if self._collision_dirty:
+                                collidingPairs = self.tree.getCollidingPairs()
+                                for (idx1, type1), (idx2, type2) in collidingPairs:
+                                    if type1 == 'Joint':
+                                        collidingJoints.add(idx1)
+                                    else:
+                                        collidingLinks.add(idx1)
+                                    if type2 == 'Joint':
+                                        collidingJoints.add(idx2)
+                                    else:
+                                        collidingLinks.add(idx2)
+                                self._cached_colliding_joints = collidingJoints
+                                self._cached_colliding_links = collidingLinks
+                                self._collision_dirty = False
+                            else:
+                                collidingJoints = self._cached_colliding_joints
+                                collidingLinks = self._cached_colliding_links
                         except Exception as e:
                             print(f"Collision detection error: {e}")
+                    _mark('collision_detection')
                     self.tree.addToWidget(
                         self,
                         selectedJoint=self.selected_joint,
@@ -3183,7 +3410,9 @@ class WindowKinegamiGUI(QMainWindow):
                         collidingJoints=collidingJoints,
                         collidingLinks=collidingLinks
                     )
+                    _mark('addToWidget')
                     self.add_tree(self.tree)
+                    _mark('add_tree')
 
         if self.mesh_selected and self.referenceMesh is not None:
             if self.control_type == "Translate":
@@ -3205,6 +3434,7 @@ class WindowKinegamiGUI(QMainWindow):
             if self.selected_frame >= 0:
                 frame_pose = self.tree.Joints[self.selected_frame].Pose
 
+            _items_before_gizmo = list(self.plot_widget.items)
             if self.control_type == "Translate":
                 joint.addTranslateArrows(
                     self,
@@ -3219,6 +3449,11 @@ class WindowKinegamiGUI(QMainWindow):
                     local=self.is_local,
                     frame=frame_pose
                 )
+            self._gizmo_gl_items = [it for it in self.plot_widget.items
+                                     if it not in _items_before_gizmo]
+        else:
+            self._gizmo_gl_items = []
+        _mark('arrows')
 
         if self.selected_arrow != -1:
             self.rotation_slider.setDisabled(False)
@@ -3226,6 +3461,19 @@ class WindowKinegamiGUI(QMainWindow):
         else:
             self.rotation_slider.setDisabled(True)
             self.translation_slider.setDisabled(True)
+
+        # ── PROFILING: print timings ─────────────────────────────────────────
+        if _prof:
+            total = _time_module.perf_counter() - _t0
+            prev = 0.0
+            segments = []
+            for label, t in _timings.items():
+                segments.append(f"  {label}: {(t-prev)*1000:.1f}ms")
+                prev = t
+            self._prof_call_count += 1
+            print(f"[PROF #{self._prof_call_count}] update_joint total={total*1000:.1f}ms  caller: {_caller_str}")
+            print("\n".join(segments))
+        # ─────────────────────────────────────────────────────────────────────
 
         #print("current radius: " + str(self.tree.r))
                 
@@ -3246,6 +3494,42 @@ class WindowKinegamiGUI(QMainWindow):
         widget.setLayout(layout)
         return widget
     
+
+    def toggle_profiling(self):
+        self._profiling_enabled = not self._profiling_enabled
+        self._prof_call_count = 0
+        state = "ON" if self._profiling_enabled else "OFF"
+        print(f"[PROF] update_joint profiling {state}")
+
+    # ── cProfile drag capture ─────────────────────────────────────────────────
+    # Press Ctrl+Shift+D to arm.  Then do exactly ONE drag (press, move, release).
+    # A snakeviz window opens automatically with the full call-tree for that drag.
+
+    def _start_drag_profile(self):
+        """Arm cProfile for the next drag cycle."""
+        self._drag_profiler = _cProfile.Profile()
+        self._drag_profiler.enable()
+        self._drag_profile_armed = True
+        print("[CPROF] Drag profiling armed — do one drag now.")
+
+    def _stop_drag_profile(self):
+        """Stop cProfile, save stats, and launch snakeviz."""
+        if not getattr(self, '_drag_profiler', None):
+            return
+        self._drag_profiler.disable()
+        self._drag_profile_armed = False
+        _stats_path = os.path.join(os.path.dirname(__file__), 'drag_profile.prof')
+        self._drag_profiler.dump_stats(_stats_path)
+        self._drag_profiler = None
+        print(f"[CPROF] Stats saved to {_stats_path}")
+        print(f"[CPROF] Opening snakeviz...")
+        import subprocess
+        subprocess.Popen([sys.executable, '-m', 'snakeviz', _stats_path])
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _mark_collision_dirty(self):
+        """Call whenever joint/link geometry changes so the next update_joint recomputes collisions."""
+        self._collision_dirty = True
 
     def add_joint(self, joint : Joint):
         # Check if this is a real joint (not a waypoint)
@@ -3286,6 +3570,7 @@ class WindowKinegamiGUI(QMainWindow):
             config_pos = real_indices.index(new_joint_index) if new_joint_index in real_indices else len(real_indices) - 1
             self.update_saved_configs_for_joint_added(config_pos)
 
+        self._mark_collision_dirty()
         self.update_joint()
         self.log_version()
         self.joint_selection_changed(self.selected_joint, force=True)
