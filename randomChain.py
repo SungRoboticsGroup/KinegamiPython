@@ -1,5 +1,5 @@
 from optimizationFunctions import *
-from optimizationFunctions import set_collision_penalty_log_file
+from optimizationFunctions import setCollisionPenaltyLogFile
 from makeKinematicTree import *
 from KinematicTree import *
 from KinematicChain import *
@@ -13,7 +13,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 2
+jointCount = 8
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
@@ -33,7 +33,7 @@ os.makedirs(results_dir, exist_ok=True)
 
 # Set up collision penalty logging to a file in the results directory
 collision_log_path = os.path.join(results_dir, "collision_penalty_log.txt")
-set_collision_penalty_log_file(collision_log_path)
+setCollisionPenaltyLogFile(collision_log_path)
 
 def generateRandomChain(nJoints):
     bounds = (-cubeSize/2, cubeSize/2)

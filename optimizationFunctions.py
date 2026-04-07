@@ -412,7 +412,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
 
         #try just moving it
         if tree.transformJoint(index, transform, propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
-            print(f"Before linkLossSameZhat, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
+            # print(f"Before linkLossSameZhat, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
             linkLossSameZhat = linkLoss(tree, 
                                         index, 
                                         power=power,
@@ -432,7 +432,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
             tree2.Joints[index].reverseZhat()
             if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True, 
                                     propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
-                print(f"Before linkLossReversedZhat (1), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
+                # print(f"Before linkLossReversedZhat (1), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
                 linkLossReversedZhat = linkLoss(tree2, 
                                                 index, 
                                                 power=power,
@@ -444,7 +444,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
             else:
                 linkLossReversedZhat = pathNonExistancePenalty
         else:
-            print(f"Before linkLossReversedZhat (2), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
+            # print(f"Before linkLossReversedZhat (2), includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
             linkLossReversedZhat = linkLoss(tree, 
                                             index, 
                                             power=power,
@@ -535,7 +535,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
     if verbose:
         msg = f"Optimized joint {index} in {time.time() - start}s -- Old loss: {initialLoss}, Improved Loss: {loss}"
         if retryingWithPenalty:
-            log_collision_penalty(msg)
+            logCollisionPenalty(msg)
         else:
             print(msg)
 
@@ -586,7 +586,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
         
         if has_collisions:
             if verbose:
-                log_collision_penalty(f"Collision detected for joint {index}, retrying with collision penalty")
+                logCollisionPenalty(f"Collision detected for joint {index}, retrying with collision penalty")
             # Retry with collision penalty enabled
             includeCollisionPenalty = True  # Ensure penalty is enabled for retry
             retryingWithPenalty = True
@@ -598,8 +598,8 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                                         retryingWithPenalty=retryingWithPenalty)
         
             if final_tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
-                log_collision_penalty(f"Collision still detected for joint {index} after retrying with penalty. Final tree: {final_tree}")
-                log_collision_penalty(f"Optimization loss for this joint was {final_loss}.")
+                logCollisionPenalty(f"Collision still detected for joint {index} after retrying with penalty. Final tree: {final_tree}")
+                logCollisionPenalty(f"Optimization loss for this joint was {final_loss}.")
                 raise Exception("Collision detected after retrying with penalty.")
             
         elif verbose:
@@ -711,7 +711,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
         if verbose:
             msg = f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}"
             if retryingWithPenalty:
-                log_collision_penalty(msg)
+                logCollisionPenalty(msg)
             else:
                 print(msg)
         
@@ -732,7 +732,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
             
             if has_collisions:
                 if verbose:
-                    log_collision_penalty(f"Collision detected for waypoint {index}, retrying with collision penalty")
+                    logCollisionPenalty(f"Collision detected for waypoint {index}, retrying with collision penalty")
                 # Retry with collision penalty enabled
                 tree, minSwarmResult = optimizeWaypointPlacement(subject, index, maxiter, tol, failurePenalty,
                                                childFraction, ignoreLater,
@@ -740,8 +740,8 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                                                includeCollisionPenalty=True, retryingWithPenalty=True)
                 
                 if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
-                    log_collision_penalty(f"Collision still detected for waypoint {index} after retrying with penalty. Final tree: {repr(tree)}")
-                    log_collision_penalty(f"Optimization loss for this waypoint was {minSwarmResult}.")
+                    logCollisionPenalty(f"Collision still detected for waypoint {index} after retrying with penalty. Final tree: {repr(tree)}")
+                    logCollisionPenalty(f"Optimization loss for this waypoint was {minSwarmResult}.")
                     raise Exception("Collision detected after retrying with penalty.")  
                 
             elif verbose:
