@@ -21,6 +21,7 @@ cycler==0.12.1
 debugpy==1.8.16
 decorator==5.2.1
 defusedxml==0.7.1
+dill==0.3.8
 distlib==0.4.0
 executing==2.2.1
 ezdxf==1.4.2

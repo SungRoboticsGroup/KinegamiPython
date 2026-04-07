@@ -2,17 +2,367 @@ from KinematicTree import *
 from treeTraversals import *
 import pyswarms as ps
 import os
+import dill
+import matplotlib.pyplot as plt
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List, Any, Tuple
+from datetime import datetime
 
 # Global file path for collision penalty logging (can be set externally)
 collision_penalty_log_file = None
 
-def set_collision_penalty_log_file(filepath):
-    """Set the file path for logging collision penalty iterations."""
+@dataclass
+class CheckpointState:
+    # Core tree state
+    tree: Any  # KinematicTree
+    
+    # Random state for reproducibility
+    random_state: Tuple
+    
+    # Traversal information
+    traversal_info: Dict[str, Any] = field(default_factory=dict)
+    # Contains: algorithm, direction, orderBy, current_index, repeat_index, 
+    #           completed_indices (list of already-processed joint indices)
+    
+    # Collision detection state
+    collision_matrices: Optional[Tuple] = None
+    
+    # Optimization history
+    optimization_history: Dict[str, List] = field(default_factory=dict)
+    # Contains: times, lengths, losses
+    
+    # Configuration
+    configurations: Optional[List] = None
+    failure_penalty: float = 0.0
+    
+    # Metadata
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    # Contains: timestamp, iteration_count, total_joints, version
+
+def saveCheckpoint(state: CheckpointState, filepath: str, compress: bool = False) -> str:
+    """
+    Save a checkpoint state to disk using dill serialization.
+    
+    Args:
+        state: CheckpointState object containing all optimization state
+        filepath: Path to save the checkpoint (without extension)
+        compress: If True, use gzip compression (slower but smaller files)
+    
+    Returns:
+        The full path of the saved checkpoint file
+    """
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    ext = '.dill.gz' if compress else '.dill'
+    full_path = filepath + ext
+    
+    if compress:
+        import gzip
+        with gzip.open(full_path, 'wb') as f:
+            dill.dump(state, f)
+    else:
+        with open(full_path, 'wb') as f:
+            dill.dump(state, f)
+    
+    return full_path
+
+def loadCheckpoint(filepath: str, restore_random_state: bool = True) -> CheckpointState:
+    """
+    Load a checkpoint state from disk.
+    
+    Args:
+        filepath: Path to the checkpoint file
+        restore_random_state: If True, restore numpy random state from checkpoint
+    
+    Returns:
+        CheckpointState object with all saved optimization state
+    """
+    if filepath.endswith('.gz'):
+        import gzip
+        with gzip.open(filepath, 'rb') as f:
+            state = dill.load(f)
+    else:
+        with open(filepath, 'rb') as f:
+            state = dill.load(f)
+    
+    if restore_random_state and state.random_state is not None:
+        np.random.set_state(state.random_state)
+    
+    return state
+
+def inspectCheckpoint(filepath: str, load_tree: bool = False) -> Dict[str, Any]:
+    """
+    Inspect a checkpoint file and print summary without loading full tree.
+    
+    Args:
+        filepath: Path to the checkpoint file
+        load_tree: If True, also load and return the tree object
+    
+    Returns:
+        Dict with checkpoint metadata and optionally the tree
+    """
+    state = loadCheckpoint(filepath, restore_random_state=False)
+    
+    info = {
+        'traversal_info': state.traversal_info,
+        'metadata': state.metadata,
+        'failure_penalty': state.failure_penalty,
+        'num_configurations': len(state.configurations) if state.configurations else 0,
+        'has_collision_matrices': state.collision_matrices is not None,
+        'optimization_history': {
+            'num_iterations': len(state.optimization_history.get('times', [])),
+            'latest_time': state.optimization_history.get('times', [None])[-1],
+            'latest_length': state.optimization_history.get('lengths', [None])[-1],
+        }
+    }
+    
+    if load_tree:
+        info['tree'] = state.tree
+    
+    # Print summary
+    print(f"Checkpoint: {filepath}")
+    print(f"  Timestamp: {state.metadata.get('timestamp', 'N/A')}")
+    print(f"  Traversal: {state.traversal_info.get('algorithm', 'N/A')} "
+          f"({state.traversal_info.get('direction', '')}, {state.traversal_info.get('orderBy', '')})")
+    print(f"  Repeat: {state.traversal_info.get('repeat_index', 'N/A')} / "
+          f"{state.traversal_info.get('total_repeats', 'N/A')}")
+    print(f"  Current joint: {state.traversal_info.get('current_index', 'N/A')}")
+    print(f"  Completed joints: {len(state.traversal_info.get('completed_indices', []))}")
+    print(f"  Iterations: {info['optimization_history']['num_iterations']}")
+    print(f"  Latest length: {info['optimization_history']['latest_length']:.4f}" 
+          if info['optimization_history']['latest_length'] else "  Latest length: N/A")
+    
+    return info
+
+def listCheckpoints(checkpoint_dir: str) -> list:
+    """
+    List all checkpoint files in a directory, sorted by iteration order.
+    
+    Args:
+        checkpoint_dir: Path to directory containing checkpoint files
+        
+    Returns:
+        List of dicts with 'path', 'repeat', 'joint_idx' for each checkpoint
+    """
+    import re
+    
+    checkpoints = []
+    
+    if not os.path.exists(checkpoint_dir):
+        return checkpoints
+    
+    for filename in os.listdir(checkpoint_dir):
+        if filename.endswith('.dill'):
+            match = re.match(r'iter_(\d+)_(\d+)\.dill', filename)
+            if match:
+                checkpoints.append({
+                    'path': os.path.join(checkpoint_dir, filename),
+                    'repeat': int(match.group(1)),
+                    'joint_idx': int(match.group(2)),
+                    'filename': filename
+                })
+    
+    # Sort by repeat, then by joint index
+    checkpoints.sort(key=lambda x: (x['repeat'], x['joint_idx']))
+
+    print(f"Found {len(checkpoints)} checkpoints in {checkpoint_dir}")
+    print(f"Checkpoints:")
+    for cp in checkpoints:
+        print(f"  {cp['filename']} (repeat {cp['repeat']}, joint {cp['joint_idx']})")
+    
+    return checkpoints
+
+def resumeFromCheckpoint(checkpoint_path: str, 
+                           showSteps: bool = True,
+                           verbose: bool = True,
+                           directory: Optional[str] = None) -> Any:
+    """
+    Resume optimization from a saved checkpoint.
+    
+    Args:
+        checkpoint_path: Path to the checkpoint file to resume from
+        showSteps: Whether to show visualization after each step
+        verbose: Whether to print progress information
+        directory: Output directory (if None, uses original from checkpoint)
+    
+    Returns:
+        The optimized KinematicTree (or tuple with times/lengths if evaluate=True in original)
+    """
+    state = loadCheckpoint(checkpoint_path, restore_random_state=True)
+    
+    tree = state.tree
+    traversal_info = state.traversal_info
+    times = state.optimization_history.get('times', [])
+    lengths = state.optimization_history.get('lengths', [])
+    losses = state.optimization_history.get('losses', [])
+    configurations = state.configurations
+    failurePenalty = state.failure_penalty
+    
+    # Extract traversal parameters
+    traversal_algo = traversal_info.get('algorithm', 'dfs')
+    direction = traversal_info.get('direction', 'outward')
+    orderBy = traversal_info.get('orderBy', 'longest')
+    repeat_index = traversal_info.get('repeat_index', 0)
+    total_repeats = traversal_info.get('total_repeats', 1)
+    completed_indices = set(traversal_info.get('completed_indices', []))
+    current_index = traversal_info.get('current_index')
+    
+    # Get other parameters from metadata
+    metadata = state.metadata
+    guarantee = metadata.get('guarantee', False)
+    parallelize = metadata.get('parallelize', False)
+    childFraction = metadata.get('childFraction', 1)
+    power = metadata.get('power', 2)
+    evaluate = metadata.get('evaluate', False)
+    save_checkpoints = metadata.get('save_checkpoints', True)
+    
+    if directory is None:
+        directory = metadata.get('directory')
+    
+    if verbose:
+        print(f"Resuming from checkpoint: {checkpoint_path}")
+        print(f"  Repeat: {repeat_index + 1}/{total_repeats}")
+        print(f"  Completed joints: {len(completed_indices)}")
+        print(f"  Current tree length: {tree.totalLength():.4f}")
+    
+    # Reconstruct traversal
+    treeTraversals = {
+        "dfs": partial(dfs, direction=direction, orderBy=orderBy),
+        "bfs": partial(bfs, direction=direction, orderBy=orderBy),
+        "randomized": partial(randomized, 
+                            power=power, 
+                            count=len(tree.Joints), 
+                            childFraction=childFraction,
+                            isWeighted=True)
+    }
+    
+    start = time.time() - (times[-1] if times else 0)  # Adjust start time
+    
+    def log(t, idx):
+        diff = time.time() - start
+        times.append(diff)
+        lengths.append(t.totalLength())
+        if directory is not None:
+            save_path = os.path.join(directory, f"{diff}_{idx}")
+            t.save(save_path, saveDir=False)
+    
+    checkpoint_dir = os.path.join(directory, 'checkpoints') if directory else None
+    iteration_count = len(completed_indices)
+    
+    # Continue from where we left off
+    for rep in range(repeat_index, total_repeats):
+        full_traversal = list(treeTraversals[traversal_algo](tree))
+        
+        for index in full_traversal:
+            # Skip already completed indices in current repeat
+            if rep == repeat_index and index in completed_indices:
+                continue
+            
+            if verbose:
+                print(f"Optimizing joint index: {index} {tree.Joints[index]}")
+            
+            iters = 50
+            tolerance = tree.r / 10
+            
+            if isWaypoint(tree.Joints[index]):
+                tree, loss = optimizeWaypointPlacement(
+                    tree, index, maxiter=iters, tol=tolerance,
+                    failurePenalty=failurePenalty, childFraction=childFraction,
+                    ignoreLater=(not guarantee), parallelize=parallelize,
+                    verbose=verbose, configurations=configurations)
+            else:
+                tree, loss = optimizeJointPlacement(
+                    tree, index, maxiter=iters, tol=tolerance,
+                    failurePenalty=failurePenalty, childFraction=childFraction,
+                    ignoreLater=(not guarantee), parallelize=parallelize,
+                    verbose=verbose, configurations=configurations)
+            
+            if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
+                print(f"Post-optimization collision detected at joint {index}.")
+                raise Exception("Post-optimization collision detected.")
+            
+            log(tree, index)
+            losses.append(loss)
+            completed_indices.add(index)
+            iteration_count += 1
+            
+            # Save checkpoint
+            if save_checkpoints and checkpoint_dir:
+                checkpoint_state = CheckpointState(
+                    tree=copy.deepcopy(tree),
+                    random_state=np.random.get_state(),
+                    traversal_info={
+                        'algorithm': traversal_algo,
+                        'direction': direction,
+                        'orderBy': orderBy,
+                        'current_index': index,
+                        'repeat_index': rep,
+                        'total_repeats': total_repeats,
+                        'completed_indices': list(completed_indices),
+                    },
+                    collision_matrices=tree.buildCollisionMatrices(),
+                    optimization_history={'times': times.copy(), 'lengths': lengths.copy(), 'losses': losses.copy()},
+                    configurations=configurations,
+                    failure_penalty=failurePenalty,
+                    metadata={
+                        'timestamp': datetime.now().isoformat(),
+                        'iteration_count': iteration_count,
+                        'total_joints': len(tree.Joints),
+                        'directory': directory,
+                        'guarantee': guarantee,
+                        'parallelize': parallelize,
+                        'childFraction': childFraction,
+                        'power': power,
+                        'evaluate': evaluate,
+                        'save_checkpoints': save_checkpoints,
+                        'version': '1.0',
+                    }
+                )
+                saveCheckpoint(checkpoint_state, os.path.join(checkpoint_dir, f'iter_{rep}_{index}'))
+        
+        # Clear completed indices for next repeat
+        completed_indices.clear()
+    
+    if showSteps:
+        tree.show()
+    
+    if verbose:
+        print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+    
+    if directory is not None:
+        tree.save(os.path.join(directory, "final"), saveDir=False)
+        
+        # Plot and save losses
+        plt.figure(figsize=(8, 5))
+        plt.plot(times, lengths, marker='o', linestyle='-', label='Length')
+        plt.xlabel('Time')
+        plt.ylabel('Length')
+        plt.title('Optimization Progress (Resumed)')
+        plt.legend()
+        plt.grid(True)
+        
+        # Save to same directory as plot_0.png (results_dir, which is 2 levels up from directory)
+        results_dir = os.path.dirname(os.path.dirname(directory))
+        plot_save_path = os.path.join(results_dir, "lossPlotAfterResuming.png")
+        try:
+            plt.savefig(plot_save_path, dpi=300, bbox_inches='tight')
+            if verbose:
+                print(f"Saved plot to: {plot_save_path}")
+        except Exception as e:
+            print(f"Error saving plot: {e}")
+        plt.close()
+    
+    if evaluate:
+        return tree, times, lengths
+    
+    return tree
+
+def setCollisionPenaltyLogFile(filepath):
     global collision_penalty_log_file
     collision_penalty_log_file = filepath
 
-def log_collision_penalty(message):
-    """Log message to both terminal and file (if set)."""
+def logCollisionPenalty(message):
     print(message)
     if collision_penalty_log_file:
         with open(collision_penalty_log_file, 'a') as f:
@@ -401,16 +751,50 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     else:
         raise Exception("Optimization failed dramatically")
 
-
 def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
-                 repeatTraversal=1):
+                 repeatTraversal=1, save_checkpoints=True):
+    """
+    Optimize the placement of joints in a kinematic tree.
+    
+    Args:
+        subject: KinematicTree to optimize
+        showSteps: Show visualization after optimization
+        childFraction: Weight for child link costs
+        guarantee: If True, don't ignore later joints
+        parallelize: Enable parallel computation
+        evaluate: If True, return (tree, times, lengths) tuple
+        verbose: Print progress information
+        directory: Output directory for saving results and checkpoints
+        resetOnFail: Reset on optimization failure
+        traversal: Traversal algorithm ('dfs', 'bfs', 'randomized')
+        direction: Traversal direction ('outward', 'inward')
+        orderBy: Traversal ordering ('default', 'longest', 'shortest')
+        power: Power for length cost calculation
+        configurations: List of joint configurations to test
+        repeatTraversal: Number of times to repeat the traversal
+        save_checkpoints: If True, save dill checkpoints after each iteration
+    
+    Returns:
+        Optimized KinematicTree, or (tree, times, lengths) if evaluate=True
+    """
     if repeatTraversal == "n":
         repeatTraversal = len(subject.Joints)
 
     times = []
     lengths = []
+    losses = []  # Track optimization losses
+    completed_indices = set()  # Track completed joint indices
+    iteration_count = 0
+    
+    # Setup checkpoint directory
+    checkpoint_dir = None
+    if save_checkpoints and directory is not None:
+        checkpoint_dir = os.path.join(directory, 'checkpoints')
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        if verbose:
+            print(f"Checkpoints will be saved to: {checkpoint_dir}")
 
     if configurations == None:
         num_joints = len(subject.Joints)
@@ -484,7 +868,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
     }
 
     print("Doing the optimization:")
-    for _ in range(repeatTraversal):
+    for repeat_idx in range(repeatTraversal):
         for index in treeTraversals[traversal](subject):
             print("Optimizing joint index:", index, subject.Joints[index])
             iters = 50
@@ -506,6 +890,55 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                 print(f"Optimization loss for this joint was {loss}.")
                 raise Exception("Post-optimization collision detected.")
             log(tree, index)
+            losses.append(loss)
+            completed_indices.add(index)
+            iteration_count += 1
+            
+            # Save checkpoint after each iteration
+            if save_checkpoints and checkpoint_dir is not None:
+                checkpoint_state = CheckpointState(
+                    tree=copy.deepcopy(tree),
+                    random_state=np.random.get_state(),
+                    traversal_info={
+                        'algorithm': traversal,
+                        'direction': direction,
+                        'orderBy': orderBy,
+                        'current_index': index,
+                        'repeat_index': repeat_idx,
+                        'total_repeats': repeatTraversal,
+                        'completed_indices': list(completed_indices),
+                    },
+                    collision_matrices=tree.buildCollisionMatrices(),
+                    optimization_history={
+                        'times': times.copy(), 
+                        'lengths': lengths.copy(), 
+                        'losses': losses.copy()
+                    },
+                    configurations=configurations,
+                    failure_penalty=failurePenalty,
+                    metadata={
+                        'timestamp': datetime.now().isoformat(),
+                        'iteration_count': iteration_count,
+                        'total_joints': len(tree.Joints),
+                        'directory': directory,
+                        'guarantee': guarantee,
+                        'parallelize': parallelize,
+                        'childFraction': childFraction,
+                        'power': power,
+                        'evaluate': evaluate,
+                        'save_checkpoints': save_checkpoints,
+                        'version': '1.0',
+                    }
+                )
+                checkpoint_path = saveCheckpoint(
+                    checkpoint_state, 
+                    os.path.join(checkpoint_dir, f'iter_{repeat_idx}_{index}')
+                )
+                if verbose:
+                    print(f"Checkpoint saved: {checkpoint_path}")
+        
+        # Clear completed indices for next repeat
+        completed_indices.clear()
 
     if showSteps:
         tree.show()

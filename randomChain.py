@@ -13,7 +13,7 @@ import os
 import shutil
 from datetime import datetime
 
-jointCount = 8
+jointCount = 2
 sparse = False
 cubeSize = 10
 title = str(jointCount)+" Joint Generalized Gimbal Chains Cube Size " + str(cubeSize)
