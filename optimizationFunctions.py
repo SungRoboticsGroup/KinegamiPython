@@ -664,7 +664,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                                    propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
             return failurePenalty * len(subject.Joints) * (len(subject.Children) + 1)
         
-        print(f"Waypoint optimization, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
+        # print(f"Waypoint optimization, includeCollisionPenalty = {includeCollisionPenalty} and collisionErrorWeight = {failurePenalty}")
         return linkLoss(tree, index, includeCollisionPenalty=includeCollisionPenalty, configurations=configurations, 
                         collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
                         collisionErrorWeight=failurePenalty) + \
