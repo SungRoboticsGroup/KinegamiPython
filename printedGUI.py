@@ -26,6 +26,7 @@ from PyQt5 import QtCore as qc
 from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut, QGridLayout
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime, QEvent
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3, QKeySequence
+from PyQt5 import sip
 from pyqtgraph.Qt import QtCore
 import pyqtgraph as pg
 from OpenGL.GL import *
@@ -1540,10 +1541,21 @@ class WindowKinegamiGUI(QMainWindow):
         
         # Determine where to insert the configuration
         insert_index = len(self.saved_configurations)  # Default: append at end
-        
+
+
+        # if not hasattr(self, 'config_interp_slider'):
+        #     print("Slider has never been created")
+        # elif sip.isdeleted(self.config_interp_slider):
+        #     print("Slider has been deleted")
+        # elif self.config_interp_slider is None:
+        #     print("Slider is None")
+        # else:
+        #     print(self.config_interp_slider.value())
+
         # Check if interpolation slider exists and is between configurations
-        if (hasattr(self, 'config_interp_slider') and 
-            len(self.saved_configurations) > 1):
+        if hasattr(self, 'config_interp_slider') and \
+            len(self.saved_configurations) > 1 and \
+        not sip.isdeleted(self.config_interp_slider):
             slider_value = self.config_interp_slider.value()
             max_value = self.config_interp_slider.maximum()
             # Invert because vertical sliders have max at top
@@ -1565,7 +1577,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.display_saved_configurations()
         
         # Move the interpolation slider to the newly added configuration
-        if hasattr(self, 'config_interp_slider'):
+        if hasattr(self, 'config_interp_slider') and \
+        not sip.isdeleted(self.config_interp_slider):
             max_value = self.config_interp_slider.maximum()
             slider_value = max_value - (insert_index * 100)
             self.config_interp_slider.blockSignals(True)
@@ -1576,7 +1589,9 @@ class WindowKinegamiGUI(QMainWindow):
         """Display all saved configurations as rows below the current configuration"""
         # Save the current interpolation slider position before recreating
         saved_slider_value = None
-        if hasattr(self, 'config_interp_slider'):
+        if hasattr(self, 'config_interp_slider') and \
+            len(self.saved_configurations) > 1 and \
+            not sip.isdeleted(self.config_interp_slider):
             saved_slider_value = self.config_interp_slider.value()
         
         # Clear the saved configs container
@@ -1850,7 +1865,8 @@ class WindowKinegamiGUI(QMainWindow):
             self.tree.setJointState(joint_index, actualState)
         
         # Update the interpolation slider to match this configuration
-        if hasattr(self, 'config_interp_slider'):
+        if hasattr(self, 'config_interp_slider') and \
+            not sip.isdeleted(self.config_interp_slider):
             # Calculate slider position for this config index
             # Since slider is inverted: max_value at top (config 0), 0 at bottom (last config)
             max_value = self.config_interp_slider.maximum()

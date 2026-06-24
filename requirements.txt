@@ -26,7 +26,7 @@ pyinstaller-hooks-contrib==2026.1
 PyOpenGL==3.1.10
 pyparsing==3.3.2
 PyQt5==5.15.11
-PyQt5-Qt5==5.15.2
+PyQt5-Qt5==5.15.13
 PyQt5_sip==12.18.0
 pyqtgraph==0.13.7
 pytetwild==0.2.3
