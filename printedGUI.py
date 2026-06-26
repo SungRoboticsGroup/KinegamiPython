@@ -44,6 +44,8 @@ from Dialog import *
 from printedJointWidget import *
 from IntersectionHelper import *
 
+import importlib.util
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -174,6 +176,62 @@ class AddMeshWidget(QWidget):
 
     def show_error(self, message):
         QMessageBox.warning(self, "Invalid Input", message)
+
+class EnvironmentWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout()
+
+        self.load_button = QPushButton('Load Environment', self)
+        self.load_button.clicked.connect(self.on_load)
+        layout.addWidget(self.load_button)
+
+        self.visible_toggle = QCheckBox('Environment Visible')
+        self.visible_toggle.setChecked(True)
+        self.visible_toggle.toggled.connect(self.on_toggle_visibility)
+        layout.addWidget(self.visible_toggle)
+
+        self.clear_button = QPushButton('Clear', self)
+        self.clear_button.clicked.connect(self.on_clear)
+        layout.addWidget(self.clear_button)
+
+        self.setLayout(layout)
+
+    def on_load(self):
+        try:
+            base_path = sys._MEIPASS
+        except AttributeError:
+            base_path = os.path.abspath(".")
+        environments_dir = os.path.join(base_path, "environments")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Load Environment", environments_dir, "Python Files (*.py)"
+        )
+        if not file_path:
+            return
+        env_dir = os.path.dirname(os.path.abspath(file_path))
+        repo_root = os.path.dirname(env_dir)
+        try:
+            if env_dir not in sys.path:
+                sys.path.insert(0, env_dir)
+            if repo_root not in sys.path:
+                sys.path.insert(0, repo_root)
+            spec = importlib.util.spec_from_file_location("_environment", file_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.window().environment_items = module.get_items()
+        except Exception as e:
+            QMessageBox.warning(self, "Load Error", f"Failed to load environment:\n{e}")
+            return
+        self.window().update_joint()
+
+    def on_toggle_visibility(self, checked):
+        self.window().environment_visible = checked
+        self.window().update_joint()
+
+    def on_clear(self):
+        self.window().environment_items = []
+        self.window().update_joint()
+
 
 class ClearTreeWidget(QWidget):
     def __init__(self, parent=None):
@@ -897,6 +955,8 @@ class WindowKinegamiGUI(QMainWindow):
         self.mesh_selected = False
         self.mesh_visible = True
         self.mesh_scale = 1.0
+        self.environment_items = []
+        self.environment_visible = True
         
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
@@ -919,6 +979,11 @@ class WindowKinegamiGUI(QMainWindow):
 
         top_dock_widget.setWidget(self.key_bar)
         
+        self.environment_widget = EnvironmentWidget(self)
+        self.environment_dock = QDockWidget("Environment", self)
+        self.environment_dock.setWidget(self.environment_widget)
+        self.environment_dock.setVisible(True)
+
         self.add_mesh_widget = AddMeshWidget(self)
         self.add_mesh_dock = QDockWidget("Import Mesh", self)
         self.add_mesh_dock.setWidget(self.add_mesh_widget)
@@ -1328,6 +1393,7 @@ class WindowKinegamiGUI(QMainWindow):
         # self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_dims_dock)  # Removed - units locked to mm
         self.addDockWidget(Qt.LeftDockWidgetArea, self.edit_grid_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.options_dock)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.environment_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.add_mesh_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.clear_tree_dock)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.clear_tree_popup_dock)
@@ -3388,6 +3454,10 @@ class WindowKinegamiGUI(QMainWindow):
 
             if self.mesh_visible and self.referenceMesh is not None:
                 self.plot_widget.addItem(self.referenceMesh.mesh)
+
+            if self.environment_visible:
+                for env_item in self.environment_items:
+                    self.plot_widget.addItem(env_item)
 
             if self.tree is not None:
                 # Compute colliding pairs for highlighting — use cache when geometry hasn't
