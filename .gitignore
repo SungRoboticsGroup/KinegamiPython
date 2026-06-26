@@ -9,4 +9,5 @@ dist/
 .vscode/
 save/*.chain
 save/*.tree
-
+waypoint_insertion.md
+user_task.md

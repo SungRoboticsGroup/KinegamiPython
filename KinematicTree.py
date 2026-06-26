@@ -485,7 +485,52 @@ class KinematicTree(Generic[F]):
         return new_indices
 
 
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+    def insertWaypointsIntoLink(self, linkIndex: int, numWaypoints: int = 1) -> None:
+        """
+        Insert numWaypoints evenly-spaced Waypoint joints along self.Links[linkIndex].
+        Mutates the tree in place. linkIndex must be > 0.
+        """
+        assert linkIndex > 0, "Use the GUI root-case handler for the root joint"
+        assert numWaypoints >= 1
+
+        fractions = [i / (numWaypoints + 1) for i in range(1, numWaypoints + 1)]
+        sub_links = self.Links[linkIndex].splitAtFractions(fractions)
+
+        parentIndex = self.Parents[linkIndex]
+        first_new_idx = len(self.Joints)
+
+        new_waypoints = []
+        for i in range(numWaypoints):
+            pose = _waypoint_pose_at_split(sub_links[i].path, sub_links[i + 1].path)
+            new_waypoints.append(Waypoint(self.r, pose))
+
+        # Rewire existing child: new parent is the last inserted waypoint
+        self.Parents[linkIndex] = first_new_idx + numWaypoints - 1
+        self.Links[linkIndex] = sub_links[-1]
+
+        # Replace linkIndex with first new waypoint in parent's children list
+        parent_children = self.Children[parentIndex]
+        idx_in_parent = parent_children.index(linkIndex)
+        parent_children[idx_in_parent] = first_new_idx
+
+        # Append new waypoints and their incoming sub-links
+        for i, (wp, sub_link) in enumerate(zip(new_waypoints, sub_links)):
+            wp_parent = parentIndex if i == 0 else first_new_idx + i - 1
+            wp_children = ([first_new_idx + i + 1] if i < numWaypoints - 1
+                           else [linkIndex])
+            self.Joints.append(wp)
+            self.Links.append(sub_link)
+            self.Parents.append(wp_parent)
+            self.Children.append(wp_children)
+            self.boundingBall = minBoundingBall(self.boundingBall, wp.boundingBall())
+
+        # Recompute collision capsules for all affected links
+        for i in range(numWaypoints):
+            self.Links[first_new_idx + i].recomputeCollisionCapsules()
+        self.Links[linkIndex].recomputeCollisionCapsules()
+
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
                   proximalColor='c', centerColor='m', distalColor='y',
                   showJointSurface=True, jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
@@ -1435,20 +1480,28 @@ class KinematicTree(Generic[F]):
                 return False
 
         else:
-            self.Joints[jointIndex].transformPoseBy(Transformation)
             joint = self.Joints[jointIndex]
             if lightweight:
                 # Fast path: only update link poses for GL transform, skip
                 # full link reconstruction (elbows, cylinders, path objects)
+                self.Joints[jointIndex].transformPoseBy(Transformation)
                 self.Links[jointIndex].transformPosesInPlace(Transformation)
             elif recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
                 link_constructor = self._get_link_constructor()
-                self.Links[jointIndex] = link_constructor(self.r, parent.DistalDubinsFrame(), 
-                                        joint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow)
+                # Build the new link BEFORE moving the joint so that if link_constructor
+                # raises (e.g. CSC solver fails), the joint hasn't moved yet and the tree
+                # remains consistent. After transformPoseBy(T), ProximalDubinsFrame() ==
+                # T @ current_ProximalDubinsFrame(), so we pass that directly.
+                new_link = link_constructor(self.r, parent.DistalDubinsFrame(),
+                                            Transformation @ joint.ProximalDubinsFrame(),
+                                            self.maxAnglePerElbow)
+                self.Joints[jointIndex].transformPoseBy(Transformation)
+                self.Links[jointIndex] = new_link
             else:
+                self.Joints[jointIndex].transformPoseBy(Transformation)
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            joint = self.Joints[jointIndex]  # reference is valid; transformPoseBy modifies in-place
             if not lightweight and jointIndex == 0 and not self.Links[0].length() == 0:
                 raise ValueError("Error in transformJoint: Link 0 is supposed to stay empty (length 0).")
             
@@ -1705,6 +1758,15 @@ def isWaypoint(joint):
     if joint is None:
         return False
     return isinstance(joint, Waypoint)
+
+
+def _waypoint_pose_at_split(sub_path_before, sub_path_after) -> SE3:
+    """Build an SE3 pose for a Waypoint(pathIndex=2) at the junction of two sub-paths."""
+    pos  = sub_path_before.endPosition
+    zhat = sub_path_before.endDir / np.linalg.norm(sub_path_before.endDir)
+    xhat = sub_path_after.circleNormal1   # guaranteed ⊥ zhat
+    yhat = np.cross(zhat, xhat)
+    return SE3.Rt(SO3(np.column_stack([xhat, yhat, zhat])), pos)
 
 def curvinessOfLink(link : LinkCSC):
     return link.path.theta1 ** 1.5 * link.path.r + link.path.theta2 ** 1.5 * link.path.r

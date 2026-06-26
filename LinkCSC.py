@@ -16,6 +16,15 @@ from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 from CollisionDetection import *
 
+
+def _dubins_frame_from_pos_and_dir(pos: np.ndarray, path_dir: np.ndarray) -> SE3:
+    """Build a minimal valid SE3 Dubins frame with path_dir as column 0 (x-axis)."""
+    xhat = path_dir / norm(path_dir)
+    yhat = unitNormalToBoth(xhat, np.array([0., 0., 1.]))
+    zhat = np.cross(xhat, yhat)
+    return SE3.Rt(SO3(np.column_stack([xhat, yhat, zhat])), pos)
+
+
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/2, 
@@ -515,3 +524,25 @@ class LinkCSC:
             normal=self.EndDubinsPose.R[:,0] if forward else -self.EndDubinsPose.R[:,0],
             radialVector=self.EndDubinsPose.R[:,1]
         )
+
+    def splitAtFractions(self, fractions: list) -> list:
+        """
+        Split this link at arc-length fractions (each in (0,1)).
+        Returns len(fractions)+1 sub-links. Returns [self] for empty fractions.
+        """
+        sub_paths = self.path.splitAtFractions(fractions)
+        if len(sub_paths) == 1:
+            return [self]
+        n = len(sub_paths)
+        result = []
+        for i, sub_path in enumerate(sub_paths):
+            start_frame = (self.StartDubinsPose if i == 0
+                           else _dubins_frame_from_pos_and_dir(
+                               sub_path.startPosition, sub_path.startDir))
+            end_frame   = (self.EndDubinsPose if i == n - 1
+                           else _dubins_frame_from_pos_and_dir(
+                               sub_path.endPosition, sub_path.endDir))
+            result.append(LinkCSC(self.r, start_frame, end_frame,
+                                  self.maxAnglePerElbow, path=sub_path,
+                                  EPSILON=self.EPSILON))
+        return result

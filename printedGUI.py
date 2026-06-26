@@ -23,7 +23,7 @@ import pyqtgraph.opengl as gl
 import PyQt5
 from PyQt5 import QtWidgets
 from PyQt5 import QtCore as qc
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut, QGridLayout
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton, QDockWidget, QComboBox, QHBoxLayout, QLabel, QDialog, QLineEdit, QCheckBox, QMessageBox, QButtonGroup, QRadioButton, QSlider, QSizePolicy, QFileDialog, QShortcut, QGridLayout, QSpinBox
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QTime, QEvent
 from PyQt5.QtGui import QPixmap, QSurfaceFormat, QKeyEvent, QPixmap, QIcon, QMatrix4x4, QVector3D, QMatrix3x3, QKeySequence
 from PyQt5 import sip
@@ -45,6 +45,7 @@ from printedJointWidget import *
 from IntersectionHelper import *
 
 import importlib.util
+from typing import Optional
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -1041,6 +1042,16 @@ class WindowKinegamiGUI(QMainWindow):
         add_waypoints_layout = QVBoxLayout()
         self.add_waypoint = QPushButton("Add Waypoint")
         add_waypoints_layout.addWidget(self.add_waypoint)
+        insert_wp_row = QHBoxLayout()
+        self.insert_waypoint_button = QPushButton("Insert Intermediate Waypoint(s)")
+        self.insert_waypoint_count = QSpinBox()
+        self.insert_waypoint_count.setMinimum(1)
+        self.insert_waypoint_count.setMaximum(99)
+        self.insert_waypoint_count.setValue(1)
+        self.insert_waypoint_count.setFixedWidth(50)
+        insert_wp_row.addWidget(self.insert_waypoint_button)
+        insert_wp_row.addWidget(self.insert_waypoint_count)
+        add_waypoints_layout.addLayout(insert_wp_row)
 
         # Select parent prompt (shown when no parent is selected and user tries to add a joint)
         self.pending_add_joint_func = None
@@ -1080,6 +1091,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.add_transverse_revolute.clicked.connect(self.add_transverse_revolute_toggle)
         self.add_coaxial_revolute.clicked.connect(self.add_coaxial_revolute_toggle)
         self.add_waypoint.clicked.connect(self.add_waypoint_func)
+        self.insert_waypoint_button.clicked.connect(self.insert_waypoint_func)
         self.add_tip.clicked.connect(self.add_tip_toggle)
         self.clear_tree_button.clicked.connect(self.clear_tree_func)
 
@@ -3856,7 +3868,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.edit_dimension_menu.setVisible(not self.edit_dimension_menu.isVisible())
         self.edit_dimension_button.setVisible(not self.edit_dimension_button.isVisible())
 
-    def _create_and_add_waypoint(self):
+    def _create_and_add_waypoint(self, distance: Optional[float] = None):
         """Create and add a waypoint."""
         try:
             if (self.tree is None) or len(self.tree.Joints) == 0:
@@ -3872,16 +3884,16 @@ class WindowKinegamiGUI(QMainWindow):
                 root = self.tree.Joints[0]
                 root_proximal_dubins = root.ProximalDubinsFrame()
                 r = root.r
-                distance = 4 * r  # Waypoint neutralLength is 0
+                d = distance if distance is not None else 4 * r
                 # Waypoint has pathIndex=2, so rotate by Ry(pi/2) so z-hat aligns with dubins x-hat
-                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-distance, 0, 0]))
+                pose = root_proximal_dubins @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-d, 0, 0]))
                 waypoint = Waypoint(r, pose)
                 self.add_joint_as_new_root(waypoint)
             else:
                 prevJoint = self.tree.Joints[self.selected_joint]
                 # Calculate pose relative to distal Dubins frame of previous joint
-                distance = 4 * prevJoint.r
-                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+                d = distance if distance is not None else 4 * prevJoint.r
+                pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([d, 0, 0]))
                 waypoint = Waypoint(prevJoint.r, pose)
                 self.tree.addJoint(parentIndex=self.selected_joint,
                     newJoint=waypoint, relativeToDistalDubins=True,
@@ -3929,6 +3941,43 @@ class WindowKinegamiGUI(QMainWindow):
                 self._create_and_add_waypoint,
                 "Waypoint"
             )
+
+    def insert_waypoint_func(self):
+        if self.tree is None or len(self.tree.Joints) == 0:
+            self.show_error("No tree to insert into.")
+            return
+        if self.selected_joint == -1:
+            self.show_error("Please select a joint first.")
+            return
+
+        num = self.insert_waypoint_count.value()
+
+        try:
+            if self.selected_joint == 0:
+                self._insert_waypoints_before_root(num)
+            else:
+                self.tree.insertWaypointsIntoLink(self.selected_joint, num)
+                self._mark_collision_dirty()
+                self.update_joint()
+                self.log_version()
+                self.joint_selection_changed(self.selected_joint, force=True)
+        except Exception as e:
+            self.show_error(str(e))
+
+    def _insert_waypoints_before_root(self, numWaypoints: int):
+        root = self.tree.Joints[0]
+        r = root.r
+        original_root_frame = root.ProximalDubinsFrame()
+        eps = r * 0.01
+        for i in range(numWaypoints, 0, -1):
+            d = i * eps
+            pose = original_root_frame @ SE3.Rt(SE3.Ry(np.pi/2).R, np.array([-d, 0, 0]))
+            waypoint = Waypoint(r, pose)
+            self.add_joint_as_new_root(waypoint)
+        self._mark_collision_dirty()
+        self.update_joint()
+        self.log_version()
+        self.select_joint_options.setCurrentIndex(0)
 
     def is_parent_joint_selected(self):
         if self.selected_joint == -1 and self.tree is not None:
