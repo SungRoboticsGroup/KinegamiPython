@@ -525,6 +525,11 @@ class LinkCSC:
             radialVector=self.EndDubinsPose.R[:,1]
         )
 
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Factory for sub-links produced by splitAtFractions. Subclasses override to preserve type."""
+        return LinkCSC(self.r, start_frame, end_frame,
+                       self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON)
+
     def splitAtFractions(self, fractions: list) -> list:
         """
         Split this link at arc-length fractions (each in (0,1)).
@@ -534,6 +539,7 @@ class LinkCSC:
         if len(sub_paths) == 1:
             return [self]
         n = len(sub_paths)
+        boundary_fracs = [0] + list(fractions) + [1]
         result = []
         for i, sub_path in enumerate(sub_paths):
             start_frame = (self.StartDubinsPose if i == 0
@@ -542,7 +548,6 @@ class LinkCSC:
             end_frame   = (self.EndDubinsPose if i == n - 1
                            else _dubins_frame_from_pos_and_dir(
                                sub_path.endPosition, sub_path.endDir))
-            result.append(LinkCSC(self.r, start_frame, end_frame,
-                                  self.maxAnglePerElbow, path=sub_path,
-                                  EPSILON=self.EPSILON))
+            result.append(self._makeSubLink(start_frame, end_frame, sub_path,
+                                            boundary_fracs[i], boundary_fracs[i + 1]))
         return result
