@@ -44,6 +44,7 @@ from ReferenceMesh import *
 from Dialog import *
 from origamiJointWidget import *
 from IntersectionHelper import *
+from measurementWidget import MeasurementWidget
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -448,6 +449,7 @@ class ClickableGLViewWidget(gl.GLViewWidget):
     drag_change_rotation = qc.pyqtSignal(float)
     key_pressed = qc.pyqtSignal(str)
     done_transforming = qc.pyqtSignal(bool)
+    measure_joint_selected = qc.pyqtSignal(int)
 
     selected_index = -1
     selected_link_index = -1
@@ -668,6 +670,22 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.is_dragging = False
             self.drag_start_pos = event.pos()
 
+            if self.parent_window.measure_select_mode:
+                origin, direction = self.get_world_coordinates(event)
+                closest_joint_dist = float('inf')
+                closest_joint = None
+                if self.parent_window.chain:
+                    for joint in self.parent_window.chain.Joints:
+                        center = joint.Pose.t
+                        radius = self.parent_window.radius
+                        hit_location = compute_sphere_intersection(origin, direction, center, radius + 0.2)
+                        if hit_location < closest_joint_dist:
+                            closest_joint_dist = hit_location
+                            closest_joint = joint
+                self.selected_joint_temp = closest_joint
+                self.last_drag_pos = event.pos()
+                return
+
             origin, direction = self.get_world_coordinates(event)
 
             self.is_local = self.parent_window.is_local
@@ -730,6 +748,25 @@ class ClickableGLViewWidget(gl.GLViewWidget):
             self.selected_joint_temp = closest_joint
 
     def mouseMoveEvent(self, event):
+        if self.parent_window.measure_select_mode:
+            if (event.buttons() and (Qt.LeftButton or Qt.MiddleButton)) and (event.pos() - self.drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
+                self.is_dragging = True
+            if not self.is_dragging:
+                return
+            curr_pos = event.position() if hasattr(event, 'position') else event.localPos()
+            diff = curr_pos - self.last_drag_pos
+            self.last_drag_pos = curr_pos
+            if event.buttons() == QtCore.Qt.MouseButton.MiddleButton:
+                self.pan(diff.x(), diff.y(), 0, relative='view')
+            elif event.buttons() == QtCore.Qt.MouseButton.LeftButton:
+                if event.modifiers() & Qt.ShiftModifier:
+                    self.pan(diff.x(), diff.y(), 0, relative='view')
+                elif self.camera_type == "Rotate":
+                    self.orbit(-diff.x() * self.orbit_speed, diff.y() * self.orbit_speed)
+                elif self.camera_type == "Pan":
+                    self.pan(diff.x(), diff.y(), 0, relative='view')
+            return
+
         if (event.buttons() and (Qt.LeftButton or Qt.MiddleButton)) and (event.pos() - self.drag_start_pos).manhattanLength() >= QApplication.startDragDistance():
             self.is_dragging = True
 
@@ -813,6 +850,19 @@ class ClickableGLViewWidget(gl.GLViewWidget):
                         self.pan(diff.x(), diff.y(), 0, relative='view')
 
     def mouseReleaseEvent(self, event):
+        if self.parent_window.measure_select_mode:
+            was_dragging = self.is_dragging
+            self.is_dragging = False
+            if not was_dragging and self.selected_joint_temp is not None:
+                joint_index = -1
+                for i, j in enumerate(self.parent_window.chain.Joints):
+                    if j is self.selected_joint_temp:
+                        joint_index = i
+                        break
+                self.measure_joint_selected.emit(joint_index)
+            self.selected_joint_temp = None
+            return
+
         if self.is_dragging and (self.selected_axis or self.selected_torus):
             self._drag_backup = None  # Clear drag backup on release
             self.done_transforming.emit(True)
@@ -869,6 +919,57 @@ class ClickableGLViewWidget(gl.GLViewWidget):
         super().wheelEvent(ev)
         self.parent_window.update_joint()
  
+class CollapsibleDockWidget(QDockWidget):
+    _TB_HEIGHT = 24
+
+    def __init__(self, title, parent=None):
+        super().__init__(title, parent)
+        self._is_collapsed = False
+        self.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+        self._setup_title_bar(title)
+
+    def _setup_title_bar(self, title):
+        bar = QWidget()
+        bar.setFixedHeight(self._TB_HEIGHT)
+        bar.setObjectName("dockTitleBar")
+        bar.setStyleSheet("""
+            #dockTitleBar { background-color: #4a4a4a; }
+            #dockTitleBar QLabel { color: white; background: transparent; }
+            #dockTitleBar QPushButton { color: white; background: transparent; border: none; }
+            #dockTitleBar QPushButton:hover { background-color: #666666; border-radius: 3px; }
+        """)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(4, 1, 4, 1)
+        layout.setSpacing(4)
+
+        self._collapse_btn = QPushButton("▼")
+        self._collapse_btn.setFixedSize(self._TB_HEIGHT - 2, self._TB_HEIGHT - 2)
+        self._collapse_btn.setFlat(True)
+        self._collapse_btn.clicked.connect(self._toggle_collapse)
+        layout.addWidget(self._collapse_btn)
+
+        layout.addWidget(QLabel(title))
+        layout.addStretch()
+
+        float_btn = QPushButton("⧉")
+        float_btn.setFixedSize(self._TB_HEIGHT - 2, self._TB_HEIGHT - 2)
+        float_btn.setFlat(True)
+        float_btn.setToolTip("Float / Dock")
+        float_btn.clicked.connect(lambda: self.setFloating(not self.isFloating()))
+        layout.addWidget(float_btn)
+
+        self.setTitleBarWidget(bar)
+
+    def _toggle_collapse(self):
+        self._is_collapsed = not self._is_collapsed
+        w = self.widget()
+        if w is not None:
+            w.setVisible(not self._is_collapsed)
+        self._collapse_btn.setText("▶" if self._is_collapsed else "▼")
+        if not self.isFloating():
+            self.setMaximumHeight(self._TB_HEIGHT + 2 if self._is_collapsed else 16777215)
+
+
 class WindowKinegamiGUI(QMainWindow):
 
     def __init__(self):
@@ -919,6 +1020,11 @@ class WindowKinegamiGUI(QMainWindow):
         self.num_sides = 4
         self.radius = 1.0
 
+        self.measure_select_mode = False
+        self.measure_active_endpoint = 0
+        self.measure_points = [None, None]
+        self._measurement_line_item = None
+
         self.plot_widget.click_signal.connect(self.joint_selection_changed)
         self.plot_widget.click_signal_arrow.connect(self.arrow_selection_changed)
         self.plot_widget.click_signal_link.connect(self.link_selection_changed)
@@ -929,7 +1035,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.plot_widget.key_pressed.connect(self.key_pressed)
         
         # //////////////////////////////////    Keyboard Options    ///////////////////////////////////
-        top_dock_widget = QDockWidget("Keyboard Controls", self)
+        top_dock_widget = CollapsibleDockWidget("Keyboard Controls", self)
         top_dock_widget.setAllowedAreas(Qt.TopDockWidgetArea)
 
         self.key_bar = QWidget()
@@ -941,14 +1047,14 @@ class WindowKinegamiGUI(QMainWindow):
         top_dock_widget.setWidget(self.key_bar)
         
         self.add_mesh_widget = AddMeshWidget(self)
-        self.add_mesh_dock = QDockWidget("Import Mesh", self)
+        self.add_mesh_dock = CollapsibleDockWidget("Import Mesh", self)
         self.add_mesh_dock.setWidget(self.add_mesh_widget)
         self.add_mesh_dock.setVisible(True)
         self.mesh_scale = 1.0
         self.add_mesh_widget.change_scale.connect(self.change_mesh_scale)
 
         # //////////////////////////////////    MESSAGE DISPLAY    ///////////////////////////////////
-        message_display_widget = QDockWidget("Messages", self)
+        message_display_widget = CollapsibleDockWidget("Messages", self)
         #message_display_widget.setAllowedAreas(Qt.BottomDockWidgetArea)
 
         # Create a layout specifically for success/error messages
@@ -979,7 +1085,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.animation_start_value = 0  # Slider value when animation started
         self.animation_loop = False  # Whether animation should loop
         
-        self.configurations_dock = QDockWidget("Configurations and Motion", self)
+        self.configurations_dock = CollapsibleDockWidget("Configurations and Motion", self)
         self.configurations_dock.setWidget(self.configurations_widget)
         self.configurations_dock.setVisible(True)
 
@@ -1040,12 +1146,12 @@ class WindowKinegamiGUI(QMainWindow):
         self.create_new_chain.clicked.connect(self.create_new_chain_func)
         self.edit_dimension_button.clicked.connect(self.edit_joint_dimension)
 
-        self.add_chain_dock = QDockWidget("New Chain", self)
+        self.add_chain_dock = CollapsibleDockWidget("New Chain", self)
         self.add_chain_button_widget = QWidget()
         self.add_chain_button_widget.setLayout(add_chain_layout)
         self.add_chain_dock.setWidget(self.add_chain_button_widget)
 
-        add_joints_dock = QDockWidget("Add Joints", self)
+        add_joints_dock = CollapsibleDockWidget("Add Joints", self)
         self.add_joints_widget = QWidget()
         self.add_joints_widget.setLayout(add_joints_layout)
         add_joints_dock.setWidget(self.add_joints_widget)
@@ -1098,7 +1204,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.joint_editing_layout.addWidget(self.select_joint_options)
         self.joint_editing_layout.addWidget(self.delete_joint_button)
         self.joint_editing_layout.addWidget(self.select_link_options)
-        edit_joints_dock = QDockWidget("Edit Joints", self)
+        edit_joints_dock = CollapsibleDockWidget("Edit Joints", self)
         #self.joint_editing_layout.addWidget(button_widget)
         edit_joints_dock.setWidget(self.editing_widget)
 
@@ -1209,7 +1315,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.set_state_tools()
 
         # ////////////////////////////////    OPTIONS    ///////////////////////////////////
-        self.options_dock = QDockWidget("Options", self)
+        self.options_dock = CollapsibleDockWidget("Options", self)
         self.options_widget = QWidget()
         self.options_layout = QVBoxLayout()
 
@@ -1254,7 +1360,7 @@ class WindowKinegamiGUI(QMainWindow):
         #self.options_dock.setMaximumSize(300, 150)
 
         # ////////////////////////////////    CAMERA CONTROLS DOCK    ///////////////////////////////////
-        self.camera_controls_dock = QDockWidget("Camera Controls", self)
+        self.camera_controls_dock = CollapsibleDockWidget("Camera Controls", self)
         self.camera_options_widget = QWidget()
         self.camera_layout = QVBoxLayout()
 
@@ -1274,7 +1380,7 @@ class WindowKinegamiGUI(QMainWindow):
         #self.camera_controls_dock.setMaximumSize(300, 150)
 
         # ////////////////////////////////    FILE   ///////////////////////////////////
-        file_dock = QDockWidget("File", self)
+        file_dock = CollapsibleDockWidget("File", self)
         #file_dock.setAllowedAreas(Qt.RightDockWidgetArea)
 
         file_dock_widget = QWidget()
@@ -1304,7 +1410,7 @@ class WindowKinegamiGUI(QMainWindow):
         file_dock.setWidget(file_dock_widget)
 
         # ////////////////////////////////    STL CONVERSION    ///////////////////////////////////
-        # self.random_btn_dock = QDockWidget("Export Options", self)
+        # self.random_btn_dock = CollapsibleDockWidget("Export Options", self)
         # self.random_btn_widget = QWidget()
         # self.random_btn_layout = QVBoxLayout()
    
@@ -1321,26 +1427,39 @@ class WindowKinegamiGUI(QMainWindow):
         # self.random_btn_dock.setMaximumSize(300, 100)
 
         self.delete_joint_widget = DeleteWidget(self)
-        self.delete_joint_dock = QDockWidget("Confirm Delete", self)
+        self.delete_joint_dock = CollapsibleDockWidget("Confirm Delete", self)
         self.delete_joint_dock.setWidget(self.delete_joint_widget)
         self.delete_joint_dock.setVisible(False)
         
         self.add_chain_button_widget = AddChainWidget(self)
-        self.add_chain_popup_dock = QDockWidget("Create New Chain", self)
+        self.add_chain_popup_dock = CollapsibleDockWidget("Create New Chain", self)
         self.add_chain_popup_dock.setWidget(self.add_chain_button_widget)
         self.add_chain_popup_dock.setVisible(False)  # Initially hidden
 
         self.edit_grid_widget = EditGridWidget(self)
-        self.edit_grid_dock = QDockWidget("Edit Grid", self)
+        self.edit_grid_dock = CollapsibleDockWidget("Edit Grid", self)
         self.edit_grid_dock.setWidget(self.edit_grid_widget)
         self.edit_grid_dock.setVisible(False)
 
         self.edit_dims_widget = EditDimensionsWidget(self)
-        self.edit_dims_dock = QDockWidget("Edit Dimensions", self)
+        self.edit_dims_dock = CollapsibleDockWidget("Edit Dimensions", self)
         self.edit_dims_dock.setWidget(self.edit_dims_widget)
         self.edit_dims_dock.setVisible(False)
         self.edit_dims_widget.target_units.connect(self.change_units)
         
+        # ////////////////////////////////    MEASUREMENT    ///////////////////////////////////
+        self.measurement_widget = MeasurementWidget(self)
+        self.measurement_dock = CollapsibleDockWidget("Measure", self)
+        self.measurement_dock.setWidget(self.measurement_widget)
+
+        self.measurement_widget.measure_select_toggled.connect(self._toggle_measure_select)
+        self.measurement_widget.frame_type_changed.connect(self._measure_frame_type_changed)
+        self.measurement_widget.set_endpoint_active.connect(self._set_measure_active_endpoint)
+        self.measurement_widget.clear_requested.connect(self._clear_measurement)
+        self.measurement_widget.axis_frame_changed.connect(lambda: self.update_joint())
+        self.plot_widget.measure_joint_selected.connect(self._measure_joint_selected_slot)
+        self.measurement_dock.visibilityChanged.connect(self._on_measurement_dock_visibility)
+
         self.addDockWidget(Qt.TopDockWidgetArea, top_dock_widget)
         self.addDockWidget(Qt.TopDockWidgetArea, message_display_widget)
 
@@ -1360,6 +1479,7 @@ class WindowKinegamiGUI(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.delete_joint_dock)
         
         self.addDockWidget(Qt.BottomDockWidgetArea, self.configurations_dock)
+        self.tabifyDockWidget(self.configurations_dock, self.measurement_dock)
         
         # Make side docks take precedence at corners (extend full height)
         self.setCorner(Qt.TopLeftCorner, Qt.LeftDockWidgetArea)
@@ -2400,6 +2520,10 @@ class WindowKinegamiGUI(QMainWindow):
         elif key == "Delete":
             if self.chain and self.selected_joint != -1:
                 self.delete_selected_joint()
+        elif key == "Escape":
+            if self.measure_select_mode:
+                self.measure_select_mode = False
+                self.measurement_widget.deactivate()
         elif key == "X":
             self.arrow_selection_changed(0)
         elif key == "Y":
@@ -3350,6 +3474,110 @@ class WindowKinegamiGUI(QMainWindow):
         self._lightweight_dirty = False
         self.update_joint()
 
+    def _toggle_measure_select(self, enabled: bool):
+        self.measure_select_mode = enabled
+        if enabled:
+            self.selected_joint = -1
+        self.update_joint()
+
+    def _set_measure_active_endpoint(self, ep: int):
+        self.measure_active_endpoint = ep
+        self.measurement_widget.set_active_endpoint(ep)
+
+    def _measure_joint_selected_slot(self, joint_index: int):
+        if joint_index == -1 or self.chain is None:
+            return
+        ep = self.measure_active_endpoint
+        frame_type = self.measurement_widget.frame_types[ep]
+        self.measure_points[ep] = (joint_index, frame_type)
+        pos = self._get_measure_position(joint_index, frame_type)
+        joint = self.chain.Joints[joint_index]
+        self.measurement_widget.set_point_info(ep, joint_index, type(joint).__name__, pos)
+        next_ep = 1 - ep
+        self.measure_active_endpoint = next_ep
+        self.measurement_widget.set_active_endpoint(next_ep)
+        self.update_joint()
+
+    def _measure_frame_type_changed(self):
+        if self.chain is None:
+            return
+        for ep in (0, 1):
+            if self.measure_points[ep] is not None:
+                joint_idx = self.measure_points[ep][0]
+                new_frame = self.measurement_widget.frame_types[ep]
+                self.measure_points[ep] = (joint_idx, new_frame)
+                pos = self._get_measure_position(joint_idx, new_frame)
+                joint = self.chain.Joints[joint_idx]
+                self.measurement_widget.set_point_info(ep, joint_idx, type(joint).__name__, pos)
+        self.update_joint()
+
+    def _on_measurement_dock_visibility(self, visible: bool):
+        if not visible and self.measure_select_mode:
+            self.measure_select_mode = False
+            self.measurement_widget.deactivate()
+
+    def _clear_measurement(self):
+        self.measure_points = [None, None]
+        self.measure_select_mode = False
+        self.measure_active_endpoint = 0
+        self.measurement_widget.reset()
+        self.update_joint()
+
+    def _get_measure_position(self, joint_index: int, frame_type: str):
+        if self.chain is None:
+            return None
+        joints = self.chain.Joints
+        if not (0 <= joint_index < len(joints)):
+            return None
+        joint = joints[joint_index]
+        if frame_type == 'center':
+            return np.array(joint.Pose.t)
+        elif frame_type == 'proximal':
+            return np.array(joint.proximalPosition())
+        elif frame_type == 'distal':
+            return np.array(joint.distalPosition())
+        return None
+
+    def _refresh_measurement_overlay(self):
+        if getattr(self, '_measurement_line_item', None) is not None:
+            try:
+                self.plot_widget.removeItem(self._measurement_line_item)
+            except Exception:
+                pass
+            self._measurement_line_item = None
+        _show = (
+            self.measure_points[0] is not None
+            and self.measure_points[1] is not None
+        )
+        if _show:
+            pos_a = self._get_measure_position(*self.measure_points[0])
+            pos_b = self._get_measure_position(*self.measure_points[1])
+            if pos_a is not None and pos_b is not None:
+                pts = np.array([pos_a, pos_b], dtype=float)
+                line = OverlayLine(pos=pts, color=(1.0, 1.0, 0.0, 1.0), width=3, antialias=True)
+                self.plot_widget.addItem(line)
+                self._measurement_line_item = line
+                displacement = pos_b - pos_a
+                dist = float(np.linalg.norm(displacement))
+                ax = self.measurement_widget.axis_frame
+                if ax == 'local_a':
+                    R_mat = self.chain.Joints[self.measure_points[0][0]].Pose.R
+                    components = R_mat.T @ displacement
+                elif ax == 'local_b':
+                    R_mat = self.chain.Joints[self.measure_points[1][0]].Pose.R
+                    components = R_mat.T @ displacement
+                else:
+                    components = displacement
+                for ep, mp in enumerate(self.measure_points):
+                    pos = self._get_measure_position(*mp)
+                    joint = self.chain.Joints[mp[0]]
+                    self.measurement_widget.set_point_info(ep, mp[0], type(joint).__name__, pos)
+                self.measurement_widget.set_result(dist, components)
+            else:
+                self.measurement_widget.set_result(None, None)
+        else:
+            self.measurement_widget.set_result(None, None)
+
     def update_joint(self, force_recreate_config_widget : bool = False):
         # If link geometry is stale from lightweight updates, rebuild first
         if self._lightweight_dirty and self.chain is not None:
@@ -3386,6 +3614,7 @@ class WindowKinegamiGUI(QMainWindow):
 
         if (not self.stl_generated):
             self.plot_widget.clear()
+            self._measurement_line_item = None
             self.select_joint_options.clear()
             self.select_link_options.clear()
             self.setCentralWidget(self.plot_widget)
@@ -3404,6 +3633,9 @@ class WindowKinegamiGUI(QMainWindow):
                     lastJoint=self.last_joint
                 )
                 self.add_chain(self.chain)
+
+        self._refresh_measurement_overlay()
+        # ─────────────────────────────────────────────────────────────────────
 
         if self.mesh_selected and self.referenceMesh is not None:
             if self.control_type == "Translate":
