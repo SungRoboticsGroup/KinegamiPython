@@ -5,7 +5,18 @@ from style import *
 from pyqtgraph import Transform3D
 from OpenGL.GL import glDisable, glEnable, GL_DEPTH_TEST
 import math
-from PyQt5.QtGui import QVector4D 
+from PyQt5.QtGui import QVector4D
+import trimesh as _trimesh
+
+
+def stlToMeshItem(file_path, scale=1):
+    mesh = _trimesh.load(file_path, force='mesh')
+    vertices = np.array(mesh.vertices, dtype=float) * scale
+    faces = np.array(mesh.faces)
+    meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+    return gl.GLMeshItem(meshdata=meshdata, color=(0.6, 0.6, 0.6, 0.7),
+                         shader='shaded', drawEdges=False, smooth=True)
+
 
 class ReferenceMesh():
 
