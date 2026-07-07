@@ -113,6 +113,11 @@ def emptyCSC(r, p, d):
     d = d / norm(d)
     return PathCSC(np.append(d,0), r, p, d, p, d, 1, 1)
 
+def _rodrigues(axis: np.ndarray, theta: float, v: np.ndarray) -> np.ndarray:
+    """Rotate vector v by angle theta (radians) around unit vector axis."""
+    c, s = np.cos(theta), np.sin(theta)
+    return v * c + np.cross(axis, v) * s + axis * np.dot(axis, v) * (1 - c)
+
 class PathCSC:
     """
     Representation for CSC Dubins paths based on the S section vector.
@@ -422,4 +427,134 @@ class PathCSC:
         elif count < 2:
             raise ValueError("Count must be at least 2")
         return self.interpolate_vectorized(np.linspace(0, 1, count))
+
+    def splitAtFractions(self, fractions: list) -> list:
+        """
+        Split this path at the given fractional positions (each strictly in (0,1)).
+        Returns a list of len(fractions)+1 PathCSC sub-paths covering the original path
+        in order, with each sub-path's error provably zero by construction.
+        """
+        fractions = sorted(f for f in fractions if 0.0 < f < 1.0)
+        if not fractions:
+            return [self]
+
+        lenC1 = self.r * self.theta1
+        lenS = self.tMag
+        lenC2 = self.r * self.theta2
+
+        rotAxis1 = -self.circle1sign * self.circleNormal1
+        rotAxis2 = -self.circle2sign * self.circleNormal2
+        r_vec0_c1 = self.startPosition - self.circleCenter1
+        r_vec0_c2 = self.turn2start - self.circleCenter2
+
+        def point_at_s(s):
+            # Returns (pos, dir, section, local_s) at arc-length s.
+            # section is 'C1', 'S', or 'C2'; local_s is the distance within that section.
+            if s <= lenC1:
+                theta_s = s / self.r
+                r_vec = _rodrigues(rotAxis1, theta_s, r_vec0_c1)
+                pos = self.circleCenter1 + r_vec
+                d = np.cross(rotAxis1, r_vec)
+                return pos, d / norm(d), 'C1', s
+            elif s <= lenC1 + lenS:
+                d = s - lenC1
+                return self.turn1end + d * self.tUnit, self.tUnit.copy(), 'S', d
+            else:
+                theta_s = (s - lenC1 - lenS) / self.r
+                r_vec = _rodrigues(rotAxis2, theta_s, r_vec0_c2)
+                pos = self.circleCenter2 + r_vec
+                d = np.cross(rotAxis2, r_vec)
+                return pos, d / norm(d), 'C2', s - lenC1 - lenS
+
+        all_points = (
+            [(self.startPosition, self.startDir, 'C1', 0.0)] +
+            [point_at_s(f * self.length) for f in fractions] +
+            [(self.endPosition, self.endDir, 'C2', lenC2)]
+        )
+
+        return [
+            self._sub_path(all_points[i][0], all_points[i][1],
+                           all_points[i][2], all_points[i][3],
+                           all_points[i+1][0], all_points[i+1][1],
+                           all_points[i+1][2], all_points[i+1][3])
+            for i in range(len(all_points) - 1)
+        ]
+
+    def _c1sign_sub(self, prev_dir, arc_end_dir):
+        """
+        circle1sign for a sub-path where C1 arcs from prev_dir to arc_end_dir on self's circle1.
+        Formula: sign(circle1sign * dot(N1, cross(arc_end_dir, prev_dir))).
+        The cross product gives the direction of unitNormalToBoth(arc_end_dir, prev_dir);
+        matching it to circle1sign*N1 ensures circleCenter1_sub = circleCenter1.
+        Works for arcs of any size, including arcs >pi (where the sign flips).
+        """
+        val = self.circle1sign * np.dot(self.circleNormal1,
+                                        np.cross(arc_end_dir, prev_dir))
+        return int(np.sign(val)) if abs(val) > 1e-10 else 1
+
+    def _c2sign_sub_as_c1(self, prev_dir, arc_end_dir):
+        """
+        circle1sign for a sub-path where C2 arcs from prev_dir to arc_end_dir on self's circle2.
+        Same formula as _c1sign_sub but referencing circle2.
+        """
+        val = self.circle2sign * np.dot(self.circleNormal2,
+                                        np.cross(arc_end_dir, prev_dir))
+        return int(np.sign(val)) if abs(val) > 1e-10 else 1
+
+    def _c2sign_sub(self, end_dir):
+        """
+        circle2sign for a sub-path where C2 ends at end_dir on self's circle2.
+        Formula: sign(circle2sign * dot(N2, cross(tUnit, end_dir))).
+        unitNormalToBoth(tUnit, end_dir) = cross(tUnit, end_dir)/|...|;
+        matching it to circle2sign*N2 ensures circleCenter2_sub = circleCenter2.
+        """
+        val = self.circle2sign * np.dot(self.circleNormal2,
+                                        np.cross(self.tUnit, end_dir))
+        return int(np.sign(val)) if abs(val) > 1e-10 else -1
+
+    def _sub_path(self, prev_pos, prev_dir, prev_sec, prev_local,
+                  next_pos, next_dir, next_sec, next_local) -> 'PathCSC':
+        """
+        Build the sub-PathCSC from (prev_pos, prev_dir) to (next_pos, next_dir).
+        Signs are computed dynamically to handle arcs of any size (including >pi).
+        """
+        r = self.r
+        if prev_sec == 'C1' and next_sec == 'C1':
+            c1s = self._c1sign_sub(prev_dir, next_dir)
+            return PathCSC(np.append(next_dir, 0), r,
+                           prev_pos, prev_dir, next_pos, next_dir,
+                           c1s, 1)
+
+        elif prev_sec == 'C1' and next_sec == 'S':
+            c1s = self._c1sign_sub(prev_dir, self.tUnit)
+            return PathCSC(np.append(self.tUnit, next_local), r,
+                           prev_pos, prev_dir, next_pos, self.tUnit,
+                           c1s, 1)
+
+        elif prev_sec == 'C1' and next_sec == 'C2':
+            c1s = self._c1sign_sub(prev_dir, self.tUnit)
+            c2s = self._c2sign_sub(next_dir)
+            return PathCSC(np.append(self.tUnit, self.tMag), r,
+                           prev_pos, prev_dir, next_pos, next_dir,
+                           c1s, c2s)
+
+        elif prev_sec == 'S' and next_sec == 'S':
+            return PathCSC(np.append(self.tUnit, next_local - prev_local), r,
+                           prev_pos, self.tUnit, next_pos, self.tUnit,
+                           1, 1)
+
+        elif prev_sec == 'S' and next_sec == 'C2':
+            c2s = self._c2sign_sub(next_dir)
+            return PathCSC(np.append(self.tUnit, self.tMag - prev_local), r,
+                           prev_pos, self.tUnit, next_pos, next_dir,
+                           1, c2s)
+
+        elif prev_sec == 'C2' and next_sec == 'C2':
+            c1s = self._c2sign_sub_as_c1(prev_dir, next_dir)
+            return PathCSC(np.append(next_dir, 0), r,
+                           prev_pos, prev_dir, next_pos, next_dir,
+                           c1s, 1)
+
+        else:
+            raise ValueError(f"Invalid section transition: {prev_sec} -> {next_sec}")
         

@@ -9,4 +9,14 @@ dist/
 .vscode/
 save/*.chain
 save/*.tree
-
+waypoint_insertion.md
+user_task.md
+collision_commits_summary.txt
+debug_collisions.py
+drag_profile.prof
+examples/testHemisphere.py
+old_tests_and_development/
+profiling.txt
+profiling2.txt
+profiling3.txt
+profiling4.txt

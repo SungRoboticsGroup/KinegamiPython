@@ -482,12 +482,17 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
         
         return composed
     
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Override to preserve OrigamiLinkCSC type when splitting."""
+        return OrigamiLinkCSC(self.numSides, self.r, start_frame, end_frame,
+                              self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON)
+
     def newLinkTransformedBy(self, Transformation : SE3):
         """Override to preserve OrigamiLinkCSC type when transforming"""
-        return OrigamiLinkCSC(self.numSides, self.r, 
-                             Transformation @ self.StartDubinsPose, 
-                             Transformation @ self.EndDubinsPose, 
-                             maxAnglePerElbow = self.maxAnglePerElbow, 
+        return OrigamiLinkCSC(self.numSides, self.r,
+                             Transformation @ self.StartDubinsPose,
+                             Transformation @ self.EndDubinsPose,
+                             maxAnglePerElbow = self.maxAnglePerElbow,
                              path = self.path.newPathTransformedBy(Transformation),
                              EPSILON = self.EPSILON)
 

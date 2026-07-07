@@ -854,6 +854,14 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         self.startRadius = startRadius if startRadius is not None else r
         self.endRadius = endRadius if endRadius is not None else r
         
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Override to preserve PrintedLinkCSC type and interpolate radii across the split."""
+        start_r = (1 - start_frac) * self.startRadius + start_frac * self.endRadius
+        end_r   = (1 - end_frac)   * self.startRadius + end_frac   * self.endRadius
+        return PrintedLinkCSC(self.r, start_frame, end_frame,
+                              self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON,
+                              startRadius=start_r, endRadius=end_r)
+
     def newLinkTransformedBy(self, Transformation : SE3):
         """Override to preserve PrintedLinkCSC type when transforming"""
         newLink = PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
