@@ -41,7 +41,7 @@ So the gripper's `r` has to stay 33. A wider collision model needs its own radiu
 - `TODO(collision)` comments:
   - `EndEffector` (class docstring and `sdf`), `ParallelJawGripper` and `KinematicTree.collision`, all with pointers to this section;
   - `PrintedParallelGripper`'s docstring (no pointer).
-- `old_tests_and_development/test_EndEffector.py::test_crossing_links`, scenario (c), checks that a link passing through the carriage is currently *missed*. It will fail once this is fixed, as a reminder to update the test, this entry, and the `TODO(collision)` comments.
+- **Quick way to check it:** put a `PrintedParallelGripper` at the origin and a straight link (radius 33) running along y at x = 70 mm, through the middle of the carriage (z = −14.25 mm). This link physically overlaps the carriage, since its surface reaches x = 37 mm, inside the carriage's 54 mm half-width. But `KinematicTree.collision(gripper, link)` currently returns `None`. Once this issue is fixed, that check should report a collision.
 
 ### How collision checking works today (relevant to any fix)
 - `collision(a, b)` samples `a.interpolate()` (the centerline) and tests `b.sdf(points) − a.r`, then does the same the other way round. **Both** directions must come within the threshold for a collision to count.
