@@ -16,8 +16,12 @@ a = Analysis(
         ('referenceMeshes/legBones.stl', 'referenceMeshes'),
         ('referenceMeshes/humanArmBones.stl', 'referenceMeshes'),
         ('referenceMeshes/arm.stl', 'referenceMeshes'),
+        # Environment files loadable via Import Environment (glob picks up new ones)
+        ('environments/*.py', 'environments'),
     ],
-    hiddenimports=[],
+    # environment_shapes is only imported by environment files at runtime,
+    # so PyInstaller's static analysis won't find it on its own.
+    hiddenimports=['environment_shapes'],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
