@@ -1072,3 +1072,321 @@ class StartTip(Tip):
 class EndTip(Tip):
     def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
         super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)
+
+
+class EndEffectorPart:
+    """
+    One rigid piece of an EndEffector, used for visualization (and for the
+    bounding ball). Geometry is defined in the part's own local frame, centered
+    at the origin:
+      - shape 'box':      size = (sx, sy, sz) full extents along local x, y, z
+      - shape 'cylinder': size = (radius, length), axis along local z
+    Where the part sits (as a function of the end effector's state) is given
+    by EndEffector.partPoses(state).
+    """
+    def __init__(self, name : str, shape : str, size : tuple, color : tuple):
+        if shape not in ('box', 'cylinder'):
+            raise ValueError("EndEffectorPart shape must be 'box' or 'cylinder'")
+        self.name = name
+        self.shape = shape
+        self.size = tuple(float(s) for s in size)
+        self.color = tuple(color)
+
+    def __repr__(self):
+        return f"EndEffectorPart(name={repr(self.name)}, shape={repr(self.shape)}, size={repr(self.size)}, color={repr(self.color)})"
+
+    def localMesh(self, numSides : int = 32) -> tuple[np.ndarray, np.ndarray]:
+        if self.shape == 'box':
+            return boxMesh(self.size)
+        radius, length = self.size
+        return closedCylinderMesh(radius, length, numSides)
+
+
+class EndEffector(Joint):
+    """
+    Abstract base class for an actuated 1-DOF end effector (e.g. a gripper).
+
+    An end effector is a terminal joint: like an EndTip it must remain a leaf
+    of the KinematicTree (enforced in KinematicTree.addJoint), but unlike a Tip
+    it has a changeable state, so it is included in configurations.
+    It is NOT a subclass of Tip, because much of the code treats
+    isinstance(joint, Tip) as "not actuated".
+
+    Frame conventions:
+      - pathIndex() is 2: the incoming tube arrives along z.
+      - The end effector frame is ProximalFrame(): its origin is the center of
+        the tube attachment face and z points out toward the tool. Part
+        geometry (parts() / partPoses()) is expressed in this frame.
+      - neutralLength is the total length along z from the attachment face to
+        the farthest tip, so DistalFrame() is at the tool tip and Pose is
+        halfway between (the usual Joint convention).
+      - The state moves parts inside the end effector, but no frame that a
+        child could attach to, so stateChangeTransformation is the identity.
+
+    Subclasses implement stateRange(), parts(), partPoses(state), and may
+    override toolFrame().
+
+    TODO(collision): collision detection currently UNDER-approximates an end
+    effector as a flat-ended tube of radius r from the attachment face to the
+    tool tip (see sdf()). Any geometry wider than r (e.g. a gripper's carriage
+    and jaws) is ignored, so collisions with it are NOT detected. Fixing this
+    needs a collision model that isn't tied to the link radius r; options are
+    discussed in KNOWN_ISSUES.md ("End effector collision checking ...").
+    """
+    _EE_GL_CACHE_KEYS = frozenset({'_gl_items_parts', '_gl_ref_parts'})
+
+    def __init__(self, r : float, length : float, Pose : SE3, initialState : float = 0):
+        super().__init__(r, length, Pose, initialState)
+        # Per-part GL cache: each part moves rigidly with its own pose
+        # (ProximalFrame() @ partPoses(state)[i]), not with any of the
+        # proximal / center / distal groups in Joint.
+        self._gl_items_parts: list = []
+        self._gl_ref_parts: list = []
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        return {k: v for k, v in state.items() if k not in EndEffector._EE_GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+
+    @abstractmethod
+    def parts(self) -> list[EndEffectorPart]:
+        pass
+
+    @abstractmethod
+    def partPoses(self, state : float) -> list[SE3]:
+        """Pose of each part (same order as parts()) in the end effector frame, at the given state."""
+        pass
+
+    def pathIndex(self) -> int:
+        return 2
+
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3()
+
+    def endEffectorFrame(self) -> SE3:
+        return self.ProximalFrame()
+
+    def toolFrame(self) -> SE3:
+        """A task-relevant frame (e.g. grasp center). Defaults to the distal (tool tip) frame."""
+        return self.DistalFrame()
+
+    def partWorldPoses(self, state : Optional[float] = None) -> list[SE3]:
+        if state is None:
+            state = self.state
+        frame = self.endEffectorFrame()
+        return [frame @ P for P in self.partPoses(state)]
+
+    def partWorldMeshes(self, state : Optional[float] = None, numSides : int = 32) -> list[tuple[np.ndarray, np.ndarray]]:
+        meshes = []
+        for part, W in zip(self.parts(), self.partWorldPoses(state)):
+            verts, faces = part.localMesh(numSides)
+            meshes.append(((W.R @ verts.T).T + W.t, faces))
+        return meshes
+
+    def boundingRadius(self) -> float | np.floating[Any]:
+        """Radius about Pose.t enclosing all parts at both ends of the state range
+        (so it doesn't change with state). Used for joint placement and the tree's
+        bounding ball, not for collision detection."""
+        center = self.Pose.t
+        radius = np.linalg.norm([self.r, self.neutralLength/2])
+        for state in self.stateRange():
+            for verts, _ in self.partWorldMeshes(state, numSides=64):
+                radius = max(radius, np.max(np.linalg.norm(verts - center, axis=1)))
+        return radius
+
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+
+    def collisionCylinder(self) -> Cylinder:
+        """The geometry used for collision detection (see the TODO(collision) note in the class docstring)."""
+        return Cylinder(self.r, self.proximalPosition(), self.pathDirection(),
+                        self.neutralLength, self.Pose.R[:, 0])
+
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        # TODO(collision): UNDER-approximation. This is the SDF of a flat-ended
+        # cylinder of radius self.r (the incoming tube radius) from the attachment
+        # face to the tool tip, independent of state. Parts wider than r (e.g. a
+        # gripper's carriage and jaws) are ignored, so collisions with them are
+        # missed. self.r can't simply be enlarged, because r is also the link
+        # radius / Dubins turning radius. See KNOWN_ISSUES.md.
+        point = xp.asarray(point).reshape(-1, 3)
+        a = xp.asarray(self.proximalPosition()).reshape(1, 3)
+        b = xp.asarray(self.distalPosition()).reshape(1, 3)
+        capsule = sdf_capsule(xp, point, a, b, self.r).flatten()
+        planes = xp.maximum(
+            sdf_plane(xp, point, xp.asarray(self.proximalPosition()), xp.asarray(-self.pathDirection())),
+            sdf_plane(xp, point, xp.asarray(self.distalPosition()), xp.asarray(self.distalPathDirection())))
+        return xp.maximum(capsule, planes)
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                  proximalColor='c', centerColor='m', distalColor='y',
+                  sphereColor=sphereColorDefault, showSphere=False,
+                  surfaceColor=None, edgeColor='dimgray',
+                  surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
+                  axisScale=jointAxisScaleDefault, showPoses=True, toolColor='k',
+                  showCollisionGeometry=False):
+        """surfaceColor overrides every part's color if given. The tool frame is
+        drawn with origin color toolColor. showCollisionGeometry draws the
+        (under-approximating) collision cylinder as a red wireframe."""
+        plotHandles = Joint.addToPlot(self, ax=ax, xColor=xColor, yColor=yColor, zColor=zColor,
+                                      proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                                      sphereColor=sphereColor, showSphere=showSphere,
+                                      surfaceColor=surfaceColor, edgeColor=edgeColor,
+                                      surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                                      axisScale=axisScale, showPoses=showPoses)
+        if showPoses:
+            addPosesToPlot(np.array([self.toolFrame()]), ax, self.r,
+                           xColor, yColor, zColor, np.array([toolColor]))
+        if showSurface:
+            allVerts = []
+            for part, (verts, faces) in zip(self.parts(), self.partWorldMeshes()):
+                color = part.color[:3] if surfaceColor is None else surfaceColor
+                ax.add_collection3d(Poly3DCollection(verts[faces], facecolor=color,
+                                                     alpha=surfaceOpacity, edgecolor=edgeColor,
+                                                     linewidth=0.3))
+                allVerts.append(verts)
+            allVerts = np.vstack(allVerts)
+            # Poly3DCollection doesn't update the axis limits on its own
+            ax.auto_scale_xyz(allVerts[:, 0], allVerts[:, 1], allVerts[:, 2], had_data=True)
+        if showCollisionGeometry:
+            self.collisionCylinder().addToPlot(ax, numPointsPerCircle=16, frame=True,
+                                               edgeColor='red', alpha=0.3, numCircles=4)
+        return plotHandles
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True,
+                    poseAxisScaleMultipler=None):
+        """Draws each part with its own color (surfaceColor is ignored). The
+        joint-axis line is never drawn: z is the approach direction, not an axis of motion."""
+        import pyqtgraph.opengl as gl
+        from style import endEffectorEdgeColorList
+        # Joint.addToWidget resets the proximal / center / distal GL groups
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor,
+                            proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                            sphereColor=sphereColor, showSphere=showSphere,
+                            surfaceColor=surfaceColor, showSurface=False, showAxis=False,
+                            axisScale=axisScale, showPoses=showPoses,
+                            poseAxisScaleMultipler=poseAxisScaleMultipler)
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+        if showSurface:
+            for part, W, (verts, faces) in zip(self.parts(), self.partWorldPoses(), self.partWorldMeshes()):
+                item = gl.GLMeshItem(vertexes=verts.astype(np.float32), faces=faces,
+                                     color=part.color, shader='shaded', smooth=False,
+                                     drawEdges=(part.shape == 'box'), edgeColor=endEffectorEdgeColorList)
+                item.setGLOptions('opaque')
+                item.setObjectName("Joint")
+                widget.plot_widget.addItem(item)
+                # Also registered in the center group, only so that code which
+                # removes a joint's GL items (KinematicTree.addToWidget's
+                # incremental rebuild) removes these too. Their transform is
+                # set by the per-part update in updateCachedGLTransforms, which
+                # runs after (and overrides) the center-group update.
+                self._gl_items_center.append(item)
+                self._gl_items_parts.append([item])
+                self._gl_ref_parts.append(SE3(W.A.copy()))
+
+    def updateCachedGLTransforms(self):
+        super().updateCachedGLTransforms()
+        from pyqtgraph import Transform3D
+        currentPoses = self.partWorldPoses()
+        for items, ref, current in zip(self._gl_items_parts, self._gl_ref_parts, currentPoses):
+            mat = Transform3D((current @ ref.inv()).A)
+            for item in items:
+                item.setTransform(mat)
+
+    def clearGLCache(self):
+        super().clearGLCache()
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+
+
+class ParallelJawGripper(EndEffector):
+    """
+    A gripper with two jaws that slide in opposite directions, modeled as:
+      - a cylindrical housing (radius r, the incoming tube radius) along z,
+      - a box-shaped carriage in front of it,
+      - two box-shaped jaws protruding forward from the carriage.
+    In the end effector frame (see EndEffector), z is the approach direction
+    and x is the direction the jaws slide.
+
+    state = gap between the inner faces of the jaws, in [0, maxOpening]
+            (0 is closed).
+
+    Parameters:
+        r             radius of the incoming tube / cylindrical housing
+        Pose          joint pose (z = approach direction, x = jaw travel)
+        housingLength length of the cylindrical housing along z
+        carriageSize  (x, y, z) full extents of the carriage
+        jawSize       (x, y, z) full extents of each jaw; x is its thickness
+                      along the travel direction, z its length protruding
+                      forward from the carriage
+        maxOpening    maximum gap between the jaws
+        initialState  initial gap between the jaws
+
+    TODO(collision): see EndEffector. Collision detection treats this as a tube
+    of radius r, so the carriage and jaws are not collision-checked.
+    """
+    def __init__(self, r : float, Pose : SE3, housingLength : float,
+                 carriageSize : tuple, jawSize : tuple, maxOpening : float,
+                 initialState : float = 0.0):
+        carriageSize = tuple(float(s) for s in carriageSize)
+        jawSize = tuple(float(s) for s in jawSize)
+        if len(carriageSize) != 3 or len(jawSize) != 3:
+            raise ValueError("carriageSize and jawSize must each have 3 entries (x, y, z)")
+        if r <= 0 or housingLength <= 0 or maxOpening <= 0 or \
+                min(carriageSize) <= 0 or min(jawSize) <= 0:
+            raise ValueError("ParallelJawGripper dimensions and maxOpening must be positive")
+        if maxOpening + 2*jawSize[0] > carriageSize[0]:
+            raise ValueError("The jaws at maxOpening must fit within the carriage's x extent")
+        if initialState < 0 or initialState > maxOpening:
+            raise ValueError("ParallelJawGripper initialState must be within [0, maxOpening]")
+        self.housingLength = float(housingLength)
+        self.carriageSize = carriageSize
+        self.jawSize = jawSize
+        self.maxOpening = float(maxOpening)
+        length = self.housingLength + carriageSize[2] + jawSize[2]
+        super().__init__(r, length, Pose, initialState)
+
+    def __repr__(self):
+        return (f"ParallelJawGripper(r={repr(self.r)}, Pose={repr(self.Pose)}, "
+                f"housingLength={repr(self.housingLength)}, carriageSize={repr(self.carriageSize)}, "
+                f"jawSize={repr(self.jawSize)}, maxOpening={repr(self.maxOpening)}, "
+                f"initialState={repr(self.state)})")
+
+    def stateRange(self) -> list:
+        return [0.0, self.maxOpening]
+
+    def jawGap(self) -> float:
+        return self.state
+
+    def parts(self) -> list[EndEffectorPart]:
+        from style import endEffectorColorList, endEffectorJawColorList
+        return [
+            EndEffectorPart('housing', 'cylinder', (self.r, self.housingLength), endEffectorColorList),
+            EndEffectorPart('carriage', 'box', self.carriageSize, endEffectorColorList),
+            EndEffectorPart('jaw+', 'box', self.jawSize, endEffectorJawColorList),
+            EndEffectorPart('jaw-', 'box', self.jawSize, endEffectorJawColorList),
+        ]
+
+    def jawCenterZ(self) -> float:
+        return self.housingLength + self.carriageSize[2] + self.jawSize[2]/2
+
+    def partPoses(self, state : float) -> list[SE3]:
+        jawX = state/2 + self.jawSize[0]/2
+        return [
+            SE3.Trans(0, 0, self.housingLength/2),
+            SE3.Trans(0, 0, self.housingLength + self.carriageSize[2]/2),
+            SE3.Trans(jawX, 0, self.jawCenterZ()),
+            SE3.Trans(-jawX, 0, self.jawCenterZ()),
+        ]
+
+    def toolFrame(self) -> SE3:
+        """Grasp center: between the jaws, halfway along their length."""
+        return self.endEffectorFrame() @ SE3.Trans(0, 0, self.jawCenterZ())

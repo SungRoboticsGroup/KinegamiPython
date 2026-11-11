@@ -411,6 +411,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         self.add_transverse_revolute = QPushButton("Add Transverse Revolute Joint")
         self.add_coaxial_revolute = QPushButton("Add Coaxial Revolute Joint")
         self.add_tip = QPushButton("Add Tip")
+        self.add_end_effector = QPushButton("Add Gripper (End Effector)")
         self.clear_tree_button = QPushButton("Clear Tree")
 
         add_waypoints_layout = QVBoxLayout()
@@ -456,6 +457,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         add_joints_layout.addWidget(self.add_coaxial_revolute)
         add_joints_layout.addLayout(add_waypoints_layout)
         add_joints_layout.addWidget(self.add_tip)
+        add_joints_layout.addWidget(self.add_end_effector)
         add_joints_layout.addWidget(self.select_parent_prompt)
         # place Add-to-root checkbox at bottom
         add_joints_layout.addWidget(self.joint_add_root_button)
@@ -467,6 +469,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         self.add_waypoint.clicked.connect(self.add_waypoint_func)
         self.insert_waypoint_button.clicked.connect(self.insert_waypoint_func)
         self.add_tip.clicked.connect(self.add_tip_toggle)
+        self.add_end_effector.clicked.connect(self.add_end_effector_toggle)
         self.clear_tree_button.clicked.connect(self.clear_tree_func)
 
         self.clear_tree_dock = CollapsibleDockWidget("Clear Tree", self)
@@ -1814,7 +1817,11 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
             real_indices = [i for i, j in enumerate(self.tree.Joints)
                            if not isinstance(j, (Waypoint, Tip))]
             config_pos = real_indices.index(new_joint_index) if new_joint_index in real_indices else len(real_indices) - 1
-            self.update_saved_configs_for_joint_added(config_pos)
+            # End effectors (linear state, e.g. a gripper starting open) keep their
+            # initial state in saved configs; other joints get state 0 as before.
+            new_joint = self.tree.Joints[new_joint_index]
+            initial_value = float(new_joint.state) if isinstance(new_joint, EndEffector) else 0.0
+            self.update_saved_configs_for_joint_added(config_pos, initial_value)
 
         self._mark_collision_dirty()
         self.update_joint()
@@ -1985,6 +1992,29 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         except Exception as e:
             self.show_error(str(e))
 
+    def _create_and_add_end_effector(self):
+        """Create and add an end effector as a child of the selected joint.
+        Currently the only end effector type is PrintedParallelGripper, added fully open."""
+        try:
+            if self.tree is None or len(self.tree.Joints) == 0 or self.add_to_root:
+                self.show_error("An end effector must be attached to an existing joint "
+                                "(it can't be the root of the tree).")
+                return
+            if self.selected_joint < 0 or self.selected_joint >= len(self.tree.Joints):
+                self.show_error('Please select a parent joint first.')
+                return
+            prevJoint = self.tree.Joints[self.selected_joint]
+            gripperLength = PrintedParallelGripper(SE3()).neutralLength
+            # Pose relative to the parent's distal Dubins frame: the gripper's
+            # path direction (z) is rotated by Ry(pi/2) to align with the Dubins
+            # x-hat, and its attachment face is 4r in front of the parent.
+            distance = prevJoint.r * 4 + gripperLength / 2
+            pose = SE3.Rt(SE3.Ry(np.pi/2).R, np.array([distance, 0, 0]))
+            joint = PrintedParallelGripper(pose, initialState=PrintedParallelGripper.MAX_OPENING)
+            self.add_joint(joint)
+        except Exception as e:
+            self.show_error(str(e))
+
     def add_transverse_revolute_toggle(self):
         if self._can_add_joint_directly():
             self._create_and_add_transverse_revolute()
@@ -2010,6 +2040,15 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
             self._show_select_parent_prompt(
                 self._create_and_add_tip,
                 "Tip"
+            )
+
+    def add_end_effector_toggle(self):
+        if self._can_add_joint_directly():
+            self._create_and_add_end_effector()
+        else:
+            self._show_select_parent_prompt(
+                self._create_and_add_end_effector,
+                "Gripper"
             )
 
     def edit_dimension_toggle(self):

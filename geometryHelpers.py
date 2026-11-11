@@ -1820,3 +1820,54 @@ def saveManifold(manifold : m3d.Manifold, filename : str):
     tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
     
     tri_mesh.export(filename)
+
+
+def boxMesh(size) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Closed triangle mesh of an axis-aligned box centered at the origin.
+
+    Parameters:
+        size: full extents (sx, sy, sz)
+
+    Returns:
+        (vertices (8,3), faces (12,3)) with outward-facing triangles.
+    """
+    hx, hy, hz = np.asarray(size, dtype=float) / 2
+    vertices = np.array([
+        [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+        [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+    ])
+    faces = np.array([
+        [0, 2, 1], [0, 3, 2],  # -z
+        [4, 5, 6], [4, 6, 7],  # +z
+        [0, 1, 5], [0, 5, 4],  # -y
+        [2, 3, 7], [2, 7, 6],  # +y
+        [0, 4, 7], [0, 7, 3],  # -x
+        [1, 2, 6], [1, 6, 5],  # +x
+    ])
+    return vertices, faces
+
+
+def closedCylinderMesh(radius : float, length : float, numSides : int = 32) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Closed triangle mesh of a cylinder (with flat end caps) along the z axis,
+    centered at the origin (z in [-length/2, length/2]).
+
+    Returns:
+        (vertices (2*numSides+2, 3), faces (4*numSides, 3)) with outward-facing triangles.
+    """
+    angles = np.linspace(0, 2*np.pi, numSides, endpoint=False)
+    ring = np.column_stack([radius*np.cos(angles), radius*np.sin(angles), np.zeros(numSides)])
+    bottom = ring + [0, 0, -length/2]
+    top = ring + [0, 0, length/2]
+    bottomCenter = 2*numSides
+    topCenter = 2*numSides + 1
+    vertices = np.vstack([bottom, top, [[0, 0, -length/2]], [[0, 0, length/2]]])
+    faces = []
+    for i in range(numSides):
+        j = (i + 1) % numSides
+        faces.append([i, j, numSides + j])                # side
+        faces.append([i, numSides + j, numSides + i])     # side
+        faces.append([bottomCenter, j, i])                # bottom cap (normal -z)
+        faces.append([topCenter, numSides + i, numSides + j])  # top cap (normal +z)
+    return vertices, np.array(faces)

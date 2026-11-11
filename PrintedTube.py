@@ -843,6 +843,35 @@ class PrintedEndHemisphere(PrintedHemisphere):
         super().__init__(r, Pose, closesForward=True, pathIndex=pathIndex)
 
 
+class PrintedParallelGripper(PrintedTube, ParallelJawGripper):
+    """
+    Servo-driven parallel jaw gripper (gripper_photo1.png / gripper_photo2.png)
+    attaching to a 33 mm radius printed tube, modeled in simplified form as a
+    cylindrical servo housing, a box carriage, and two box jaws.
+    Dimensions are in mm. state = gap between the jaws, in [0, MAX_OPENING].
+
+    It must be the last joint on its branch (a leaf). It is left out of
+    Arduino code generation (generateArduino.py) for now.
+
+    TODO(collision): collision detection treats this as a tube of radius R
+    (see EndEffector.sdf), so the carriage and jaws are not collision-checked.
+    """
+    R = 33.0                            # incoming tube / housing radius
+    HOUSING_LENGTH = 49.5               # cylinder housing the servo, along z
+    CARRIAGE_SIZE = (108.0, 63.3, 30.0) # x (jaw travel), y, z (approach direction)
+    JAW_SIZE = (7.5, 27.0, 78.0)        # x (thickness along travel), y, z (protrusion from carriage)
+    MAX_OPENING = 45.0                  # maximum gap between the jaws
+
+    def __init__(self, Pose : SE3, initialState : float = 0.0):
+        PrintedTube.__init__(self)
+        ParallelJawGripper.__init__(self, r=self.R, Pose=Pose, housingLength=self.HOUSING_LENGTH,
+                                    carriageSize=self.CARRIAGE_SIZE, jawSize=self.JAW_SIZE,
+                                    maxOpening=self.MAX_OPENING, initialState=initialState)
+
+    def __repr__(self):
+        return f"PrintedParallelGripper(Pose={repr(self.Pose)}, initialState={repr(self.state)})"
+
+
 class PrintedLinkCSC(PrintedTube, LinkCSC):
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
                  maxAnglePerElbow : float = np.pi/10, path : Optional[PathCSC] = None, 

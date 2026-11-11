@@ -18,7 +18,11 @@ from spatialmath import SE3
 from scipy.spatial.transform import Rotation as R
 from ReferenceMesh import *
 from IntersectionHelper import *
-from Joint import Prismatic, Revolute, Waypoint
+from Joint import Prismatic, Revolute, Waypoint, EndEffector
+
+# Joint types whose state is a linear length (shown and edited in length units),
+# as opposed to Revolute joints whose state is an angle (shown and edited in degrees)
+LINEAR_STATE_JOINT_TYPES = (Prismatic, EndEffector)
 
 
 class DeleteWidget(QWidget):
@@ -1224,7 +1228,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
 
     def state_slider_moved(self, value):
         if self.model and self.selected_joint != -1:
-            if isinstance(self.model.Joints[self.selected_joint], Prismatic):
+            if isinstance(self.model.Joints[self.selected_joint], LINEAR_STATE_JOINT_TYPES):
                 actualState = value / (100 * self.model.r)
             elif isinstance(self.model.Joints[self.selected_joint], Revolute):
                 actualState = math.radians(value)
@@ -1247,7 +1251,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
                 value = float(self.state_textbox.text())
             except ValueError:
                 return
-            if isinstance(self.model.Joints[self.selected_joint], Prismatic):
+            if isinstance(self.model.Joints[self.selected_joint], LINEAR_STATE_JOINT_TYPES):
                 actualState = value
             elif isinstance(self.model.Joints[self.selected_joint], Revolute):
                 actualState = math.radians(value)
@@ -1271,7 +1275,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
         if self.model and self.selected_joint != -1:
             joint = self.model.Joints[self.selected_joint]
             stateRange = joint.stateRange()
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 stateActual = joint.state if state is None else max(stateRange[0], min(stateRange[1], state))
                 actual = (stateRange[0], stateRange[1], stateActual)
                 scale = 100 * self.model.r
@@ -1310,7 +1314,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
             self.state_slider.setMaximum(maxSlider)
             self.state_slider.setValue(currentSlider)
             self.old_state_slider_val = currentSlider
-            decimals = 2 if isinstance(self.model.Joints[self.selected_joint], Prismatic) else 0
+            decimals = 2 if isinstance(self.model.Joints[self.selected_joint], LINEAR_STATE_JOINT_TYPES) else 0
             self.state_textbox.setText(str(np.round(currentText, decimals)))
             self.current_state_label.setText(
                 f"Min State: {np.round(minText, decimals)} ≤ "
@@ -1369,7 +1373,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
             slider = QSlider(Qt.Horizontal)
             slider.setFixedWidth(50)
 
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 display_state = joint.state
                 state_range = joint.stateRange()
                 scale = 100 * self.model.r
@@ -1424,7 +1428,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
             slider = self.config_sliders[i]
             text_box.blockSignals(True)
             slider.blockSignals(True)
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 display_state = joint.state
                 text_box.setText(str(round(display_state, 2)))
                 slider.setValue(int(display_state * 100 * self.model.r))
@@ -1463,7 +1467,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
             except ValueError:
                 return
             joint = self.model.Joints[joint_index]
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 actualState = value
             elif isinstance(joint, Revolute):
                 actualState = math.radians(value)
@@ -1479,7 +1483,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
         """Handle configuration slider movement."""
         if self.model and 0 <= joint_index < len(self.model.Joints):
             joint = self.model.Joints[joint_index]
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 actualState = value / (100 * self.model.r)
                 display_state = actualState
             elif isinstance(joint, Revolute):
@@ -1711,7 +1715,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
                 continue
             interpolated_value = config_a[i] * (1 - t) + config_b[i] * t
             joint = self.model.Joints[joint_index]
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 actualState = interpolated_value
             elif isinstance(joint, Revolute):
                 actualState = math.radians(interpolated_value)
@@ -1740,7 +1744,7 @@ class BaseWindowKinegamiGUI(QMainWindow):
             if joint_index >= len(self.model.Joints):
                 continue
             joint = self.model.Joints[joint_index]
-            if isinstance(joint, Prismatic):
+            if isinstance(joint, LINEAR_STATE_JOINT_TYPES):
                 actualState = value
             elif isinstance(joint, Revolute):
                 actualState = math.radians(value)
@@ -1775,13 +1779,14 @@ class BaseWindowKinegamiGUI(QMainWindow):
                 self.saved_configurations[config_index + 1], self.saved_configurations[config_index]
             self.display_saved_configurations()
 
-    def update_saved_configs_for_joint_added(self, config_position: int = -1):
-        """Insert state 0 into all saved configs when a joint is added."""
+    def update_saved_configs_for_joint_added(self, config_position: int = -1, value: float = 0.0):
+        """Insert value (default state 0) into all saved configs when a joint is added.
+        value is in display units (degrees for Revolute, length for linear-state joints)."""
         for config in self.saved_configurations:
             if config_position < 0 or config_position >= len(config):
-                config.append(0.0)
+                config.append(value)
             else:
-                config.insert(config_position, 0.0)
+                config.insert(config_position, value)
 
     def update_saved_configs_for_joint_deleted(self, deleted_joint_index):
         """Remove the state for a deleted joint from all saved configs."""

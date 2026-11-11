@@ -17,17 +17,51 @@ import dill
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from Joint import Waypoint, Tip, Revolute, Prismatic
+from Joint import Waypoint, Tip, Revolute, Prismatic, EndEffector
 
 
-def real_joint_info(tree):
-    """Return list of (tree_index, joint_type_name) for actuated joints."""
+def config_joint_info(tree):
+    """Return list of (tree_index, joint_type_name) for every joint that has a
+    column in the GUI's saved configurations (same rule as the GUI: all joints
+    except Waypoints and Tips), in column order."""
     info = []
     for i, j in enumerate(tree.Joints):
         if isinstance(j, (Waypoint, Tip)):
             continue
         info.append((i, type(j).__name__))
     return info
+
+
+def real_joint_info(tree):
+    """Return list of (tree_index, joint_type_name) for the joints driven by
+    servos in the generated code. End effectors (e.g. grippers) are left out
+    for now, since their states aren't servo angles."""
+    return [(i, name) for (i, name) in config_joint_info(tree)
+            if not isinstance(tree.Joints[i], EndEffector)]
+
+
+def servo_configs(tree, configs):
+    """
+    Select the servo columns of each saved configuration.
+
+    Returns (joints, rows, skipped):
+        joints   list of (tree_index, joint_type_name) for the servo joints
+        rows     each config restricted to the servo columns (missing values
+                 padded with 0.0)
+        skipped  list of (tree_index, joint_type_name) for end effectors whose
+                 columns were removed
+
+    Columns are removed by their position, so servo columns stay aligned even
+    when an end effector comes before other joints in the configuration
+    (e.g. a gripper on one branch of a tree).
+    """
+    columns = config_joint_info(tree)
+    servoColumns = [c for c, (i, _) in enumerate(columns)
+                    if not isinstance(tree.Joints[i], EndEffector)]
+    joints = [columns[c] for c in servoColumns]
+    skipped = [columns[c] for c in range(len(columns)) if c not in servoColumns]
+    rows = [[cfg[c] if c < len(cfg) else 0.0 for c in servoColumns] for cfg in configs]
+    return joints, rows, skipped
 
 
 def generate_arduino(session_path: str, output_path: str | None = None,
@@ -48,7 +82,13 @@ def generate_arduino(session_path: str, output_path: str | None = None,
     if len(configs) < 2:
         raise ValueError("Need at least 2 saved configurations for a sequence")
 
-    joints = real_joint_info(tree)
+    joints, configs, skipped_end_effectors = servo_configs(tree, configs)
+    end_effector_warnings = [
+        f"WARNING: joint {tree_idx} ({jtype}) is an end effector and was NOT "
+        f"included in the Arduino code; control it separately."
+        for tree_idx, jtype in skipped_end_effectors]
+    for message in end_effector_warnings:
+        print(message)
     num_servos = len(joints)
     num_configs = len(configs)
     num_segments = num_configs - 1
@@ -79,6 +119,9 @@ def generate_arduino(session_path: str, output_path: str | None = None,
     w("//   Servo library signal range [0, 180] maps linearly to [0, 270].")
     w("//   Joint states are expressed in [-135, 135] (0 = center).")
     w("//   Conversion:  signal = (SIGN * state + 135) * 180.0 / 270.0")
+    for message in end_effector_warnings:
+        w("//")
+        w(f"// {message}")
     w("// ===================================================================")
     w("")
     w('#include <Servo.h>')
@@ -119,10 +162,8 @@ def generate_arduino(session_path: str, output_path: str | None = None,
     w("// Edit these values to adjust the dance.")
     w("const float CONFIGS[NUM_CONFIGS][NUM_SERVOS] = {")
     for ci, cfg in enumerate(configs):
-        # Pad or truncate to num_servos
-        row = list(cfg[:num_servos])
-        while len(row) < num_servos:
-            row.append(0.0)
+        # Already restricted to the servo columns (and padded) by servo_configs
+        row = list(cfg)
         comma = "," if ci < num_configs - 1 else ""
         w(f"  {{ {fmt_row(row)} }}{comma}  // config {ci}")
     w("};")

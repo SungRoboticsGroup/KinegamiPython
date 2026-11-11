@@ -63,6 +63,9 @@ compoundElbowColorList = (1, 1, 1, 0.5)  # white, 0.5 opacity
 linkColorList = (0.5, 0.5, 0.5, 1.0)  # gray
 prismaticColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
 revoluteColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
+endEffectorColorList = (0.2, 0.2, 0.2, 1.0)  # dark gray (end effector housing / body)
+endEffectorJawColorList = (0.55, 0.55, 0.6, 1.0)  # lighter gray (moving end effector parts, e.g. jaws)
+endEffectorEdgeColorList = (0.6, 0.6, 0.6, 1.0)  # light gray edges on end effector boxes
 
 xPoseColor = 'darkred'  # darkred
 yPoseColor = 'darkblue'  # darkblue

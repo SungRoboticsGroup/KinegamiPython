@@ -182,6 +182,10 @@ class KinematicTree(Generic[F]):
         if isinstance(parent, Tip) and parent.forward:
             raise ValueError("Cannot add a child joint to an end tip (forward-closing Tip). "
                              "End tips must remain leaf nodes.")
+        # Likewise an end effector (e.g. a gripper) must remain a leaf
+        if isinstance(parent, EndEffector):
+            raise ValueError("Cannot add a child joint to an end effector. "
+                             "End effectors must remain leaf nodes.")
         
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
@@ -631,6 +635,10 @@ class KinematicTree(Generic[F]):
             joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
             joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
             joint.centerSphere().addToWidget(widget, color=collisionJointColor)
+        elif isColliding and isinstance(joint, EndEffector):
+            # Highlight the geometry actually used for collision detection
+            # (an under-approximating tube of radius r; see EndEffector.sdf)
+            joint.collisionCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
 
     def _addOneLink(self, widget, index, selectedLink, collidingLinks,
                     linkColor, linkOpacity, showLinkPath, pathColor,
@@ -964,7 +972,12 @@ class KinematicTree(Generic[F]):
     
     
     # Returns None for no collision or the pair of closest points for a collision
-    def collision(self, tube1, tube2, coarseDistanceThreshold=0.5, 
+    # Every object is treated as a centerline (interpolate()) with radius .r.
+    # TODO(collision): this means an EndEffector (e.g. a gripper) is
+    # UNDER-approximated as a tube of radius r (the incoming tube radius): its
+    # wider parts (carriage, jaws) are not collision-checked. See
+    # EndEffector.sdf and KNOWN_ISSUES.md.
+    def collision(self, tube1, tube2, coarseDistanceThreshold=0.5,
                   fineDistanceThreshold=0.001) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
         coarseDensity = 1 / coarseDistanceThreshold
         fineDensity = 1 / fineDistanceThreshold        
@@ -1746,6 +1759,7 @@ def loadKinematicTree(filename : str):
                 'CoaxialRevolute': CoaxialRevolute,
                 'Waypoint': Waypoint,
                 'Tip': Tip,
+                'ParallelJawGripper': ParallelJawGripper,
             }
             tree = eval(data, eval_namespace)
             f.close()
