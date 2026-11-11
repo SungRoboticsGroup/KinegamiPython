@@ -60,6 +60,27 @@ def solid_box(cx, cy, cz, size,
                          color=color)
 
 
+def flat_rectangle(cx, cy, sx, sy, z=0.0,
+                   color=(0.8, 0.8, 0.8, 1.0), glOptions='opaque'):
+    """
+    Flat horizontal rectangle centered at (cx, cy) on the plane at height z,
+    with side length sx along x and sy along y.
+    """
+    hx, hy = sx / 2.0, sy / 2.0
+    verts = np.array([
+        [cx - hx, cy - hy, z],
+        [cx + hx, cy - hy, z],
+        [cx + hx, cy + hy, z],
+        [cx - hx, cy + hy, z],
+    ], dtype=float)
+    faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=int)
+    meshdata = gl.MeshData(vertexes=verts, faces=faces)
+    # shader=None: flat, unlit color. The 'shaded' shader leaves an upward-
+    # facing plane at ~20% brightness, so it would render very dark from above.
+    return gl.GLMeshItem(meshdata=meshdata, smooth=False, shader=None,
+                         color=color, glOptions=glOptions)
+
+
 def solid_sphere(cx, cy, cz, radius,
                  color=(0.2, 0.8, 0.4, 0.8), rows=20, cols=20):
     """Solid sphere centered at (cx, cy, cz)."""
@@ -71,14 +92,41 @@ def solid_sphere(cx, cy, cz, radius,
 
 
 def solid_cylinder(cx, cy, cz, radius, length,
-                   color=(0.8, 0.4, 0.2, 0.8), rows=2, cols=20):
+                   color=(0.8, 0.4, 0.2, 0.8), cols=20, caps=True,
+                   glOptions='opaque'):
     """
     Solid cylinder with its base centered at (cx, cy, cz), extending along +Z.
+    caps: if True, close the top and bottom with flat disks.
+    glOptions: pass 'translucent' for the color's alpha to take effect.
     Use item.rotate(...) after calling this if you need a different orientation.
     """
-    meshdata = gl.MeshData.cylinder(rows=rows, cols=cols,
-                                    radius=[radius, radius], length=length)
+    theta = np.linspace(0, 2 * np.pi, cols, endpoint=False)
+    ring = np.column_stack([radius * np.cos(theta),
+                            radius * np.sin(theta),
+                            np.zeros(cols)])
+    top = ring + [0, 0, length]
+    idx = np.arange(cols)
+    nxt = (idx + 1) % cols
+
+    # Side wall: bottom ring = 0..cols-1, top ring = cols..2cols-1
+    verts = [ring, top]
+    faces = [np.column_stack([idx, nxt, cols + nxt]),
+             np.column_stack([idx, cols + nxt, cols + idx])]
+
+    if caps:
+        # Caps get their own vertices so smooth shading doesn't blend
+        # the flat cap normals with the curved side normals.
+        b0 = 2 * cols                 # bottom cap ring start
+        bc = 3 * cols                 # bottom cap center
+        t0 = 3 * cols + 1             # top cap ring start
+        tc = 4 * cols + 1             # top cap center
+        verts += [ring, [[0, 0, 0]], top, [[0, 0, length]]]
+        faces += [np.column_stack([np.full(cols, bc), b0 + nxt, b0 + idx]),
+                  np.column_stack([np.full(cols, tc), t0 + idx, t0 + nxt])]
+
+    meshdata = gl.MeshData(vertexes=np.vstack(verts).astype(float),
+                           faces=np.vstack(faces).astype(int))
     item = gl.GLMeshItem(meshdata=meshdata, smooth=True, shader='shaded',
-                         color=color)
+                         color=color, glOptions=glOptions)
     item.translate(cx, cy, cz)
     return item

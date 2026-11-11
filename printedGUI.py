@@ -299,7 +299,8 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         # Set camera distance appropriate for the grid size
         # Set camera distance to view the whole grid comfortably
         self.plot_widget.opts['distance'] = self.grid_size * 1.5
-        
+        self.store_default_camera_distance()
+
         # Create and configure grid
         self.grid = gl.GLGridItem()
         self.grid.setColor(self.grid_color)
@@ -702,6 +703,11 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
     
         self.camera_layout.addWidget(self.camera1)
         self.camera_layout.addWidget(self.camera2)
+
+        self.reset_view_button = QPushButton("Reset View")
+        self.reset_view_button.setToolTip("Reset the camera to the default position and orientation")
+        self.reset_view_button.clicked.connect(self.reset_camera_view)
+        self.camera_layout.addWidget(self.reset_view_button)
         
         self.camera_options_widget.setLayout(self.camera_layout)
         self.camera_controls_dock.setWidget(self.camera_options_widget)

@@ -320,6 +320,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         self.setCentralWidget(self.plot_widget)
 
         self.plot_widget.setBackgroundColor(backgroundColorDefault)
+        self.store_default_camera_distance()
 
         self.grid = gl.GLGridItem()
         self.plot_widget.addItem(self.grid)
@@ -721,6 +722,11 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
     
         self.camera_layout.addWidget(self.camera1)
         self.camera_layout.addWidget(self.camera2)
+
+        self.reset_view_button = QPushButton("Reset View")
+        self.reset_view_button.setToolTip("Reset the camera to the default position and orientation")
+        self.reset_view_button.clicked.connect(self.reset_camera_view)
+        self.camera_layout.addWidget(self.reset_view_button)
         
         self.camera_options_widget.setLayout(self.camera_layout)
         self.camera_controls_dock.setWidget(self.camera_options_widget)
@@ -882,6 +888,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         if (prev != new):
             conversion_factor = self.factor[prev] / self.factor[new]
             self.plot_widget.opts['distance'] *= conversion_factor
+            self.scale_default_camera_distance(conversion_factor)
             self.update_joint()
 
     def preserve_dimensions(self, prev, new):
@@ -911,6 +918,7 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
             self.chain = new_chain
 
             self.plot_widget.opts['distance'] *= factor
+            self.scale_default_camera_distance(factor)
 
             self.log_version()
             self.update_joint()

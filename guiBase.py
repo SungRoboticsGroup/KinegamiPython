@@ -879,6 +879,34 @@ class BaseWindowKinegamiGUI(QMainWindow):
             self.plot_widget.camera_type = "Pan"
         self.update_joint()
 
+    # Default camera orientation (pyqtgraph GLViewWidget defaults).
+    DEFAULT_CAMERA_ELEVATION = 30
+    DEFAULT_CAMERA_AZIMUTH = 45
+
+    def store_default_camera_distance(self):
+        """Record the current camera distance as the 'home' zoom level used by
+        reset_camera_view(). Call once after the initial camera is set up."""
+        self.default_camera_distance = self.plot_widget.opts['distance']
+
+    def scale_default_camera_distance(self, factor):
+        """Keep the reset-view zoom consistent when the scene is rescaled
+        (e.g. unit changes)."""
+        if hasattr(self, 'default_camera_distance'):
+            self.default_camera_distance *= factor
+
+    def reset_camera_view(self):
+        """Return the camera to its default center, zoom, and orientation."""
+        distance = getattr(self, 'default_camera_distance', self.plot_widget.opts['distance'])
+        self.plot_widget.setCameraPosition(
+            # pg.Vector (not bare QVector3D) matches pyqtgraph's default type and
+            # supports indexing/iteration, which plain QVector3D does not.
+            pos=pg.Vector(0, 0, 0),
+            distance=distance,
+            elevation=self.DEFAULT_CAMERA_ELEVATION,
+            azimuth=self.DEFAULT_CAMERA_AZIMUTH,
+        )
+        self.update_joint()
+
     def show_delete_widget(self):
         self.delete_joint_dock.setVisible(True)
 
