@@ -727,6 +727,11 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         self.reset_view_button.setToolTip("Reset the camera to the default position and orientation")
         self.reset_view_button.clicked.connect(self.reset_camera_view)
         self.camera_layout.addWidget(self.reset_view_button)
+
+        self.fit_view_button = QPushButton("Fit View")
+        self.fit_view_button.setToolTip("Center and zoom the camera to fit everything visible (keeps current viewing angle)")
+        self.fit_view_button.clicked.connect(self.fit_camera_view)
+        self.camera_layout.addWidget(self.fit_view_button)
         
         self.camera_options_widget.setLayout(self.camera_layout)
         self.camera_controls_dock.setWidget(self.camera_options_widget)

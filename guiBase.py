@@ -907,6 +907,83 @@ class BaseWindowKinegamiGUI(QMainWindow):
         )
         self.update_joint()
 
+    # Fraction of extra room left around the scene when fitting the view.
+    FIT_VIEW_MARGIN = 1.1
+
+    def _scene_points_for_fit(self):
+        """World-space points of everything visible in the 3D view, excluding the
+        grid, UI overlays (gizmo arrows, measurement line - all OverlayLine), and
+        any item flagged with `exclude_from_fit_view = True` (e.g. joint-axis
+        reference lines). Covers the tree, environment items, and the reference mesh."""
+        chunks = []
+        for item in self.plot_widget.items:
+            if item is getattr(self, 'grid', None) or isinstance(item, OverlayLine):
+                continue
+            if getattr(item, 'exclude_from_fit_view', False):
+                continue
+            if not item.visible():
+                continue
+            if isinstance(item, gl.GLMeshItem):
+                md = item.opts.get('meshdata')
+                if md is None:
+                    continue
+                local = md.vertexes()
+                if local is None:
+                    local = md.vertexes(indexed='faces')
+            elif isinstance(item, (gl.GLLinePlotItem, gl.GLScatterPlotItem)):
+                local = item.pos
+            else:
+                continue
+            if local is None:
+                continue
+            local = np.asarray(local, dtype=float).reshape(-1, 3)
+            if len(local) == 0:
+                continue
+            # QMatrix4x4.data() is column-major; transpose to get row-major.
+            M = np.array(item.viewTransform().data(), dtype=float).reshape(4, 4).T
+            chunks.append(local @ M[:3, :3].T + M[:3, 3])
+        if not chunks:
+            return None
+        pts = np.vstack(chunks)
+        return pts[np.all(np.isfinite(pts), axis=1)]
+
+    def fit_camera_view(self):
+        """Center and zoom the camera so everything visible fits on screen,
+        keeping the current viewing direction (elevation/azimuth)."""
+        pts = self._scene_points_for_fit()
+        if pts is None or len(pts) == 0:
+            return
+        pw = self.plot_widget
+        el = math.radians(pw.opts['elevation'])
+        az = math.radians(pw.opts['azimuth'])
+        # Camera basis (pyqtgraph euler convention): f points from the orbit
+        # center toward the camera; right/up span the image plane.
+        f = np.array([math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)])
+        right = np.array([-math.sin(az), math.cos(az), 0.0])
+        up = np.cross(f, right)
+
+        x, y, z = pts @ right, pts @ up, pts @ f
+        cx = 0.5 * (x.min() + x.max())
+        cy = 0.5 * (y.min() + y.max())
+        cz = 0.5 * (z.min() + z.max())
+
+        # pyqtgraph's fov is the horizontal field of view.
+        tan_h = math.tan(0.5 * math.radians(pw.opts.get('fov', 60)))
+        w, h = max(pw.width(), 1), max(pw.height(), 1)
+        tan_v = tan_h * h / w
+
+        # Camera sits at depth s along f. Each point needs |offset| <= tan * (s - z),
+        # so s must be at least z + |offset| / tan for every point.
+        m = self.FIT_VIEW_MARGIN
+        s = max(np.max(z + m * np.abs(x - cx) / tan_h),
+                np.max(z + m * np.abs(y - cy) / tan_v))
+        extent = max(np.ptp(x), np.ptp(y), np.ptp(z))
+        distance = max(s - cz, 0.5 * extent, 1e-6)
+
+        center = cx * right + cy * up + cz * f
+        pw.setCameraPosition(pos=pg.Vector(*center), distance=distance)
+        self.update_joint()
+
     def show_delete_widget(self):
         self.delete_joint_dock.setVisible(True)
 

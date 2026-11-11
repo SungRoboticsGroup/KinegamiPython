@@ -259,6 +259,8 @@ class Joint(ABC):
             jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
                                 self.Pose.t + 10 * self.r * zhat])
             line_item = gl.GLLinePlotItem(pos=jointAxis, color=showAxisColor, width=2, antialias=True)  # Using a silver color
+            # Reference line extending well past the joint; don't let it drive the GUI's Fit View.
+            line_item.exclude_from_fit_view = True
             widget.plot_widget.addItem(line_item)
             self._gl_items_center.append(line_item)
 
