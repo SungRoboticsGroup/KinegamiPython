@@ -5,6 +5,7 @@ from optimizationFunctions import (
     listCheckpoints
 )
 import matplotlib.pyplot as plt
+import numpy as np
 
 CHECKPOINT_DIR = '/home/samhitha/code/Trials Before Experiments/2026.04.06_21.12.11_Joints2_Chains1_Seed44/0/BFS Outward Shortest n repetitions/checkpoints'
 CHECKPOINT_FILE = '/home/samhitha/code/Trials Before Experiments/2026.04.06_21.12.11_Joints2_Chains1_Seed44/0/BFS Outward Shortest n repetitions/checkpoints/iter_2_2.dill'
@@ -40,6 +41,8 @@ def exampleLoadCheckpoint(checkpoint_path=CHECKPOINT_FILE):
     print(f"  Latest time: {hist.get('times', [None])[-1]:.2f}s" if hist.get('times') else "  No times recorded")
     print(f"  Latest length: {hist.get('lengths', [None])[-1]:.4f}" if hist.get('lengths') else "  No lengths recorded")
     latest_loss = hist.get('losses', [None])[-1]
+    # older checkpoints stored waypoint parameter arrays here instead of losses
+    latest_loss = np.asarray(latest_loss)
     latest_loss = latest_loss.item() if latest_loss.size == 1 else latest_loss.tolist()
     print(f"  Latest loss: {latest_loss}")
     
