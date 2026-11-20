@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
+import csv
+import json
 
 # Global file path for collision penalty logging (can be set externally)
 collision_penalty_log_file = None
@@ -278,23 +280,31 @@ def resumeFromCheckpoint(checkpoint_path: str,
             iters = 50
             tolerance = tree.r / 10
             
+            visitRecord = {}
+            visitStart = time.time()
             if isWaypoint(tree.Joints[index]):
                 tree, loss = optimizeWaypointPlacement(
                     tree, index, maxiter=iters, tol=tolerance,
                     failurePenalty=failurePenalty, childFraction=childFraction,
                     ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations)
+                    verbose=verbose, configurations=configurations, visitRecord=visitRecord)
             else:
                 tree, loss = optimizeJointPlacement(
                     tree, index, maxiter=iters, tol=tolerance,
                     failurePenalty=failurePenalty, childFraction=childFraction,
                     ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations)
+                    verbose=verbose, configurations=configurations, visitRecord=visitRecord)
+            visitTime = time.time() - visitStart
 
             log(tree, index)
             losses.append(loss)
             completed_indices.add(index)
             iteration_count += 1
+            if directory is not None:
+                visitRecord.update(visit=iteration_count, repeat=rep, index=index, visit_s=visitTime,
+                                   elapsed_s=times[-1], total_length=lengths[-1],
+                                   sum_squared_length=sumSquaredLinkLength(tree))
+                appendVisitRecord(directory, visitRecord)
             
             # Save checkpoint
             if save_checkpoints and checkpoint_dir:
@@ -415,18 +425,35 @@ def rotationAngle(R):
     # Geodesic angle of a rotation matrix
     return np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
 
-def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeCollisionPenalty, configurations):
-    # optimizeOnce(includeCollisionPenalty) -> (tree, loss, initialLoss), where initialLoss is the
-    # same objective evaluated at the current placement.
+def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeCollisionPenalty, configurations,
+                               visitRecord=None):
+    # optimizeOnce(includeCollisionPenalty) -> (tree, loss, initialLoss, timing), where initialLoss is the
+    # same objective evaluated at the current placement and timing has 'pso_s', 'nm_s' (and 'notApplied'
+    # if the best particle couldn't be applied).
+    # If visitRecord is a dict, it's filled in with what happened on this visit (see VISIT_FIELDS).
+    if visitRecord is None:
+        visitRecord = {}
+    visitRecord.update(kind=label, retried=False, reverted=False, revert_reason="", collision_check_s=0.0)
+
+    def timedCollidingConfigurations(tree):
+        start = time.time()
+        colliding = collidingConfigurations(tree, index, configurations)
+        visitRecord['collision_check_s'] += time.time() - start
+        return colliding
+
     # First try without the collision penalty (much cheaper), and only retry with it if that collides.
-    tree, loss, initialLoss = optimizeOnce(includeCollisionPenalty=False)
-    if includeCollisionPenalty and len(collidingConfigurations(tree, index, configurations)) > 0:
+    tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=False)
+    visitRecord.update(nopenalty_pso_s=timing['pso_s'], nopenalty_nm_s=timing['nm_s'])
+    if includeCollisionPenalty and len(timedCollidingConfigurations(tree)) > 0:
         logCollisionPenalty(f"Collision detected for {label} {index}, retrying with collision penalty")
-        tree, loss, initialLoss = optimizeOnce(includeCollisionPenalty=True)
+        visitRecord['retried'] = True
+        tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=True)
+        visitRecord.update(penalty_pso_s=timing['pso_s'], penalty_nm_s=timing['nm_s'])
+    visitRecord['initial_loss'] = initialLoss
 
     # The current placement is always a candidate, so a visit should never make things worse.
     # If it does (or still collides), keep the current placement and move on in the traversal.
-    colliding = collidingConfigurations(tree, index, configurations) if includeCollisionPenalty else []
+    colliding = timedCollidingConfigurations(tree) if includeCollisionPenalty else []
     increased = loss > initialLoss + 1e-9 * max(1, abs(initialLoss))
     if len(colliding) > 0 or increased:
         if len(colliding) > 0 and not increased:
@@ -436,20 +463,66 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
         else:
             reason = "objective increased"
         logCollisionPenalty(f"WARNING: reverting {label} {index} ({reason}). Loss {initialLoss} -> {loss}; keeping previous placement.")
+        visitRecord.update(reverted=True, revert_reason=reason, final_loss=initialLoss)
         return subject.copyAbbreviatedSelf(), initialLoss
+    if timing.get('notApplied'):
+        visitRecord.update(reverted=True, revert_reason="best particle could not be applied")
+    visitRecord['final_loss'] = loss
     return tree, loss
+
+# Columns of visits.csv, one row per visit
+VISIT_FIELDS = ['visit', 'repeat', 'index', 'kind', 'initial_loss', 'final_loss',
+                'retried', 'reverted', 'revert_reason',
+                'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s', 'collision_check_s',
+                'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length']
+
+def appendVisitRecord(directory, visitRecord):
+    path = os.path.join(directory, 'visits.csv')
+    isNew = not os.path.exists(path)
+    with open(path, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=VISIT_FIELDS, restval='', extrasaction='ignore')
+        if isNew:
+            writer.writeheader()
+        writer.writerow(visitRecord)
+
+def sumSquaredLinkLength(tree):
+    # Tree-wide version of the visits' objective (power 2, no collision penalty), for comparing with total length
+    return sum(link.path.length ** 2 for link in tree.Links)
+
+def writeRunInfo(directory, settings):
+    # Records which code and settings produced a run, so results can be traced back to them later
+    import subprocess, platform
+    repo = os.path.dirname(os.path.abspath(__file__))
+    def git(*args):
+        try:
+            return subprocess.run(['git', *args], cwd=repo, capture_output=True, text=True, check=True).stdout.rstrip()
+        except Exception as e:
+            return f"unavailable ({e})"
+    info = {
+        'start_time': datetime.now().isoformat(),
+        'git_commit': git('rev-parse', 'HEAD'),
+        'git_branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
+        'uncommitted_changes_to_tracked_files': git('status', '--porcelain', '--untracked-files=no').splitlines(),
+        'python_version': platform.python_version(),
+        'numpy_version': np.__version__,
+        'pyswarms_version': ps.__version__,
+        'settings': settings,
+    }
+    with open(os.path.join(directory, 'run_info.json'), 'w') as f:
+        json.dump(info, f, indent=2, default=str)
 
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                            childFraction = 1, ignoreLater = False, parallelize = False,
                            verbose=True, power=2, includeCollisionPenalty=True,
-                           configurations=None):
+                           configurations=None, visitRecord=None):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     warnIfInitialCollisions(subject, configurations, "optimizeJointPlacement")
 
     optimizeOnce = partial(optimizeJointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
                            childFraction, ignoreLater, parallelize, verbose, power, configurations)
-    return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations)
+    return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations,
+                                      visitRecord)
 
 def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
                                parallelize, verbose, power, configurations, includeCollisionPenalty):
@@ -574,15 +647,17 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
 
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},
                                         bounds=(min_bound, max_bound),init_pos=init_pos,ftol=tol)
+    psoStart = time.time()
     minSwarmLoss, minSwarmResult = optimizer.optimize(joint_batch_objective_function, iters=int((maxiter + 1)/2),verbose=False,
                                                         n_processes=n_particles if parallelize else None)
-
+    nmStart = time.time()
     nelderMead = minimize(objective, minSwarmResult, method="Nelder-Mead", bounds=bounds, tol=tol, options={
         'maxiter':int(maxiter/2),
         'fatol':tol,
     })
     result = nelderMead.x
     loss = nelderMead.fun
+    timing = {'pso_s': nmStart - psoStart, 'nm_s': time.time() - nmStart}
 
     if verbose:
         msg = f"Optimized joint {index} in {time.time() - start}s -- Old loss: {initialLoss}, Improved Loss: {loss}"
@@ -598,7 +673,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]),
                                    propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
             raise Exception()
-        return tree, loss, initialLoss
+        return tree, loss, initialLoss, timing
     else:
         try:
             if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]),
@@ -610,7 +685,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                        propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
                 raise Exception()
 
-            return tree, loss, initialLoss
+            return tree, loss, initialLoss, timing
         except:
             tree2 = subject.copyAbbreviatedSelf()
             tree2.Joints[index].reverseZhat()
@@ -619,19 +694,20 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                         safe=True, relative=True, propogate=False,
                                         recomputeLinkPath=True, recomputeBoundingBall=False):
                 raise Exception()
-            return tree2, loss, initialLoss
+            return tree2, loss, initialLoss, timing
 
 def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None,
-                              includeCollisionPenalty=True):
+                              includeCollisionPenalty=True, visitRecord=None):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     warnIfInitialCollisions(subject, configurations, "optimizeWaypointPlacement")
 
     optimizeOnce = partial(optimizeWaypointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
                            childFraction, ignoreLater, parallelize, verbose, configurations)
-    return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations)
+    return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations,
+                                      visitRecord)
 
 def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
                                   parallelize, verbose, configurations, includeCollisionPenalty):
@@ -701,13 +777,16 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
     for i in range(3, 6):
         init_pos[2:, i] = wrapToRange(init_pos[2:, i], bounds[i][0], bounds[i][1])
     optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':0.7, 'c2':0.5, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
+    psoStart = time.time()
     minSwarmLoss, minSwarmResult = optimizer.optimize(waypoint_batch_objective_function, iters=maxiter,verbose=False, n_processes=n_particles if parallelize else None)
+
+    timing = {'pso_s': time.time() - psoStart, 'nm_s': 0.0}
 
     tree = subject.copyAbbreviatedSelf()
     if not tree.transformJoint(index, paramsToTransform(minSwarmResult),
                                propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
         logCollisionPenalty(f"WARNING: best particle for waypoint {index} could not be applied; keeping previous placement.")
-        return subject.copyAbbreviatedSelf(), initialLoss, initialLoss
+        return subject.copyAbbreviatedSelf(), initialLoss, initialLoss, dict(timing, notApplied=True)
 
     if verbose:
         msg = f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}"
@@ -715,7 +794,7 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
             logCollisionPenalty(msg)
         else:
             print(msg)
-    return tree, minSwarmLoss, initialLoss
+    return tree, minSwarmLoss, initialLoss, timing
 
 def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
@@ -821,6 +900,9 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
 
     tree = subject.copyAbbreviatedSelf()
     log(tree, -1)
+    if directory != None:
+        appendVisitRecord(directory, dict(visit=0, index=-1, kind='start', elapsed_s=times[-1],
+                                          total_length=lengths[-1], sum_squared_length=sumSquaredLinkLength(tree)))
 
     # create the traversal calls
     treeTraversals = {
@@ -840,21 +922,29 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             iters = 50
             tolerance = subject.r/10
 
+            visitRecord = {}
+            visitStart = time.time()
             if isWaypoint(subject.Joints[index]):
                 tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
                                                     failurePenalty=failurePenalty, childFraction=childFraction, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations)
+                                                    configurations=configurations, visitRecord=visitRecord)
             else:
                 tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
                                                     failurePenalty=failurePenalty, childFraction=childFraction, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations)
+                                                    configurations=configurations, visitRecord=visitRecord)
+            visitTime = time.time() - visitStart
 
             log(tree, index)
             losses.append(loss)
             completed_indices.add(index)
             iteration_count += 1
+            if directory != None:
+                visitRecord.update(visit=iteration_count, repeat=repeat_idx, index=index, visit_s=visitTime,
+                                   elapsed_s=times[-1], total_length=lengths[-1],
+                                   sum_squared_length=sumSquaredLinkLength(tree))
+                appendVisitRecord(directory, visitRecord)
             
             # Save checkpoint after each iteration
             if save_checkpoints and checkpoint_dir is not None:

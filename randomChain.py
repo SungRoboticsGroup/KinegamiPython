@@ -11,6 +11,7 @@ from functools import partial
 import threading
 import os 
 import shutil
+import traceback
 from datetime import datetime
 
 jointCount = 8
@@ -96,6 +97,10 @@ def test():
     ]
     optimizations = [v[0] for v in versions]
     labels = [v[1] for v in versions]
+    writeRunInfo(results_dir, dict(script='randomChain.py', jointCount=jointCount, chainCount=chainCount,
+                                   seed=seed, cubeSize=cubeSize, sparse=sparse, restartFrom=restartFrom,
+                                   multipleIterations=multipleIterations,
+                                   traversals={v[1]: v[0].keywords for v in versions}))
 
     lowerBounds = []
     results = []
@@ -137,13 +142,19 @@ def test():
             os.makedirs(direc, exist_ok=True)
             # Reset random state before each optimization to ensure deterministic behavior
             np.random.set_state(saved_state)
-            optimized, times, losses = f(construct, 
-                                        configurations=collision_free_configs,
-                                        showSteps=False, 
-                                        parallelize=True, 
-                                        evaluate=True, 
-                                        verbose=False, 
-                                        directory=direc)
+            try:
+                optimized, times, losses = f(construct,
+                                            configurations=collision_free_configs,
+                                            showSteps=False,
+                                            parallelize=True,
+                                            evaluate=True,
+                                            verbose=False,
+                                            directory=direc)
+            except Exception:
+                # Record the failure and move on, so one traversal can't throw away the others' results
+                logCollisionPenalty(f"ERROR: {labels[no]} failed on tree {i}:\n{traceback.format_exc()}")
+                results[i].append(None)
+                continue
             if multipleIterations:
                 count = 2
                 while (losses[0] - losses[-1] > 100):
@@ -155,11 +166,11 @@ def test():
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
             #optimized.show(block=False)
-        
-        # Save checkpoint to results directory
-        checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
-        with open(checkpoint_file, "w") as file:
-            json.dump(results, file)
+
+            # Save checkpoint to results directory after every traversal
+            checkpoint_file = os.path.join(results_dir, f"random_results_chkpt{i}.json")
+            with open(checkpoint_file, "w") as file:
+                json.dump(results, file)
 
     # Save final results to results directory
     final_results_file = os.path.join(results_dir, "random_results.json")
@@ -171,7 +182,11 @@ def test():
         plt.figure(figsize=(8, 5)) 
         
         idx = 0
-        for x, y in result:
+        for traversalResult in result:
+            if traversalResult is None: # this traversal failed
+                idx += 1
+                continue
+            x, y = traversalResult
             plt.plot(x, y, marker='o', linestyle='-', label=labels[idx])
             idx += 1
 

@@ -114,6 +114,10 @@ def testRandomTrees(show: bool = False):
             "BFS - Inward Shortest",
             "Randomized"
     ]
+    writeRunInfo(results_dir, dict(script='randomTree.py', jointCount=jointCount, treeCount=treeCount,
+                                   probabilityOfBranching=probabilityOfBranching, seed=seed, cubeSize=cubeSize,
+                                   sparse=sparse, restartFrom=restartFrom, multipleIterations=multipleIterations,
+                                   traversals={label: f.keywords for label, f in zip(labels, optimizations)}))
 
     lowerBounds = []
     results = []
