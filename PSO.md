@@ -61,8 +61,11 @@ The no-penalty attempt runs first because the penalty is expensive: it runs coll
 ### One waypoint visit (`optimizeWaypointPlacementOnce`)
 
 - **Search space:** 6-D, `[tx, ty, tz, ZYZ Euler angles]`. The move is expressed in the **waypoint's own frame** (`relative=True`), so rotations turn the waypoint in place.
-- **Objective:** `linkLoss` plus 10 × the angle (in radians) between the waypoint's orientation and the orientation that would line it up with its parent's distal frame.
-- **Initial swarm (24 particles):** particle 0 lines the waypoint up with its parent, particle 1 is the current placement, and the rest are random noise.
+- **Objective:** `linkLoss` plus `alignmentWeight` (default 10) × the angle (in radians) between the waypoint's orientation and the orientation that would line it up with its parent's distal frame.
+- **Initial swarm (24 particles):** particle 0 lines the waypoint up with its parent, particle 1 is the current placement, and the rest are random.
+  - With `straightThroughGuess=True`, two more particles point the waypoint along the line from the end of the previous part to the start of the next one: one turned in place, one also moved onto that line.
+  - With `waypointSampling="box"` (default), each random particle is the line-up guess plus uniform noise: ±2·`localLinkScale` per translation axis and ±2π per ZYZ angle.
+  - With `waypointSampling="multiscale"`, the random particles are split into thirds that rotate in place, move up to ±0.5·`localLinkScale` per axis, or move anywhere within the bounds. All of them get rotations sampled uniformly over orientations. Box sampling almost never pairs a large rotation with a small move, which is what fixing a bunched waypoint usually needs.
   - Translation bounds: ±2·`localLinkScale` per axis, widened to include the line-up guess.
   - Angle bounds: ±2π.
 - **Optimizer:** `GlobalBestPSO` (c1 = 0.7, c2 = 0.5, w = 0.5) for 50 iterations. Unlike joint visits, there's no Nelder-Mead step afterward.
@@ -81,7 +84,7 @@ loss = (incoming link length)^power
 
 Two consequences:
 - The penalty gives PSO no gradient to follow out of a collision. It only makes colliding placements look bad.
-- The visits minimize **squared** link lengths, while the experiments report **total length**. A visit can lower its own objective and still slightly raise total length.
+- With the default `power = 2`, the visits minimize **squared** link lengths, while the experiments report **total length**. A visit can lower its own objective and still slightly raise total length. `power = 1` makes the visits minimize plain length instead.
 
 ## Options
 
@@ -94,8 +97,12 @@ Two consequences:
 | `orderBy` | `"default"`, `"longest"`, `"shortest"` | dfs/bfs only. The order in which to visit siblings at each branch. **Has no effect on chains** |
 | `repeatTraversal` | int, or `"n"` | Number of passes. `"n"` means one pass per entry in `tree.Joints` (joints and waypoints together) |
 | `configurations` | list of state lists | Each state list has an entry for every joint and waypoint (0 for waypoints). The result must be collision-free in all of them. `None` means a single all-zeros configuration |
-| `childFraction` | float ≥ 0 | Weight on outgoing links. **Currently only used by the randomized traversal**; see [Known issues](#known-issues) |
-| `power` | float ≥ 0 | **Only used by the randomized traversal's weights.** Visits always use power 2 |
+| `childFraction` | float ≥ 0 | Weight on outgoing links in each visit's objective, and in the randomized traversal's weights (default 1) |
+| `power` | float ≥ 0 | Power on link lengths in each visit's objective: 1 = plain length, 2 = squared lengths (default 2) |
+| `traversalPower` | float ≥ 0 | Power on link lengths in the randomized traversal's weights only (default 2) |
+| `waypointSampling` | `"box"`, `"multiscale"` | How waypoint visits sample random initial particles (default `"box"`); see [One waypoint visit](#one-waypoint-visit-optimizewaypointplacementonce) |
+| `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `False`) |
+| `alignmentWeight` | float ≥ 0 | Weight of the waypoint objective's alignment penalty, per radian (default 10; 0 turns it off) |
 | `guarantee` | bool | **Always pass `True`.** `False` makes visits optimize a cut-down subtree; that path is untested and slated for removal |
 | `parallelize` | bool | Evaluates particles across processes. Particle sampling is seeded by `np.random`, but results aren't guaranteed to be identical from run to run |
 | `directory` | path or `None` | Where per-visit `.tree` files and `checkpoints/` go |
@@ -112,7 +119,7 @@ Two consequences:
 
 The traversal order is computed from the tree passed to `optimizeTree`, i.e. the starting tree, and isn't updated as the tree changes. ([Known issues](#known-issues) covers what happens on resume.)
 
-The experiment scripts use 9 variants: {DFS, BFS} × {outward, inward} × {longest, shortest}, plus randomized with power 3.
+The experiment scripts use 9 variants: {DFS, BFS} × {outward, inward} × {longest, shortest}, plus randomized with `traversalPower=3`.
 
 ### PSO and sampling parameters
 
@@ -255,8 +262,6 @@ Checks to run after changing optimizer code:
 
 ### Known issues
 
-- **`childFraction` has no effect on joint or waypoint placement.** Neither optimizer passes it to `linkLoss`, which defaults to 1. It needs wiring up before it can be an experiment parameter.
-- **Visits always use power 2.** `optimizeTree`'s `power` only changes the randomized traversal's weights.
 - **The root joint has a broken initial guess.** DFS and BFS visit the root (index 0), but the root has no parent: `Parents[0] = -1`, so the joint optimizer uses `Joints[-1]` (the last joint) to compute its guess. The current-placement particle keeps this from making things worse, but the guess is meaningless. The randomized traversal never visits the root.
 - **Resuming can change the traversal order.** `optimizeTree` computes the order from the starting tree. `resumeFromCheckpoint` recomputes it from the checkpoint's tree, so `longest`/`shortest` orderings can differ after a resume.
 - **The collision penalty is all-or-nothing** (see [Objective](#objective)), so PSO has no gradient to follow out of a collision.
@@ -267,9 +272,12 @@ Checks to run after changing optimizer code:
 
 ### Before systematic experiments
 
-1. Rerun the 8-joint seed-44 chain on all traversals, and confirm none crash and how often visits revert.
-2. Wire up `childFraction`, and decide whether to also expose `power` for visits.
-3. Decide which metric to report, total length or the visits' sum of squares.
+1. **Next:** compare `power = 1` (plain length, matching the reported total length) with `power = 2` (squared lengths, which favor evenly spread links) on the 8-joint seed-44 chain.
+   - `childFraction` and `power` now reach each visit's objective, and the randomized traversal's weights have their own `traversalPower`. Defaults (`childFraction = 1`, `power = 2`, `traversalPower = 2`) keep the earlier behavior.
+   - Checkpoints saved before this change stored the randomized weight power as `power`, and their visits used power 2. `resumeFromCheckpoint` reads them that way.
+2. Rerun the 8-joint seed-44 chain on all traversals, and confirm none crash and how often visits revert.
+   - In progress. A first single-traversal run (BFS Outward Shortest, 2026.11.20_16.15.57) had no penalized retries or reverts through 337 visits. It was ahead of April's DFS Outward run at every pass (254.4 vs. 326.3 after pass 14) and below April's final on sum of squares (3,944 vs. 4,497), but not yet on total length.
+3. Decide which metric to report, total length or the visits' sum of squares. The power experiment in step 1 feeds into this. Suggestion: report total length as the headline result, and keep sum of squares as a check on the optimizer.
 4. Port the clustering fix from the GUI branch, then smoke-test `randomTree.py`.
 5. Profile:
    - the split between PSO and Nelder-Mead time;
@@ -277,7 +285,7 @@ Checks to run after changing optimizer code:
    - how collision checking scales with the number of configurations.
 6. Fix the experiment list. The parameter space from the 5/7 meeting notes:
    - **Inputs:** number of joints, number of configurations.
-   - **Our parameters:** traversal, number of passes (or visits), `childFraction`.
+   - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits.
    - **PSO parameters:** global vs. local best; number of particles; sampling bounds; initial particles (uniform random vs. evenly spaced, from [TODO_tests.md](TODO_tests.md)); k; w.
 
    The planned plots compare time per joint against the objective divided by the best objective found by a reference method.

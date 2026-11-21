@@ -100,7 +100,7 @@ def testRandomTrees(show: bool = False):
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest"),
                     partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest"),
-                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3)
+                    partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", traversalPower=3)
     ]
 
     labels = [

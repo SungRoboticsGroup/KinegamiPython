@@ -226,8 +226,18 @@ def resumeFromCheckpoint(checkpoint_path: str,
     guarantee = metadata.get('guarantee', False)
     parallelize = metadata.get('parallelize', False)
     childFraction = metadata.get('childFraction', 1)
-    power = metadata.get('power', 2)
+    if 'traversalPower' in metadata:
+        power = metadata.get('power', 2)
+        traversalPower = metadata['traversalPower']
+    else:
+        # Older checkpoints only stored the randomized traversal's weight power as 'power';
+        # their visits always used power 2
+        power = 2
+        traversalPower = metadata.get('power', 2)
     evaluate = metadata.get('evaluate', False)
+    waypointSampling = metadata.get('waypointSampling', "box")
+    straightThroughGuess = metadata.get('straightThroughGuess', False)
+    alignmentWeight = metadata.get('alignmentWeight', 10)
     save_checkpoints = metadata.get('save_checkpoints', True)
     
     if directory is None:
@@ -246,7 +256,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
         "dfs": partial(dfs, direction=direction, orderBy=orderBy),
         "bfs": partial(bfs, direction=direction, orderBy=orderBy),
         "randomized": partial(randomized, 
-                            power=power, 
+                            power=traversalPower, 
                             count=len(tree.Joints), 
                             childFraction=childFraction,
                             isWeighted=True)
@@ -285,13 +295,15 @@ def resumeFromCheckpoint(checkpoint_path: str,
             if isWaypoint(tree.Joints[index]):
                 tree, loss = optimizeWaypointPlacement(
                     tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction,
+                    failurePenalty=failurePenalty, childFraction=childFraction, power=power,
                     ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations, visitRecord=visitRecord)
+                    verbose=verbose, configurations=configurations, visitRecord=visitRecord,
+                    waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
+                    alignmentWeight=alignmentWeight)
             else:
                 tree, loss = optimizeJointPlacement(
                     tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction,
+                    failurePenalty=failurePenalty, childFraction=childFraction, power=power,
                     ignoreLater=(not guarantee), parallelize=parallelize,
                     verbose=verbose, configurations=configurations, visitRecord=visitRecord)
             visitTime = time.time() - visitStart
@@ -333,6 +345,10 @@ def resumeFromCheckpoint(checkpoint_path: str,
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
+                        'traversalPower': traversalPower,
+                        'waypointSampling': waypointSampling,
+                        'straightThroughGuess': straightThroughGuess,
+                        'alignmentWeight': alignmentWeight,
                         'evaluate': evaluate,
                         'save_checkpoints': save_checkpoints,
                         'version': '1.0',
@@ -486,7 +502,7 @@ def appendVisitRecord(directory, visitRecord):
         writer.writerow(visitRecord)
 
 def sumSquaredLinkLength(tree):
-    # Tree-wide version of the visits' objective (power 2, no collision penalty), for comparing with total length
+    # Tree-wide version of the visits' objective at the default power 2 (no collision penalty), for comparing with total length
     return sum(link.path.length ** 2 for link in tree.Links)
 
 def writeRunInfo(directory, settings):
@@ -544,7 +560,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         if tree.transformJoint(index, transform, propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
             linkLossSameZhat = linkLoss(tree,
                                         index,
-                                        power=power,
+                                        power=power, childFraction=childFraction,
                                         collisionMatrices=collisionMatrices,
                                         movedJointIndex=movedJointIndex,
                                         includeCollisionPenalty=includeCollisionPenalty,
@@ -563,7 +579,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                     propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
                 linkLossReversedZhat = linkLoss(tree2,
                                                 index,
-                                                power=power,
+                                                power=power, childFraction=childFraction,
                                                 collisionMatrices=collisionMatrices,
                                                 movedJointIndex=movedJointIndex,
                                                 includeCollisionPenalty=includeCollisionPenalty,
@@ -574,7 +590,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         else:
             linkLossReversedZhat = linkLoss(tree,
                                             index,
-                                            power=power,
+                                            power=power, childFraction=childFraction,
                                             collisionMatrices=collisionMatrices,
                                             movedJointIndex=movedJointIndex,
                                             includeCollisionPenalty=includeCollisionPenalty,
@@ -696,21 +712,71 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                 raise Exception()
             return tree2, loss, initialLoss, timing
 
+WAYPOINT_SAMPLINGS = ("box", "multiscale")
+
+def randomRotation():
+    # Uniformly distributed rotation matrix (from a uniformly distributed unit quaternion), using np.random
+    w, x, y, z = (lambda q: q / np.linalg.norm(q))(np.random.normal(size=4))
+    return np.array([[1 - 2*(y*y + z*z), 2*(x*y - z*w),     2*(x*z + y*w)],
+                     [2*(x*y + z*w),     1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+                     [2*(x*z - y*w),     2*(y*z + x*w),     1 - 2*(x*x + y*y)]])
+
+def rotationBetween(a, b):
+    # Smallest rotation matrix taking unit vector a to unit vector b
+    v = np.cross(a, b)
+    c = np.dot(a, b)
+    if np.linalg.norm(v) < 1e-12:
+        if c > 0:
+            return np.eye(3)
+        # opposite directions: rotate pi about any axis perpendicular to a
+        axis = np.cross(a, [1, 0, 0] if abs(a[0]) < 0.9 else [0, 1, 0])
+        axis /= np.linalg.norm(axis)
+        return 2 * np.outer(axis, axis) - np.eye(3)
+    vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + vx + vx @ vx / (1 + c)
+
+def straightThroughGuesses(subject, index):
+    # Waypoint moves (in its own frame, as [t, ZYZ angles]) that point it along the line from the end of
+    # the previous part to the start of the next one, the direction that would straighten both adjacent
+    # links: one turning it in place, and one also moving it onto that line.
+    waypoint = subject.Joints[index]
+    start = subject.Joints[subject.Parents[index]].DistalDubinsFrame().t
+    if len(subject.Children[index]) > 0:
+        end = subject.Joints[subject.Children[index][0]].ProximalDubinsFrame().t
+    else:
+        end = waypoint.Pose.t
+    direction = end - start
+    if np.linalg.norm(direction) < 1e-9:
+        return []
+    direction = direction / np.linalg.norm(direction)
+    orientation = rotationBetween(waypoint.Pose.R[:, 2], direction) @ waypoint.Pose.R
+    onLine = start + np.dot(waypoint.Pose.t - start, direction) * direction
+    guesses = []
+    for position in (waypoint.Pose.t, onLine):
+        move = waypoint.Pose.inv() * SE3.Rt(orientation, position, check=False)
+        guesses.append(list(move.t) + list(move.eul()))
+    return guesses
+
 def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None,
-                              includeCollisionPenalty=True, visitRecord=None):
+                              includeCollisionPenalty=True, visitRecord=None, power=2,
+                              waypointSampling="box", straightThroughGuess=False, alignmentWeight=10):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
+    if waypointSampling not in WAYPOINT_SAMPLINGS:
+        raise ValueError(f"waypointSampling must be one of {WAYPOINT_SAMPLINGS}")
     warnIfInitialCollisions(subject, configurations, "optimizeWaypointPlacement")
 
     optimizeOnce = partial(optimizeWaypointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
-                           childFraction, ignoreLater, parallelize, verbose, configurations)
+                           childFraction, ignoreLater, parallelize, verbose, power, configurations,
+                           waypointSampling, straightThroughGuess, alignmentWeight)
     return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations,
                                       visitRecord)
 
 def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
-                                  parallelize, verbose, configurations, includeCollisionPenalty):
+                                  parallelize, verbose, power, configurations,
+                                  waypointSampling, straightThroughGuess, alignmentWeight, includeCollisionPenalty):
     start = time.time()
 
     parent = subject.Joints[subject.Parents[index]]
@@ -741,9 +807,10 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
 
         # regularize toward aligning with the parent's distal frame
         misalignment = rotationAngle(tree.Joints[index].Pose.R.T @ alignedOrientation)
-        return linkLoss(tree, index, includeCollisionPenalty=includeCollisionPenalty, configurations=configurations,
+        return linkLoss(tree, index, power=power, childFraction=childFraction,
+                        includeCollisionPenalty=includeCollisionPenalty, configurations=configurations,
                         collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
-                        collisionErrorWeight=failurePenalty) + misalignment * 10
+                        collisionErrorWeight=failurePenalty) + misalignment * alignmentWeight
 
     initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
     if not initialTree.transformJoint(index, paramsToTransform(initialGuess),
@@ -762,16 +829,34 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
 
     n_particles = 24
 
-    # particle 0 is the initial guess and particle 1 is the current placement
+    # particle 0 is the initial guess and particle 1 is the current placement,
+    # followed by the straight-through guesses (if enabled), then random particles
     init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
     init_pos[1] = np.array([0]*6, dtype='float64')
-    #add random noise
-    noise = np.zeros_like(init_pos[2:])
-    for i in range(0,3):
-        noise[:, i] = np.random.uniform(-dist*2,dist*2, n_particles - 2)
-    for i in range(3, 6):
-        noise[:, i] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
-    init_pos[2:] += noise
+    guesses = straightThroughGuesses(subject, index) if straightThroughGuess else []
+    for k, guess in enumerate(guesses):
+        init_pos[2 + k] = guess
+    first = 2 + len(guesses)
+    nRandom = n_particles - first
+    if waypointSampling == "box":
+        #add random noise
+        noise = np.zeros_like(init_pos[first:])
+        for i in range(0,3):
+            noise[:, i] = np.random.uniform(-dist*2,dist*2, nRandom)
+        for i in range(3, 6):
+            noise[:, i] = np.random.uniform(-np.pi*2,np.pi*2, nRandom)
+        init_pos[first:] += noise
+    else: # "multiscale"
+        # Thirds: rotate in place, small moves, and moves over the full range, all with rotations
+        # sampled uniformly over orientations. Fixing a bunched waypoint usually needs a large
+        # rotation with little or no translation, which box sampling almost never produces.
+        scales = np.array_split(np.arange(nRandom), 3)
+        translations = np.zeros((nRandom, 3))
+        translations[scales[1]] = np.random.uniform(-dist/2, dist/2, (len(scales[1]), 3))
+        translations[scales[2]] = np.random.uniform([b[0] for b in bounds[:3]], [b[1] for b in bounds[:3]],
+                                                    (len(scales[2]), 3))
+        init_pos[first:, 0:3] = translations
+        init_pos[first:, 3:6] = [SE3.Rt(randomRotation(), np.zeros(3)).eul() for _ in range(nRandom)]
     for i in range(0,3):
         init_pos[2:, i] = np.clip(init_pos[2:, i], bounds[i][0], bounds[i][1])
     for i in range(3, 6):
@@ -799,14 +884,15 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
 def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
-                 repeatTraversal=1, save_checkpoints=True):
+                 repeatTraversal=1, save_checkpoints=True, traversalPower=2,
+                 waypointSampling="box", straightThroughGuess=False, alignmentWeight=10):
     """
     Optimize the placement of joints in a kinematic tree.
     
     Args:
         subject: KinematicTree to optimize
         showSteps: Show visualization after optimization
-        childFraction: Weight for child link costs
+        childFraction: Weight on outgoing links in each visit's objective (and the randomized traversal's weights)
         guarantee: If True, don't ignore later joints
         parallelize: Enable parallel computation
         evaluate: If True, return (tree, times, lengths) tuple
@@ -816,10 +902,18 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         traversal: Traversal algorithm ('dfs', 'bfs', 'randomized')
         direction: Traversal direction ('outward', 'inward')
         orderBy: Traversal ordering ('default', 'longest', 'shortest')
-        power: Power for length cost calculation
+        power: Power on link lengths in each visit's objective (1 = plain length, 2 = squared lengths)
         configurations: List of joint configurations to test
         repeatTraversal: Number of times to repeat the traversal
         save_checkpoints: If True, save dill checkpoints after each iteration
+        traversalPower: Power on link lengths in the randomized traversal's weights
+        waypointSampling: How waypoint visits sample their random initial particles: "box" (uniform over the
+            bounds, the original behavior) or "multiscale" (thirds that rotate in place, move a little, or move
+            over the full range, with uniformly distributed rotations)
+        straightThroughGuess: If True, waypoint visits also start particles that point the waypoint along the
+            line from the previous part to the next one, in place and moved onto that line
+        alignmentWeight: Weight (per radian) of the waypoint objective's penalty for misalignment with the
+            parent's distal frame; 0 turns it off
     
     Returns:
         Optimized KinematicTree, or (tree, times, lengths) if evaluate=True
@@ -909,7 +1003,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         "dfs": partial(dfs, direction=direction, orderBy=orderBy),
         "bfs": partial(bfs, direction=direction, orderBy=orderBy),
         "randomized": partial(randomized, 
-                            power=power, 
+                            power=traversalPower, 
                             count=len(subject.Joints), 
                             childFraction=childFraction,
                             isWeighted=True)
@@ -926,12 +1020,14 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             visitStart = time.time()
             if isWaypoint(subject.Joints[index]):
                 tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, 
+                                                    failurePenalty=failurePenalty, childFraction=childFraction, power=power, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations, visitRecord=visitRecord)
+                                                    configurations=configurations, visitRecord=visitRecord,
+                                                    waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
+                                                    alignmentWeight=alignmentWeight)
             else:
                 tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, 
+                                                    failurePenalty=failurePenalty, childFraction=childFraction, power=power, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
                                                     configurations=configurations, visitRecord=visitRecord)
             visitTime = time.time() - visitStart
@@ -977,6 +1073,10 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
+                        'traversalPower': traversalPower,
+                        'waypointSampling': waypointSampling,
+                        'straightThroughGuess': straightThroughGuess,
+                        'alignmentWeight': alignmentWeight,
                         'evaluate': evaluate,
                         'save_checkpoints': save_checkpoints,
                         'version': '1.0',

@@ -93,7 +93,7 @@ def test():
         (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "BFS Outward Shortest n repetitions"),
         # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
         # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
+        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", traversalPower=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
     ]
     optimizations = [v[0] for v in versions]
     labels = [v[1] for v in versions]
