@@ -2,7 +2,7 @@
 
 This document covers the code that shortens a kinematic tree by moving its joints and waypoints, using particle swarm optimization (PSO). It describes how the code is structured, which traversals and parameters are available, how to run and debug it, and where development stands.
 
-*Status as of 2026-11-20, branch `pso-fixes`.*
+*Status as of 2026-11-22, branch `pso-fixes`.*
 
 ## What it does
 
@@ -25,6 +25,9 @@ The result must be collision-free in every configuration in a given list of join
 | [randomChain.py](randomChain.py) | Experiment script for random chains built with the generalized gimbal construction |
 | [randomTree.py](randomTree.py) | Experiment script for random branching trees |
 | [manageCheckpoints.py](manageCheckpoints.py) | Examples of loading, inspecting and resuming checkpoints |
+| [parameterSweep.py](parameterSweep.py) | Overnight sweep over the visit settings on small random chains; see [Parameter sweeps](#parameter-sweeps) |
+| [bunchingExamples.py](bunchingExamples.py), [debugExamples/bunching/](debugExamples/bunching/) | Saved bunched waypoints with known better placements, and a harness that runs single waypoint visits on them |
+| [viewConfigurations.py](viewConfigurations.py) | Interactive viewer that switches between a tree's configurations and highlights near-collisions |
 | [view.py](view.py), [viewBrokenExample.py](viewBrokenExample.py) | Scripts for viewing saved results and stepping through a failing example |
 
 ### Call structure
@@ -161,6 +164,25 @@ Each script:
 
 **How long it takes:** an 8-joint gimbal chain has 23 entries in `tree.Joints` (joints plus waypoints). At `"n"` passes that's 529 visits, about 65–70 minutes per traversal. A visit that needs the penalized retry takes roughly 20 times longer than one that doesn't.
 
+### Parameter sweeps
+
+[parameterSweep.py](parameterSweep.py) runs every combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight` and visit `power` on small random gimbal chains (default: 4 joints, seeds 0–7, 5 configurations each), with DFS outward for one pass per entry in `tree.Joints`. Runs go one seed at a time, so stopping early still leaves complete comparisons for the finished seeds.
+
+```
+python parameterSweep.py [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...]
+python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" [--settings PATTERN,...]
+python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"
+```
+
+`--settings` takes settings labels or wildcard patterns, such as `'*_power2'` or `'multiscale_straight_*'`. With `--resume`, it narrows which of the sweep's unfinished runs to do this time. Each resume writes `resume_<timestamp>.json` with the git commit and the settings it ran. A run that was interrupted partway is cleared and rerun from the start.
+
+It writes `run_info.json`, `summary.csv` (one row per run) and `errors.log` to the sweep folder, and each run's `visits.csv`, final tree and checkpoints to `seed<k>/<settings label>/`. A 4-joint run takes about 4–6 minutes, so the full 16-setting, 8-seed grid takes about 11 hours.
+
+**Overnight runs on a Windows laptop:**
+- **Pause Windows Update** (Settings → Windows Update → Pause updates). An update restart at 06:29 killed the first sweep; sleep settings don't prevent update restarts.
+- **Set the screen timeout to Never while plugged in.** On laptops with Modern Standby, the screen timing out puts the system in a low-power state even when sleep is set to Never. The first sweep kept running in it, but runs took about 15–25% longer, which affects the timing columns.
+- **Keep the lid open.**
+
 ### Output layout
 
 ```
@@ -256,36 +278,88 @@ Checks to run after changing optimizer code:
 - **Nov 2026 (`pso-fixes`):**
   - **False collisions fixed.** The final collision checks used the tree's current state, where the gimbal construction leaves prismatic joints fully extended, instead of the configuration list. That flagged results that were collision-free in every configuration, and it caused the April crashes.
   - **Reverts.** A visit that still collides, or that raises its own objective, is now reverted with a logged warning instead of raising.
-  - **Joint sampling.** Particles were clipped to ±2× the incoming link length, which is often about 0 right after the gimbal construction. That collapsed the whole swarm onto one point.
+  - **Joint sampling.** Particles were clipped to ±2× the incoming link length, which can be about 0 once optimization has collapsed a link. That collapsed the whole swarm onto one point.
   - **Waypoint moves.** These used to be in the world frame, so rotations swung waypoints around the world origin.
   - **Checkpoints.** Names now sort in visit order.
+  - **Logging.** Per-visit `visits.csv` and per-run `run_info.json`.
+  - **Visit objective.** `power` and `childFraction` now reach each visit's objective; the randomized traversal's weights have their own `traversalPower`.
+  - **Bunching.** Investigated waypoints left at orientations where both adjacent links bend, when turning (and maybe slightly moving) the waypoint would clearly straighten them. Added three waypoint search options (`waypointSampling`, `straightThroughGuess`, `alignmentWeight`), five saved examples with a test harness, and a parameter sweep.
+
+### Current status
+
+**8-joint seed-44 chain, single traversal (2026.11.20_16.15.57, BFS Outward Shortest, default settings):** finished 23 passes at total length 242.8, vs. 243.9 for April's DFS Outward run, which visits the same order on a chain. Sum of squares 3,329 vs. 4,497. No penalized retries or reverts. The final tree is still visibly bunched, for example in a loop near the base, and collisions don't explain it: no two unattached parts come within 4.4 of each other in any configuration.
+
+**Bunching examples** (`python bunchingExamples.py`): five waypoints from that final tree where a heavy search found much better placements. Share of the gap in local squared link length closed, averaged over 3 seeds:
+
+| Settings | Overall | Notes |
+|---|---|---|
+| Default | 5% | |
+| `alignmentWeight=0` alone | 5% | Box sampling never finds the moves it would allow |
+| `waypointSampling="multiscale"` alone | 26% | |
+| `straightThroughGuess=True` alone | 62% | Nearly identical across seeds, since the guesses are deterministic |
+| All three | 65% | |
+
+None of the settings fixes W1, a waypoint sitting on its parent's frame (incoming link length 0); see [Empty links](#empty-links).
+
+**Overnight sweep (2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7):** stopped after 52 of 128 runs, when a Windows Update restart killed it. Seeds 0–2 are complete. Final total length relative to the default settings on the same chain:
+
+| Settings (power 2) | Mean ratio | Range |
+|---|---|---|
+| multiscale + straight-through + alignment 0 | 0.747 | 0.64–0.89 |
+| multiscale + straight-through + alignment 10 | 0.771 | 0.64–0.88 |
+| box + straight-through + alignment 10 | 0.819 | 0.68–0.94 |
+| multiscale + alignment 0 | 0.867 | 0.84–0.89 |
+| box + straight-through + alignment 0 | 0.869 | 0.81–0.93 |
+| multiscale alone | 0.943 | 0.88–0.98 |
+| alignment 0 alone | 0.999 | 0.84–1.13 |
+
+- **Power 1 is worse in every run:** all 26 power-1 runs finished 12–76% longer than the default settings. Visits with power 1 slide waypoints onto their neighbors, leaving zero-length links (seed 0's power-1 link lengths: `[0, 0, 12.2, 0, 0, 16.2, 0, 0, 24.2, 0]`). The waypoints then get stuck, so the waypoint settings barely matter: on seed 0, all 8 power-1 settings gave identical results.
+- **No final tree collides** in any of the 52 runs.
+- **10 visits were reverted.** All have the signature of the [near-contact mismatch](#known-issues) (a collision flagged, loss unchanged); one was traced and confirmed. Reverting kept the trees collision-free.
+
+**Decision (2026-11-22): finish the sweep with the 8 power-2 settings only**, on seeds 3–7 (about 4 hours), and come back to power 1 after the [empty-links](#empty-links) investigation. More power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them. Any fix for empty links would mean rerunning power 1 anyway. To do this: `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2'` (38 runs).
 
 ### Known issues
 
+- **Collision count and penalty disagree about near-contacts.** `collisionsCountAndError` counts any pair closer than `fineDistanceThreshold` (0.001) as a collision, but its smooth penalty is about 0.5 at distance 0 and about 0 at 0.001. So the optimizer can bring two parts within 0.001 of each other at almost no cost, and the post-visit check then counts a collision and reverts the visit (logged as "did not raise the objective"). Traced in one of the sweep's 10 reverts: links 5 and 9 at distance 0.000976, penalty term 1.4 × 10⁻⁶. Two options, not yet decided:
+  - (a) count only real overlaps (distance below 0) as collisions, and treat 0–0.001 as allowed near-contact;
+  - (b) shift the penalty so it's already near its full value at 0.001.
+- **Empty links.** See [Empty links](#empty-links).
 - **The root joint has a broken initial guess.** DFS and BFS visit the root (index 0), but the root has no parent: `Parents[0] = -1`, so the joint optimizer uses `Joints[-1]` (the last joint) to compute its guess. The current-placement particle keeps this from making things worse, but the guess is meaningless. The randomized traversal never visits the root.
 - **Resuming can change the traversal order.** `optimizeTree` computes the order from the starting tree. `resumeFromCheckpoint` recomputes it from the checkpoint's tree, so `longest`/`shortest` orderings can differ after a resume.
 - **The collision penalty is all-or-nothing** (see [Objective](#objective)), so PSO has no gradient to follow out of a collision.
-- **Reverts haven't been seen in a real run yet.** They're implemented and checked by reading the code, but the small test run didn't trigger one.
 - **Runs aren't exactly reproducible.** Earlier 3-joint runs with the same seed ended between 18.1 and 50.6, partly because the code changed between runs. Comparing variants needs several trials per setting.
 - **Tree branches have fixes in the GUI branch.** `chainsGUIdevelopment` has collision fixes that `pso-fixes` doesn't: the sibling-waypoint clustering fix `af6b0359`, which matters for branching trees, and the short-tube end-disc fix `392f2061`. Port them before running trees.
 - **Hard-coded paths.** [manageCheckpoints.py](manageCheckpoints.py) and [view.py](view.py) contain `/home/samhitha/...` paths.
 
+### Empty links
+
+Links of length 0, where a waypoint sits exactly on a neighbor's frame, may fundamentally break both the sampling and the one-joint-at-a-time approach:
+- **The optimization creates them.** The 8-joint seed-44 start tree has none. After 23 passes with the default settings, 2 of its 15 waypoints sit on a neighbor (W1 and W22); April's run had 5 by pass 19, plus several more within 0.001. With power 1, about every other link collapses.
+- **Visits can't move a waypoint out of that position.** Every rotation in place is infeasible: in the bunching survey, 59% of W1's random placements were infeasible. Escaping needs a move away combined with a large turn, which none of the sampling options produce reliably. W1 isn't fixed by any setting.
+- **Power 1 drives waypoints into it,** because sliding a waypoint onto its neighbor costs nothing in plain length. It's the main reason power 1 does worse.
+- **The objective sees no penalty for it.** A zero-length link and its waypoint add nothing to `linkLoss`, but the waypoint then can't bend the path anymore.
+
+Ideas to investigate:
+- **Delete the waypoint** when it gets close enough to a neighbor, simplifying the tree.
+- **Re-center the waypoint** to keep the tree's structure: move it to exactly the middle of the CSC path outward from it, so both of its links have length again. It's unclear what that should mean at a branch, where a waypoint has several outward paths.
+- **Avoid creating them:** sample or guess positions away from the neighbor, or penalize very short links.
+
 ### Before systematic experiments
 
-1. **Next:** compare `power = 1` (plain length, matching the reported total length) with `power = 2` (squared lengths, which favor evenly spread links) on the 8-joint seed-44 chain.
-   - `childFraction` and `power` now reach each visit's objective, and the randomized traversal's weights have their own `traversalPower`. Defaults (`childFraction = 1`, `power = 2`, `traversalPower = 2`) keep the earlier behavior.
-   - Checkpoints saved before this change stored the randomized weight power as `power`, and their visits used power 2. `resumeFromCheckpoint` reads them that way.
-2. Rerun the 8-joint seed-44 chain on all traversals, and confirm none crash and how often visits revert.
-   - In progress. A first single-traversal run (BFS Outward Shortest, 2026.11.20_16.15.57) had no penalized retries or reverts through 337 visits. It was ahead of April's DFS Outward run at every pass (254.4 vs. 326.3 after pass 14) and below April's final on sum of squares (3,944 vs. 4,497), but not yet on total length.
-3. Decide which metric to report, total length or the visits' sum of squares. The power experiment in step 1 feeds into this. Suggestion: report total length as the headline result, and keep sum of squares as a check on the optimizer.
-4. Port the clustering fix from the GUI branch, then smoke-test `randomTree.py`.
-5. Profile:
+1. **Next:** finish the sweep with the 8 power-2 settings on seeds 3–7 (see the decision in [Current status](#current-status)).
+2. **Investigate [empty links](#empty-links),** then rerun power 1 against power 2.
+3. **Decide the near-contact question** (see [Known issues](#known-issues)).
+4. **Decide which metric to report,** total length or the visits' sum of squares. Suggestion: total length as the headline result, with sum of squares as a check on the optimizer. Power 1 targets total length directly but currently does worse because of empty links.
+5. **Rerun the 8-joint seed-44 chain** with the best settings from the sweep, on several traversals. So far only one traversal has been rerun, with default settings.
+6. Port the clustering fix from the GUI branch, then smoke-test `randomTree.py`.
+7. Profile:
    - the split between PSO and Nelder-Mead time;
    - joint visits vs. waypoint visits;
    - how collision checking scales with the number of configurations.
-6. Fix the experiment list. The parameter space from the 5/7 meeting notes:
+8. Fix the experiment list. The parameter space from the 5/7 meeting notes:
    - **Inputs:** number of joints, number of configurations.
-   - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits.
+   - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits, `waypointSampling`, `straightThroughGuess`, `alignmentWeight`.
    - **PSO parameters:** global vs. local best; number of particles; sampling bounds; initial particles (uniform random vs. evenly spaced, from [TODO_tests.md](TODO_tests.md)); k; w.
 
    The planned plots compare time per joint against the objective divided by the best objective found by a reference method.

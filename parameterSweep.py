@@ -3,8 +3,14 @@ Parameter sweep over the visit settings on small random chains, meant for overni
 
 Usage:
     python parameterSweep.py [--joints 4] [--seeds 8] [--first-seed 0] [--settings LABEL,...] [--no-checkpoints]
-    python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>"     # continue an interrupted sweep
+    python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" [--settings PATTERN,...]
+                                                                                       # continue an interrupted sweep
     python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"  # print the comparison table
+
+--settings takes settings labels or wildcard patterns, e.g. --settings '*_power2' or
+--settings 'multiscale_straight_*'. With --resume it narrows which of the sweep's runs are still done this time;
+--joints, --seeds and --first-seed are ignored on resume. Each resume writes resume_<timestamp>.json recording the
+git commit and the settings it ran.
 
 Every combination of the settings in SETTINGS_GRID is run on each random chain (generated as in
 randomChain.py, with collision-free configurations), one seed at a time, so stopping early still leaves
@@ -23,9 +29,11 @@ Output, in "Trials Before Experiments/<timestamp>_Sweep_Joints<N>_Seeds<a>-<b>/"
 import argparse
 import copy
 import csv
+import fnmatch
 import itertools
 import json
 import os
+import shutil
 import time
 import traceback
 from datetime import datetime
@@ -55,6 +63,15 @@ def settingsLabel(settings):
                      "straight" if settings['straightThroughGuess'] else "nostraight",
                      f"align{settings['alignmentWeight']:g}",
                      f"power{settings['power']:g}"])
+
+def resolveSettings(spec):
+    # Comma-separated labels or wildcard patterns -> matching labels, in grid order
+    labels = [settingsLabel(s) for s in allSettings()]
+    patterns = [p.strip() for p in spec.split(',') if p.strip()]
+    for pattern in patterns:
+        if not fnmatch.filter(labels, pattern):
+            raise SystemExit(f"--settings pattern {pattern!r} matches no settings; valid labels: {labels}")
+    return [label for label in labels if any(fnmatch.fnmatch(label, p) for p in patterns)]
 
 def allSettings():
     keys = list(SETTINGS_GRID)
@@ -126,6 +143,11 @@ def finishedRuns(sweepDir):
 def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints):
     label = settingsLabel(settings)
     runDir = os.path.join(seedDir, label)
+    if os.path.exists(runDir):
+        # left over from a run that was interrupted before it finished (finished runs are skipped before
+        # this point), so start it fresh rather than appending to its partial visits.csv and checkpoints
+        print(f"Clearing the unfinished earlier attempt at seed {seed} {label}", flush=True)
+        shutil.rmtree(runDir)
     os.makedirs(runDir, exist_ok=True)
     setCollisionPenaltyLogFile(os.path.join(runDir, 'collision_penalty_log.txt'))
     row = dict(seed=seed, label=label, **settings, start_length=chain.totalLength(),
@@ -186,7 +208,8 @@ def main():
     parser.add_argument('--joints', type=int, default=4, help="joints per random chain (default 4)")
     parser.add_argument('--seeds', type=int, default=8, help="number of random chains (default 8)")
     parser.add_argument('--first-seed', type=int, default=0, help="seed of the first chain (default 0)")
-    parser.add_argument('--settings', help="comma-separated settings labels to run (default: the whole grid)")
+    parser.add_argument('--settings', help="comma-separated settings labels or wildcard patterns to run, e.g. '*_power2' "
+                                           "(default: the whole grid, or on --resume the sweep's original settings)")
     parser.add_argument('--no-checkpoints', action='store_true', help="don't save a checkpoint after every visit")
     parser.add_argument('--resume', metavar='SWEEP_DIR', help="continue an interrupted sweep in this folder")
     parser.add_argument('--summarize', metavar='SWEEP_DIR', help="print the comparison table for a sweep and exit")
@@ -200,10 +223,18 @@ def main():
         sweepDir = args.resume
         with open(os.path.join(sweepDir, 'run_info.json')) as f:
             sweep = json.load(f)['settings']
+        if args.settings:
+            chosen = resolveSettings(args.settings)
+            extra = [label for label in chosen if label not in sweep['settings']]
+            if extra:
+                print(f"Note: running settings that weren't in the original sweep: {extra}")
+            sweep['settings'] = chosen
+        timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+        writeRunInfo(sweepDir, dict(resumed=True, settings=sweep['settings']), filename=f"resume_{timestamp}.json")
     else:
         sweep = dict(script='parameterSweep.py', joints=args.joints,
                      seeds=list(range(args.first_seed, args.first_seed + args.seeds)),
-                     settings=args.settings.split(',') if args.settings else [settingsLabel(s) for s in allSettings()],
+                     settings=resolveSettings(args.settings) if args.settings else [settingsLabel(s) for s in allSettings()],
                      grid=SETTINGS_GRID, traversal=TRAVERSAL, cubeSize=CUBE_SIZE,
                      numExtraConfigs=NUM_EXTRA_CONFIGS, saveCheckpoints=not args.no_checkpoints)
         timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
@@ -216,8 +247,9 @@ def main():
     unknown = set(sweep['settings']) - {settingsLabel(s) for s in allSettings()}
     if unknown:
         raise SystemExit(f"Unknown settings labels {sorted(unknown)}; valid: {[settingsLabel(s) for s in allSettings()]}")
-    done = finishedRuns(sweepDir)
-    total = len(sweep['seeds']) * len(settingsList)
+    selected = {(seed, settingsLabel(s)) for seed in sweep['seeds'] for s in settingsList}
+    done = finishedRuns(sweepDir) & selected
+    total = len(selected)
     print(f"Sweep folder: {sweepDir}\n{total} runs ({len(sweep['seeds'])} chains x {len(settingsList)} settings), "
           f"{len(done)} already finished\n", flush=True)
 

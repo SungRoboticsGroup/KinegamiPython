@@ -429,8 +429,8 @@ def warnIfInitialCollisions(subject, configurations, caller):
 
 def localLinkScale(subject, index):
     # Length scale for sampling moves of the joint/waypoint at index: its longest adjacent link,
-    # floored at the tube radius so near-zero-length links (common right after the gimbal
-    # construction) don't collapse the whole swarm onto one point
+    # floored at the tube radius so near-zero-length links (which optimization can create by sliding
+    # a waypoint onto its neighbor) don't collapse the whole swarm onto one point
     lengths = [subject.Links[index].path.length] + [subject.Links[c].path.length for c in subject.Children[index]]
     return max(max(lengths), subject.r)
 
@@ -505,7 +505,7 @@ def sumSquaredLinkLength(tree):
     # Tree-wide version of the visits' objective at the default power 2 (no collision penalty), for comparing with total length
     return sum(link.path.length ** 2 for link in tree.Links)
 
-def writeRunInfo(directory, settings):
+def writeRunInfo(directory, settings, filename='run_info.json'):
     # Records which code and settings produced a run, so results can be traced back to them later
     import subprocess, platform
     repo = os.path.dirname(os.path.abspath(__file__))
@@ -524,7 +524,7 @@ def writeRunInfo(directory, settings):
         'pyswarms_version': ps.__version__,
         'settings': settings,
     }
-    with open(os.path.join(directory, 'run_info.json'), 'w') as f:
+    with open(os.path.join(directory, filename), 'w') as f:
         json.dump(info, f, indent=2, default=str)
 
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
