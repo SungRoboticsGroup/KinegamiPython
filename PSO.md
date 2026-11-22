@@ -2,7 +2,7 @@
 
 This document covers the code that shortens a kinematic tree by moving its joints and waypoints, using particle swarm optimization (PSO). It describes how the code is structured, which traversals and parameters are available, how to run and debug it, and where development stands.
 
-*Status as of 2026-11-22, branch `pso-fixes`.*
+*Status as of 2026-11-22, branch `pso-fixes`. For why each experiment was run and what it showed, see [EXPERIMENTS.md](EXPERIMENTS.md).*
 
 ## What it does
 
@@ -26,7 +26,8 @@ The result must be collision-free in every configuration in a given list of join
 | [randomTree.py](randomTree.py) | Experiment script for random branching trees |
 | [manageCheckpoints.py](manageCheckpoints.py) | Examples of loading, inspecting and resuming checkpoints |
 | [parameterSweep.py](parameterSweep.py) | Overnight sweep over the visit settings on small random chains; see [Parameter sweeps](#parameter-sweeps) |
-| [bunchingExamples.py](bunchingExamples.py), [debugExamples/bunching/](debugExamples/bunching/) | Saved bunched waypoints with known better placements, and a harness that runs single waypoint visits on them |
+| [bunchingExamples.py](bunchingExamples.py), [debugExamples/bunching/](debugExamples/bunching/) | Saved bunched waypoints with known better placements, a harness that runs single waypoint visits on them, and `surveyBunching.py`, which found the placements |
+| [EXPERIMENTS.md](EXPERIMENTS.md) | Experiment log: the question, command, result and conclusion for each experiment |
 | [viewConfigurations.py](viewConfigurations.py) | Interactive viewer that switches between a tree's configurations and highlights near-collisions |
 | [view.py](view.py), [viewBrokenExample.py](viewBrokenExample.py) | Scripts for viewing saved results and stepping through a failing example |
 
@@ -148,8 +149,8 @@ These are hard-coded in [optimizationFunctions.py](optimizationFunctions.py), no
 Settings are module-level variables at the top of each script. Edit them, then run the script:
 
 ```
-python randomChain.py     # jointCount, seed, cubeSize, chainCount; the traversals to run are the `versions` list in test()
-python randomTree.py      # jointCount, probabilityOfBranching, seed, treeCount; the `optimizations` list in testRandomTrees()
+python randomChain.py --note "why"   # jointCount, seed, cubeSize, chainCount; the traversals are the `versions` list in test()
+python randomTree.py --note "why"    # jointCount, probabilityOfBranching, seed, treeCount; the `optimizations` list in testRandomTrees()
 ```
 
 **Warning:** both scripts create their results folder as soon as they're imported, not just when run. So don't import from them; copy the function you need instead.
@@ -169,12 +170,12 @@ Each script:
 [parameterSweep.py](parameterSweep.py) runs every combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight` and visit `power` on small random gimbal chains (default: 4 joints, seeds 0–7, 5 configurations each), with DFS outward for one pass per entry in `tree.Joints`. Runs go one seed at a time, so stopping early still leaves complete comparisons for the finished seeds.
 
 ```
-python parameterSweep.py [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...]
-python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" [--settings PATTERN,...]
+python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...]
+python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" --note "why" [--settings PATTERN,...]
 python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"
 ```
 
-`--settings` takes settings labels or wildcard patterns, such as `'*_power2'` or `'multiscale_straight_*'`. With `--resume`, it narrows which of the sweep's unfinished runs to do this time. Each resume writes `resume_<timestamp>.json` with the git commit and the settings it ran. A run that was interrupted partway is cleared and rerun from the start.
+`--note` saves why the sweep (or resume) is being run in `run_info.json` (or `resume_<timestamp>.json`); every script warns if it's missing. Log the experiment in [EXPERIMENTS.md](EXPERIMENTS.md) too. `--settings` takes settings labels or wildcard patterns, such as `'*_power2'` or `'multiscale_straight_*'`. With `--resume`, it narrows which of the sweep's unfinished runs to do this time. Each resume writes `resume_<timestamp>.json` with the git commit and the settings it ran. A run that was interrupted partway is cleared and rerun from the start.
 
 It writes `run_info.json`, `summary.csv` (one row per run) and `errors.log` to the sweep folder, and each run's `visits.csv`, final tree and checkpoints to `seed<k>/<settings label>/`. A 4-joint run takes about 4–6 minutes, so the full 16-setting, 8-seed grid takes about 11 hours.
 
@@ -262,6 +263,8 @@ Checks to run after changing optimizer code:
 
 ## Development status
 
+This section is a snapshot of where things stand. The experiments behind it, with their questions, commands and results, are logged in [EXPERIMENTS.md](EXPERIMENTS.md); add an entry there for each new experiment.
+
 ### History
 
 - **Dec 2025 – Jan 2026:**
@@ -317,7 +320,7 @@ None of the settings fixes W1, a waypoint sitting on its parent's frame (incomin
 - **No final tree collides** in any of the 52 runs.
 - **10 visits were reverted.** All have the signature of the [near-contact mismatch](#known-issues) (a collision flagged, loss unchanged); one was traced and confirmed. Reverting kept the trees collision-free.
 
-**Decision (2026-11-22): finish the sweep with the 8 power-2 settings only**, on seeds 3–7 (about 4 hours), and come back to power 1 after the [empty-links](#empty-links) investigation. More power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them. Any fix for empty links would mean rerunning power 1 anyway. To do this: `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2'` (38 runs).
+**Decision (2026-11-22): finish the sweep with the 8 power-2 settings only**, on seeds 3–7 (about 4 hours), and come back to power 1 after the [empty-links](#empty-links) investigation. More power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them. Any fix for empty links would mean rerunning power 1 anyway. To do this: `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2' --note "..."` (38 runs).
 
 ### Known issues
 

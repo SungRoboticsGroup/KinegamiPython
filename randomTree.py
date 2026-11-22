@@ -11,6 +11,7 @@ import threading
 import os 
 import shutil
 import re
+import argparse
 from datetime import datetime
 
 jointCount = 4
@@ -23,6 +24,11 @@ restartFrom = 0
 multipleIterations=False
 
 seed = 41
+
+# Why this run is being done, saved in run_info.json: python randomTree.py --note "..."
+noteParser = argparse.ArgumentParser(description="Settings are the variables at the top of this script.")
+noteParser.add_argument('--note', help="why this run is being done; saved in run_info.json")
+note = noteParser.parse_known_args()[0].note
 np.random.seed(seed)
 saved_state = np.random.get_state()
 
@@ -117,7 +123,7 @@ def testRandomTrees(show: bool = False):
     writeRunInfo(results_dir, dict(script='randomTree.py', jointCount=jointCount, treeCount=treeCount,
                                    probabilityOfBranching=probabilityOfBranching, seed=seed, cubeSize=cubeSize,
                                    sparse=sparse, restartFrom=restartFrom, multipleIterations=multipleIterations,
-                                   traversals={label: f.keywords for label, f in zip(labels, optimizations)}))
+                                   traversals={label: f.keywords for label, f in zip(labels, optimizations)}), note=note)
 
     lowerBounds = []
     results = []

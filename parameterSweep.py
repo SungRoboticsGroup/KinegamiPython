@@ -2,7 +2,7 @@
 Parameter sweep over the visit settings on small random chains, meant for overnight runs.
 
 Usage:
-    python parameterSweep.py [--joints 4] [--seeds 8] [--first-seed 0] [--settings LABEL,...] [--no-checkpoints]
+    python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings LABEL,...] [--no-checkpoints]
     python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" [--settings PATTERN,...]
                                                                                        # continue an interrupted sweep
     python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"  # print the comparison table
@@ -211,6 +211,8 @@ def main():
     parser.add_argument('--settings', help="comma-separated settings labels or wildcard patterns to run, e.g. '*_power2' "
                                            "(default: the whole grid, or on --resume the sweep's original settings)")
     parser.add_argument('--no-checkpoints', action='store_true', help="don't save a checkpoint after every visit")
+    parser.add_argument('--note', help="why this sweep (or resume) is being run; saved in run_info.json "
+                                       "(or resume_<timestamp>.json)")
     parser.add_argument('--resume', metavar='SWEEP_DIR', help="continue an interrupted sweep in this folder")
     parser.add_argument('--summarize', metavar='SWEEP_DIR', help="print the comparison table for a sweep and exit")
     args = parser.parse_args()
@@ -230,7 +232,8 @@ def main():
                 print(f"Note: running settings that weren't in the original sweep: {extra}")
             sweep['settings'] = chosen
         timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
-        writeRunInfo(sweepDir, dict(resumed=True, settings=sweep['settings']), filename=f"resume_{timestamp}.json")
+        writeRunInfo(sweepDir, dict(resumed=True, settings=sweep['settings']), filename=f"resume_{timestamp}.json",
+                     note=args.note)
     else:
         sweep = dict(script='parameterSweep.py', joints=args.joints,
                      seeds=list(range(args.first_seed, args.first_seed + args.seeds)),
@@ -241,7 +244,7 @@ def main():
         sweepDir = os.path.join("Trials Before Experiments",
                                 f"{timestamp}_Sweep_Joints{args.joints}_Seeds{sweep['seeds'][0]}-{sweep['seeds'][-1]}")
         os.makedirs(sweepDir, exist_ok=True)
-        writeRunInfo(sweepDir, sweep)
+        writeRunInfo(sweepDir, sweep, note=args.note)
 
     settingsList = [s for s in allSettings() if settingsLabel(s) in sweep['settings']]
     unknown = set(sweep['settings']) - {settingsLabel(s) for s in allSettings()}

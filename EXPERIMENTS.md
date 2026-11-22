@@ -1,0 +1,202 @@
+# Experiment log
+
+A running record of the experiments on the PSO tree optimizer: why each was run, what was run, what came out, and what we concluded. [PSO.md](PSO.md) describes the code and its *current* status; this file keeps the history behind it.
+
+## How to use this file
+
+- **Add an entry before or right after each experiment,** including small diagnostic ones. Add new entries at the bottom, and don't rewrite old ones. If a later experiment changes a conclusion, say so in the new entry, and add a one-line "Update:" pointer to the old one.
+- **Record the question first.** An experiment without a stated question is hard to interpret later.
+- **Pass `--note "<the question>"`** to `randomChain.py`, `randomTree.py` and `parameterSweep.py` (including resumes). It's saved in the results folder's `run_info.json`, so the folder records its own purpose even apart from this log.
+- **Results folders** are in `Trials Before Experiments/` and mostly aren't in git, so they exist only on the machine that ran them. Each entry names its folder, the commit it ran on, and the command.
+- **Planned experiments** can be logged ahead of time with `Status: planned`, then filled in.
+
+Template:
+
+```markdown
+## YYYY-MM-DD: <short title>
+
+**Question:** what we wanted to find out, and why.
+**Run:** command, commit, results folder, settings.
+**Result:** the numbers that matter.
+**Learned / decided:** conclusions, and what changes because of them.
+```
+
+---
+
+## Spring 2026: debugging the 8-joint crashes (reconstructed)
+
+*Reconstructed in November 2026 from the meeting notes ("Meeting with Samhitha notes.docx"), the commit history and the saved results. It isn't a record kept at the time; Samhitha's own log of the May tests is in Google Drive.*
+
+**Question:** why do longer chains crash with "Collision detected after retrying with penalty"?
+
+**Run:**
+- **January:** `randomChain.py` on 2- and 3-joint chains, seed 42, while the SDF collision checking was being integrated.
+- **February 13:** a 7-joint chain, one traversal (`2026.02.13_18.40.31_Joints7_Chains1_Seed42`).
+- **April 6:** the 8-joint seed-44 chain on several traversals, with the new per-visit checkpoints (`2026.04.06_21.38.31_Joints8_Chains1_Seed44`, committed as `b40e7303`).
+- **May:** `LocalBestPSO` vs. `GlobalBestPSO`, and k and w values, on an 8-joint chain with 4 configurations. This code was never pushed.
+
+**Result:**
+- **January:** seven 3-joint runs on the same seed ended between 18.1 and 50.6, partly because the code changed between runs.
+- **February:** the 7-joint run went from 540.6 to 212.4 in 2,639 s.
+- **April:** DFS Outward Longest and Shortest both finished 23 passes at **243.9** (from 470.3, about 67 minutes each). They were identical, because on a chain the two orderings visit the same order. DFS Inward Longest crashed at joint 9 on pass 19, at length 287.2. A BFS Outward Shortest attempt stopped after one checkpoint, for unknown reasons. The crash tree was saved in `viewBrokenExample.py`.
+- **May, from the notes:**
+  - GlobalBest found a better result than LocalBest with reverting.
+  - With LocalBest, lowering k from 4 to 2 helped a little. Raising w from 0.5 to 0.9 helped a lot but caused more reverts, all on one joint.
+  - Even with n passes, the results weren't "smoothing out across waypoints."
+
+**Learned / decided (at the time):**
+- **3/23:** `collisionErrorWeight` was defaulting to 1; the default was removed (`2f2dc2cf`). A remaining puzzle: the retry seemed to run without its penalty.
+- **4/15:** concluded that PSO wasn't keeping the best particle.
+- **5/7:** added a revert when a retry still collides, and planned to revert whenever the objective rises.
+
+Update: the 2026-11-20 entry below finds a different cause for the crash, and explains both the 3/23 and 4/15 puzzles.
+
+---
+
+## 2026-11-20: Why did the April 8-joint run crash at joint 9?
+
+**Question:** is the joint-9 collision real, and why couldn't the penalized retry avoid it?
+
+**Run:** replayed the crash tree (`viewBrokenExample.py`) and the April checkpoint before it (`iter_18_10.dill`), at commit `b40e7303` with diagnostic scripts:
+- compared this branch's `collision()` with the GUI branch's version;
+- checked the tree in each of the 5 configurations;
+- checked whether pyswarms keeps each particle's best position.
+
+**Result:**
+- **The collision is real but only exists in the tree's current state.** Root joint 0 and link 9 come within 1.60 of each other at their centerlines, against the 2.0 they need. But the tree is collision-free in all 5 configurations.
+- **The current state isn't one of the configurations.** The gimbal construction leaves prismatic joints fully extended (state 2.0), and no configuration has that.
+- **The checks disagreed.** The penalized retry worked: its result is collision-free in every configuration, and its penalized loss of 146.0 equals the unpenalized one. The final checks then tested the current state and raised.
+- **The GUI branch's `collision()` gives the same result,** so its end-cap fixes aren't involved.
+- **pyswarms 1.3.0 does keep each particle's best,** and the current placement is always a starting particle, so a visit can't come back worse.
+- **Explains the 3/23 puzzle:** the loss of 146.049 had no penalty because nothing collided in the optimization's configurations.
+- **Explains the 4/15 puzzle:** resuming from `iter_18_22` replayed joints 21 → 10, because checkpoint names sorted by joint index and not by visit order. For an inward traversal, `iter_18_22` was the *first* visit of pass 18.
+
+**Learned / decided:**
+- Only the given configurations need to be collision-free (decided by Daniel). All collision checks now use the configuration list.
+- Visits that still collide, or that raise their own objective, are reverted with a warning instead of raising.
+- Checkpoint names now include a visit counter.
+- Also fixed in the same commit:
+  - joint sampling: particles were clipped to ±2× the incoming link length instead of the bounds;
+  - waypoint moves: they were in the world frame, so rotations pivoted about the world origin.
+
+All in `3570f996`.
+
+---
+
+## 2026-11-20: Small-chain regression baseline
+
+**Question:** do the fixes run from start to finish, including resuming? This also gives a quick baseline to check later code changes against.
+
+**Run:** a 4-joint random chain (`np.random.seed(42)`, same generator as `randomChain.py`, 4 configurations), 2 passes of DFS Inward Longest, then a resume from the middle checkpoint. Scratch script, not in the repo; its recipe is in [PSO.md](PSO.md) under Tests.
+
+**Result:** length 77.26 → **66.53**, no collisions in any configuration, and the resume completed. Rerun after each later code change: with default settings it reproduced 66.53 exactly, with every visit's losses and lengths identical. With the new waypoint options (multiscale, straight-through guesses, alignment weight 0), it reached 56.60.
+
+**Learned / decided:** use it as a regression check; defaults must reproduce 66.53.
+
+---
+
+## 2026-11-20: Rerun the 8-joint seed-44 chain with the fixes
+
+**Question:** does the fixed code get through the chain that crashed in April, and how does it compare with April's best traversal?
+
+**Run:** `python randomChain.py` with one traversal, BFS Outward Shortest, default settings, at commit `d3951070`. Folder `2026.11.20_16.15.57_Joints8_Chains1_Seed44`. It was stopped after visit 228 and resumed on 2026-11-21 with `resumeFromCheckpoint`. On a chain, BFS Outward visits the same order as April's DFS Outward runs.
+
+**Result:**
+- **Total length 470.3 → 242.8** after 23 passes, vs. April's 243.9. Sum of squared link lengths 3,329, vs. 4,497 for April.
+- **Much faster early on,** for example 294.5 vs. 359.3 after pass 6. It then slowed to 254.4 by pass 14 and 242.8 by pass 23, while April dropped sharply after pass 15.
+- **No penalized retries or reverts in 529 visits.** Time 4,050 s, vs. 4,042 s in April on a different machine.
+- **The final tree is still visibly bunched,** for example in a loop near the base. Collisions don't explain it: with `viewConfigurations.py`, no two unattached parts come within 4.4 of each other in any configuration.
+
+**Learned / decided:** the crash is fixed, and the result matches April's best. The bunching is an optimizer problem, not a collision constraint, so investigate it next.
+
+---
+
+## 2026-11-21: How much better could each waypoint be placed? (bunching survey)
+
+**Question:** in the final tree above, how much could each waypoint's adjacent links shrink if it were placed better? And is the visits' failure to find that due to sampling, or to the alignment penalty?
+
+**Run:** for each of the 15 waypoints, 3,000 random moves, then Nelder-Mead from the 4 best. A third of the moves rotate in place, a third make small moves, and a third use the optimizer's full range. Each is scored under the waypoint objective (alignment weight 10) and under plain `linkLoss`. Script: [debugExamples/bunching/surveyBunching.py](debugExamples/bunching/surveyBunching.py), at commit `d3951070` plus the then-uncommitted `power`/`childFraction` wiring.
+
+**Result:**
+- **Under the optimizer's own objective, 13 of the 14 non-leaf waypoints could be improved,** and every improvement is collision-free. For example, W4 157.7 → 114.2, W8 121.0 → 80.5, W16 721 → 545, W19 813 → 654.
+- **The better placements are mostly 60–140° turns with moves of 1–9 units.**
+- **For some waypoints, the alignment penalty blocks the straightening.** W1's `linkLoss` could halve (22.6 → 11.3) with a 119° turn, but the penalty makes that worse overall. W2, W7, W13 and W14 show smaller versions of the same thing.
+
+**Learned / decided:**
+- **Sampling hypothesis:** box sampling almost never pairs a large rotation with a small move, about 1 in 10,000 per particle.
+- **Penalty hypothesis:** the alignment penalty can hold a waypoint in place.
+- Saved five waypoints (W1, W4, W7, W8, W19) with their best-found placements as test cases in [debugExamples/bunching/](debugExamples/bunching/).
+- Implemented three options: `waypointSampling="multiscale"`, `straightThroughGuess`, and `alignmentWeight`.
+
+---
+
+## 2026-11-21: Which waypoint options fix the bunching examples?
+
+**Question:** on the five saved examples, how much does each option, and each combination, close the gap to the best-found placement?
+
+**Run:** `python bunchingExamples.py [--sampling multiscale] [--straight] [--alignment 0]`, 3 seeds per example. On the code committed as `9282d653`. The measure is the share of the gap in local squared link length closed, toward the best placement found for plain `linkLoss`.
+
+**Result:**
+
+| Settings | W1 | W4 | W7 | W8 | W19 | Overall |
+|---|---|---|---|---|---|---|
+| Default | 0% | 14% | 0% | 9% | 0% | 5% |
+| Alignment 0 | 0% | 17% | 0% | 9% | 0% | 5% |
+| Multiscale | 0% | 50% | 0% | 31% | 49% | 26% |
+| Straight-through | 0% | 82% | 81% | 66% | 79% | 62% |
+| Multiscale + straight-through | 0% | 79% | 81% | 61% | 82% | 61% |
+| All three | 0% | 83% | 89% | 70% | 82% | 65% |
+
+**Learned / decided:**
+- **The straight-through guess does most of the work,** and nearly identically across seeds, since the guesses are deterministic.
+- **Multiscale helps alone but adds little on top of the straight-through guess.**
+- **Alignment 0 matters only together with a good guess.**
+- **W1 isn't fixed by any setting.** It sits on its parent's frame (incoming link length 0), and every turn in place is infeasible there.
+- Next: test the options on whole-tree optimizations, in the sweep below.
+
+---
+
+## 2026-11-22: Overnight sweep over the waypoint options and visit power
+
+**Question:** on whole optimizations of several small chains, which combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight` and visit `power` gives the shortest trees? In particular, does power 1, which targets total length directly, beat power 2?
+
+**Run:** `python parameterSweep.py` at commit `667e7808`. Folder `2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7`. The grid is all 16 combinations, on 4-joint random gimbal chains (seeds 0–7), 5 configurations each, DFS outward for one pass per entry in `tree.Joints` (121 visits per run).
+
+**Result:**
+- **Stopped after 52 of 128 runs** (seeds 0–2 complete): a Windows Update restart at 06:29 killed WSL. Earlier, at 03:47, the laptop had entered Modern Standby when its screen timed out. That didn't stop the sweep, but later runs were about 15–25% slower.
+- **Final total length relative to the default settings on the same chain (3 seeds):**
+
+| Settings (power 2) | Mean ratio | Range |
+|---|---|---|
+| multiscale + straight-through + alignment 0 | 0.747 | 0.64–0.89 |
+| multiscale + straight-through + alignment 10 | 0.771 | 0.64–0.88 |
+| box + straight-through + alignment 10 | 0.819 | 0.68–0.94 |
+| multiscale + alignment 0 | 0.867 | 0.84–0.89 |
+| box + straight-through + alignment 0 | 0.869 | 0.81–0.93 |
+| multiscale alone | 0.943 | 0.88–0.98 |
+| alignment 0 alone | 0.999 | 0.84–1.13 |
+
+- **All 26 power-1 runs finished 12–76% longer than the default settings.** On seed 0, all 8 power-1 settings gave identical results, with link lengths `[0, 0, 12.2, 0, 0, 16.2, 0, 0, 24.2, 0]`.
+- **No final tree collides.**
+- **10 visits were reverted, each with a collision flagged and the loss unchanged.** Traced one: links 5 and 9 at distance 0.000976. The collision count uses a threshold of 0.001, but the smooth penalty is almost 0 at that distance (1.4 × 10⁻⁶).
+
+**Learned / decided:**
+- **Same ranking as on the examples:** the straight-through guess helps most, multiscale adds to it, and alignment 0 helps only in combination. The best combination gives trees about 25% shorter.
+- **Power 1 fails because of empty links:** visits slide waypoints onto their neighbors, and the waypoints then can't move. A new [Empty links](PSO.md#empty-links) investigation was added to PSO.md, with Daniel's ideas: delete a waypoint that gets close enough to a neighbor, or re-center it on the CSC path outward from it.
+- **Decision (Daniel):** finish the sweep with the 8 power-2 settings only, and come back to power 1 after the empty-links investigation. More power-1 runs wouldn't say much about the waypoint settings.
+- **The near-contact mismatch is logged in PSO.md's known issues;** whether to count only true overlaps or make the penalty stricter is undecided.
+- **For overnight runs:** pause Windows Update, set the screen timeout to Never while plugged in, and keep the lid open.
+
+---
+
+## 2026-11-22: Finish the sweep with power 2 only
+
+**Status:** planned.
+
+**Question:** with 8 chains instead of 3, does the ranking of the power-2 settings hold, and do the top three separate?
+
+**Run:** `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2' --note "Finish the sweep with power 2 only: does the ranking hold on 8 chains?"`: 38 runs on seeds 3–7, about 3.7 hours. (Fill in the commit from `resume_<timestamp>.json`.)
+
+**Result:** (to fill in)
+
+**Learned / decided:** (to fill in)

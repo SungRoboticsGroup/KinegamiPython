@@ -505,8 +505,11 @@ def sumSquaredLinkLength(tree):
     # Tree-wide version of the visits' objective at the default power 2 (no collision penalty), for comparing with total length
     return sum(link.path.length ** 2 for link in tree.Links)
 
-def writeRunInfo(directory, settings, filename='run_info.json'):
-    # Records which code and settings produced a run, so results can be traced back to them later
+def writeRunInfo(directory, settings, filename='run_info.json', note=None):
+    # Records which code and settings produced a run, and why it was run (note), so results can be
+    # traced back to them later
+    if not note:
+        print("Warning: no --note given, so this run's run info won't record why it was run.")
     import subprocess, platform
     repo = os.path.dirname(os.path.abspath(__file__))
     def git(*args):
@@ -515,6 +518,7 @@ def writeRunInfo(directory, settings, filename='run_info.json'):
         except Exception as e:
             return f"unavailable ({e})"
     info = {
+        'note': note,
         'start_time': datetime.now().isoformat(),
         'git_commit': git('rev-parse', 'HEAD'),
         'git_branch': git('rev-parse', '--abbrev-ref', 'HEAD'),

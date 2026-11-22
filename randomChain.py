@@ -12,6 +12,7 @@ import threading
 import os 
 import shutil
 import traceback
+import argparse
 from datetime import datetime
 
 jointCount = 8
@@ -23,6 +24,11 @@ restartFrom = 0
 multipleIterations=False
 
 seed = 44
+
+# Why this run is being done, saved in run_info.json: python randomChain.py --note "..."
+noteParser = argparse.ArgumentParser(description="Settings are the variables at the top of this script.")
+noteParser.add_argument('--note', help="why this run is being done; saved in run_info.json")
+note = noteParser.parse_known_args()[0].note
 np.random.seed(seed)
 saved_state = np.random.get_state()
 
@@ -100,7 +106,7 @@ def test():
     writeRunInfo(results_dir, dict(script='randomChain.py', jointCount=jointCount, chainCount=chainCount,
                                    seed=seed, cubeSize=cubeSize, sparse=sparse, restartFrom=restartFrom,
                                    multipleIterations=multipleIterations,
-                                   traversals={v[1]: v[0].keywords for v in versions}))
+                                   traversals={v[1]: v[0].keywords for v in versions}), note=note)
 
     lowerBounds = []
     results = []
