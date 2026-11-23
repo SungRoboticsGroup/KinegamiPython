@@ -408,7 +408,8 @@ def logCollisionPenalty(message):
             f.write(message + '\n')
 
 def collidingConfigurations(tree, index, configurations):
-    # Returns the configurations in which the moved joint/waypoint at index collides with something.
+    # Returns the configurations in which the moved joint/waypoint at index (or any of a list of indices)
+    # collides with something.
     # Only the given configurations matter: the tree's current state is not checked.
     colliding = []
     for configuration in configurations:
@@ -547,18 +548,22 @@ def unlockGuess(subject, index):
     return [list(move.t) + list(move.eul())]
 
 def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeCollisionPenalty, configurations,
-                               visitRecord=None):
+                               visitRecord=None, movedIndices=None):
     # optimizeOnce(includeCollisionPenalty) -> (tree, loss, initialLoss, timing), where initialLoss is the
     # same objective evaluated at the current placement and timing has 'pso_s', 'nm_s' (and 'notApplied'
     # if the best particle couldn't be applied).
     # If visitRecord is a dict, it's filled in with what happened on this visit (see VISIT_FIELDS).
+    # movedIndices: the joints/waypoints the visit moves (default [index]; with parent-locking, also the waypoints
+    # carried along), whose collisions are checked.
+    if movedIndices is None:
+        movedIndices = [index]
     if visitRecord is None:
         visitRecord = {}
     visitRecord.update(kind=label, retried=False, reverted=False, revert_reason="", collision_check_s=0.0)
 
     def timedCollidingConfigurations(tree):
         start = time.time()
-        colliding = collidingConfigurations(tree, index, configurations)
+        colliding = collidingConfigurations(tree, movedIndices, configurations)
         visitRecord['collision_check_s'] += time.time() - start
         return colliding
 
@@ -577,6 +582,16 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
     # If it does (or still collides), keep the current placement and move on in the traversal.
     colliding = timedCollidingConfigurations(tree) if includeCollisionPenalty else []
     increased = loss > initialLoss + 1e-9 * max(1, abs(initialLoss))
+    if len(colliding) > 0 and not increased:
+        # If the current placement already collided in each of these configurations, reverting can't help:
+        # accept the change, which the objective (collision penalty included) says is no worse
+        before = timedCollidingConfigurations(subject)
+        if all(c in before for c in colliding):
+            reason = (f"still colliding in configurations {colliding}, but the placement before this visit collided "
+                      f"in {before}; accepted since the objective did not increase")
+            logCollisionPenalty(f"WARNING: {label} {index}: {reason}. Loss {initialLoss} -> {loss}.")
+            visitRecord.update(revert_reason=reason, final_loss=loss)
+            return tree, loss
     if len(colliding) > 0 or increased:
         if len(colliding) > 0 and not increased:
             reason = f"collision in configurations {colliding} did not raise the objective (possible bug in the objective)"
@@ -650,16 +665,18 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
 
     optimizeOnce = partial(optimizeJointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
                            childFraction, ignoreLater, parallelize, verbose, power, configurations, parentLocking)
+    movedIndices = [index] + parentLockedDescendants(subject, index) if parentLocking else [index]
     return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations,
-                                      visitRecord)
+                                      visitRecord, movedIndices)
 
 def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
                                parallelize, verbose, power, configurations, parentLocking, includeCollisionPenalty):
-    movedJointIndex = index
     collisionMatrices = subject.buildCollisionMatrices()
     # parent-locked waypoints move with the joint, and the links leaving them count as the joint's outgoing links
     locked = parentLockedDescendants(subject, index) if parentLocking else []
     outgoing = lockedOutgoingLinks(subject, index, locked) if locked else None
+    # the collision penalty covers everything that moves, carried waypoints and their links included
+    movedJointIndex = [index] + locked if locked else index
     def move(tree, transformation):
         return moveWithParentLocked(tree, index, transformation, locked)
 
@@ -884,8 +901,9 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     optimizeOnce = partial(optimizeWaypointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
                            childFraction, ignoreLater, parallelize, verbose, power, configurations,
                            waypointSampling, straightThroughGuess, alignmentWeight, parentLocking)
+    movedIndices = [index] + parentLockedDescendants(subject, index) if parentLocking else [index]
     return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations,
-                                      visitRecord)
+                                      visitRecord, movedIndices)
 
 def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
                                   parallelize, verbose, power, configurations,
@@ -909,11 +927,12 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
     localAlign = waypoint.Pose.inv() * alignTransform * waypoint.Pose
     initialGuess = list(localAlign.t) + list(localAlign.eul())
 
-    movedJointIndex = index
     collisionMatrices = subject.buildCollisionMatrices()
     # parent-locked waypoints move with this one, and the links leaving them count as its outgoing links
     locked = parentLockedDescendants(subject, index) if parentLocking else []
     outgoing = lockedOutgoingLinks(subject, index, locked) if locked else None
+    # the collision penalty covers everything that moves, carried waypoints and their links included
+    movedJointIndex = [index] + locked if locked else index
     selfLocked = parentLocking and isParentLocked(subject, index)
 
     def waypointLinkLoss(tree):

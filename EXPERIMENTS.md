@@ -253,3 +253,42 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 - On these two chains, power 1 with parent-locking ends at about half the best power-2 result. In effect it removes the waypoints and lets the joints place themselves, with direct links between them.
 - Whether waypoints help at all here is now an open question: on these chains, none were worth keeping.
 - Next: run parent-locking on all 8 chains at both powers, to check the result holds and whether it helps power 2.
+
+## 2026-11-23: Parent-locking at both powers, on 4-joint and 6-joint chains
+
+**Status:** 4-joint sweep done; 6-joint sweep still running at the time of writing (7 of 12 runs done at 10:30). Both ran on `5c5b8669`, before the collision-check fix below.
+
+**Question:** does the pilot's power-1 gain hold on all 8 chains, does parent-locking help power 2, and does it carry over to bigger chains?
+
+**Run:** `python parameterSweep.py [--joints 6 --seeds 3] --grid power=2,1 --grid parentLocking=False,True --grid waypointSampling=box --grid alignmentWeight=10 --grid straightThroughGuess=True --note "..."`: folders `2026.11.23_02.36.20_Sweep_Joints4_Seeds0-7` (32 runs) and `2026.11.23_06.10.21_Sweep_Joints6_Seeds0-2` (12 runs).
+
+**Result, 4 joints** (final total length; no errors, and no final tree collides):
+
+| Chain | Power 1 | Power 1 + parent-locking | Power 2 | Power 2 + parent-locking | Lower bound |
+|---|---|---|---|---|---|
+| 0 | 61.5 | **23.6** | 45.9 | 44.9 | 9.2 |
+| 1 | 88.6 | **19.6** | 59.7 | 54.6 | 7.7 |
+| 2 | 111.0 | **23.1** | 57.4 | 50.3 | 10.0 |
+| 3 | 86.1 | **27.4** | 46.2 | 45.2 | 12.0 |
+| 4 | 82.5 | **25.0** | 44.5 | 36.6 | 13.6 |
+| 5 | 88.1 | **23.4** | 45.9 | 50.6 | 11.5 |
+| 6 | 76.3 | **20.7** | 55.0 | 43.9 | 7.8 |
+| 7 | 133.5 | **32.4** | 54.5 | 54.9 | 11.6 |
+
+- Power 1 + parent-locking wins on every chain, at about half the best power-2 length, and ends with all 7 waypoints parent-locked every time. It had 13 reverts in total.
+- At power 2, parent-locking is shorter on 6 of 8 chains, but keeps only 1–2 waypoints locked at the end, as the power-2 math predicts.
+- Runs took 5.5–7.5 minutes each.
+
+**Result, 6 joints so far:** chain 0 gave 175.0 / 79.4 / 93.1 / 90.5 (power 1, power 1 + parent-locking, power 2, power 2 + parent-locking; lower bound 15.4), and chain 1 gave 210.0 / – / 103.1 / 103.2 (lower bound 22.3). Runs take 20–70 minutes, much longer than on 4 joints.
+
+**Bug found: the 6-joint parent-locking results are invalid.** Chain 0's power-1 + parent-locking run (79.4) ended with a tree the checker calls colliding, after 46 reverts in 69 minutes. Traced through its checkpoints:
+- At visit 61, joint 9 moved with W10 and W11 carried along, which moved link 12 (leaving W11) into joint 0 in configuration 4. Both the collision penalty and the revert guard only checked pairs involving the visited node and its own links, so the pair joint 0 / link 12 was never checked. A deep collision of a carried link would have slipped through the same way.
+- The collision itself is an end-cap false positive of the kind accepted so far: the closest point on joint 0 is the end of its centerline, and the overlap is −0.187 against its rounded cap but +0.335 against its flat end. It isn't filtered because only one of the two closest points is at an end.
+- From then on, the revert guard rejected every change that still collided, even those that reduced the collisions, so the tree stayed in that state.
+
+**Fixed (next commit):** collision checks and the collision penalty now cover the visited node plus its carried parent-locked waypoints. The revert guard accepts a change that still collides only in configurations the tree already collided in, when the objective didn't increase. Replaying visit 61 from the checkpoint before it with the fix gives a collision-free result.
+
+**Learned / decided:**
+- The 4-joint lengths stand, since none of those final trees collide, though a rerun with the fix may differ slightly. The 6-joint parent-locking runs, at both powers, need rerunning with the fix.
+- Open: with parent-locking, links pass closer to joints, so end-cap false positives with only one closest point at an end may come up more often. Worth considering extending the end-cap filter to that case.
+- Next: rerun the parent-locking settings on 6 joints (and possibly 4) with the fix.

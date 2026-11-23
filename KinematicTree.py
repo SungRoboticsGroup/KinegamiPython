@@ -385,14 +385,24 @@ class KinematicTree(Generic[F]):
 
         return newTree
 
-    def detectCollisions(self, specificJointIndex : Optional[int] = None, plot: bool = False, debug: bool = False) -> int:
+    def detectCollisions(self, specificJointIndex = None, plot: bool = False, debug: bool = False) -> int:
+        # specificJointIndex: None for the whole tree, or an index or list of indices (see collisionPairsFromMovingJoint)
         collisionMatrices = self.buildCollisionMatrices()
         numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
         return numCollisions
 
     
-    def collisionPairsFromMovingJoint(self, movingJointIndex : int, 
+    def collisionPairsFromMovingJoint(self, movingJointIndex,
             collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        # movingJointIndex may be a list of indices, for joints that move together (e.g. a joint and the
+        # parent-locked waypoints carried with it): then the pairs involving any of them, without repeats
+        if not isinstance(movingJointIndex, (int, np.integer)):
+            parts = [self.collisionPairsFromMovingJoint(int(i), collisionMatrices) for i in movingJointIndex]
+            jj_pairs, jl_pairs, ll_pairs = [np.hstack([p[k] for p in parts]).astype(int) for k in range(3)]
+            jj_pairs = np.unique(np.sort(jj_pairs, axis=0), axis=1) if jj_pairs.size > 0 else jj_pairs
+            jl_pairs = np.unique(jl_pairs, axis=1) if jl_pairs.size > 0 else jl_pairs
+            ll_pairs = np.unique(np.sort(ll_pairs, axis=0), axis=1) if ll_pairs.size > 0 else ll_pairs
+            return jj_pairs, jl_pairs, ll_pairs
         jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
         i = movingJointIndex
         
