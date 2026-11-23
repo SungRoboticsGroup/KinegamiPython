@@ -306,6 +306,8 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 
 ### Current status
 
+> **All results below were obtained with a collision checker that never compared links entering real joints against each other** (fixed 2026-11-23; see [EXPERIMENTS.md](EXPERIMENTS.md)). They're unreliable, power 1 especially, and need rerunning.
+
 "Default settings" in this section means the defaults when these runs were made: box sampling, alignment weight 10, and **no** straight-through guess. `straightThroughGuess` became the default afterwards (see the decision below).
 
 **8-joint seed-44 chain, single traversal (2026.11.20_16.15.57, BFS Outward Shortest, default settings):** finished 23 passes at total length 242.8, vs. 243.9 for April's DFS Outward run, which visits the same order on a chain. Sum of squares 3,329 vs. 4,497. No penalized retries or reverts. The final tree is still visibly bunched, for example in a loop near the base, and collisions don't explain it: no two unattached parts come within 4.4 of each other in any configuration.
@@ -347,6 +349,8 @@ Details and per-seed numbers are in [EXPERIMENTS.md](EXPERIMENTS.md).
 
 ### Known issues
 
+- **Fixed 2026-11-23: links entering real joints were never checked against each other.** `findLinkClusters` left the link from the last waypoint into each real joint out of every cluster, and `buildCollisionMatrices` treated all such links as one cluster. Each cluster now includes the link into the next joint, and any link left out of every cluster gets its own. Results from before the fix are unreliable.
+- **Fixed 2026-11-23: with parent-locking, carried waypoints' links weren't collision-checked.** The penalty and the revert guard now check the visited node plus the parent-locked waypoints carried with it.
 - **Collision count and penalty disagree about near-contacts.** `collisionsCountAndError` counts any pair closer than `fineDistanceThreshold` (0.001) as a collision, but its smooth penalty is about 0.5 at distance 0 and about 0 at 0.001. So the optimizer can bring two parts within 0.001 of each other at almost no cost, and the post-visit check then counts a collision and reverts the visit (logged as "did not raise the objective"). Traced in one of the sweep's 10 reverts: links 5 and 9 at distance 0.000976, penalty term 1.4 × 10⁻⁶. Two options, not yet decided:
   - (a) count only real overlaps (distance below 0) as collisions, and treat 0–0.001 as allowed near-contact;
   - (b) shift the penalty so it's already near its full value at 0.001.

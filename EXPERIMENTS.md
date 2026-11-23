@@ -303,3 +303,29 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 - The 4-joint lengths stand, since none of those final trees collide, though a rerun with the fix may differ slightly. The 6-joint parent-locking runs, at both powers, need rerunning with the fix.
 - Open: with parent-locking, links pass closer to joints, so end-cap false positives with only one closest point at an end may come up more often. Worth considering extending the end-cap filter to that case.
 - Next: rerun the parent-locking settings on 6 joints (and possibly 4) with the fix.
+
+## 2026-11-23: Collision checker never compared links entering real joints: all earlier results are unreliable
+
+**Status:** fixed in the commit after `b142a961`.
+
+**Question:** why does the final tree of chain 2's 6-joint power-1 + parent-locking run visibly collide, when the checker reported it collision-free?
+
+**Found:** `KinematicTree.findLinkClusters` groups each run of waypoints with its links, and link/link pairs within a cluster aren't checked. It only followed waypoint children, so the link from the last waypoint into each real joint (links 3, 6, 9, 12, 15 on a 6-joint chain) was in no cluster. `buildCollisionMatrices` then saw those links as all in the same cluster (`None == None`), so **no two links entering real joints were ever checked against each other**, in any tree, in any run, by the penalty, the revert guard or the final check. On chain 2, links 6 and 15 overlap by 0.79 tube radii. The intended clusters (as in [sets.py](sets.py)'s docstring) include that link: `[1, 2, 3], [4, 5, 6], …`.
+
+This is a different bug from the GUI branch's clustering fix `af6b0359` (sibling waypoints at a branch point), which still needs porting before running trees.
+
+**Fix:** follow real-joint children too, so each cluster includes the link into the next joint; any link still left out of every cluster gets a cluster of its own.
+
+**Recheck of all 138 final trees in the four sweeps with the fixed checker** (all configurations of each chain):
+
+| Settings | Final trees that collide |
+|---|---|
+| Power 2, all settings, all sweeps | 1 of 99 |
+| Power 1, no parent-locking | 18 of 37 |
+| Power 1 + parent-locking, 4 joints | 4 of 10 |
+| Power 1 + parent-locking, 6 joints | 3 of 3 |
+
+**Learned / decided:**
+- **All results recorded before this fix are unreliable**, every entry above included. The optimizer never saw these collisions, so every run, at either power, may have taken moves it shouldn't have, even where its final tree happens to pass the fixed check. Power 1 is the worst affected: once waypoints collapse, the links into joints are the only links with length, and none of them were compared. The power-1 + parent-locking gains in particular (about half the power-2 length) may come largely from trees that pass through themselves.
+- The decisions based on those results (`straightThroughGuess=True` as the default; power 2 only) stand for now as working choices, but need confirming.
+- Next: small runs to check the fixed code runs smoothly, then rerun the sweeps.

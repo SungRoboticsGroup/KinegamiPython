@@ -590,10 +590,11 @@ class KinematicTree(Generic[F]):
                 if isWaypoint(self.Joints[parent_idx]):
                     buildWaypointSet(parent_idx, current_wp_set, current_link_set)
             
-            # Check children
+            # Check children, including real joints, whose incoming link (from this waypoint) belongs to this
+            # cluster too (the call adds that link and stops there)
             children_indices = self.Children[joint_idx]
             for child_idx in children_indices:
-                if child_idx not in visited and isWaypoint(self.Joints[child_idx]):
+                if child_idx not in visited:
                     buildWaypointSet(child_idx, current_wp_set, current_link_set)
         
         # Go through all joints and find waypoint sets
@@ -605,7 +606,13 @@ class KinematicTree(Generic[F]):
                 if current_wp_set:
                     waypoint_sets.append(current_wp_set)
                     link_sets.append(current_link_set)
-        
+
+        # A link directly between two real joints has no waypoints around it: it's a cluster of its own.
+        # (Every link must be in some cluster: links missing from all of them would never be checked
+        # against each other.)
+        clustered = {l for link_set in link_sets for l in link_set}
+        link_sets += [[l] for l in range(1, len(self.Links)) if l not in clustered]
+
         return link_sets
     
     
