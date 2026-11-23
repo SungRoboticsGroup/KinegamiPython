@@ -191,12 +191,40 @@ All in `3570f996`.
 
 ## 2026-11-22: Finish the sweep with power 2 only
 
-**Status:** planned.
+**Status:** done (resume ran 17:38–21:59, 4.4 hours; commit `e202b4d6`).
 
 **Question:** with 8 chains instead of 3, does the ranking of the power-2 settings hold, and do the top three separate?
 
-**Run:** `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2' --note "Finish the sweep with power 2 only: does the ranking hold on 8 chains?"`: 38 runs on seeds 3–7, about 3.7 hours. (Fill in the commit from `resume_<timestamp>.json`.)
+**Run:** `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2' --note "Finish the sweep with power 2 only: does the ranking hold on 8 chains?"`: 38 runs on seeds 3–7.
 
-**Result:** (to fill in)
+**Result:** all 64 power-2 runs finished, none failed, and no final tree collides. Final total length relative to the default settings (box, no straight-through, alignment 10) on the same chain:
 
-**Learned / decided:** (to fill in)
+| Settings (power 2) | Mean ratio | Range | Beat default |
+|---|---|---|---|
+| multiscale + straight-through + alignment 0 | 0.732 | 0.59–1.05 | 7/8 |
+| multiscale + straight-through + alignment 10 | 0.751 | 0.59–1.00 | 8/8 (seed 3 by under 0.5%) |
+| box + straight-through + alignment 10 | 0.755 | 0.56–0.94 | 8/8 |
+| box + straight-through + alignment 0 | 0.786 | 0.53–1.13 | 7/8 |
+| multiscale + alignment 0 | 0.892 | 0.71–1.22 | 7/8 |
+| multiscale + alignment 10 | 0.913 | 0.79–1.06 | 7/8 |
+| alignment 0 alone | 0.979 | 0.80–1.13 | 5/8 |
+
+Each setting's effect, comparing runs that differ only in that setting (32 pairs each):
+
+| Setting | Geometric mean ratio | Better in |
+|---|---|---|
+| `straightThroughGuess=True` vs. False | 0.789 | 31/32 |
+| `waypointSampling="multiscale"` vs. box | 0.938 | 20/32 |
+| `alignmentWeight=0` vs. 10 | 0.987 | 18/32 |
+
+- The best setting varies by seed, but it always uses the straight-through guess (4 multiscale, 4 box).
+- Seed 3 is the exception: nothing beat the default by more than 6%.
+- The best result on each chain is still 3.1–5.9 times its lower bound.
+- 13 visits were reverted, all with the near-contact signature ("did not raise the objective").
+
+**Learned / decided:**
+- The ranking held for the straight-through guess: it's the one clear win.
+- The top three don't separate. Their means are within 0.025 of each other, and their ranges overlap widely.
+- Multiscale sampling helps slightly but not consistently.
+- The alignment weight makes no measurable difference on these chains. On the bunching examples it mattered only together with multiscale sampling.
+- Proposed, not yet decided: make `straightThroughGuess=True` the default, and pick the sampling and alignment weight on bigger chains, where there are more waypoints for them to act on.

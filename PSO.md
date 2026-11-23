@@ -304,23 +304,26 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 
 None of the settings fixes W1, a waypoint sitting on its parent's frame (incoming link length 0); see [Empty links](#empty-links).
 
-**Overnight sweep (2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7):** stopped after 52 of 128 runs, when a Windows Update restart killed it. Seeds 0–2 are complete. Final total length relative to the default settings on the same chain:
+**Overnight sweep (2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7):** 4-joint chains, 8 seeds, DFS outward. The first night stopped after 52 of 128 runs, when a Windows Update restart killed it. Seeds 3–7 were then finished with power 2 only (see the decision below). All 90 runs finished without errors, and no final tree collides. Final total length relative to the default settings on the same chain, over all 8 seeds:
 
 | Settings (power 2) | Mean ratio | Range |
 |---|---|---|
-| multiscale + straight-through + alignment 0 | 0.747 | 0.64–0.89 |
-| multiscale + straight-through + alignment 10 | 0.771 | 0.64–0.88 |
-| box + straight-through + alignment 10 | 0.819 | 0.68–0.94 |
-| multiscale + alignment 0 | 0.867 | 0.84–0.89 |
-| box + straight-through + alignment 0 | 0.869 | 0.81–0.93 |
-| multiscale alone | 0.943 | 0.88–0.98 |
-| alignment 0 alone | 0.999 | 0.84–1.13 |
+| multiscale + straight-through + alignment 0 | 0.732 | 0.59–1.05 |
+| multiscale + straight-through + alignment 10 | 0.751 | 0.59–1.00 |
+| box + straight-through + alignment 10 | 0.755 | 0.56–0.94 |
+| box + straight-through + alignment 0 | 0.786 | 0.53–1.13 |
+| multiscale + alignment 0 | 0.892 | 0.71–1.22 |
+| multiscale + alignment 10 | 0.913 | 0.79–1.06 |
+| alignment 0 alone | 0.979 | 0.80–1.13 |
 
+- **The straight-through guess is the one clear win:** about 21% shorter, and better in 31 of 32 paired comparisons. Multiscale sampling gives about 6% (better in 20/32). The alignment weight makes no measurable difference here (18/32). The top three settings don't separate.
+- **Results are still far from the lower bound:** the best run on each chain is 3.1–5.9 times it.
 - **Power 1 is worse in every run:** all 26 power-1 runs finished 12–76% longer than the default settings. Visits with power 1 slide waypoints onto their neighbors, leaving zero-length links (seed 0's power-1 link lengths: `[0, 0, 12.2, 0, 0, 16.2, 0, 0, 24.2, 0]`). The waypoints then get stuck, so the waypoint settings barely matter: on seed 0, all 8 power-1 settings gave identical results.
-- **No final tree collides** in any of the 52 runs.
-- **10 visits were reverted.** All have the signature of the [near-contact mismatch](#known-issues) (a collision flagged, loss unchanged); one was traced and confirmed. Reverting kept the trees collision-free.
+- **23 visits were reverted** (10 on the first night, 13 in the power-2 resume). All have the signature of the [near-contact mismatch](#known-issues) (a collision flagged, loss unchanged); one was traced and confirmed. Reverting kept the trees collision-free.
 
-**Decision (2026-11-22): finish the sweep with the 8 power-2 settings only**, on seeds 3–7 (about 4 hours), and come back to power 1 after the [empty-links](#empty-links) investigation. More power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them. Any fix for empty links would mean rerunning power 1 anyway. To do this: `python parameterSweep.py --resume "Trials Before Experiments/2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7" --settings '*_power2' --note "..."` (38 runs).
+Details and per-seed numbers are in [EXPERIMENTS.md](EXPERIMENTS.md).
+
+**Decision (2026-11-22): power 2 only for now.** Seeds 3–7 were finished with the 8 power-2 settings only. Power 1 waits for the [empty-links](#empty-links) investigation: more power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them, and any fix for empty links would mean rerunning power 1 anyway.
 
 ### Known issues
 
@@ -350,7 +353,7 @@ Ideas to investigate:
 
 ### Before systematic experiments
 
-1. **Next:** finish the sweep with the 8 power-2 settings on seeds 3–7 (see the decision in [Current status](#current-status)).
+1. **Decide the defaults** from the sweep: probably `straightThroughGuess=True`; sampling and alignment weight are undecided (see [Current status](#current-status)).
 2. **Investigate [empty links](#empty-links),** then rerun power 1 against power 2.
 3. **Decide the near-contact question** (see [Known issues](#known-issues)).
 4. **Decide which metric to report,** total length or the visits' sum of squares. Suggestion: total length as the headline result, with sum of squares as a check on the optimizer. Power 1 targets total length directly but currently does worse because of empty links.
