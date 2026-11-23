@@ -3,7 +3,7 @@ Debugging harness for bunched waypoints: runs single waypoint visits on saved ex
 the result with known better placements, without running a whole tree optimization.
 
 Usage:
-    python bunchingExamples.py [names...] [--sampling box|multiscale] [--straight] [--alignment W]
+    python bunchingExamples.py [names...] [--sampling box|multiscale] [--straight | --no-straight] [--alignment W]
                                [--repeats N] [--seed S] [--serial]
     python bunchingExamples.py W8 --show [--sampling ...]   # plot one example (current / result / references)
 
@@ -148,7 +148,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('names', nargs='*', help="examples to run (default: all)")
     parser.add_argument('--sampling', choices=WAYPOINT_SAMPLINGS, help="waypointSampling (default: box)")
-    parser.add_argument('--straight', action='store_true', help="straightThroughGuess=True")
+    parser.add_argument('--straight', action=argparse.BooleanOptionalAction, default=None,
+                        help="straightThroughGuess (default: True)")
     parser.add_argument('--alignment', type=float, help="alignmentWeight (default: 10)")
     parser.add_argument('--repeats', type=int, default=3, help="runs per example with different seeds (default 3)")
     parser.add_argument('--seed', type=int, default=0, help="first seed (default 0)")
@@ -160,8 +161,8 @@ def main():
     settings = {}
     if args.sampling:
         settings['waypointSampling'] = args.sampling
-    if args.straight:
-        settings['straightThroughGuess'] = True
+    if args.straight is not None:
+        settings['straightThroughGuess'] = args.straight
     if args.alignment is not None:
         settings['alignmentWeight'] = args.alignment
     examples = loadExamples(args.names or None)

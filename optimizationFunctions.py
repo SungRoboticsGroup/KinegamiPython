@@ -236,7 +236,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
         traversalPower = metadata.get('power', 2)
     evaluate = metadata.get('evaluate', False)
     waypointSampling = metadata.get('waypointSampling', "box")
-    straightThroughGuess = metadata.get('straightThroughGuess', False)
+    straightThroughGuess = metadata.get('straightThroughGuess', False)  # checkpoints from before the option existed ran without it
     alignmentWeight = metadata.get('alignmentWeight', 10)
     save_checkpoints = metadata.get('save_checkpoints', True)
     
@@ -765,7 +765,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None,
                               includeCollisionPenalty=True, visitRecord=None, power=2,
-                              waypointSampling="box", straightThroughGuess=False, alignmentWeight=10):
+                              waypointSampling="box", straightThroughGuess=True, alignmentWeight=10):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     if waypointSampling not in WAYPOINT_SAMPLINGS:
@@ -889,7 +889,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
                  repeatTraversal=1, save_checkpoints=True, traversalPower=2,
-                 waypointSampling="box", straightThroughGuess=False, alignmentWeight=10):
+                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10):
     """
     Optimize the placement of joints in a kinematic tree.
     
@@ -915,7 +915,8 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             bounds, the original behavior) or "multiscale" (thirds that rotate in place, move a little, or move
             over the full range, with uniformly distributed rotations)
         straightThroughGuess: If True, waypoint visits also start particles that point the waypoint along the
-            line from the previous part to the next one, in place and moved onto that line
+            line from the previous part to the next one, in place and moved onto that line (default True;
+            the parameter sweep found it about 21% shorter on 4-joint chains)
         alignmentWeight: Weight (per radian) of the waypoint objective's penalty for misalignment with the
             parent's distal frame; 0 turns it off
     

@@ -227,4 +227,4 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 - The top three don't separate. Their means are within 0.025 of each other, and their ranges overlap widely.
 - Multiscale sampling helps slightly but not consistently.
 - The alignment weight makes no measurable difference on these chains. On the bunching examples it mattered only together with multiscale sampling.
-- Proposed, not yet decided: make `straightThroughGuess=True` the default, and pick the sampling and alignment weight on bigger chains, where there are more waypoints for them to act on.
+- Decided: `straightThroughGuess=True` is now the default. The sampling and alignment weight stay at box and 10 until they're tested on bigger chains, where there are more waypoints for them to act on.

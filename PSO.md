@@ -105,7 +105,7 @@ Two consequences:
 | `power` | float ≥ 0 | Power on link lengths in each visit's objective: 1 = plain length, 2 = squared lengths (default 2) |
 | `traversalPower` | float ≥ 0 | Power on link lengths in the randomized traversal's weights only (default 2) |
 | `waypointSampling` | `"box"`, `"multiscale"` | How waypoint visits sample random initial particles (default `"box"`); see [One waypoint visit](#one-waypoint-visit-optimizewaypointplacementonce) |
-| `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `False`) |
+| `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `True` since 2026-11-22; was `False`) |
 | `alignmentWeight` | float ≥ 0 | Weight of the waypoint objective's alignment penalty, per radian (default 10; 0 turns it off) |
 | `guarantee` | bool | **Always pass `True`.** `False` makes visits optimize a cut-down subtree; that path is untested and slated for removal |
 | `parallelize` | bool | Evaluates particles across processes. Particle sampling is seeded by `np.random`, but results aren't guaranteed to be identical from run to run |
@@ -290,6 +290,8 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 
 ### Current status
 
+"Default settings" in this section means the defaults when these runs were made: box sampling, alignment weight 10, and **no** straight-through guess. `straightThroughGuess` became the default afterwards (see the decision below).
+
 **8-joint seed-44 chain, single traversal (2026.11.20_16.15.57, BFS Outward Shortest, default settings):** finished 23 passes at total length 242.8, vs. 243.9 for April's DFS Outward run, which visits the same order on a chain. Sum of squares 3,329 vs. 4,497. No penalized retries or reverts. The final tree is still visibly bunched, for example in a loop near the base, and collisions don't explain it: no two unattached parts come within 4.4 of each other in any configuration.
 
 **Bunching examples** (`python bunchingExamples.py`): five waypoints from that final tree where a heavy search found much better placements. Share of the gap in local squared link length closed, averaged over 3 seeds:
@@ -323,6 +325,8 @@ None of the settings fixes W1, a waypoint sitting on its parent's frame (incomin
 
 Details and per-seed numbers are in [EXPERIMENTS.md](EXPERIMENTS.md).
 
+**Decision (2026-11-22): `straightThroughGuess=True` is now the default**, since it was better in 31 of 32 paired comparisons. `waypointSampling` stays `"box"` and `alignmentWeight` stays 10 until they're tested on bigger chains. Use `--no-straight` in `bunchingExamples.py` to compare against the old default.
+
 **Decision (2026-11-22): power 2 only for now.** Seeds 3–7 were finished with the 8 power-2 settings only. Power 1 waits for the [empty-links](#empty-links) investigation: more power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them, and any fix for empty links would mean rerunning power 1 anyway.
 
 ### Known issues
@@ -353,7 +357,7 @@ Ideas to investigate:
 
 ### Before systematic experiments
 
-1. **Decide the defaults** from the sweep: probably `straightThroughGuess=True`; sampling and alignment weight are undecided (see [Current status](#current-status)).
+1. **Decide the remaining defaults:** `waypointSampling` and `alignmentWeight` are undecided; test them on bigger chains (see [Current status](#current-status)).
 2. **Investigate [empty links](#empty-links),** then rerun power 1 against power 2.
 3. **Decide the near-contact question** (see [Known issues](#known-issues)).
 4. **Decide which metric to report,** total length or the visits' sum of squares. Suggestion: total length as the headline result, with sum of squares as a check on the optimizer. Power 1 targets total length directly but currently does worse because of empty links.
