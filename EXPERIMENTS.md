@@ -256,7 +256,7 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 
 ## 2026-11-23: Parent-locking at both powers, on 4-joint and 6-joint chains
 
-**Status:** 4-joint sweep done; 6-joint sweep still running at the time of writing (7 of 12 runs done at 10:30). Both ran on `5c5b8669`, before the collision-check fix below.
+**Status:** done (4-joint sweep 02:36–06:10, 6-joint sweep 06:10–13:30). Both ran on `5c5b8669`, before the collision-check fix below.
 
 **Question:** does the pilot's power-1 gain hold on all 8 chains, does parent-locking help power 2, and does it carry over to bigger chains?
 
@@ -279,14 +279,25 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 - At power 2, parent-locking is shorter on 6 of 8 chains, but keeps only 1–2 waypoints locked at the end, as the power-2 math predicts.
 - Runs took 5.5–7.5 minutes each.
 
-**Result, 6 joints so far:** chain 0 gave 175.0 / 79.4 / 93.1 / 90.5 (power 1, power 1 + parent-locking, power 2, power 2 + parent-locking; lower bound 15.4), and chain 1 gave 210.0 / – / 103.1 / 103.2 (lower bound 22.3). Runs take 20–70 minutes, much longer than on 4 joints.
+**Result, 6 joints** (final total length; ! marks a final tree the checker calls colliding, from the bug below; 11 waypoints per chain):
+
+| Chain | Power 1 | Power 1 + parent-locking | Power 2 | Power 2 + parent-locking | Lower bound |
+|---|---|---|---|---|---|
+| 0 | 175.0 | 79.4 ! | 93.1 | 90.5 | 15.4 |
+| 1 | 210.0 | 51.6 ! | 103.1 | 103.2 | 22.3 |
+| 2 | 296.7 | **42.7** | 121.9 | 99.4 | 17.8 |
+
+- Chain 2's power-1 + parent-locking run is collision-free (0 reverts), so its 42.7 stands: less than half the best power-2 result, as on 4 joints. Chains 0 and 1 ended colliding after 46 and 34 reverts.
+- Power 1 without parent-locking gets stuck again, at 1.7–2.4× power 2, with 9–11 of 11 waypoints collapsed onto their parents but not carried.
+- Power 2 + parent-locking: shorter on chain 2 (99.4 vs 121.9), about even on chains 0 and 1. It unlocked waypoints 8–11 times per run (5–9 per run on 4 joints) and ended with 1–2 locked, so at power 2 waypoints lock and unlock repeatedly.
+- Mean run time: 19.5 / 45.0 / 26.1 / 29.5 minutes; about 7.3 hours for the 6-joint sweep.
 
 **Bug found: the 6-joint parent-locking results are invalid.** Chain 0's power-1 + parent-locking run (79.4) ended with a tree the checker calls colliding, after 46 reverts in 69 minutes. Traced through its checkpoints:
 - At visit 61, joint 9 moved with W10 and W11 carried along, which moved link 12 (leaving W11) into joint 0 in configuration 4. Both the collision penalty and the revert guard only checked pairs involving the visited node and its own links, so the pair joint 0 / link 12 was never checked. A deep collision of a carried link would have slipped through the same way.
 - The collision itself is an end-cap false positive of the kind accepted so far: the closest point on joint 0 is the end of its centerline, and the overlap is −0.187 against its rounded cap but +0.335 against its flat end. It isn't filtered because only one of the two closest points is at an end.
 - From then on, the revert guard rejected every change that still collided, even those that reduced the collisions, so the tree stayed in that state.
 
-**Fixed (next commit):** collision checks and the collision penalty now cover the visited node plus its carried parent-locked waypoints. The revert guard accepts a change that still collides only in configurations the tree already collided in, when the objective didn't increase. Replaying visit 61 from the checkpoint before it with the fix gives a collision-free result.
+**Fixed in `6ed3f12c`:** collision checks and the collision penalty now cover the visited node plus its carried parent-locked waypoints. The revert guard accepts a change that still collides only in configurations the tree already collided in, when the objective didn't increase. Replaying visit 61 from the checkpoint before it with the fix gives a collision-free result.
 
 **Learned / decided:**
 - The 4-joint lengths stand, since none of those final trees collide, though a rerun with the fix may differ slightly. The 6-joint parent-locking runs, at both powers, need rerunning with the fix.
