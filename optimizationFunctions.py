@@ -238,6 +238,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
     waypointSampling = metadata.get('waypointSampling', "box")
     straightThroughGuess = metadata.get('straightThroughGuess', False)  # checkpoints from before the option existed ran without it
     alignmentWeight = metadata.get('alignmentWeight', 10)
+    parentLocking = metadata.get('parentLocking', False)
     save_checkpoints = metadata.get('save_checkpoints', True)
     
     if directory is None:
@@ -299,13 +300,14 @@ def resumeFromCheckpoint(checkpoint_path: str,
                     ignoreLater=(not guarantee), parallelize=parallelize,
                     verbose=verbose, configurations=configurations, visitRecord=visitRecord,
                     waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
-                    alignmentWeight=alignmentWeight)
+                    alignmentWeight=alignmentWeight, parentLocking=parentLocking)
             else:
                 tree, loss = optimizeJointPlacement(
                     tree, index, maxiter=iters, tol=tolerance,
                     failurePenalty=failurePenalty, childFraction=childFraction, power=power,
                     ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations, visitRecord=visitRecord)
+                    verbose=verbose, configurations=configurations, visitRecord=visitRecord,
+                    parentLocking=parentLocking)
             visitTime = time.time() - visitStart
 
             log(tree, index)
@@ -315,7 +317,8 @@ def resumeFromCheckpoint(checkpoint_path: str,
             if directory is not None:
                 visitRecord.update(visit=iteration_count, repeat=rep, index=index, visit_s=visitTime,
                                    elapsed_s=times[-1], total_length=lengths[-1],
-                                   sum_squared_length=sumSquaredLinkLength(tree))
+                                   sum_squared_length=sumSquaredLinkLength(tree),
+                                   parent_locked_count=countParentLocked(tree))
                 appendVisitRecord(directory, visitRecord)
             
             # Save checkpoint
@@ -349,6 +352,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
                         'waypointSampling': waypointSampling,
                         'straightThroughGuess': straightThroughGuess,
                         'alignmentWeight': alignmentWeight,
+                        'parentLocking': parentLocking,
                         'evaluate': evaluate,
                         'save_checkpoints': save_checkpoints,
                         'version': '1.0',
@@ -441,6 +445,107 @@ def rotationAngle(R):
     # Geodesic angle of a rotation matrix
     return np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
 
+# Parent-locking (option parentLocking): a waypoint is parent-locked when its proximal Dubins frame coincides
+# with its parent's distal Dubins frame, so its incoming link is empty and the tree behaves as if the waypoint
+# were deleted, while keeping it available to be moved out again later. Visits carry parent-locked descendants
+# along with the joint or waypoint they're locked to, waypoint visits consider locking to the parent, and visits
+# to a parent-locked waypoint consider unlocking it. Whether a waypoint is parent-locked is read from the
+# geometry, so it needs no extra saved state.
+PARENT_LOCK_TOLERANCE = 1e-6  # in units of the tube radius for positions, and directly for rotation matrix entries
+PARENT_LOCK_MARGIN = 1e-3     # relative improvement in linkLoss needed to lock or unlock (keeps waypoints from flip-flopping)
+
+def isParentLocked(tree, index):
+    if index == 0 or not isWaypoint(tree.Joints[index]):
+        return False
+    parentFrame = tree.Joints[tree.Parents[index]].DistalDubinsFrame()
+    frame = tree.Joints[index].ProximalDubinsFrame()
+    return np.linalg.norm(frame.t - parentFrame.t) < PARENT_LOCK_TOLERANCE * tree.r and \
+           np.max(np.abs(frame.R - parentFrame.R)) < PARENT_LOCK_TOLERANCE
+
+def parentLockedDescendants(tree, index):
+    # The waypoints locked to index, directly or through a chain of other locked waypoints, parents first
+    locked = []
+    frontier = [index]
+    while frontier:
+        node = frontier.pop(0)
+        for c in tree.Children[node]:
+            if isParentLocked(tree, c):
+                locked.append(c)
+                frontier.append(c)
+    return locked
+
+def countParentLocked(tree):
+    return sum(isParentLocked(tree, i) for i in range(len(tree.Joints)))
+
+def lockedOutgoingLinks(tree, index, locked):
+    # The links leaving index and its parent-locked descendants (other than the empty links to those descendants)
+    return [c for node in [index] + locked for c in tree.Children[node] if c not in locked]
+
+def moveWithParentLocked(tree, index, transformation, locked, relative=True):
+    # Like tree.transformJoint(index, transformation, propogate=False, safe=True, relative=relative,
+    # recomputeBoundingBall=False), but the parent-locked descendants in locked move with the joint, snapped back
+    # onto their parents' distal frames, so a move is never judged by the path to a waypoint left behind.
+    # Returns False (leaving the tree unchanged) if a link can't be made.
+    if not locked:
+        return tree.transformJoint(index, transformation, propogate=False, safe=True, relative=relative,
+                                   recomputeBoundingBall=False)
+    backup = tree.dataDeepCopy()
+    try:
+        if relative:
+            transformation = tree.Joints[index].Pose @ transformation @ tree.Joints[index].Pose.inv()
+        tree.Joints[index].transformPoseBy(transformation)
+        for d in locked:
+            snap = tree.Joints[tree.Parents[d]].DistalDubinsFrame() * tree.Joints[d].ProximalDubinsFrame().inv()
+            tree.Joints[d].transformPoseBy(snap)
+        moved = [index] + locked
+        if index > 0:
+            tree.Links[index] = LinkCSC(tree.r, tree.Joints[tree.Parents[index]].DistalDubinsFrame(),
+                                        tree.Joints[index].ProximalDubinsFrame(), tree.maxAnglePerElbow)
+        else:
+            tree.Links[0] = tree.Links[0].newLinkTransformedBy(transformation)
+            tree.boundingBall = tree.boundingBall.newBallTransformedBy(transformation)
+        for node in moved:
+            for c in tree.Children[node]:
+                tree.Links[c] = LinkCSC(tree.r, tree.Joints[node].DistalDubinsFrame(),
+                                        tree.Joints[c].ProximalDubinsFrame(), tree.maxAnglePerElbow)
+            tree.Joints[node].recomputeCollisionCapsules()
+    except (ValueError, AssertionError):
+        tree.setTo(backup)
+        return False
+    return True
+
+def pathMidpointFrame(link):
+    # Position and unit tangent at the middle (by arc length) of a link's CSC path
+    path = link.path
+    r = path.r
+    lengthC1, lengthS, lengthC2 = r * path.theta1, path.tMag, r * path.theta2
+    s = (lengthC1 + lengthS + lengthC2) / 2
+    if s <= lengthC1:
+        # along the first turn: the tangent turns from startDir toward w1, the direction to the circle's center
+        a = s / r
+        d, w = path.startDir, path.w1
+        return path.circleCenter1 - r * np.cos(a) * w + r * np.sin(a) * d, np.cos(a) * d + np.sin(a) * w
+    if s <= lengthC1 + lengthS:
+        return path.turn1end + (s - lengthC1) * path.tUnit, path.tUnit
+    # along the second turn, measured back from the end
+    a = (lengthC1 + lengthS + lengthC2 - s) / r
+    d, w = path.endDir, path.w2
+    return path.circleCenter2 - r * np.cos(a) * w - r * np.sin(a) * d, np.cos(a) * d - np.sin(a) * w
+
+def unlockGuess(subject, index):
+    # For a parent-locked waypoint: the move (in its own frame, as [t, ZYZ angles]) to the middle of the path
+    # leaving it, pointing along that path, so both of its links have length again. Splitting a path this way
+    # leaves both halves feasible, so it's a safe way out of the locked position.
+    if len(subject.Children[index]) == 0:
+        return []
+    waypoint = subject.Joints[index]
+    position, tangent = pathMidpointFrame(subject.Links[subject.Children[index][0]])
+    frame = waypoint.ProximalDubinsFrame()
+    # Dubins frames point along x; turn the frame as little as possible to point along the tangent
+    newFrame = SE3.Rt(rotationBetween(frame.R[:, 0], tangent) @ frame.R, position, check=False)
+    move = waypoint.Pose.inv() * (newFrame * frame.inv()) * waypoint.Pose
+    return [list(move.t) + list(move.eul())]
+
 def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeCollisionPenalty, configurations,
                                visitRecord=None):
     # optimizeOnce(includeCollisionPenalty) -> (tree, loss, initialLoss, timing), where initialLoss is the
@@ -466,6 +571,7 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
         tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=True)
         visitRecord.update(penalty_pso_s=timing['pso_s'], penalty_nm_s=timing['nm_s'])
     visitRecord['initial_loss'] = initialLoss
+    visitRecord['parent_lock_action'] = timing.get('parentLockAction', '')
 
     # The current placement is always a candidate, so a visit should never make things worse.
     # If it does (or still collides), keep the current placement and move on in the traversal.
@@ -479,7 +585,7 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
         else:
             reason = "objective increased"
         logCollisionPenalty(f"WARNING: reverting {label} {index} ({reason}). Loss {initialLoss} -> {loss}; keeping previous placement.")
-        visitRecord.update(reverted=True, revert_reason=reason, final_loss=initialLoss)
+        visitRecord.update(reverted=True, revert_reason=reason, final_loss=initialLoss, parent_lock_action='')
         return subject.copyAbbreviatedSelf(), initialLoss
     if timing.get('notApplied'):
         visitRecord.update(reverted=True, revert_reason="best particle could not be applied")
@@ -490,7 +596,8 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
 VISIT_FIELDS = ['visit', 'repeat', 'index', 'kind', 'initial_loss', 'final_loss',
                 'retried', 'reverted', 'revert_reason',
                 'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s', 'collision_check_s',
-                'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length']
+                'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length',
+                'parent_lock_action', 'parent_locked_count']
 
 def appendVisitRecord(directory, visitRecord):
     path = os.path.join(directory, 'visits.csv')
@@ -534,20 +641,27 @@ def writeRunInfo(directory, settings, filename='run_info.json', note=None):
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                            childFraction = 1, ignoreLater = False, parallelize = False,
                            verbose=True, power=2, includeCollisionPenalty=True,
-                           configurations=None, visitRecord=None):
+                           configurations=None, visitRecord=None, parentLocking=False):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
+    if parentLocking and ignoreLater:
+        raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeJointPlacement")
 
     optimizeOnce = partial(optimizeJointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
-                           childFraction, ignoreLater, parallelize, verbose, power, configurations)
+                           childFraction, ignoreLater, parallelize, verbose, power, configurations, parentLocking)
     return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations,
                                       visitRecord)
 
 def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
-                               parallelize, verbose, power, configurations, includeCollisionPenalty):
+                               parallelize, verbose, power, configurations, parentLocking, includeCollisionPenalty):
     movedJointIndex = index
     collisionMatrices = subject.buildCollisionMatrices()
+    # parent-locked waypoints move with the joint, and the links leaving them count as the joint's outgoing links
+    locked = parentLockedDescendants(subject, index) if parentLocking else []
+    outgoing = lockedOutgoingLinks(subject, index, locked) if locked else None
+    def move(tree, transformation):
+        return moveWithParentLocked(tree, index, transformation, locked)
 
     def objective(params, returnWhich : bool = False) -> float:
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
@@ -561,7 +675,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         linkLossReversedZhat = pathNonExistancePenalty
 
         #try just moving it
-        if tree.transformJoint(index, transform, propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+        if move(tree, transform):
             linkLossSameZhat = linkLoss(tree,
                                         index,
                                         power=power, childFraction=childFraction,
@@ -569,18 +683,17 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                         movedJointIndex=movedJointIndex,
                                         includeCollisionPenalty=includeCollisionPenalty,
                                         configurations=configurations,
-                                        collisionErrorWeight=failurePenalty)
+                                        collisionErrorWeight=failurePenalty, outgoing=outgoing)
         else:
             linkLossSameZhat = pathNonExistancePenalty
 
         #try switching zhat
         tree.Joints[index].reverseZhat()
         if (linkLossSameZhat == pathNonExistancePenalty or
-             not tree.transformJoint(index, SE3(), safe=True, relative=True, propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False)):
+             not move(tree, SE3())):
             tree2 = subject.copyAbbreviatedSelf(ignoreLater, index)
             tree2.Joints[index].reverseZhat()
-            if tree2.transformJoint(index, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation), safe=True, relative=True,
-                                    propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+            if move(tree2, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation)):
                 linkLossReversedZhat = linkLoss(tree2,
                                                 index,
                                                 power=power, childFraction=childFraction,
@@ -588,7 +701,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                                 movedJointIndex=movedJointIndex,
                                                 includeCollisionPenalty=includeCollisionPenalty,
                                                 configurations=configurations,
-                                                collisionErrorWeight=failurePenalty)
+                                                collisionErrorWeight=failurePenalty, outgoing=outgoing)
             else:
                 linkLossReversedZhat = pathNonExistancePenalty
         else:
@@ -599,7 +712,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                             movedJointIndex=movedJointIndex,
                                             includeCollisionPenalty=includeCollisionPenalty,
                                             configurations=configurations,
-                                            collisionErrorWeight=failurePenalty)
+                                            collisionErrorWeight=failurePenalty, outgoing=outgoing)
 
         if returnWhich:
             if linkLossSameZhat <= linkLossReversedZhat:
@@ -625,12 +738,10 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
     initialGuess = [initialPosition,initialRotation]
     initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
-    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation),
-                                      propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+    if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
         initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
-    if not initialTree.transformJoint(index, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation),
-                                      propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+    if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
         initialGuess = [0,0]
 
     initialLoss = objective([0,0])
@@ -690,19 +801,16 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
 
     tree = subject.copyAbbreviatedSelf()
     if which == 1:
-        if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]),
-                                   propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+        if not move(tree, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1])):
             raise Exception()
         return tree, loss, initialLoss, timing
     else:
         try:
-            if not tree.transformJoint(index, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1]),
-                                       propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+            if not move(tree, SE3.Trans([0,0,result[0]]) @ SE3.Rz(result[1])):
                 raise Exception()
 
             tree.Joints[index].reverseZhat()
-            if not tree.transformJoint(index, SE3.Trans([0,0,0]), safe=True, relative=True,
-                                       propogate=False, recomputeLinkPath=True, recomputeBoundingBall=False):
+            if not move(tree, SE3.Trans([0,0,0])):
                 raise Exception()
 
             return tree, loss, initialLoss, timing
@@ -710,9 +818,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
             tree2 = subject.copyAbbreviatedSelf()
             tree2.Joints[index].reverseZhat()
 
-            if not tree2.transformJoint(index, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1]),
-                                        safe=True, relative=True, propogate=False,
-                                        recomputeLinkPath=True, recomputeBoundingBall=False):
+            if not move(tree2, SE3.Trans([0,0,-result[0]]) @ SE3.Rz(-result[1])):
                 raise Exception()
             return tree2, loss, initialLoss, timing
 
@@ -765,22 +871,26 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None,
                               includeCollisionPenalty=True, visitRecord=None, power=2,
-                              waypointSampling="box", straightThroughGuess=True, alignmentWeight=10):
+                              waypointSampling="box", straightThroughGuess=True, alignmentWeight=10,
+                              parentLocking=False):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     if waypointSampling not in WAYPOINT_SAMPLINGS:
         raise ValueError(f"waypointSampling must be one of {WAYPOINT_SAMPLINGS}")
+    if parentLocking and ignoreLater:
+        raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeWaypointPlacement")
 
     optimizeOnce = partial(optimizeWaypointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
                            childFraction, ignoreLater, parallelize, verbose, power, configurations,
-                           waypointSampling, straightThroughGuess, alignmentWeight)
+                           waypointSampling, straightThroughGuess, alignmentWeight, parentLocking)
     return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations,
                                       visitRecord)
 
 def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
                                   parallelize, verbose, power, configurations,
-                                  waypointSampling, straightThroughGuess, alignmentWeight, includeCollisionPenalty):
+                                  waypointSampling, straightThroughGuess, alignmentWeight, parentLocking,
+                                  includeCollisionPenalty):
     start = time.time()
 
     parent = subject.Joints[subject.Parents[index]]
@@ -801,12 +911,22 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
 
     movedJointIndex = index
     collisionMatrices = subject.buildCollisionMatrices()
+    # parent-locked waypoints move with this one, and the links leaving them count as its outgoing links
+    locked = parentLockedDescendants(subject, index) if parentLocking else []
+    outgoing = lockedOutgoingLinks(subject, index, locked) if locked else None
+    selfLocked = parentLocking and isParentLocked(subject, index)
+
+    def waypointLinkLoss(tree):
+        # on a copy, since the collision penalty leaves the tree in the last configuration
+        return linkLoss(tree.copyAbbreviatedSelf(), index, power=power, childFraction=childFraction,
+                        includeCollisionPenalty=includeCollisionPenalty, configurations=configurations,
+                        collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
+                        collisionErrorWeight=failurePenalty, outgoing=outgoing)
 
     def objective(params):
         tree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
-        if not tree.transformJoint(index, paramsToTransform(params),
-                                   propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+        if not moveWithParentLocked(tree, index, paramsToTransform(params), locked):
             return failurePenalty * len(subject.Joints) * (len(subject.Children) + 1)
 
         # regularize toward aligning with the parent's distal frame
@@ -814,11 +934,10 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
         return linkLoss(tree, index, power=power, childFraction=childFraction,
                         includeCollisionPenalty=includeCollisionPenalty, configurations=configurations,
                         collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
-                        collisionErrorWeight=failurePenalty) + misalignment * alignmentWeight
+                        collisionErrorWeight=failurePenalty, outgoing=outgoing) + misalignment * alignmentWeight
 
     initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
-    if not initialTree.transformJoint(index, paramsToTransform(initialGuess),
-                                      propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+    if not moveWithParentLocked(initialTree, index, paramsToTransform(initialGuess), locked):
         initialGuess = [0]*6
 
     initialLoss = objective([0]*6)
@@ -834,10 +953,13 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
     n_particles = 24
 
     # particle 0 is the initial guess and particle 1 is the current placement,
-    # followed by the straight-through guesses (if enabled), then random particles
+    # followed by the straight-through guesses (if enabled), the unlocking guess (for a parent-locked
+    # waypoint), then random particles
     init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
     init_pos[1] = np.array([0]*6, dtype='float64')
     guesses = straightThroughGuesses(subject, index) if straightThroughGuess else []
+    if selfLocked:
+        guesses = guesses + unlockGuess(subject, index)
     for k, guess in enumerate(guesses):
         init_pos[2 + k] = guess
     first = 2 + len(guesses)
@@ -872,10 +994,50 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
     timing = {'pso_s': time.time() - psoStart, 'nm_s': 0.0}
 
     tree = subject.copyAbbreviatedSelf()
-    if not tree.transformJoint(index, paramsToTransform(minSwarmResult),
-                               propogate=False, safe=True, relative=True, recomputeBoundingBall=False):
+    if not moveWithParentLocked(tree, index, paramsToTransform(minSwarmResult), locked):
         logCollisionPenalty(f"WARNING: best particle for waypoint {index} could not be applied; keeping previous placement.")
         return subject.copyAbbreviatedSelf(), initialLoss, initialLoss, dict(timing, notApplied=True)
+
+    if parentLocking:
+        # Compare locked against unlocked on linkLoss alone (the alignment penalty is always 0 when locked, so
+        # including it would favor locking for reasons unrelated to length), keeping the current state unless
+        # the other is better by PARENT_LOCK_MARGIN.
+        psoLinkLoss = waypointLinkLoss(tree)
+        if selfLocked:
+            currentLinkLoss = waypointLinkLoss(subject)
+            if not isParentLocked(tree, index) and psoLinkLoss < currentLinkLoss * (1 - PARENT_LOCK_MARGIN):
+                timing['parentLockAction'] = 'unlocked'
+                return tree, minSwarmLoss, initialLoss, timing
+            # The swarm stayed locked (or barely improved). Its objective includes the alignment penalty,
+            # which is 0 when locked, so it rarely picks the unlocking guess even when that's much shorter;
+            # judge that guess on linkLoss directly, as locking is judged.
+            for guess in unlockGuess(subject, index):
+                unlockedTree = subject.copyAbbreviatedSelf()
+                if moveWithParentLocked(unlockedTree, index, paramsToTransform(guess), locked):
+                    unlockedLinkLoss = waypointLinkLoss(unlockedTree)
+                    if unlockedLinkLoss < currentLinkLoss * (1 - PARENT_LOCK_MARGIN):
+                        timing['parentLockAction'] = 'unlocked'
+                        if verbose:
+                            print(f"Unlocked waypoint {index}: linkLoss {currentLinkLoss} locked vs. {unlockedLinkLoss} unlocked")
+                        # Reported on linkLoss, the basis of the decision (the locked objective equals its linkLoss)
+                        return unlockedTree, unlockedLinkLoss, initialLoss, timing
+            timing['parentLockAction'] = 'keptLocked'
+            return subject.copyAbbreviatedSelf(), initialLoss, initialLoss, timing
+        elif isParentLocked(tree, index):
+            # the swarm itself landed on the locked placement (particle 0, the line-up guess, is exactly it)
+            timing['parentLockAction'] = 'parentLocked'
+        else:
+            lockedTree = subject.copyAbbreviatedSelf()
+            lockMove = parent.DistalDubinsFrame() * waypoint.ProximalDubinsFrame().inv()
+            if moveWithParentLocked(lockedTree, index, lockMove, locked, relative=False):
+                lockedLinkLoss = waypointLinkLoss(lockedTree)
+                if lockedLinkLoss < psoLinkLoss * (1 - PARENT_LOCK_MARGIN):
+                    timing['parentLockAction'] = 'parentLocked'
+                    misalignment = rotationAngle(lockedTree.Joints[index].Pose.R.T @ alignedOrientation)
+                    lockedLoss = lockedLinkLoss + misalignment * alignmentWeight
+                    if verbose:
+                        print(f"Parent-locked waypoint {index}: linkLoss {psoLinkLoss} unlocked vs. {lockedLinkLoss} locked")
+                    return lockedTree, lockedLoss, initialLoss, timing
 
     if verbose:
         msg = f"Optimized waypoint {index} in {time.time() - start}s -- Old Loss: {initialLoss}, Improved Loss: {minSwarmLoss}"
@@ -889,7 +1051,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
                  repeatTraversal=1, save_checkpoints=True, traversalPower=2,
-                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10):
+                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10, parentLocking=False):
     """
     Optimize the placement of joints in a kinematic tree.
     
@@ -919,6 +1081,9 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             the parameter sweep found it about 21% shorter on 4-joint chains)
         alignmentWeight: Weight (per radian) of the waypoint objective's penalty for misalignment with the
             parent's distal frame; 0 turns it off
+        parentLocking: If True, waypoints can be parent-locked onto their parent's distal frame (as if deleted,
+            but kept available): visits carry parent-locked descendants along, waypoint visits consider
+            locking, and visits to parent-locked waypoints consider unlocking them. Needs guarantee=True.
     
     Returns:
         Optimized KinematicTree, or (tree, times, lengths) if evaluate=True
@@ -1001,7 +1166,8 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
     log(tree, -1)
     if directory != None:
         appendVisitRecord(directory, dict(visit=0, index=-1, kind='start', elapsed_s=times[-1],
-                                          total_length=lengths[-1], sum_squared_length=sumSquaredLinkLength(tree)))
+                                          total_length=lengths[-1], sum_squared_length=sumSquaredLinkLength(tree),
+                                          parent_locked_count=countParentLocked(tree)))
 
     # create the traversal calls
     treeTraversals = {
@@ -1029,12 +1195,13 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
                                                     configurations=configurations, visitRecord=visitRecord,
                                                     waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
-                                                    alignmentWeight=alignmentWeight)
+                                                    alignmentWeight=alignmentWeight, parentLocking=parentLocking)
             else:
                 tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
                                                     failurePenalty=failurePenalty, childFraction=childFraction, power=power, 
                                                     ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations, visitRecord=visitRecord)
+                                                    configurations=configurations, visitRecord=visitRecord,
+                                                    parentLocking=parentLocking)
             visitTime = time.time() - visitStart
 
             log(tree, index)
@@ -1044,7 +1211,8 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             if directory != None:
                 visitRecord.update(visit=iteration_count, repeat=repeat_idx, index=index, visit_s=visitTime,
                                    elapsed_s=times[-1], total_length=lengths[-1],
-                                   sum_squared_length=sumSquaredLinkLength(tree))
+                                   sum_squared_length=sumSquaredLinkLength(tree),
+                                   parent_locked_count=countParentLocked(tree))
                 appendVisitRecord(directory, visitRecord)
             
             # Save checkpoint after each iteration
@@ -1082,6 +1250,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                         'waypointSampling': waypointSampling,
                         'straightThroughGuess': straightThroughGuess,
                         'alignmentWeight': alignmentWeight,
+                        'parentLocking': parentLocking,
                         'evaluate': evaluate,
                         'save_checkpoints': save_checkpoints,
                         'version': '1.0',

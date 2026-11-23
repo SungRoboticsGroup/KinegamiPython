@@ -2,7 +2,8 @@
 Parameter sweep over the visit settings on small random chains, meant for overnight runs.
 
 Usage:
-    python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings LABEL,...] [--no-checkpoints]
+    python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings LABEL,...]
+                             [--grid KEY=V1,V2 ...] [--no-checkpoints]
     python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" [--settings PATTERN,...]
                                                                                        # continue an interrupted sweep
     python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"  # print the comparison table
@@ -11,6 +12,11 @@ Usage:
 --settings 'multiscale_straight_*'. With --resume it narrows which of the sweep's runs are still done this time;
 --joints, --seeds and --first-seed are ignored on resume. Each resume writes resume_<timestamp>.json recording the
 git commit and the settings it ran.
+
+--grid replaces one setting's values for a new sweep, e.g. to compare parent-locking at power 1 only:
+    --grid power=1 --grid parentLocking=False,True --grid waypointSampling=box --grid alignmentWeight=10
+The first combination is the baseline that --summarize compares against. The sweep's grid is saved in
+run_info.json and reused by --resume and --summarize. Labels end in "_parentlock" for runs with parentLocking.
 
 Every combination of the settings in SETTINGS_GRID is run on each random chain (generated as in
 randomChain.py, with collision-free configurations), one seed at a time, so stopping early still leaves
@@ -21,7 +27,7 @@ in their settings.
 Output, in "Trials Before Experiments/<timestamp>_Sweep_Joints<N>_Seeds<a>-<b>/":
     run_info.json            git commit, versions, and the sweep's settings
     summary.csv              one row per run: settings, start/final total length, sum of squares, time,
-                             retries, reverts, final collisions, and any error
+                             retries, reverts, final collisions, parent-locks and unlocks, and any error
     errors.log               tracebacks of runs that raised
     seed<k>/start.tree, seed<k>/configs.json
     seed<k>/<settings label>/visits.csv, final.tree, checkpoints/, collision_penalty_log.txt
@@ -48,34 +54,62 @@ SETTINGS_GRID = {
     'straightThroughGuess': [False, True],
     'alignmentWeight': [10, 0],
     'power': [2, 1],
+    'parentLocking': [False],
 }
 TRAVERSAL = dict(traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n",
                  childFraction=1, guarantee=True)
 CUBE_SIZE = 10
 NUM_EXTRA_CONFIGS = 4  # collision-free random configurations in addition to neutral, as in randomChain.py
 
-SUMMARY_FIELDS = ['seed', 'label'] + list(SETTINGS_GRID) + \
-                 ['start_length', 'final_length', 'lower_bound', 'start_sum_squared', 'final_sum_squared',
-                  'time_s', 'visits', 'retried', 'reverted', 'final_colliding_configs', 'error']
+RESULT_FIELDS = ['start_length', 'final_length', 'lower_bound', 'start_sum_squared', 'final_sum_squared',
+                 'time_s', 'visits', 'retried', 'reverted', 'final_colliding_configs',
+                 'parent_locks', 'parent_unlocks', 'final_parent_locked', 'error']
+
+def summaryFields(grid):
+    return ['seed', 'label'] + list(grid) + RESULT_FIELDS
 
 def settingsLabel(settings):
     return "_".join([settings['waypointSampling'],
                      "straight" if settings['straightThroughGuess'] else "nostraight",
                      f"align{settings['alignmentWeight']:g}",
-                     f"power{settings['power']:g}"])
+                     f"power{settings['power']:g}"]) + ("_parentlock" if settings.get('parentLocking') else "")
 
-def resolveSettings(spec):
+def parseGridOverride(text):
+    # "key=v1,v2" -> (key, [values]), with values parsed as bools or numbers where they look like them
+    if '=' not in text:
+        raise SystemExit(f"--grid takes KEY=VALUE[,VALUE...], got {text!r}")
+    key, values = text.split('=', 1)
+    if key not in SETTINGS_GRID:
+        raise SystemExit(f"--grid: unknown setting {key!r}; settings: {list(SETTINGS_GRID)}")
+    def parse(v):
+        if v in ('True', 'False'):
+            return v == 'True'
+        for kind in (int, float):
+            try:
+                return kind(v)
+            except ValueError:
+                pass
+        return v
+    return key, [parse(v.strip()) for v in values.split(',') if v.strip()]
+
+def sweepGrid(sweepDir):
+    # The grid a sweep was run with (sweeps from before --grid existed used the grid of the time, which
+    # lacked parentLocking)
+    with open(os.path.join(sweepDir, 'run_info.json')) as f:
+        return json.load(f)['settings'].get('grid', SETTINGS_GRID)
+
+def resolveSettings(spec, grid=SETTINGS_GRID):
     # Comma-separated labels or wildcard patterns -> matching labels, in grid order
-    labels = [settingsLabel(s) for s in allSettings()]
+    labels = [settingsLabel(s) for s in allSettings(grid)]
     patterns = [p.strip() for p in spec.split(',') if p.strip()]
     for pattern in patterns:
         if not fnmatch.filter(labels, pattern):
             raise SystemExit(f"--settings pattern {pattern!r} matches no settings; valid labels: {labels}")
     return [label for label in labels if any(fnmatch.fnmatch(label, p) for p in patterns)]
 
-def allSettings():
-    keys = list(SETTINGS_GRID)
-    return [dict(zip(keys, values)) for values in itertools.product(*SETTINGS_GRID.values())]
+def allSettings(grid=SETTINGS_GRID):
+    keys = list(grid)
+    return [dict(zip(keys, values)) for values in itertools.product(*grid.values())]
 
 def generateRandomChain(nJoints, r=1):
     # Same construction as randomChain.py
@@ -124,11 +158,16 @@ def prepareSeed(sweepDir, seed, nJoints):
     # use the reloaded tree, so runs and resumed runs start from exactly the same object state
     return seedDir, loadKinematicTree(treePath), configs
 
-def appendSummary(sweepDir, row):
+def appendSummary(sweepDir, row, grid):
     path = os.path.join(sweepDir, 'summary.csv')
     isNew = not os.path.exists(path)
+    if not isNew:
+        with open(path) as f:
+            fields = next(csv.reader(f))  # keep an existing file's columns
+    else:
+        fields = summaryFields(grid)
     with open(path, 'a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS, restval='', extrasaction='ignore')
+        writer = csv.DictWriter(f, fieldnames=fields, restval='', extrasaction='ignore')
         if isNew:
             writer.writeheader()
         writer.writerow(row)
@@ -140,7 +179,7 @@ def finishedRuns(sweepDir):
     with open(path) as f:
         return {(int(r['seed']), r['label']) for r in csv.DictReader(f)}
 
-def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints):
+def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints, grid):
     label = settingsLabel(settings)
     runDir = os.path.join(seedDir, label)
     if os.path.exists(runDir):
@@ -163,6 +202,9 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints):
         row.update(final_length=tree.totalLength(), final_sum_squared=sumSquaredLinkLength(tree),
                    visits=len(visits), retried=sum(r['retried'] == 'True' for r in visits),
                    reverted=sum(r['reverted'] == 'True' for r in visits),
+                   parent_locks=sum(r.get('parent_lock_action') == 'parentLocked' for r in visits),
+                   parent_unlocks=sum(r.get('parent_lock_action') == 'unlocked' for r in visits),
+                   final_parent_locked=countParentLocked(tree),
                    final_colliding_configs=sum(len(collidingConfigurations(tree, i, configs))
                                                for i in range(len(tree.Joints))))
     except Exception as e:
@@ -170,7 +212,7 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints):
         with open(os.path.join(sweepDir, 'errors.log'), 'a') as f:
             f.write(f"seed {seed}, {label}:\n{traceback.format_exc()}\n")
     row['time_s'] = time.time() - start
-    appendSummary(sweepDir, row)
+    appendSummary(sweepDir, row, grid)
     return row
 
 def summarize(sweepDir):
@@ -179,14 +221,15 @@ def summarize(sweepDir):
     ok = [r for r in rows if not r['error']]
     failed = [r for r in rows if r['error']]
     seeds = sorted({int(r['seed']) for r in ok})
-    baseline = settingsLabel(allSettings()[0])
+    grid = sweepGrid(sweepDir)
+    baseline = settingsLabel(allSettings(grid)[0])
     base = {int(r['seed']): float(r['final_length']) for r in ok if r['label'] == baseline}
     print(f"{sweepDir}\n{len(ok)} finished runs on seeds {seeds}, {len(failed)} failed\n")
     print(f"Final total length relative to the baseline ({baseline}) on the same chain; lower is better.")
     print(f"{'settings':45} {'runs':>4} {'mean ratio':>10} {'best':>6} {'worst':>6} {'wins':>5} "
           f"{'mean final':>10} {'retried':>7} {'reverted':>8} {'mean time':>9}")
     results = []
-    for label in [settingsLabel(s) for s in allSettings()]:
+    for label in [settingsLabel(s) for s in allSettings(grid)]:
         runs = [r for r in ok if r['label'] == label and int(r['seed']) in base]
         if not runs:
             continue
@@ -210,6 +253,9 @@ def main():
     parser.add_argument('--first-seed', type=int, default=0, help="seed of the first chain (default 0)")
     parser.add_argument('--settings', help="comma-separated settings labels or wildcard patterns to run, e.g. '*_power2' "
                                            "(default: the whole grid, or on --resume the sweep's original settings)")
+    parser.add_argument('--grid', action='append', default=[], metavar='KEY=V1,V2',
+                        help="for a new sweep, replace one setting's values in the grid, e.g. --grid power=1 "
+                             "--grid parentLocking=False,True (repeatable; the first value of each is the baseline)")
     parser.add_argument('--no-checkpoints', action='store_true', help="don't save a checkpoint after every visit")
     parser.add_argument('--note', help="why this sweep (or resume) is being run; saved in run_info.json "
                                        "(or resume_<timestamp>.json)")
@@ -222,11 +268,14 @@ def main():
         return
 
     if args.resume:
+        if args.grid:
+            raise SystemExit("--grid only applies to new sweeps; a resume uses the sweep's own grid")
         sweepDir = args.resume
         with open(os.path.join(sweepDir, 'run_info.json')) as f:
             sweep = json.load(f)['settings']
+        grid = sweep.get('grid', SETTINGS_GRID)
         if args.settings:
-            chosen = resolveSettings(args.settings)
+            chosen = resolveSettings(args.settings, grid)
             extra = [label for label in chosen if label not in sweep['settings']]
             if extra:
                 print(f"Note: running settings that weren't in the original sweep: {extra}")
@@ -235,10 +284,14 @@ def main():
         writeRunInfo(sweepDir, dict(resumed=True, settings=sweep['settings']), filename=f"resume_{timestamp}.json",
                      note=args.note)
     else:
+        grid = dict(SETTINGS_GRID)
+        for override in args.grid:
+            key, values = parseGridOverride(override)
+            grid[key] = values
         sweep = dict(script='parameterSweep.py', joints=args.joints,
                      seeds=list(range(args.first_seed, args.first_seed + args.seeds)),
-                     settings=resolveSettings(args.settings) if args.settings else [settingsLabel(s) for s in allSettings()],
-                     grid=SETTINGS_GRID, traversal=TRAVERSAL, cubeSize=CUBE_SIZE,
+                     settings=resolveSettings(args.settings, grid) if args.settings else [settingsLabel(s) for s in allSettings(grid)],
+                     grid=grid, traversal=TRAVERSAL, cubeSize=CUBE_SIZE,
                      numExtraConfigs=NUM_EXTRA_CONFIGS, saveCheckpoints=not args.no_checkpoints)
         timestamp = datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
         sweepDir = os.path.join("Trials Before Experiments",
@@ -246,10 +299,10 @@ def main():
         os.makedirs(sweepDir, exist_ok=True)
         writeRunInfo(sweepDir, sweep, note=args.note)
 
-    settingsList = [s for s in allSettings() if settingsLabel(s) in sweep['settings']]
-    unknown = set(sweep['settings']) - {settingsLabel(s) for s in allSettings()}
+    settingsList = [s for s in allSettings(grid) if settingsLabel(s) in sweep['settings']]
+    unknown = set(sweep['settings']) - {settingsLabel(s) for s in allSettings(grid)}
     if unknown:
-        raise SystemExit(f"Unknown settings labels {sorted(unknown)}; valid: {[settingsLabel(s) for s in allSettings()]}")
+        raise SystemExit(f"Unknown settings labels {sorted(unknown)}; valid: {[settingsLabel(s) for s in allSettings(grid)]}")
     selected = {(seed, settingsLabel(s)) for seed in sweep['seeds'] for s in settingsList}
     done = finishedRuns(sweepDir) & selected
     total = len(selected)
@@ -264,7 +317,7 @@ def main():
             label = settingsLabel(settings)
             if (seed, label) in done:
                 continue
-            row = runOne(sweepDir, seedDir, seed, chain, configs, settings, sweep['saveCheckpoints'])
+            row = runOne(sweepDir, seedDir, seed, chain, configs, settings, sweep['saveCheckpoints'], grid)
             count += 1
             runTimes.append(row['time_s'])
             remaining = (total - count) * np.mean(runTimes)

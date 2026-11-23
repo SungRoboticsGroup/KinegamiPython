@@ -4,6 +4,7 @@ the result with known better placements, without running a whole tree optimizati
 
 Usage:
     python bunchingExamples.py [names...] [--sampling box|multiscale] [--straight | --no-straight] [--alignment W]
+                               [--parent-locking]
                                [--repeats N] [--seed S] [--serial]
     python bunchingExamples.py W8 --show [--sampling ...]   # plot one example (current / result / references)
 
@@ -15,6 +16,8 @@ best under plain linkLoss ("ref len"). Both are collision-free in every configur
 For each example and repeat, the table reports linkLoss (power 2, the length term alone) and the waypoint
 objective with the default alignmentWeight 10, before and after the visit, next to the references. "gap
 closed" is how much of the distance from the current linkLoss to the "ref len" linkLoss the visit closed.
+With --parent-locking, "lock" shows what the visit did about parent-locking (locked to the parent, unlocked,
+or kept locked), and the "before" columns mark a waypoint that starts parent-locked with "*".
 """
 import argparse
 import json
@@ -76,7 +79,7 @@ def runVisit(example, seed, parallelize=True, **settings):
 def runAll(examples, repeats, seed, parallelize, settings):
     print(f"Settings: {settings or 'defaults'}; {repeats} repeat(s) per example, seeds {seed}..{seed + repeats - 1}\n")
     header = f"{'example':8} {'seed':>4}  {'linkLoss: before':>16} {'after':>8} {'ref len':>8} {'gap closed':>10}   " \
-             f"{'objective(w=10): before':>23} {'after':>8} {'ref obj':>8}  {'retried/reverted':>16} {'time':>6}"
+             f"{'objective(w=10): before':>23} {'after':>8} {'ref obj':>8}  {'retried/reverted':>16} {'lock':>12} {'time':>6}"
     print(header)
     print('-' * len(header))
     summary = []
@@ -93,8 +96,10 @@ def runAll(examples, repeats, seed, parallelize, settings):
             gap = (L0 - L) / (L0 - refLen) if L0 - refLen > 1e-9 else float('nan')
             closed.append(gap)
             flags = f"{'R' if record.get('retried') else '-'}/{'V' if record.get('reverted') else '-'}"
-            print(f"{e['name']:8} {seed + r:>4}  {L0:16.2f} {L:8.2f} {refLen:8.2f} {gap:10.0%}   "
-                  f"{obj0:23.2f} {obj:8.2f} {refObj:8.2f}  {flags:>16} {time.time() - start:5.1f}s")
+            star = '*' if isParentLocked(tree, index) else ' '
+            print(f"{e['name']:8} {seed + r:>4}  {L0:15.2f}{star} {L:8.2f} {refLen:8.2f} {gap:10.0%}   "
+                  f"{obj0:22.2f}{star} {obj:8.2f} {refObj:8.2f}  {flags:>16} {record.get('parent_lock_action') or '-':>12} "
+                  f"{time.time() - start:5.1f}s")
         summary.append((e['name'], np.nanmean(closed)))
     print("\nMean share of the linkLoss gap closed: " + ", ".join(f"{n} {g:.0%}" for n, g in summary)
           + f"; overall {np.nanmean([g for _, g in summary]):.0%}")
@@ -151,6 +156,7 @@ def main():
     parser.add_argument('--straight', action=argparse.BooleanOptionalAction, default=None,
                         help="straightThroughGuess (default: True)")
     parser.add_argument('--alignment', type=float, help="alignmentWeight (default: 10)")
+    parser.add_argument('--parent-locking', action='store_true', help="parentLocking=True")
     parser.add_argument('--repeats', type=int, default=3, help="runs per example with different seeds (default 3)")
     parser.add_argument('--seed', type=int, default=0, help="first seed (default 0)")
     parser.add_argument('--serial', action='store_true', help="don't parallelize particle evaluation")
@@ -165,6 +171,8 @@ def main():
         settings['straightThroughGuess'] = args.straight
     if args.alignment is not None:
         settings['alignmentWeight'] = args.alignment
+    if args.parent_locking:
+        settings['parentLocking'] = True
     examples = loadExamples(args.names or None)
     if args.show:
         if len(examples) != 1:

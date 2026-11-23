@@ -228,3 +228,28 @@ Each setting's effect, comparing runs that differ only in that setting (32 pairs
 - Multiscale sampling helps slightly but not consistently.
 - The alignment weight makes no measurable difference on these chains. On the bunching examples it mattered only together with multiscale sampling.
 - Decided: `straightThroughGuess=True` is now the default. The sampling and alignment weight stay at box and 10 until they're tested on bigger chains, where there are more waypoints for them to act on.
+
+## 2026-11-22: Pilot of parent-locking at power 1
+
+**Status:** done (ran 23:15–23:39 on uncommitted changes on top of `70870712`; the code is otherwise as committed with parent-locking).
+
+**Question:** does [parent-locking](PSO.md#parent-locking) stop power 1 from getting stuck on empty links, and does it run cleanly?
+
+**Run:** `python parameterSweep.py --seeds 2 --grid power=1 --grid parentLocking=False,True --grid waypointSampling=box --grid alignmentWeight=10 --grid straightThroughGuess=True --note "..."`: folder `2026.11.22_23.15.45_Sweep_Joints4_Seeds0-1`, 4 runs.
+
+**Result:**
+
+| Chain | Power 1 | Power 1 + parent-locking | Best power-2 run in the earlier sweep | Lower bound |
+|---|---|---|---|---|
+| Seed 0 | 61.5 | **23.6** | 43.5 | 9.2 |
+| Seed 1 | 88.6 | **19.6** | 45.2 | 7.7 |
+
+- No errors, and no final tree collides. Seed 1's parent-locking run had 2 reverts, both with the near-contact signature.
+- The sum of squared link lengths also fell far below the power-2 runs (80.7 and 47.7, against 178.8 and 167.7), even though those runs minimize it directly.
+- In both runs, all 7 waypoints became parent-locked during the first pass, exactly as without parent-locking, and none were unlocked afterward. The first pass ends at the same length as without parent-locking. The gains all come from later passes, where joints can move with their locked waypoints carried along.
+- The swarm locked the waypoints by itself, landing on particle 0 (the line-up guess, which is exactly the locked placement). Those visits weren't logged as `parentLocked`; that's fixed now.
+
+**Learned / decided:**
+- On these two chains, power 1 with parent-locking ends at about half the best power-2 result. In effect it removes the waypoints and lets the joints place themselves, with direct links between them.
+- Whether waypoints help at all here is now an open question: on these chains, none were worth keeping.
+- Next: run parent-locking on all 8 chains at both powers, to check the result holds and whether it helps power 2.

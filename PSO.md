@@ -74,6 +74,17 @@ The no-penalty attempt runs first because the penalty is expensive: it runs coll
   - Angle bounds: ±2π.
 - **Optimizer:** `GlobalBestPSO` (c1 = 0.7, c2 = 0.5, w = 0.5) for 50 iterations. Unlike joint visits, there's no Nelder-Mead step afterward.
 
+### Parent-locking
+
+With `parentLocking=True`, a waypoint can be **parent-locked**: its proximal Dubins frame coincides with its parent's distal Dubins frame (within 1e-6), so its incoming link is empty. The tree then behaves as if the waypoint were deleted, but it stays in the tree in case it's needed again. Whether a waypoint is parent-locked is read from the geometry (`isParentLocked`), so it needs no extra saved state, and existing trees with empty links count as parent-locked.
+
+- **Locked waypoints move with what they're locked to.** Every move a joint or waypoint visit considers is also applied to its parent-locked descendants (recursively), which are snapped back onto their parents' distal frames (`moveWithParentLocked`). The links leaving them count as the visited joint's outgoing links in `linkLoss`. Without this, a joint with a waypoint sitting on its distal frame can barely move: shifting the joint forward makes the path to the waypoint loop back.
+- **Waypoint visits consider locking.** After PSO, the visit also evaluates the waypoint locked onto its parent, and locks it if that's better on `linkLoss` by at least 0.1% (`PARENT_LOCK_MARGIN`).
+- **Visits to a locked waypoint consider unlocking it.** The swarm gets one more particle, the **unlocking guess**: the middle of the path leaving the waypoint, pointing along that path. Both halves of a feasible path are feasible, so this is a safe way out. The waypoint is unlocked if the swarm's best is unlocked and better on `linkLoss` by the margin, or else if the unlocking guess is.
+- **Lock decisions use `linkLoss` alone,** without the alignment penalty, which is always 0 for a locked waypoint and would favor locking for reasons unrelated to length. (Inside PSO the alignment penalty still applies, which is why the unlocking guess is also judged separately: with `alignmentWeight` 10, the swarm almost never picks it.) When a visit unlocks via the guess, its `final_loss` is reported as that `linkLoss`.
+- **What to expect at each power.** At power 2, merging links of lengths a and b costs (a+b)², more than a² + b², so visits rarely lock, and a locked waypoint is unlocked as soon as it's visited. At power 1, locking and splitting cost about the same, and the margin keeps waypoints from flipping back and forth.
+- **Branching:** the unlocking guess uses the path to the waypoint's first child. Waypoints in the current tree construction have one child each.
+
 ### Objective
 
 `linkLoss`, in [treeTraversals.py](treeTraversals.py):
@@ -107,6 +118,7 @@ Two consequences:
 | `waypointSampling` | `"box"`, `"multiscale"` | How waypoint visits sample random initial particles (default `"box"`); see [One waypoint visit](#one-waypoint-visit-optimizewaypointplacementonce) |
 | `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `True` since 2026-11-22; was `False`) |
 | `alignmentWeight` | float ≥ 0 | Weight of the waypoint objective's alignment penalty, per radian (default 10; 0 turns it off) |
+| `parentLocking` | bool | Let waypoints be parent-locked onto their parent's distal frame, as if deleted but kept available (default `False`; needs `guarantee=True`). See [Parent-locking](#parent-locking) |
 | `guarantee` | bool | **Always pass `True`.** `False` makes visits optimize a cut-down subtree; that path is untested and slated for removal |
 | `parallelize` | bool | Evaluates particles across processes. Particle sampling is seeded by `np.random`, but results aren't guaranteed to be identical from run to run |
 | `directory` | path or `None` | Where per-visit `.tree` files and `checkpoints/` go |
@@ -170,12 +182,14 @@ Each script:
 [parameterSweep.py](parameterSweep.py) runs every combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight` and visit `power` on small random gimbal chains (default: 4 joints, seeds 0–7, 5 configurations each), with DFS outward for one pass per entry in `tree.Joints`. Runs go one seed at a time, so stopping early still leaves complete comparisons for the finished seeds.
 
 ```
-python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...]
+python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...] [--grid KEY=V1,V2 ...]
 python parameterSweep.py --resume "Trials Before Experiments/<sweep folder>" --note "why" [--settings PATTERN,...]
 python parameterSweep.py --summarize "Trials Before Experiments/<sweep folder>"
 ```
 
 `--note` saves why the sweep (or resume) is being run in `run_info.json` (or `resume_<timestamp>.json`); every script warns if it's missing. Log the experiment in [EXPERIMENTS.md](EXPERIMENTS.md) too. `--settings` takes settings labels or wildcard patterns, such as `'*_power2'` or `'multiscale_straight_*'`. With `--resume`, it narrows which of the sweep's unfinished runs to do this time. Each resume writes `resume_<timestamp>.json` with the git commit and the settings it ran. A run that was interrupted partway is cleared and rerun from the start.
+
+`--grid` replaces one setting's values for a new sweep (repeatable), for example `--grid power=1 --grid parentLocking=False,True`. The first combination is the baseline `--summarize` compares against. The grid is saved in `run_info.json`, and `--resume` and `--summarize` use it. Labels end in `_parentlock` for runs with `parentLocking`. `summary.csv` also counts each run's parent-locks and unlocks and its parent-locked waypoints at the end.
 
 It writes `run_info.json`, `summary.csv` (one row per run) and `errors.log` to the sweep folder, and each run's `visits.csv`, final tree and checkpoints to `seed<k>/<settings label>/`. A 4-joint run takes about 4–6 minutes, so the full 16-setting, 8-seed grid takes about 11 hours.
 
@@ -213,6 +227,8 @@ Trials Before Experiments/<timestamp>_Joints<N>_Chains<C>_Seed<S>/
 | `collision_check_s` | Seconds spent on the collision checks after each attempt. Checks inside the penalized objective run in PSO's worker processes and are counted in `penalty_pso_s` instead |
 | `visit_s`, `elapsed_s` | The visit's total time, and the time since the run started |
 | `total_length`, `sum_squared_length` | The tree's total link length, and its sum of squared link lengths (the tree-wide version of the visits' objective) |
+| `parent_lock_action` | With `parentLocking`: `parentLocked`, `unlocked` or `keptLocked` (a locked waypoint stayed locked); blank otherwise, or if the visit was reverted |
+| `parent_locked_count` | The number of parent-locked waypoints after the visit |
 
 For example, with pandas (`pip install pandas`; it isn't in `requirements.txt`):
 
@@ -351,14 +367,14 @@ Links of length 0, where a waypoint sits exactly on a neighbor's frame, may fund
 - **The objective sees no penalty for it.** A zero-length link and its waypoint add nothing to `linkLoss`, but the waypoint then can't bend the path anymore.
 
 Ideas to investigate:
-- **Delete the waypoint** when it gets close enough to a neighbor, simplifying the tree.
-- **Re-center the waypoint** to keep the tree's structure: move it to exactly the middle of the CSC path outward from it, so both of its links have length again. It's unclear what that should mean at a branch, where a waypoint has several outward paths.
+- **Delete the waypoint** when it gets close enough to a neighbor, simplifying the tree. *Implemented as [parent-locking](#parent-locking), which treats the waypoint as deleted but keeps it available.*
+- **Re-center the waypoint** to keep the tree's structure: move it to exactly the middle of the CSC path outward from it, so both of its links have length again. It's unclear what that should mean at a branch, where a waypoint has several outward paths. *Implemented as parent-locking's unlocking guess.* With it, W1 closes 100% of its gap in the bunching examples (linkLoss 22.61 → 11.31, against 11.32 for the heavy search).
 - **Avoid creating them:** sample or guess positions away from the neighbor, or penalize very short links.
 
 ### Before systematic experiments
 
 1. **Decide the remaining defaults:** `waypointSampling` and `alignmentWeight` are undecided; test them on bigger chains (see [Current status](#current-status)).
-2. **Investigate [empty links](#empty-links),** then rerun power 1 against power 2.
+2. **Test [parent-locking](#parent-locking)** for [empty links](#empty-links): at power 1 against power 2, and with power 2 to check it doesn't make things worse.
 3. **Decide the near-contact question** (see [Known issues](#known-issues)).
 4. **Decide which metric to report,** total length or the visits' sum of squares. Suggestion: total length as the headline result, with sum of squares as a check on the optimizer. Power 1 targets total length directly but currently does worse because of empty links.
 5. **Rerun the 8-joint seed-44 chain** with the best settings from the sweep, on several traversals. So far only one traversal has been rerun, with default settings.
