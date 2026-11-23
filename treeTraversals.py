@@ -48,6 +48,10 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
     if includeCollisionPenalty:
         if collisionMatrices is None:
             collisionMatrices = tree.buildCollisionMatrices()
+        # Put the tree back in its configuration afterwards: callers go on to use it (the joint visit's
+        # objective reverses the joint's axis on the same tree and scores that too), and a tree left in the
+        # last configuration gives them a different tree from the one they will return.
+        originalConfiguration = [joint.state for joint in tree.Joints]
         for i in range(0, len(configurations)):
             print("Current loss = ", loss)
             tree.setConfiguration(configurations[i])
@@ -57,6 +61,7 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
             newAmount = collisionError * collisionErrorWeight
             print(f"Collision penalty to add: {newAmount}")
             loss += newAmount
+        tree.setConfiguration(originalConfiguration)
     
     # print("Loss with collision penalty:", loss)
     return loss 

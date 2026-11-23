@@ -329,3 +329,26 @@ This is a different bug from the GUI branch's clustering fix `af6b0359` (sibling
 - **All results recorded before this fix are unreliable**, every entry above included. The optimizer never saw these collisions, so every run, at either power, may have taken moves it shouldn't have, even where its final tree happens to pass the fixed check. Power 1 is the worst affected: once waypoints collapse, the links into joints are the only links with length, and none of them were compared. The power-1 + parent-locking gains in particular (about half the power-2 length) may come largely from trees that pass through themselves.
 - The decisions based on those results (`straightThroughGuess=True` as the default; power 2 only) stand for now as working choices, but need confirming.
 - Next: small runs to check the fixed code runs smoothly, then rerun the sweeps.
+
+## 2026-11-23: Small runs after the collision fixes
+
+**Status:** done.
+
+**Question:** does the optimizer still run smoothly after the link-clustering and carried-waypoint fixes?
+
+**Run:** `python parameterSweep.py --joints 3 --seeds 2 --grid power=2,1 --grid parentLocking=False,True --grid waypointSampling=box --grid alignmentWeight=10 --grid straightThroughGuess=True --note "..."`, twice: folder `2026.11.23_14.00.49_Sweep_Joints3_Seeds0-1` on `be0e9422`, then `2026.11.23_14.26.14_Sweep_Joints3_Seeds0-1` with the `linkLoss` fix below (uncommitted at the time, committed right after).
+
+**Result:**
+
+| Chain | Power 2 | Power 2 + parent-locking | Power 1 | Power 1 + parent-locking | Lower bound |
+|---|---|---|---|---|---|
+| 0 | 28.1 | 25.1 | 36.9 | 15.3 | 6.5 |
+| 1 | 31.8 | 30.2 | 46.5 | 14.3 → 14.4 | 6.5 |
+
+- Both times: no errors, no final tree collides under the fixed checker, and runs took 2.2–4.9 minutes.
+- **The first run had 2 reverts** (chain 1, power 1 + parent-locking, joint 3), where the objective with the collision penalty went down although the result really collided (overlap 0.37). Cause, older than parent-locking: `linkLoss` posed the tree in each configuration for the penalty and left it in the last one. The joint visit's objective then reversed the joint's axis on that posed tree and scored it there, but the returned tree is rebuilt in the neutral pose, where it collided. Fixed by restoring the configuration in `linkLoss`. Replaying that visit with the fix: accepted, loss 10.12 → 9.64, collision-free.
+- **The second run had no reverts**; chain 1's run kept all 5 penalized retries. The other 7 runs gave identical lengths (none had a penalized joint retry that chose the reversed axis).
+
+**Learned / decided:**
+- The fixed code runs cleanly. Every penalized joint retry before this fix could have chosen between its two axis options on the wrong geometry, one more reason the earlier results are unreliable.
+- On 3-joint chains, power 1 + parent-locking stays at about half the power-2 length with the fixed checks. Too small to conclude anything; next is rerunning the 4-joint sweep and the 6-joint parent-locking settings.
