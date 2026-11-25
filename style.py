@@ -1,32 +1,96 @@
-import ezdxf
+﻿import ezdxf
 
-# Chosen to be mutually distinguishable in grayscale
-xColorDefault='orangered'
-yColorDefault='lightgreen'
-zColorDefault='darkblue'
+################# Main colors for the GUI ####################
+surfaceOpacityDefault = 1.0
+linkOpacityDefault = 0.5
+linkColorDefault = (0.5, 0.5, 0.5, linkOpacityDefault)  # gray
+jointColorDefault = (0.0, 0.0, 1.0, surfaceOpacityDefault)  # blue 
+jointEdgeColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue
+referenceMeshColor = (0, 1, 0, 1)  # green
 
-pathColorDefault='black'
-sphereColorDefault='black'
-
-linkColorDefault='lightgray'
-surfaceOpacityDefault= 0.5
-jointColorDefault='darkgreen'
-jointEdgeColorDefault='darkgreen'
-prismaticColorDefault='darkblue'
-prismaticEdgeColorDefault='darkblue'
-revoluteColorDefault='darkred'
-revoluteEdgeColorDefault='darkred'
-groundPlaneColorDefault='black'
-
-jointAxisScaleDefault=10
-globalAxisScaleDefault=10
-groundPlaneScaleDefault=10
-
-blockDefault=True
-
-# in AutoCAD Color Index 
+############## Colors for the crease pattern dxf #####################
+# In AutoCAD Color Index 
 # https://ezdxf.readthedocs.io/en/stable/concepts/aci.html#aci
-mountainColorDefault=5 #174  #dark blue
-valleyColorDefault=1 #red
-boundaryColorDefault=2 #yellow
-cutColorDefault=3 #101 #green 3
+mountainColorDefault = 5  # blue
+valleyColorDefault = 1  # red 
+mountainCColorDefault = 4  # cyan
+valleyCColorDefault = 6  # magenta 
+boundaryColorDefault = 2  # yellow
+cutColorDefault = 3  # green
+rawPropertiesColor = "#eaeaea" # light grey
+mapPropertiesColor = "#ffffff" # white
+
+############### Other colors, not all used in the GUI ###################
+# Chosen to be mutually distinguishable in grayscale
+xColorDefault = (1.0, 0.27, 0.0, 1.0)  # orangered
+yColorDefault = (0.56, 0.93, 0.56, 1.0)  # lightgreen
+zColorDefault = (0.0, 0.0, 0.55, 1.0)  # darkblue
+proximalColorDefault = (0.0, 1.0, 1.0, 1.0)  # cyan
+centerColorDefault = (1.0, 0.0, 1.0, 1.0)  # magenta
+distalColorDefault = (1.0, 1.0, 0.0, 1.0)  # yellow
+
+pathColorDefault = (0.0, 0.0, 0.0, 1.0)  # black
+sphereColorDefault = (0.0, 0.0, 0.0, 0.05)  # black, 0.05 opacity
+
+# New colors for specific joint types (from merging-in-sdf-collisions branch)
+prismaticColorDefault = 'darkblue'
+prismaticEdgeColorDefault = 'darkblue'
+revoluteColorDefault = 'darkblue'
+revoluteEdgeColorDefault = 'darkblue'
+
+groundPlaneColorDefault = (0.0, 0.0, 0.0, 1.0)  # black 
+
+jointAxisScaleDefault = 10
+globalAxisScaleDefault = 10
+groundPlaneScaleDefault = 10
+
+blockDefault = True
+
+gridColorDefault = (0, 0, 0, 255)  # black
+backgroundColorDefault = (255, 255, 255, 255)  # white
+successColorDefault = "green"  # green
+errorColorDefault = "red"  # red
+
+meshItemDefaultColor = (1.0, 1.0, 1.0, 1.0)  # white
+meshItemEdgeColor = (0.5, 0.5, 0.5, 1.0)  # gray
+meshLinkDefaultColor = (1.0, 1.0, 1.0, 1.0)  # white
+meshLinkEdgeColor = (0.5, 0.5, 0.5, 1.0)  # gray 
+
+ballDefaultColor = (0, 0, 0, 0.5)  # black
+cylinderColorList = (1, 0, 0, 1)  # red
+elbowColorList = (1, 1, 1, 1)  # white
+compoundElbowColorList = (1, 1, 1, 0.5)  # white, 0.5 opacity
+linkColorList = (0.5, 0.5, 0.5, 1.0)  # gray
+prismaticColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
+revoluteColorList = (0.0, 0.0, 0.545, 1.0)  # darkblue as RGB tuple
+endEffectorColorList = (0.2, 0.2, 0.2, 1.0)  # dark gray (end effector housing / body)
+endEffectorJawColorList = (0.55, 0.55, 0.6, 1.0)  # lighter gray (moving end effector parts, e.g. jaws)
+endEffectorEdgeColorList = (0.6, 0.6, 0.6, 1.0)  # light gray edges on end effector boxes
+
+xPoseColor = 'darkred'  # darkred
+yPoseColor = 'darkblue'  # darkblue
+zPoseColor = 'darkgreen'  # darkgreen
+
+oColor = 'black'  # black 
+
+lineColor = (1, 0, 0, 1)  # red
+originPointsColor = (1, 1, 1, 1)  # white 
+showAxisColor = (0.75, 0.75, 0.75, 1)  # light gray
+lineSphereColor = [0, 0, 0, 0]  # black, fully transparent
+rotateArrowColors = [(1, 0, 0, 1), (0, 1, 0, 1), (0, 0, 1, 1)]  # red, green, blue
+selectedArrowColor = (1, 1, 0, 1)  # yellow 
+
+extendedCircleColors = [(1, 0, 0, 0.5), (0, 1, 0, 0.5), (0, 0, 1, 0.5)]  # red, green, blue (0.5 opacity)
+
+selectedLinkColor = (1.0, 1.0, 0.0, 0.5)  # yellow (0.5 opacity)
+selectedSphereColor = (1.0, 1.0, 0.5, 0.5)  # light yellow (0.5 opacity)
+selectedJointColor = (0.0, 0.0, 1.0, 0.1)  # blue (0.1 opacity)
+
+collisionJointColor = (1.0, 0.0, 0.0, 0.4)  # transparent red
+collisionLinkColor = (1.0, 0.0, 0.0, 0.7)  # bright red (0.7 opacity)
+
+pathStartColor = 'r'  # red
+pathEndColor = 'b'  # blue
+pathWidgetColor = 'g'  # green
+pathPointColor = (1, 1, 1, 1)  # white 
+tUnitColor = (1, 1, 1, 1)  # white

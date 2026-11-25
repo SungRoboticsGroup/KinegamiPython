@@ -246,13 +246,13 @@ class TubularPattern():
         # add new entities to the modelspace
         msp = doc.modelspace()
         if directed:
-            doc.layers.add(name="MountainCW", color=5)
-            doc.layers.add(name="MountainCCW", color=4)
-            doc.layers.add(name="ValleyCW", color=1)
-            doc.layers.add(name="ValleyCCW", color=6)
+            doc.layers.add(name="MountainCW", color=mountainColorDefault)
+            doc.layers.add(name="MountainCCW", color=mountainCColorDefault)
+            doc.layers.add(name="ValleyCW", color=valleyColorDefault)
+            doc.layers.add(name="ValleyCCW", color=valleyCColorDefault)
         else:
-            doc.layers.add(name="Mountain", color=5)
-            doc.layers.add(name="Valley", color=1)
+            doc.layers.add(name="Mountain", color=mountainColorDefault)
+            doc.layers.add(name="Valley", color=valleyColorDefault)
 
         ymin = self.proximalMarker[0, 1]
         ymax = ymin + self.patternHeight
@@ -279,7 +279,7 @@ class TubularPattern():
             # get the modelspace properties
             msp_properties = LayoutProperties.from_layout(msp)
             # set light gray background color and black foreground color
-            msp_properties.set_colors("#eaeaea")
+            msp_properties.set_colors(rawPropertiesColor)
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
             ax.set_ylim(ymin, ymax)
@@ -296,7 +296,7 @@ class TubularPattern():
                          valleyColor=valleyColor, boundaryColor=boundaryColor,
                          cutColor=cutColor) 
 
-    def show(self, dxfName="", show=True, printGraph=False, block=blockDefault,
+    def show(self, dxfName=None, show=True, printGraph=False, block=blockDefault,
              mountainColor=mountainColorDefault, valleyColor=valleyColorDefault,
              boundaryColor=boundaryColorDefault, cutColor=cutColorDefault):
         if dxfName and (len(dxfName) < 4 or dxfName[-4:]!=".dxf"):
@@ -393,11 +393,13 @@ class TubularPattern():
             # get the modelspace properties
             msp_properties = LayoutProperties.from_layout(msp)
             # set light gray background color and black foreground color
-            msp_properties.set_colors("#ffffff") # light gray #eaeaea
+            msp_properties.set_colors(mapPropertiesColor) # light gray #eaeaea
             Frontend(ctx, out, config=config).draw_layout(msp, finalize=False,
                                              layout_properties=msp_properties)
+            ax.set_aspect("equal", adjustable="box")
             ax.set_ylim(ymin, ymax)
             ax.set_xlim(xmin, xmax)
+            fig.canvas.draw()
             plt.show(block=block)
 
         return doc
@@ -1313,15 +1315,17 @@ class TwistFittingPattern(TubularPattern):
         self.distalBaseIndices = self.numSides + self.proximalBaseIndices
         rightDiagonals = np.vstack((self.proximalBaseIndices,
                                     self.distalBaseIndices)).T
+        self.addMountainEdges(rightDiagonals)
         leftDiagonals = np.vstack((np.roll(self.distalBaseIndices, 1),
                                    self.proximalBaseIndices)).T
-        self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
-
         
-        self.addValleyEdges(np.vstack((np.roll(self.proximalBaseIndices, 1),
-                                       self.proximalBaseIndices)).T)
-        self.addValleyEdges(np.vstack((np.roll(self.distalBaseIndices, 1),
-                                       self.distalBaseIndices)).T)
+        #self.addMountainEdges(np.vstack((rightDiagonals, leftDiagonals)))
+        if baseTwist > self.EPSILON:
+            self.addMountainEdges(leftDiagonals)
+            self.addValleyEdges(np.vstack((np.roll(self.proximalBaseIndices, 1),
+                                        self.proximalBaseIndices)).T)
+            self.addValleyEdges(np.vstack((np.roll(self.distalBaseIndices, 1),
+                                        self.distalBaseIndices)).T)
         
         referenceXshift = (np.floor(numSides * twistAngle / (2*np.pi)) *
                            self.baseSideLength) + baseXshift

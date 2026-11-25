@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Created on Fri Jun 23 21:54:54 2023
 
@@ -15,8 +15,8 @@ from scipy.spatial import ConvexHull
 from typing import Union, Any
 from numpy.typing import ArrayLike, NDArray
 from types import ModuleType
-from ZACH_vectorized_link_sdf import *
 from geometryHelpers import jointAxisScaleDefault, jointColorDefault, jointEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
+import pyqtgraph.opengl as gl
 
 class Joint(ABC):
     """
@@ -37,6 +37,41 @@ class Joint(ABC):
         self.collisionCapsules = self.getCapsules()
         self.proximalDubins = self.ProximalDubinsFrame()
         self.distalDubins = self.DistalDubinsFrame()
+
+        # GL mesh cache for fast animation (populated by addToWidget)
+        # Items split into three groups with independent reference frames:
+        #   proximal – built from ProximalFrame (stays fixed during own state change)
+        #   center   – built from Pose          (stays fixed during own state change)
+        #   distal   – built from DistalFrame   (moves when state changes)
+        self._gl_items_proximal: list = []
+        self._gl_items_center: list = []
+        self._gl_items_distal: list = []
+        self._gl_ref_proximal: SE3 | None = None
+        self._gl_ref_pose: SE3 | None = None
+        self._gl_ref_distal: SE3 | None = None
+        self._gl_shape_dirty: bool = True
+
+    # GL cache attributes that hold pyqtgraph GL objects (cannot be pickled)
+    _GL_CACHE_KEYS = frozenset({
+        '_gl_items_proximal', '_gl_items_center', '_gl_items_distal',
+        '_gl_ref_proximal', '_gl_ref_pose', '_gl_ref_distal', '_gl_shape_dirty',
+    })
+
+    def __getstate__(self):
+        """Exclude GL cache from pickling / deepcopy."""
+        return {k: v for k, v in self.__dict__.items()
+                if k not in Joint._GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        # Restore GL cache to clean defaults
+        self._gl_items_proximal = []
+        self._gl_items_center = []
+        self._gl_items_distal = []
+        self._gl_ref_proximal = None
+        self._gl_ref_pose = None
+        self._gl_ref_distal = None
+        self._gl_shape_dirty = True
     
     @abstractmethod #0 for xhat, 2 for zhat
     def pathIndex(self) -> int:
@@ -112,10 +147,10 @@ class Joint(ABC):
     
     def pathDirection(self) -> np.ndarray:
         return self.Pose.R[:,self.pathIndex()]
-    
+
     def distalPathDirection(self) -> np.ndarray:
         return self.DistalFrame().R[:,self.pathIndex()]
-
+    
     def reverseZhat(self):
         self.Pose = self.Pose @ SE3.Rx(np.pi)
         self.proximalDubins = self.ProximalDubinsFrame()
@@ -209,7 +244,105 @@ class Joint(ABC):
         else:
             plotHandles = None
         return plotHandles
-        
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        # Reset GL cache — subclasses will append their items too
+        self._gl_items_proximal = []
+        self._gl_items_center = []
+        self._gl_items_distal = []
+
+        if showAxis:
+            zhat = self.Pose.R[:, 2] 
+            jointAxis = np.array([self.Pose.t - 10 * self.r * zhat,
+                                self.Pose.t + 10 * self.r * zhat])
+            line_item = gl.GLLinePlotItem(pos=jointAxis, color=showAxisColor, width=2, antialias=True)  # Using a silver color
+            # Reference line extending well past the joint; don't let it drive the GUI's Fit View.
+            line_item.exclude_from_fit_view = True
+            widget.plot_widget.addItem(line_item)
+            self._gl_items_center.append(line_item)
+
+        if showPoses:
+            groups = [self._gl_items_proximal, self._gl_items_distal, self._gl_items_center]
+            for pose, color, group in zip(
+                    [self.ProximalFrame(), self.DistalFrame(), self.Pose],
+                    [proximalColor, distalColor, centerColor],
+                    groups):
+                for i, axis_color in enumerate([xColor, yColor, zColor]):
+                    poseAxisScale = self.r
+                    if poseAxisScaleMultipler:
+                        poseAxisScale *= poseAxisScaleMultipler
+                    start_point = pose.t
+                    end_point = start_point + poseAxisScale * pose.R[:, i]
+                    points = np.array([start_point, end_point])
+                    line = gl.GLLinePlotItem(pos=points, color=axis_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+                    group.append(line)
+
+        if showSphere:
+            items_before = list(widget.plot_widget.items)
+            self.boundingBall().addToWidget(widget, sphereColor)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_center.append(item)
+
+        # Store reference frames for each group
+        self._gl_ref_proximal = SE3(self.ProximalFrame().A.copy())
+        self._gl_ref_pose = SE3(self.Pose.A.copy())
+        self._gl_ref_distal = SE3(self.DistalFrame().A.copy())
+        self._gl_shape_dirty = False
+    
+    def addArrows(self, widget, selectedArrow=-1, local=True, frame: SE3 = None, mode=""):
+        import math
+        desired_px = 80
+        thickness_px = 10
+        rad = widget.plot_widget.world_length_for_pixel_length(desired_px)
+        arrow_thick = widget.plot_widget.world_length_for_pixel_length(thickness_px)
+        colors = rotateArrowColors
+        center = self.Pose.t
+
+        # choose axes
+        if local:
+            axes = [self.Pose.R[:,i] for i in range(3)]
+        else:
+            axes = np.eye(3)
+        if frame:
+            axes = [frame.R[:,i] for i in range(3)]
+
+        if mode == "Translate":
+            for i, a in enumerate(axes):
+                col = selectedArrowColor if i==selectedArrow else colors[i]
+                start = center
+                end = center + rad * a
+                from printedGUI import OverlayLine
+                widget.plot_widget.addItem(
+                    OverlayLine(pos=np.array([start,end]), color=col, width=8, antialias=True)
+                )
+
+        elif mode == "Rotate":
+            for i, axis in enumerate(axes):
+                helper = np.array([1,0,0])
+                if abs(np.dot(axis,helper))>0.9:
+                    helper = np.array([0,1,0])
+                u = np.cross(axis, helper); u/=np.linalg.norm(u)
+                v = np.cross(axis, u)
+                pts = np.array([
+                    center + (rad+arrow_thick)*(u*np.cos(t)+v*np.sin(t))
+                    for t in np.linspace(0,2*math.pi,64)
+                ])
+                col = selectedArrowColor if i==selectedArrow else colors[i]
+                from printedGUI import OverlayLine
+                widget.plot_widget.addItem(
+                    OverlayLine(pos=pts, color=col, width=8, antialias=True)
+                )
+
+    def addTranslateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
+        self.addArrows(widget, selectedArrow, local, frame, mode="Translate")
+    
+    def addRotateArrows(self, widget, selectedArrow=-1, local=True, frame : SE3 = None):
+        self.addArrows(widget, selectedArrow, local, frame, mode="Rotate")
     
     def show(self, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
@@ -229,6 +362,39 @@ class Joint(ABC):
             ax.legend([xHats, yHats, zHats], [r'$\^x$', r'$\^y$', r'$\^z$'])
         ax.set_aspect('equal')
         plt.show(block=block)
+
+    def updateCachedGLTransforms(self):
+        """Apply per-group rigid-body deltas to cached GL items.
+        Proximal items transform with ProximalFrame, center with Pose,
+        distal with DistalFrame.  This correctly handles both own state
+        changes (only distal moves) and parent transforms (all groups move)."""
+        from pyqtgraph import Transform3D
+        for items, ref, current in [
+            (getattr(self, '_gl_items_proximal', []),
+             getattr(self, '_gl_ref_proximal', None), self.ProximalFrame()),
+            (getattr(self, '_gl_items_center', []),
+             getattr(self, '_gl_ref_pose', None), self.Pose),
+            (getattr(self, '_gl_items_distal', []),
+             getattr(self, '_gl_ref_distal', None), self.DistalFrame()),
+        ]:
+            if not items or ref is None:
+                continue
+            mat = Transform3D((current @ ref.inv()).A)
+            for item in items:
+                item.setTransform(mat)
+
+    def clearGLCache(self):
+        """Discard cached GL items (e.g. before a full rebuild)."""
+        self._gl_items_proximal = []
+        self._gl_items_center = []
+        self._gl_items_distal = []
+        self._gl_ref_proximal = None
+        self._gl_ref_pose = None
+        self._gl_ref_distal = None
+        self._gl_shape_dirty = True
+
+    def hasGLCache(self) -> bool:
+        return not self._gl_shape_dirty
 
     def getCapsules(self):
         return []
@@ -344,6 +510,18 @@ class Prismatic(Joint):
         return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(), 
                         self.length(), uhat)
     
+    def proximalCylinder(self) -> Cylinder:
+        """Fixed-length cylinder on the proximal side (for rendering)."""
+        uhat = (self.Pose @ SE3.Rz(np.pi/2)).R[:,1]
+        return Cylinder(self.r, self.ProximalFrame().t, self.pathDirection(),
+                        self.minLength, uhat)
+
+    def distalCylinder(self) -> Cylinder:
+        """Fixed-length cylinder on the distal side (translates with state)."""
+        uhat = (self.Pose @ SE3.Rz(np.pi/2)).R[:,1]
+        return Cylinder(self.r, self.DistalFrame().t, -self.distalPathDirection(),
+                        self.minLength, uhat)
+
     def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
              proximalColor='c', centerColor='m', distalColor='y',
              sphereColor=sphereColorDefault, showSphere=False, 
@@ -357,10 +535,43 @@ class Prismatic(Joint):
                           surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
                           axisScale=axisScale, showPoses=showPoses)
         if showSurface:
-            self.boundingCylinder().addToPlot(ax, color=surfaceColor, 
-                                              alpha=surfaceOpacity, 
-                                              edgeColor=edgeColor)            
+            self.proximalCylinder().addToPlot(ax, color=surfaceColor,
+                                              alpha=surfaceOpacity,
+                                              edgeColor=edgeColor)
+            self.distalCylinder().addToPlot(ax, color=surfaceColor,
+                                            alpha=surfaceOpacity,
+                                            edgeColor=edgeColor)            
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=prismaticColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=10, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import prismaticColorList
+        
+        # Call parent's addToWidget for poses and axis
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        if showSurface:
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != prismaticColorDefault else prismaticColorList
+            # Proximal cylinder → proximal group
+            items_before = list(widget.plot_widget.items)
+            self.proximalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            # Distal cylinder → distal group
+            items_before = list(widget.plot_widget.items)
+            self.distalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
     
     def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
         # TODO: ADD PLANAR CUTOFFS
@@ -462,20 +673,61 @@ class Revolute(Joint):
             self.distalCylinder().addToPlot(ax, color=surfaceColor, edgeColor=edgeColor, alpha=surfaceOpacity)
             self.centerSphere().addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity)
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=revoluteColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=10, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList
+        
+        # Call parent's addToWidget for poses and axis
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        if showSurface:
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            # Proximal cylinder → proximal group
+            items_before = list(widget.plot_widget.items)
+            self.proximalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            # Distal cylinder → distal group
+            items_before = list(widget.plot_widget.items)
+            self.distalCylinder().addToWidget(widget, color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
+            # Center sphere → center group
+            items_before = list(widget.plot_widget.items)
+            self.centerSphere().addToWidget(widget, color=color)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_center.append(item)
 
 class TransverseRevolute(Revolute):
-    def __init__(self, r : float, Pose : SE3, minAngle : float, maxAngle : float, 
-                 neutralLength : Optional[float] = None, initialState : float = 0.0):
-        if minAngle is None or maxAngle is None:
-            raise ValueError("TransverseRevolute joints must have both minAngle and maxAngle specified")
+    def __init__(self, r : float, Pose : SE3, minAngle : Optional[float] = None, maxAngle : Optional[float] = None, 
+                 neutralLength : Optional[float] = None, initialState : float = 0.0,
+                 checkCircleOverlap : bool = True):
         if neutralLength is None: 
+            if minAngle is None or maxAngle is None:
+                raise ValueError("TransverseRevolute joints must have either neutralLength or both minAngle and maxAngle specified")
             # compute neutralLength to achieve min and max angles
             # without the end circles overlapping
             largerAngle = max(abs(minAngle), abs(maxAngle))
             neutralLength = 2*r*np.tan(largerAngle/2)
-        else:
+        elif checkCircleOverlap:
             # check that the provided neutralLength is sufficient
             angleAtWhichCirclesTouch = 2 * np.arctan(neutralLength / (2*r))
+            if minAngle is None:
+                minAngle = -angleAtWhichCirclesTouch
+            if maxAngle is None:
+                maxAngle = angleAtWhichCirclesTouch
             if minAngle < -angleAtWhichCirclesTouch-1e-6 or maxAngle > angleAtWhichCirclesTouch+1e-6:
                 raise Warning("Provided neutralLength is too small to prevent end circle overlap for the given minAngle and maxAngle")
         Revolute.__init__(self, r, Pose, pathIndex=0, neutralLength=neutralLength, 
@@ -548,6 +800,29 @@ class Waypoint(Joint):
         center = xp.asarray(self.Pose.t).reshape(3)
         # SDF of a sphere centered at Pose.t with radius r
         return xp.linalg.norm(point - center, axis=1) - self.r
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault, 
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        """Draw the waypoint as a circle with a small dot at the center."""
+        # Call parent's addToWidget first (this resets GL cache groups)
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        # Waypoint surface items are Pose-based → center group
+        items_before = list(widget.plot_widget.items)
+        circle = Circle3D(self.r, self.Pose.t, self.Pose.R[:, self.pidx])
+        circle.addToWidget(widget, color=surfaceColor, width=0.05*self.r)
+        # Small dot at the waypoint center
+        dot = Ball(self.Pose.t, 0.05 * self.r)
+        dot.addToWidget(widget, color=surfaceColor)
+        for item in widget.plot_widget.items:
+            if item not in items_before:
+                self._gl_items_center.append(item)
+        
 
 class Tip(Joint):
     def __init__(self, r : float, Pose : SE3, length : float, 
@@ -636,7 +911,7 @@ class Tip(Joint):
             # Scale the hemisphere
             x_scaled = self.r * x_sphere
             y_scaled = self.r * y_sphere
-            z_scaled = scale_z * (z_sphere if self.forward else -z_sphere)
+            z_scaled = scale_z * z_sphere
             
             # Transform to world coordinates based on path direction
             if self.forward:
@@ -671,12 +946,447 @@ class Tip(Joint):
                           linewidth=0.5 if edgeColor else 0)
         
         return plotHandles
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=linkColorDefault, 
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import linkColorList
+        
+        # Call parent's addToWidget for poses and axis  
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        
+        if showSurface:
+            # Render the tip as a stretched hemisphere, matching addToPlot logic
+            n_lat = 6    # latitude divisions
+            n_lon = 8    # longitude divisions
+
+            # Hemisphere theta range
+            if self.forward:
+                theta = np.linspace(0, np.pi/2, n_lat)
+            else:
+                theta = np.linspace(np.pi/2, np.pi, n_lat)
+            phi = np.linspace(0, 2*np.pi, n_lon, endpoint=False)
+
+            # Build vertex grid (n_lat x n_lon) + 1 pole vertex
+            vertices = []
+            for i in range(n_lat):
+                for j in range(n_lon):
+                    x_s = np.sin(theta[i]) * np.cos(phi[j])
+                    y_s = np.sin(theta[i]) * np.sin(phi[j])
+                    z_s = np.cos(theta[i])
+                    # Scale
+                    x_sc = self.r * x_s
+                    y_sc = self.r * y_s
+                    z_sc = self.neutralLength * z_s
+                    vertices.append([x_sc, y_sc, z_sc])
+
+            # Pole vertex (the closed tip of the hemisphere)
+            if self.forward:
+                # theta=0 pole: z_sphere=cos(0)=1
+                vertices.append([0, 0, self.neutralLength])
+            else:
+                # theta=pi pole: z_sphere=cos(pi)=-1
+                vertices.append([0, 0, -self.neutralLength])
+
+            pole_idx = n_lat * n_lon
+            vertices = np.array(vertices, dtype=np.float32)
+
+            # Build triangle faces
+            faces = []
+            for i in range(n_lat - 1):
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    v00 = i * n_lon + j
+                    v01 = i * n_lon + j_next
+                    v10 = (i + 1) * n_lon + j
+                    v11 = (i + 1) * n_lon + j_next
+                    faces.append([v00, v01, v11])
+                    faces.append([v00, v11, v10])
+
+            # Fan triangles connecting pole to the first ring (theta[0] row)
+            if self.forward:
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    faces.append([pole_idx, j_next, j])
+            else:
+                last_row = (n_lat - 1) * n_lon
+                for j in range(n_lon):
+                    j_next = (j + 1) % n_lon
+                    faces.append([pole_idx, last_row + j, last_row + j_next])
+
+            faces = np.array(faces, dtype=np.int32)
+
+            # Transform vertices to world coordinates (same logic as addToPlot)
+            if self.forward:
+                base_frame = self.ProximalFrame()
+            else:
+                base_frame = self.DistalFrame()
+            R = base_frame.R
+
+            x_sc = vertices[:, 0]
+            y_sc = vertices[:, 1]
+            z_sc = vertices[:, 2]
+
+            if self.pidx == 0:
+                xw = base_frame.t[0] + z_sc * R[0, 0] + x_sc * R[0, 1] + y_sc * R[0, 2]
+                yw = base_frame.t[1] + z_sc * R[1, 0] + x_sc * R[1, 1] + y_sc * R[1, 2]
+                zw = base_frame.t[2] + z_sc * R[2, 0] + x_sc * R[2, 1] + y_sc * R[2, 2]
+            elif self.pidx == 1:
+                xw = base_frame.t[0] + x_sc * R[0, 0] + z_sc * R[0, 1] + y_sc * R[0, 2]
+                yw = base_frame.t[1] + x_sc * R[1, 0] + z_sc * R[1, 1] + y_sc * R[1, 2]
+                zw = base_frame.t[2] + x_sc * R[2, 0] + z_sc * R[2, 1] + y_sc * R[2, 2]
+            else:  # pidx == 2
+                xw = base_frame.t[0] + x_sc * R[0, 0] + y_sc * R[0, 1] + z_sc * R[0, 2]
+                yw = base_frame.t[1] + x_sc * R[1, 0] + y_sc * R[1, 1] + z_sc * R[1, 2]
+                zw = base_frame.t[2] + x_sc * R[2, 0] + y_sc * R[2, 1] + z_sc * R[2, 2]
+
+            world_verts = np.column_stack([xw, yw, zw]).astype(np.float32)
+
+            meshdata = gl.MeshData(vertexes=world_verts, faces=faces)
+            # Use surfaceColor override (e.g. collision highlighting) if provided, otherwise default color list
+            tip_color = surfaceColor if surfaceColor != linkColorDefault else linkColorList
+            meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(tip_color),
+                                     shader='shaded', smooth=True)
+            meshitem.setGLOptions('translucent')
+            meshitem.setObjectName("Joint")
+            widget.plot_widget.addItem(meshitem)
+            # Forward tip is built from ProximalFrame → proximal group
+            # Backward tip is built from DistalFrame → distal group
+            if self.forward:
+                self._gl_items_proximal.append(meshitem)
+            else:
+                self._gl_items_distal.append(meshitem)
         
 
 class StartTip(Tip):
     def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
-        super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)
+        super().__init__(r, Pose, length, closesForward=False, pathIndex=pathIndex)
 
 class EndTip(Tip):
     def __init__(self, r : float, Pose : SE3, length : float, pathIndex : int = 2):
-        super().__init__(r, Pose, length, closesForward=False, pathIndex=pathIndex)
+        super().__init__(r, Pose, length, closesForward=True, pathIndex=pathIndex)
+
+
+class EndEffectorPart:
+    """
+    One rigid piece of an EndEffector, used for visualization (and for the
+    bounding ball). Geometry is defined in the part's own local frame, centered
+    at the origin:
+      - shape 'box':      size = (sx, sy, sz) full extents along local x, y, z
+      - shape 'cylinder': size = (radius, length), axis along local z
+    Where the part sits (as a function of the end effector's state) is given
+    by EndEffector.partPoses(state).
+    """
+    def __init__(self, name : str, shape : str, size : tuple, color : tuple):
+        if shape not in ('box', 'cylinder'):
+            raise ValueError("EndEffectorPart shape must be 'box' or 'cylinder'")
+        self.name = name
+        self.shape = shape
+        self.size = tuple(float(s) for s in size)
+        self.color = tuple(color)
+
+    def __repr__(self):
+        return f"EndEffectorPart(name={repr(self.name)}, shape={repr(self.shape)}, size={repr(self.size)}, color={repr(self.color)})"
+
+    def localMesh(self, numSides : int = 32) -> tuple[np.ndarray, np.ndarray]:
+        if self.shape == 'box':
+            return boxMesh(self.size)
+        radius, length = self.size
+        return closedCylinderMesh(radius, length, numSides)
+
+
+class EndEffector(Joint):
+    """
+    Abstract base class for an actuated 1-DOF end effector (e.g. a gripper).
+
+    An end effector is a terminal joint: like an EndTip it must remain a leaf
+    of the KinematicTree (enforced in KinematicTree.addJoint), but unlike a Tip
+    it has a changeable state, so it is included in configurations.
+    It is NOT a subclass of Tip, because much of the code treats
+    isinstance(joint, Tip) as "not actuated".
+
+    Frame conventions:
+      - pathIndex() is 2: the incoming tube arrives along z.
+      - The end effector frame is ProximalFrame(): its origin is the center of
+        the tube attachment face and z points out toward the tool. Part
+        geometry (parts() / partPoses()) is expressed in this frame.
+      - neutralLength is the total length along z from the attachment face to
+        the farthest tip, so DistalFrame() is at the tool tip and Pose is
+        halfway between (the usual Joint convention).
+      - The state moves parts inside the end effector, but no frame that a
+        child could attach to, so stateChangeTransformation is the identity.
+
+    Subclasses implement stateRange(), parts(), partPoses(state), and may
+    override toolFrame().
+
+    TODO(collision): collision detection currently UNDER-approximates an end
+    effector as a flat-ended tube of radius r from the attachment face to the
+    tool tip (see sdf()). Any geometry wider than r (e.g. a gripper's carriage
+    and jaws) is ignored, so collisions with it are NOT detected. Fixing this
+    needs a collision model that isn't tied to the link radius r; options are
+    discussed in KNOWN_ISSUES.md ("End effector collision checking ...").
+    """
+    _EE_GL_CACHE_KEYS = frozenset({'_gl_items_parts', '_gl_ref_parts'})
+
+    def __init__(self, r : float, length : float, Pose : SE3, initialState : float = 0):
+        super().__init__(r, length, Pose, initialState)
+        # Per-part GL cache: each part moves rigidly with its own pose
+        # (ProximalFrame() @ partPoses(state)[i]), not with any of the
+        # proximal / center / distal groups in Joint.
+        self._gl_items_parts: list = []
+        self._gl_ref_parts: list = []
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        return {k: v for k, v in state.items() if k not in EndEffector._EE_GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+
+    @abstractmethod
+    def parts(self) -> list[EndEffectorPart]:
+        pass
+
+    @abstractmethod
+    def partPoses(self, state : float) -> list[SE3]:
+        """Pose of each part (same order as parts()) in the end effector frame, at the given state."""
+        pass
+
+    def pathIndex(self) -> int:
+        return 2
+
+    def stateChangeTransformation(self, stateChange : float) -> SE3:
+        return SE3()
+
+    def endEffectorFrame(self) -> SE3:
+        return self.ProximalFrame()
+
+    def toolFrame(self) -> SE3:
+        """A task-relevant frame (e.g. grasp center). Defaults to the distal (tool tip) frame."""
+        return self.DistalFrame()
+
+    def partWorldPoses(self, state : Optional[float] = None) -> list[SE3]:
+        if state is None:
+            state = self.state
+        frame = self.endEffectorFrame()
+        return [frame @ P for P in self.partPoses(state)]
+
+    def partWorldMeshes(self, state : Optional[float] = None, numSides : int = 32) -> list[tuple[np.ndarray, np.ndarray]]:
+        meshes = []
+        for part, W in zip(self.parts(), self.partWorldPoses(state)):
+            verts, faces = part.localMesh(numSides)
+            meshes.append(((W.R @ verts.T).T + W.t, faces))
+        return meshes
+
+    def boundingRadius(self) -> float | np.floating[Any]:
+        """Radius about Pose.t enclosing all parts at both ends of the state range
+        (so it doesn't change with state). Used for joint placement and the tree's
+        bounding ball, not for collision detection."""
+        center = self.Pose.t
+        radius = np.linalg.norm([self.r, self.neutralLength/2])
+        for state in self.stateRange():
+            for verts, _ in self.partWorldMeshes(state, numSides=64):
+                radius = max(radius, np.max(np.linalg.norm(verts - center, axis=1)))
+        return radius
+
+    def boundingBall(self) -> Ball:
+        return Ball(self.Pose.t, self.boundingRadius())
+
+    def collisionCylinder(self) -> Cylinder:
+        """The geometry used for collision detection (see the TODO(collision) note in the class docstring)."""
+        return Cylinder(self.r, self.proximalPosition(), self.pathDirection(),
+                        self.neutralLength, self.Pose.R[:, 0])
+
+    def sdf(self, point: ArrayLike, xp: ModuleType = np) -> Union[float, ArrayLike]:
+        # TODO(collision): UNDER-approximation. This is the SDF of a flat-ended
+        # cylinder of radius self.r (the incoming tube radius) from the attachment
+        # face to the tool tip, independent of state. Parts wider than r (e.g. a
+        # gripper's carriage and jaws) are ignored, so collisions with them are
+        # missed. self.r can't simply be enlarged, because r is also the link
+        # radius / Dubins turning radius. See KNOWN_ISSUES.md.
+        point = xp.asarray(point).reshape(-1, 3)
+        a = xp.asarray(self.proximalPosition()).reshape(1, 3)
+        b = xp.asarray(self.distalPosition()).reshape(1, 3)
+        capsule = sdf_capsule(xp, point, a, b, self.r).flatten()
+        planes = xp.maximum(
+            sdf_plane(xp, point, xp.asarray(self.proximalPosition()), xp.asarray(-self.pathDirection())),
+            sdf_plane(xp, point, xp.asarray(self.distalPosition()), xp.asarray(self.distalPathDirection())))
+        return xp.maximum(capsule, planes)
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                  proximalColor='c', centerColor='m', distalColor='y',
+                  sphereColor=sphereColorDefault, showSphere=False,
+                  surfaceColor=None, edgeColor='dimgray',
+                  surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=False,
+                  axisScale=jointAxisScaleDefault, showPoses=True, toolColor='k',
+                  showCollisionGeometry=False):
+        """surfaceColor overrides every part's color if given. The tool frame is
+        drawn with origin color toolColor. showCollisionGeometry draws the
+        (under-approximating) collision cylinder as a red wireframe."""
+        plotHandles = Joint.addToPlot(self, ax=ax, xColor=xColor, yColor=yColor, zColor=zColor,
+                                      proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                                      sphereColor=sphereColor, showSphere=showSphere,
+                                      surfaceColor=surfaceColor, edgeColor=edgeColor,
+                                      surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                                      axisScale=axisScale, showPoses=showPoses)
+        if showPoses:
+            addPosesToPlot(np.array([self.toolFrame()]), ax, self.r,
+                           xColor, yColor, zColor, np.array([toolColor]))
+        if showSurface:
+            allVerts = []
+            for part, (verts, faces) in zip(self.parts(), self.partWorldMeshes()):
+                color = part.color[:3] if surfaceColor is None else surfaceColor
+                ax.add_collection3d(Poly3DCollection(verts[faces], facecolor=color,
+                                                     alpha=surfaceOpacity, edgecolor=edgeColor,
+                                                     linewidth=0.3))
+                allVerts.append(verts)
+            allVerts = np.vstack(allVerts)
+            # Poly3DCollection doesn't update the axis limits on its own
+            ax.auto_scale_xyz(allVerts[:, 0], allVerts[:, 1], allVerts[:, 2], had_data=True)
+        if showCollisionGeometry:
+            self.collisionCylinder().addToPlot(ax, numPointsPerCircle=16, frame=True,
+                                               edgeColor='red', alpha=0.3, numCircles=4)
+        return plotHandles
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=jointColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True,
+                    poseAxisScaleMultipler=None):
+        """Draws each part with its own color (surfaceColor is ignored). The
+        joint-axis line is never drawn: z is the approach direction, not an axis of motion."""
+        import pyqtgraph.opengl as gl
+        from style import endEffectorEdgeColorList
+        # Joint.addToWidget resets the proximal / center / distal GL groups
+        super().addToWidget(widget=widget, xColor=xColor, yColor=yColor, zColor=zColor,
+                            proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor,
+                            sphereColor=sphereColor, showSphere=showSphere,
+                            surfaceColor=surfaceColor, showSurface=False, showAxis=False,
+                            axisScale=axisScale, showPoses=showPoses,
+                            poseAxisScaleMultipler=poseAxisScaleMultipler)
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+        if showSurface:
+            for part, W, (verts, faces) in zip(self.parts(), self.partWorldPoses(), self.partWorldMeshes()):
+                item = gl.GLMeshItem(vertexes=verts.astype(np.float32), faces=faces,
+                                     color=part.color, shader='shaded', smooth=False,
+                                     drawEdges=(part.shape == 'box'), edgeColor=endEffectorEdgeColorList)
+                item.setGLOptions('opaque')
+                item.setObjectName("Joint")
+                widget.plot_widget.addItem(item)
+                # Also registered in the center group, only so that code which
+                # removes a joint's GL items (KinematicTree.addToWidget's
+                # incremental rebuild) removes these too. Their transform is
+                # set by the per-part update in updateCachedGLTransforms, which
+                # runs after (and overrides) the center-group update.
+                self._gl_items_center.append(item)
+                self._gl_items_parts.append([item])
+                self._gl_ref_parts.append(SE3(W.A.copy()))
+
+    def updateCachedGLTransforms(self):
+        super().updateCachedGLTransforms()
+        from pyqtgraph import Transform3D
+        currentPoses = self.partWorldPoses()
+        for items, ref, current in zip(self._gl_items_parts, self._gl_ref_parts, currentPoses):
+            mat = Transform3D((current @ ref.inv()).A)
+            for item in items:
+                item.setTransform(mat)
+
+    def clearGLCache(self):
+        super().clearGLCache()
+        self._gl_items_parts = []
+        self._gl_ref_parts = []
+
+
+class ParallelJawGripper(EndEffector):
+    """
+    A gripper with two jaws that slide in opposite directions, modeled as:
+      - a cylindrical housing (radius r, the incoming tube radius) along z,
+      - a box-shaped carriage in front of it,
+      - two box-shaped jaws protruding forward from the carriage.
+    In the end effector frame (see EndEffector), z is the approach direction
+    and x is the direction the jaws slide.
+
+    state = gap between the inner faces of the jaws, in [0, maxOpening]
+            (0 is closed).
+
+    Parameters:
+        r             radius of the incoming tube / cylindrical housing
+        Pose          joint pose (z = approach direction, x = jaw travel)
+        housingLength length of the cylindrical housing along z
+        carriageSize  (x, y, z) full extents of the carriage
+        jawSize       (x, y, z) full extents of each jaw; x is its thickness
+                      along the travel direction, z its length protruding
+                      forward from the carriage
+        maxOpening    maximum gap between the jaws
+        initialState  initial gap between the jaws
+
+    TODO(collision): see EndEffector. Collision detection treats this as a tube
+    of radius r, so the carriage and jaws are not collision-checked.
+    """
+    def __init__(self, r : float, Pose : SE3, housingLength : float,
+                 carriageSize : tuple, jawSize : tuple, maxOpening : float,
+                 initialState : float = 0.0):
+        carriageSize = tuple(float(s) for s in carriageSize)
+        jawSize = tuple(float(s) for s in jawSize)
+        if len(carriageSize) != 3 or len(jawSize) != 3:
+            raise ValueError("carriageSize and jawSize must each have 3 entries (x, y, z)")
+        if r <= 0 or housingLength <= 0 or maxOpening <= 0 or \
+                min(carriageSize) <= 0 or min(jawSize) <= 0:
+            raise ValueError("ParallelJawGripper dimensions and maxOpening must be positive")
+        if maxOpening + 2*jawSize[0] > carriageSize[0]:
+            raise ValueError("The jaws at maxOpening must fit within the carriage's x extent")
+        if initialState < 0 or initialState > maxOpening:
+            raise ValueError("ParallelJawGripper initialState must be within [0, maxOpening]")
+        self.housingLength = float(housingLength)
+        self.carriageSize = carriageSize
+        self.jawSize = jawSize
+        self.maxOpening = float(maxOpening)
+        length = self.housingLength + carriageSize[2] + jawSize[2]
+        super().__init__(r, length, Pose, initialState)
+
+    def __repr__(self):
+        return (f"ParallelJawGripper(r={repr(self.r)}, Pose={repr(self.Pose)}, "
+                f"housingLength={repr(self.housingLength)}, carriageSize={repr(self.carriageSize)}, "
+                f"jawSize={repr(self.jawSize)}, maxOpening={repr(self.maxOpening)}, "
+                f"initialState={repr(self.state)})")
+
+    def stateRange(self) -> list:
+        return [0.0, self.maxOpening]
+
+    def jawGap(self) -> float:
+        return self.state
+
+    def parts(self) -> list[EndEffectorPart]:
+        from style import endEffectorColorList, endEffectorJawColorList
+        return [
+            EndEffectorPart('housing', 'cylinder', (self.r, self.housingLength), endEffectorColorList),
+            EndEffectorPart('carriage', 'box', self.carriageSize, endEffectorColorList),
+            EndEffectorPart('jaw+', 'box', self.jawSize, endEffectorJawColorList),
+            EndEffectorPart('jaw-', 'box', self.jawSize, endEffectorJawColorList),
+        ]
+
+    def jawCenterZ(self) -> float:
+        return self.housingLength + self.carriageSize[2] + self.jawSize[2]/2
+
+    def partPoses(self, state : float) -> list[SE3]:
+        jawX = state/2 + self.jawSize[0]/2
+        return [
+            SE3.Trans(0, 0, self.housingLength/2),
+            SE3.Trans(0, 0, self.housingLength + self.carriageSize[2]/2),
+            SE3.Trans(jawX, 0, self.jawCenterZ()),
+            SE3.Trans(-jawX, 0, self.jawCenterZ()),
+        ]
+
+    def toolFrame(self) -> SE3:
+        """Grasp center: between the jaws, halfway along their length."""
+        return self.endEffectorFrame() @ SE3.Trans(0, 0, self.jawCenterZ())

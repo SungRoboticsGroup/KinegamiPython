@@ -1,4 +1,4 @@
-"""
+﻿"""
 Assorted geometry-related helper functions and classes
 """
 from __future__ import annotations
@@ -321,6 +321,17 @@ class Circle3D:
         # 3d circle points
         return self.c + u @ uhat + v @ vhat
 
+    def addToWidget(self, widget, color=(0.0, 0.0, 1.0, 1.0), 
+                    width : float = 2, count : int = 64):
+        """Draw this circle as a closed line loop in a pyqtgraph GL widget."""
+        import pyqtgraph.opengl as gl
+        pts = self.interpolate(count=count)
+        # Close the loop by appending the first point
+        # pts = np.vstack([pts, pts[0:1]]) unnecessary since interpolate linspace is closed
+        line = gl.GLLinePlotItem(pos=pts.astype(np.float32), color=color, 
+                                 width=width, antialias=True)
+        widget.plot_widget.addItem(line)
+
 
 def line_sphere_intersection(line_point: np.ndarray, line_dir: np.ndarray, 
                              sphere_center: np.ndarray, sphere_radius: float,
@@ -489,6 +500,26 @@ class Ball:
         else:
             return ax.plot_surface(x, y, z, color=color, alpha=alpha)
     
+    def addToWidget(self, widget, color=ballDefaultColor, is_waypoint=False):
+        import pyqtgraph.opengl as gl
+        from OpenGL.GL import GL_FALSE
+        md = gl.MeshData.sphere(rows=10, cols=10)
+        # Pre-transform vertices to world space (radius * vertex + center)
+        # so the item's local transform stays identity, compatible with
+        # the GL-cache fast path (setTransform applies a rigid-body delta).
+        verts = md.vertexes().copy() * self.r + np.asarray(self.c)
+        md = gl.MeshData(vertexes=verts, faces=md.faces())
+        sphere = gl.GLMeshItem(meshdata=md, color=tuple(color), shader='shaded', smooth=True)
+        sphere.setGLOptions('translucent')
+        # Don't write to depth buffer so items inside the sphere remain visible
+        sphere.updateGLOptions({'glDepthMask': (GL_FALSE,)})
+        # Render after opaque items so the sphere blends on top of them
+        sphere.setDepthValue(10)
+        if (is_waypoint):
+            sphere.setObjectName("Waypoint")
+            sphere.setGLOptions('opaque')
+        widget.plot_widget.addItem(sphere)
+    
     def show(self, color='black', alpha=1, frame=False, block=blockDefault):
         ax = plt.figure().add_subplot(projection='3d')
         plotHandles = self.addToPlot(ax, color, alpha, frame)
@@ -618,6 +649,34 @@ class Cylinder:
         circlePoints = np.tile(circle, (numCircles,1)) + np.repeat(segment, radialCount, axis=0)
         return circlePoints.reshape((numCircles, radialCount, 3))
     
+    def interpolateQtCircles(self, numPointsPerCircle=32, numCircles=10):
+        angle = np.linspace(0, 2 * np.pi, numPointsPerCircle, endpoint=False)
+        u = self.r * np.cos(angle)
+        v = self.r * np.sin(angle)
+        
+        uhat = self.uhat
+        vhat = cross(self.direction, uhat)
+        circlePoints = np.outer(u, uhat) + np.outer(v, vhat)
+
+        vertices = []
+        for i in range(numCircles):
+            t = i / float(numCircles - 1)
+            p = self.start + t * self.direction * self.length
+            vertices.append(circlePoints + p)
+
+        vertices = np.vstack(vertices)
+
+        indices = []
+        for i in range(numCircles - 1):
+            for j in range(numPointsPerCircle):
+                next_j = (j + 1) % numPointsPerCircle
+                indices.extend([
+                    [i * numPointsPerCircle + j, i * numPointsPerCircle + next_j, (i + 1) * numPointsPerCircle + j],
+                    [(i + 1) * numPointsPerCircle + j, i * numPointsPerCircle + next_j, (i + 1) * numPointsPerCircle + next_j]
+                ])
+
+        return vertices, np.array(indices)
+    
     def addToPlot(self, ax, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, edgeColor=None):
         circles = self.interpolateCircles(numPointsPerCircle, numCircles)
         X = circles[:,:,0]
@@ -629,6 +688,21 @@ class Cylinder:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha)
         else:
             return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, edgecolor=edgeColor)
+    
+    def addToWidget(self, widget, numPointsPerCircle=16, numCircles=2, color_list=cylinderColorList, is_joint=False, opaque=False):
+        import pyqtgraph.opengl as gl
+        vertices, indices = self.interpolateQtCircles(numPointsPerCircle, numCircles)
+        meshdata = gl.MeshData(vertexes=vertices, faces=indices)
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), shader='shaded', smooth=True)
+        meshitem.setGLOptions('opaque' if opaque else 'translucent')
+        if (is_joint):
+            meshitem.setObjectName("Joint")
+        else:
+            meshitem.setObjectName("Link")
+        
+        widget.plot_widget.addItem(meshitem)
+
+        return vertices, indices
     
     def show(self, numPointsPerCircle=32, color='black', alpha=0.5, frame=False, numCircles=2, block=blockDefault, edgeColor='black'):
         ax = plt.figure().add_subplot(projection='3d')
@@ -705,6 +779,21 @@ class Elbow:
         
         return StartCircle, MidEllipse, EndCircle
     
+    def circleEllipseCircleQT(self, numSides : int = 32):
+        StartCircle, MidEllipse, EndCircle = self.circleEllipseCircle(numSides)
+        vertices = np.vstack((StartCircle[:numSides], MidEllipse[:numSides], EndCircle[:numSides]))
+
+        faces = []
+        for i in range(2):
+            for j in range(numSides): 
+                next_index = (j + 1) % numSides
+                faces.append([i * numSides + j, i * numSides + next_index, (i + 1) * numSides + j])
+                faces.append([(i + 1) * numSides + j, i * numSides + next_index, (i + 1) * numSides + next_index])
+
+        faces = np.array(faces)
+
+        return vertices, faces
+    
     def addToPlot(self, ax, numSides : int = 32, color : str = 'black', 
                   alpha : float = 0.5, wireFrame : bool = False, 
                   showFrames : bool = False):
@@ -735,6 +824,36 @@ class Elbow:
             ax.quiver(x,y,z,u,v,w,length=self.r,normalize=True)
         
         return frameHandles
+    
+    def addToWidget(self, widget, numSides : int = 16, color_list=elbowColorList, 
+                  alpha : float = 1.0, wireFrame : bool = True, 
+                  showFrames : bool = False, debug : bool = False):
+        import pyqtgraph.opengl as gl
+        
+        vertices, faces = self.circleEllipseCircleQT(numSides)
+
+        meshdata = gl.MeshData(vertexes=vertices, faces=faces)
+        meshitem = gl.GLMeshItem(meshdata=meshdata, color=tuple(color_list), drawEdges=wireFrame, shader='shaded', smooth=True)
+        meshitem.setObjectName("Link")
+        
+        if showFrames:
+            Fwd = self.StartFrame @ self.Forward 
+            FwdRot = Fwd @ self.Rotate
+            FwdRotFwd = FwdRot @ self.Forward
+            Poses = np.array([self.StartFrame, Fwd, FwdRot, FwdRotFwd])
+
+            ax = plt.figure().add_subplot(projection='3d')
+            addPosesToPlotQT(Poses, ax, widget.plot_widget,
+                                        axisLength=1, xColor=xPoseColor, 
+                                        yColor=yPoseColor, zColor=zPoseColor)
+
+            x,y,z = Fwd.t
+            u,v,w = np.cross(Fwd.R[:,0], FwdRot.R[:,0])
+            line = gl.GLLinePlotItem(pos=np.array([[x,y,z], [0.5*u,0.5*v,0.5*w]]), color=lineColor, width=5) 
+            widget.plot_widget.addItem(line)
+
+        meshitem.setGLOptions('translucent')
+        widget.plot_widget.addItem(meshitem)
     
     def show(self, numSides : int = 32, color : str = 'black', 
              alpha : float = 0.5, wireFrame : bool = False, 
@@ -784,6 +903,36 @@ class CompoundElbow:
         
         if showBoundingBall:
             self.boundingBall().addToPlot(ax, color=color, alpha = 0.25*alpha)
+        
+        return allHandleSets
+    
+    def circleEllipseCircleQT(self, numSides : int = 32):
+        allHandleSets = []
+
+        vertices = []
+        faces = []
+        vertex_offset = 0
+
+        for elbow in self.elbows:
+            v, f = elbow.circleEllipseCircleQT(numSides)
+
+            vertices.extend(v.tolist())
+            f2 = [[item + vertex_offset for item in sublist] for sublist in f.tolist()]
+            faces.extend(f2)
+            vertex_offset += len(v)
+
+        return vertices, faces
+    
+    def addToWidget(self, widget, numSides : int = 32, color_list=compoundElbowColorList, 
+                  alpha : float = 1.0, wireFrame : bool = False, 
+                  showFrames : bool = True, showBoundingBall : bool = False, debug : bool = False):
+        allHandleSets = []
+        
+        for elbow in self.elbows:
+            elbow.addToWidget(widget, numSides, color_list, alpha, wireFrame, showFrames, debug)
+        
+        if showBoundingBall:
+            self.boundingBall().addToWidget(widget, color=tuple(color_list), alpha = 0.25*alpha)
         
         return allHandleSets
     
@@ -1471,6 +1620,118 @@ class HornTorus(Torus):
         super().__init__(radius, radius, center, axisDirection)
 
 
+def sdf_capsule(xp: ModuleType, p: ArrayLike, a: ArrayLike, b: ArrayLike, r) -> ArrayLike:
+    """
+    Vectorized signed distance from points to capsule(s).
+    
+    Parameters:
+        xp: Array module (np for numpy or cp for cupy)
+        p:  Query points, shape (N, 3)
+        a:  Capsule start(s), shape (L, 3)
+        b:  Capsule end(s), shape (L, 3)
+        r:  Tube radius, float or shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L). Negative inside, positive outside.
+    """
+    # Zero-length capsules (a == b) are spheres: h = 0 (from ZACH_vectorized_link_sdf.py; dividing by |b - a|^2
+    # would give NaN)
+    r = xp.atleast_1d(xp.asarray(r))
+    pa = p[:, None, :] - a[None, :, :] # (N,L,3)
+    ba = b - a # (L,3)
+    ba2 = xp.sum(ba * ba, axis=1) # (L,)
+    dot_pa_ba = xp.sum(pa * ba[None, :, :], axis=2)  # (N,L)
+    h = xp.where(ba2[None, :] > 0, dot_pa_ba / ba2[None, :], 0.0)  # (N,L)
+    h = xp.clip(h, 0.0, 1.0)                      # (N,L)
+    closest = pa - ba[None, :, :] * h[:, :, None] # (N,L,3)
+    return xp.sqrt(xp.sum(closest * closest, axis=2)) - r[None, :]  # (N,L)
+
+
+def sdf_plane(xp: ModuleType, p: ArrayLike, plane_point: ArrayLike, plane_normal: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points to a plane.
+    
+    Parameters:
+        xp: Array module (np for numpy or cp for cupy)
+        p:  Query points, shape (N, 3)
+        plane_point:  A point on the plane, shape (3,)
+        plane_normal: Normal direction of the plane, shape (3,)
+    
+    Returns:
+        Signed distances, shape (N,). Positive on the normal side.
+    """
+    dp = p - plane_point[None, :]             # (N, 3)
+    return xp.sum(dp * plane_normal[None, :], axis=1)  # (N,)
+
+
+def _sdf_torus_section_flat_ended_local(xp: ModuleType, localP: ArrayLike, sc: ArrayLike, ra: ArrayLike, rb: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points (in local frame) to a flat-ended torus section.
+    
+    Parameters:
+        xp:     Array module (np for numpy or cp for cupy)
+        localP: Points in local frame, shape (N, L, 3)
+        sc:     Sine/cosine of torus section half-angle, shape (L, 2)
+        ra:     Major radii, shape (L,)
+        rb:     Minor radii (tube radii), shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L).
+    """
+    px = xp.abs(localP[..., 0])  # (N, L)
+    py = localP[..., 1]          # (N, L)
+    pz = localP[..., 2]          # (N, L)
+
+    scx = sc[None, :, 0]         # (1, L)
+    scy = sc[None, :, 1]         # (1, L)
+    ra_ = ra[None, :]            # (1, L)
+    rb_ = rb[None, :]            # (1, L)
+
+    endCenter_x = ra_ * scx      # (1, L)
+    endCenter_y = ra_ * scy      # (1, L)
+    tangent_x = scy              # (1, L)
+    tangent_y = -scx             # (1, L)
+
+    toPoint_x = px - endCenter_x # (N, L)
+    toPoint_y = py - endCenter_y # (N, L)
+    pastEnd = toPoint_x * tangent_x + toPoint_y * tangent_y  # (N, L)
+
+    p_len = xp.sqrt(px * px + py * py)  # (N, L)
+    k = xp.where(scy * px > scx * py, scx * px + scy * py, p_len)  # (N, L)
+    # Clamp sqrt argument to prevent NaN from numerical precision issues
+    sqrt_arg = p_len * p_len + pz * pz + ra_ * ra_ - 2.0 * ra_ * k  # (N, L)
+    sqrt_arg = xp.maximum(sqrt_arg, 0.0)
+    base = xp.sqrt(sqrt_arg) - rb_  # (N, L)
+
+    radialInPlane = toPoint_x * scx + toPoint_y * scy  # (N, L)
+    discDist = xp.sqrt(radialInPlane * radialInPlane + pz * pz)  # (N, L)
+    outsideDisc = xp.maximum(discDist - rb_, 0.0)       # (N, L)
+    disc = xp.sqrt(pastEnd * pastEnd + outsideDisc * outsideDisc)  # (N, L)
+
+    return xp.where(pastEnd <= 0.0, base, disc)
+
+
+def sdf_torus_section_flat_ended(xp: ModuleType, p: ArrayLike, center: ArrayLike, R_w2l: ArrayLike, sc: ArrayLike, ra: ArrayLike, rb: ArrayLike) -> ArrayLike:
+    """
+    Signed distance from points to flat-ended torus section(s) in world frame.
+    
+    Parameters:
+        xp:    Array module (np for numpy or cp for cupy)
+        p:     Query points, shape (N, 3)
+        center: Torus center(s), shape (L, 3)
+        R_w2l: World-to-local rotation matrices, shape (L, 3, 3)
+        sc:    Sine/cosine of torus section half-angle, shape (L, 2)
+        ra:    Major radii, shape (L,)
+        rb:    Minor radii (tube radii), shape (L,)
+    
+    Returns:
+        Signed distances, shape (N, L).
+    """
+    dp = p[:, None, :] - center[None, :, :]           # (N, L, 3)
+    localP = xp.einsum("lij,nlj->nli", R_w2l, dp)    # (N, L, 3)
+    return _sdf_torus_section_flat_ended_local(xp, localP, sc, ra, rb)
+
+
 def sdf_aabb(
     min1: ArrayLike,
     max1: ArrayLike,
@@ -1564,3 +1825,54 @@ def saveManifold(manifold : m3d.Manifold, filename : str):
     tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
     
     tri_mesh.export(filename)
+
+
+def boxMesh(size) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Closed triangle mesh of an axis-aligned box centered at the origin.
+
+    Parameters:
+        size: full extents (sx, sy, sz)
+
+    Returns:
+        (vertices (8,3), faces (12,3)) with outward-facing triangles.
+    """
+    hx, hy, hz = np.asarray(size, dtype=float) / 2
+    vertices = np.array([
+        [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+        [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+    ])
+    faces = np.array([
+        [0, 2, 1], [0, 3, 2],  # -z
+        [4, 5, 6], [4, 6, 7],  # +z
+        [0, 1, 5], [0, 5, 4],  # -y
+        [2, 3, 7], [2, 7, 6],  # +y
+        [0, 4, 7], [0, 7, 3],  # -x
+        [1, 2, 6], [1, 6, 5],  # +x
+    ])
+    return vertices, faces
+
+
+def closedCylinderMesh(radius : float, length : float, numSides : int = 32) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Closed triangle mesh of a cylinder (with flat end caps) along the z axis,
+    centered at the origin (z in [-length/2, length/2]).
+
+    Returns:
+        (vertices (2*numSides+2, 3), faces (4*numSides, 3)) with outward-facing triangles.
+    """
+    angles = np.linspace(0, 2*np.pi, numSides, endpoint=False)
+    ring = np.column_stack([radius*np.cos(angles), radius*np.sin(angles), np.zeros(numSides)])
+    bottom = ring + [0, 0, -length/2]
+    top = ring + [0, 0, length/2]
+    bottomCenter = 2*numSides
+    topCenter = 2*numSides + 1
+    vertices = np.vstack([bottom, top, [[0, 0, -length/2]], [[0, 0, length/2]]])
+    faces = []
+    for i in range(numSides):
+        j = (i + 1) % numSides
+        faces.append([i, j, numSides + j])                # side
+        faces.append([i, numSides + j, numSides + i])     # side
+        faces.append([bottomCenter, j, i])                # bottom cap (normal -z)
+        faces.append([topCenter, numSides + i, numSides + j])  # top cap (normal +z)
+    return vertices, np.array(faces)

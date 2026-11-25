@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Created on Fri Jun 23 23:13:27 2023
 
@@ -15,6 +15,7 @@ import queue
 from LinkCSC import LinkCSC
 import os
 import time
+import dill
 from typing import Generic, TypeVar, get_args, Union, Optional, Tuple
 from functools import partial
 from geometryHelpers import *
@@ -44,8 +45,9 @@ class KinematicTree(Generic[F]):
     def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/12, 
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
-                 boundingBall : Optional[Ball] = None):
+                 boundingBall : Optional[Ball] = None, units : str = "Centimeter (cm)"):
             self.r = root.r
+            self.units = units
 
             #saveParamsAreNone = np.array([joints is None, links is None, parents is None, children is None, boundingBall is None])
             if not joints is None and not links is None and not parents is None and not children is None and not boundingBall is None:
@@ -98,7 +100,8 @@ class KinematicTree(Generic[F]):
             f"links={repr(self.Links)}, "
             f"parents={repr(self.Parents)}, "
             f"children={repr(self.Children)}, "
-            f"boundingBall={repr(self.boundingBall)})"
+            f"boundingBall={repr(self.boundingBall)}, "
+            f"units={repr(self.units)})"
         )
         np.set_printoptions(precision=numpy_precision)
         return output
@@ -112,6 +115,20 @@ class KinematicTree(Generic[F]):
         self.r, self.Joints, self.Parents, \
             self.Links, self.maxAnglePerElbow, \
             self.boundingBall, self.Children = data
+
+    def isConsistent(self, tolerance : float = 0.1) -> bool:
+        """Fast check that all links connect to their parent's distal
+        and their own joint's proximal Dubins frames within tolerance."""
+        for i in range(1, len(self.Joints)):
+            parent_distal = self.Joints[self.Parents[i]].DistalDubinsFrame().t
+            link_start = self.Links[i].StartDubinsPose.t
+            if np.linalg.norm(parent_distal - link_start) > tolerance:
+                return False
+            joint_proximal = self.Joints[i].ProximalDubinsFrame().t
+            link_end = self.Links[i].EndDubinsPose.t
+            if np.linalg.norm(joint_proximal - link_end) > tolerance:
+                return False
+        return True
 
     """
     Returns the new Joint's index. 
@@ -139,7 +156,9 @@ class KinematicTree(Generic[F]):
                  relative : bool = True, fixedPosition : bool = False, 
                  fixedOrientation : bool = False, 
                  safe : bool = True, endPlane : Optional[Plane] = None,
-                 chooseXhatToMinPath : bool = False) -> int:
+                 chooseXhatToMinPath : bool = False, 
+                 relativeToDistalDubins : bool = False,
+                 cachedLink : Optional[LinkCSC] = None) -> int:
         # Validate fabrication type if this tree has a type constraint
         # Skip validation for waypoints as they are fabrication-agnostic
         from Joint import Waypoint
@@ -158,6 +177,16 @@ class KinematicTree(Generic[F]):
                 if not isinstance(newJoint, fabrication_type):
                     raise TypeError(f"Joint must inherit from {fabrication_type.__name__}, got {type(newJoint).__name__}")
         
+        # A forward-closing Tip (end tip) must remain a leaf — no children allowed
+        parent = self.Joints[parentIndex]
+        if isinstance(parent, Tip) and parent.forward:
+            raise ValueError("Cannot add a child joint to an end tip (forward-closing Tip). "
+                             "End tips must remain leaf nodes.")
+        # Likewise an end effector (e.g. a gripper) must remain a leaf
+        if isinstance(parent, EndEffector):
+            raise ValueError("Cannot add a child joint to an end effector. "
+                             "End effectors must remain leaf nodes.")
+        
         if safe and fixedPosition:
             raise ValueError("ERROR: trying to call addJoint with \
                 safe and fixedPosition both True")
@@ -167,8 +196,10 @@ class KinematicTree(Generic[F]):
         
         newJoint = copy.deepcopy(newJoint)
         parent = self.Joints[parentIndex]
-        if relative:
+        if relative and not relativeToDistalDubins:
             newJoint.transformPoseIntoFrame(parent.Pose)
+        elif relativeToDistalDubins:
+            newJoint.transformPoseIntoFrame(parent.DistalDubinsFrame())
 
         if safe: # Algorithm 9 from [Chen et al. 2023]
             jointsToAdd = placeJointAndWayPoints(newJoint, parent,
@@ -226,7 +257,10 @@ class KinematicTree(Generic[F]):
 
         # Use fabrication-specific link constructor if available
         link_constructor = self._get_link_constructor()
-        newLink = link_constructor(self.r, parent.DistalDubinsFrame(), 
+        if not safe and not cachedLink is None:
+            newLink = cachedLink
+        else:
+            newLink = link_constructor(self.r, parent.DistalDubinsFrame(), 
                                 newJoint.ProximalDubinsFrame(),
                                 self.maxAnglePerElbow)
         if newLink is None:
@@ -250,6 +284,129 @@ class KinematicTree(Generic[F]):
         return newIndex
     
     
+    def deleteJoint(self, jointIndex : int, recursive : bool = False) -> None:
+        """
+        Delete a joint from the tree.
+        
+        Parameters:
+            jointIndex : int - Index of the joint to delete
+            recursive : bool - If True, delete all descendants. If False, re-parent 
+                              children to the deleted joint's parent (default: False)
+        
+        When recursive=True:
+        1. Finds all descendants of the joint (recursively)
+        2. Removes them from Joints, Links, Parents, and Children
+        3. Adjusts all remaining joint indices in Parents and Children
+        
+        When recursive=False:
+        1. Re-parents all children to the deleted joint's parent
+        2. Creates new links from parent to each child
+        3. Removes only the specified joint
+        4. Adjusts remaining joint indices
+        """
+        if jointIndex < 0 or jointIndex >= len(self.Joints):
+            raise ValueError(f"Joint index {jointIndex} out of range [0, {len(self.Joints)-1}]")
+        
+        if jointIndex == 0:
+            raise ValueError("Cannot delete the root joint (index 0)")
+        
+        parent_index = self.Parents[jointIndex]
+        
+        if recursive:
+            # Original recursive deletion behavior
+            # Step 1: Find all descendants (including the joint itself)
+            descendants = set()
+            to_process = [jointIndex]
+            
+            while to_process:
+                current = to_process.pop()
+                descendants.add(current)
+                # Add all children of current joint to the processing queue
+                to_process.extend(self.Children[current])
+            
+            # Sort descendants in descending order so we can delete from the end
+            # This prevents index shifting issues during deletion
+            descendants_sorted = sorted(descendants, reverse=True)
+            
+            # Step 2: Remove the joint from its parent's children list
+            if parent_index >= 0:
+                self.Children[parent_index] = [c for c in self.Children[parent_index] if c not in descendants]
+            
+            # Step 3: Delete all descendants from the lists (from end to start)
+            for idx in descendants_sorted:
+                del self.Joints[idx]
+                del self.Links[idx]
+                del self.Parents[idx]
+                del self.Children[idx]
+            
+            # Step 4: Adjust all indices in Parents and Children
+            # Create a mapping from old indices to new indices
+            index_mapping = {}
+            offset = 0
+            for old_idx in range(len(self.Joints) + len(descendants_sorted)):
+                if old_idx in descendants:
+                    offset += 1
+                else:
+                    index_mapping[old_idx] = old_idx - offset
+            
+            # Update Parents array
+            for i in range(len(self.Parents)):
+                if self.Parents[i] >= 0:
+                    self.Parents[i] = index_mapping[self.Parents[i]]
+            
+            # Update Children array
+            for i in range(len(self.Children)):
+                self.Children[i] = [index_mapping[c] for c in self.Children[i]]
+        else:
+            # Non-recursive: re-parent children to the deleted joint's parent
+            children_to_reparent = self.Children[jointIndex].copy()
+            
+            # Step 1: Update parent's children list - remove deleted joint, add its children
+            if parent_index >= 0:
+                self.Children[parent_index] = [c for c in self.Children[parent_index] if c != jointIndex]
+                self.Children[parent_index].extend(children_to_reparent)
+            
+            # Step 2: Create new links from parent to each child and update their parents
+            link_constructor = self._get_link_constructor()
+            parent_joint = self.Joints[parent_index]
+            
+            for child_idx in children_to_reparent:
+                child_joint = self.Joints[child_idx]
+                # Create new link from parent's distal frame to child's proximal frame
+                new_link = link_constructor(self.r, parent_joint.DistalDubinsFrame(),
+                                           child_joint.ProximalDubinsFrame(),
+                                           self.maxAnglePerElbow)
+                if new_link is None:
+                    print(f"WARNING: Could not create valid link from joint {parent_index} to joint {child_idx}")
+                    # Keep the old link as a fallback
+                else:
+                    self.Links[child_idx] = new_link
+                
+                # Update parent reference
+                self.Parents[child_idx] = parent_index
+            
+            # Step 3: Delete the joint
+            del self.Joints[jointIndex]
+            del self.Links[jointIndex]
+            del self.Parents[jointIndex]
+            del self.Children[jointIndex]
+            
+            # Step 4: Adjust all indices in Parents and Children
+            # All indices > jointIndex need to be decremented by 1
+            for i in range(len(self.Parents)):
+                if self.Parents[i] > jointIndex:
+                    self.Parents[i] -= 1
+                elif self.Parents[i] == jointIndex:
+                    # This shouldn't happen since we already re-parented children
+                    raise RuntimeError(f"Found orphaned joint at index {i}")
+            
+            for i in range(len(self.Children)):
+                self.Children[i] = [c - 1 if c > jointIndex else c for c in self.Children[i]]
+        
+        # Recompute bounding ball since we removed joints
+        self.recomputeBoundingBall()
+    
+    
     def recomputeBoundingBall(self):
         self.boundingBall = self.Joints[0].boundingBall()
         for joint in self.Joints[1:]:
@@ -266,7 +423,118 @@ class KinematicTree(Generic[F]):
                                                 link.elbow2BoundingBall)
             
     
-    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+    def addSubtree(self, parentIndex : int, subtree : 'KinematicTree') -> list[int]:
+        """
+        Copy all joints and links from another tree into this tree, 
+        attaching the subtree's root as a child of parentIndex.
+        
+        Uses the subtree's existing links (cachedLink) to avoid recomputing paths.
+        
+        Parameters:
+            parentIndex : int - Index of the joint in this tree to attach the subtree's root to
+            subtree : KinematicTree - The tree whose joints/links to copy in
+            
+        Returns:
+            list[int] - The new indices of all added joints (in the order they appeared in the subtree)
+        """
+        if parentIndex < 0 or parentIndex >= len(self.Joints):
+            raise ValueError(f"Parent index {parentIndex} out of range [0, {len(self.Joints)-1}]")
+        
+        # A backward-closing Tip (start tip) must remain a root — it cannot become a non-root
+        # node by being grafted as a subtree under another joint
+        subtree_root = subtree.Joints[0]
+        if isinstance(subtree_root, Tip) and not subtree_root.forward:
+            raise ValueError("Cannot attach a subtree whose root is a start tip (backward-closing Tip). "
+                             "Start tips must remain root nodes.")
+        
+        # Map from old subtree indices to new indices in this tree
+        index_mapping = {}
+        
+        # BFS to add joints in parent-first order so parents exist before children
+        queue_items = collections.deque()
+        # Start with root of subtree (index 0), attaching to parentIndex in this tree
+        queue_items.append((0, parentIndex))
+        
+        new_indices = []
+        
+        while queue_items:
+            subtree_idx, new_parent_idx = queue_items.popleft()
+            subtree_joint = subtree.Joints[subtree_idx]
+            
+            # Use cached link for non-root subtree joints (root's link is a 
+            # degenerate self-link, so we need a fresh link from the new parent)
+            cachedLink = subtree.Links[subtree_idx] if subtree_idx != 0 else None
+            
+            new_idx = self.addJoint(
+                parentIndex=new_parent_idx,
+                newJoint=subtree_joint,
+                relative=False,
+                fixedPosition=True,
+                fixedOrientation=True,
+                safe=False,
+                cachedLink=cachedLink
+            )
+            
+            if new_idx is None:
+                print(f"WARNING: Failed to add subtree joint {subtree_idx}")
+                continue
+            
+            index_mapping[subtree_idx] = new_idx
+            new_indices.append(new_idx)
+            
+            # Enqueue all children of this subtree joint
+            for child_idx in subtree.Children[subtree_idx]:
+                queue_items.append((child_idx, new_idx))
+        
+        return new_indices
+
+
+    def insertWaypointsIntoLink(self, linkIndex: int, numWaypoints: int = 1) -> None:
+        """
+        Insert numWaypoints evenly-spaced Waypoint joints along self.Links[linkIndex].
+        Mutates the tree in place. linkIndex must be > 0.
+        """
+        assert linkIndex > 0, "Use the GUI root-case handler for the root joint"
+        assert numWaypoints >= 1
+
+        fractions = [i / (numWaypoints + 1) for i in range(1, numWaypoints + 1)]
+        sub_links = self.Links[linkIndex].splitAtFractions(fractions)
+
+        parentIndex = self.Parents[linkIndex]
+        first_new_idx = len(self.Joints)
+
+        new_waypoints = []
+        for i in range(numWaypoints):
+            pose = _waypoint_pose_at_split(sub_links[i].path, sub_links[i + 1].path)
+            new_waypoints.append(Waypoint(self.r, pose))
+
+        # Rewire existing child: new parent is the last inserted waypoint
+        self.Parents[linkIndex] = first_new_idx + numWaypoints - 1
+        self.Links[linkIndex] = sub_links[-1]
+
+        # Replace linkIndex with first new waypoint in parent's children list
+        parent_children = self.Children[parentIndex]
+        idx_in_parent = parent_children.index(linkIndex)
+        parent_children[idx_in_parent] = first_new_idx
+
+        # Append new waypoints and their incoming sub-links
+        for i, (wp, sub_link) in enumerate(zip(new_waypoints, sub_links)):
+            wp_parent = parentIndex if i == 0 else first_new_idx + i - 1
+            wp_children = ([first_new_idx + i + 1] if i < numWaypoints - 1
+                           else [linkIndex])
+            self.Joints.append(wp)
+            self.Links.append(sub_link)
+            self.Parents.append(wp_parent)
+            self.Children.append(wp_children)
+            self.boundingBall = minBoundingBall(self.boundingBall, wp.boundingBall())
+
+        # Recompute collision capsules for all affected links
+        for i in range(numWaypoints):
+            self.Links[first_new_idx + i].recomputeCollisionCapsules()
+        self.Links[linkIndex].recomputeCollisionCapsules()
+
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
                   proximalColor='c', centerColor='m', distalColor='y',
                   showJointSurface=True, jointAxisScale=jointAxisScaleDefault, showJointPoses=True,
                   linkColor=linkColorDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True, 
@@ -341,6 +609,179 @@ class KinematicTree(Generic[F]):
             ax.scatter(plotPoint[0,:], plotPoint[1,:], plotPoint[2,:], color='red', s=50)
         return np.array(xyzHandles), np.array(abcHandles)
     
+    def _addOneJoint(self, widget, index, selectedJoint, collidingJoints,
+                     xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                     sphereColor, showSpheres, jointColor, showJointSurface,
+                     showJointAxis, jointAxisScale, showJointPoses):
+        """Add GL items for a single joint (used by addToWidget and incremental updates)."""
+        joint = self.Joints[index]
+        if joint is None:
+            return
+        isColliding = index in collidingJoints
+        if index == selectedJoint:
+            joint.addToWidget(widget, xColor, yColor, zColor,
+                    proximalColor, centerColor, distalColor,
+                    sphereColor=selectedJointColor, showSphere=True,
+                    surfaceColor=jointColor,
+                    showSurface=showJointSurface, showAxis=showJointAxis,
+                    axisScale=jointAxisScale, showPoses=showJointPoses, poseAxisScaleMultipler=2)
+        else:
+            joint.addToWidget(widget, xColor, yColor, zColor,
+                    proximalColor, centerColor, distalColor,
+                    sphereColor, showSphere=showSpheres,
+                    surfaceColor=jointColor, showSurface=showJointSurface, showAxis=showJointAxis,
+                    axisScale=jointAxisScale, showPoses=showJointPoses)
+        if isColliding and (isinstance(joint, Revolute) or isinstance(joint, Prismatic)):
+            joint.proximalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+            joint.distalCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+            joint.centerSphere().addToWidget(widget, color=collisionJointColor)
+        elif isColliding and isinstance(joint, EndEffector):
+            # Highlight the geometry actually used for collision detection
+            # (an under-approximating tube of radius r; see EndEffector.sdf)
+            joint.collisionCylinder().addToWidget(widget, color_list=collisionJointColor, is_joint=True)
+
+    def _addOneLink(self, widget, index, selectedLink, collidingLinks,
+                    linkColor, linkOpacity, showLinkPath, pathColor,
+                    showPathCircles, showLinkPoses, showLinkSurface):
+        """Add GL items for a single link (used by addToWidget and incremental updates)."""
+        link = self.Links[index]
+        if link is None:
+            return
+        isColliding = index in collidingLinks
+        if index == selectedLink:
+            color = collisionLinkColor if isColliding else selectedLinkColor
+        elif isColliding:
+            color = collisionLinkColor
+        else:
+            color = linkColor
+        link.addToWidget(widget, color=color,
+                        alpha=linkOpacityDefault,
+                        showPath=showLinkPath,
+                        pathColor=pathColor,
+                        showPathCircles=showPathCircles,
+                        showFrames=showLinkPoses,
+                        showBoundary=showLinkSurface,
+                        linkID=index)
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                  proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                  showJointSurface=True, jointColor=jointColorDefault,
+                  jointAxisScale=jointAxisScaleDefault, showJointAxis=True, showJointPoses=False,
+                  linkColor=linkColorDefault, linkOpacity=linkOpacityDefault, surfaceOpacity=surfaceOpacityDefault, showLinkSurface=True,
+                  showLinkPoses=False, showLinkPath=True, pathColor=pathColorDefault,
+                  showPathCircles=False, sphereColor=sphereColorDefault,
+                  showSpheres=False, showGlobalFrame=False, globalAxisScale=globalAxisScaleDefault, lastJoint=None,
+                  selectedJoint=None, selectedLink=None,
+                  collidingJoints=None, collidingLinks=None,
+                  only_rebuild_index=None):
+        # TODO: IMPLEMENT showGlobalFrame
+        if collidingJoints is None:
+            collidingJoints = set()
+        if collidingLinks is None:
+            collidingLinks = set()
+
+        if only_rebuild_index is not None:
+            # Incremental mode: remove old GL items for only_rebuild_index, rebuild those,
+            # and apply model-matrix updates to everything else.
+            joint = self.Joints[only_rebuild_index]
+            link = self.Links[only_rebuild_index]
+            if joint is not None:
+                for item in (getattr(joint, '_gl_items_proximal', []) +
+                             getattr(joint, '_gl_items_center', []) +
+                             getattr(joint, '_gl_items_distal', [])):
+                    try:
+                        widget.plot_widget.removeItem(item)
+                    except Exception:
+                        pass
+                joint.clearGLCache()
+                self._addOneJoint(widget, only_rebuild_index, selectedJoint, collidingJoints,
+                                   xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                                   sphereColor, showSpheres, jointColor, showJointSurface,
+                                   showJointAxis, jointAxisScale, showJointPoses)
+            if link is not None:
+                for item in getattr(link, '_gl_items', []):
+                    try:
+                        widget.plot_widget.removeItem(item)
+                    except Exception:
+                        pass
+                link.clearGLCache()
+                self._addOneLink(widget, only_rebuild_index, selectedLink, collidingLinks,
+                                  linkColor, linkOpacity, showLinkPath, pathColor,
+                                  showPathCircles, showLinkPoses, showLinkSurface)
+            # Model-matrix update for all other joints and links
+            for i, j in enumerate(self.Joints):
+                if j is not None and i != only_rebuild_index:
+                    j.updateCachedGLTransforms()
+            for i, lnk in enumerate(self.Links):
+                if lnk is not None and i != only_rebuild_index:
+                    lnk.updateCachedGLTransforms()
+            return
+
+        if showSpheres:
+            self.boundingBall.addToWidget(widget, color=sphereColor)
+
+        for index, joint in enumerate(self.Joints):
+            self._addOneJoint(widget, index, selectedJoint, collidingJoints,
+                               xColor, yColor, zColor, proximalColor, centerColor, distalColor,
+                               sphereColor, showSpheres, jointColor, showJointSurface,
+                               showJointAxis, jointAxisScale, showJointPoses)
+
+        for index, link in enumerate(self.Links):
+            self._addOneLink(widget, index, selectedLink, collidingLinks,
+                             linkColor, linkOpacity, showLinkPath, pathColor,
+                             showPathCircles, showLinkPoses, showLinkSurface)
+
+    def updateGLTransforms(self):
+        """Fast-update all cached GL items by applying model-matrix transforms.
+        Only works when all joints and links have a valid GL cache
+        (i.e. addToWidget was called earlier and shapes haven't changed).
+        Returns True if the fast path succeeded, False if a full redraw is needed."""
+        for joint in self.Joints:
+            if joint is None:
+                continue
+            if not joint.hasGLCache():
+                return False
+            joint.updateCachedGLTransforms()
+        for link in self.Links:
+            if link is None:
+                continue
+            if not link.hasGLCache():
+                return False
+            link.updateCachedGLTransforms()
+        return True
+
+    def clearAllGLCaches(self):
+        """Clear GL cache on all joints and links (before a full rebuild)."""
+        for joint in self.Joints:
+            if joint is not None:
+                joint.clearGLCache()
+        for link in self.Links:
+            if link is not None:
+                link.clearGLCache()
+
+    def resyncFromLightweight(self):
+        """Rebuild link geometry from current joint poses after lightweight
+        animation.  Call this when switching from animation back to editing
+        or export so that elbows, cylinders, path objects, bounding balls,
+        and collision capsules are all consistent again."""
+        link_constructor = self._get_link_constructor()
+        for i, link in enumerate(self.Links):
+            if link is None or i == 0:
+                continue
+            parent_idx = self.Parents[i]
+            parent = self.Joints[parent_idx]
+            joint = self.Joints[i]
+            self.Links[i] = link_constructor(
+                self.r, parent.DistalDubinsFrame(),
+                joint.ProximalDubinsFrame(),
+                self.maxAnglePerElbow)
+            # Transfer GL cache from old link to new one
+            if not getattr(link, '_gl_shape_dirty', True):
+                self.Links[i]._gl_items = link._gl_items
+                self.Links[i]._gl_ref_pose = link._gl_ref_pose
+                self.Links[i]._gl_shape_dirty = False
+        self.recomputeBoundingBall()
+
     def copyAbbreviatedSelf(self, isolate=False, isolateJoint = 0):
         try:
             newTree = KinematicTree(copy.deepcopy(self.Joints[self.Parents[self.Parents[isolateJoint]]]), self.maxAnglePerElbow)
@@ -390,6 +831,41 @@ class KinematicTree(Generic[F]):
         collisionMatrices = self.buildCollisionMatrices()
         numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
         return numCollisions
+
+    def getCollidingPairs(self, coarseDistanceThresholdRatio : float = 0.5,
+                          fineDistanceThresholdRatio : float = 0.001) -> list[Tuple[Tuple[int, str], Tuple[int, str]]]:
+        """
+        Return a list of all currently colliding pairs of objects.
+        
+        Each element is ((idx1, type1), (idx2, type2)) where type is 'Joint' or 'Link'.
+        """
+        coarseDistanceThreshold = self.r * coarseDistanceThresholdRatio
+        fineDistanceThreshold = self.r * fineDistanceThresholdRatio
+        
+        collisionMatrices = self.buildCollisionMatrices()
+        jj_pairs, jl_pairs, ll_pairs = self.getAllCollisionPairs(collisionMatrices)
+        
+        collidingPairs = []
+        for j1, j2 in jj_pairs.T:
+            if self.collision(self.Joints[j1], self.Joints[j2],
+                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
+                collidingPairs.append(((j1, 'Joint'), (j2, 'Joint')))
+        # as in collisionsCountAndError: a joint is checked only against the part of each incoming-path link
+        # outside its window (see incomingWindowCheckedLengths)
+        incomingWindows = self.incomingWindowCheckedLengths()
+        for j, l in jl_pairs.T:
+            checkedLength = incomingWindows.get((int(j), int(l)))
+            if checkedLength is not None and checkedLength <= 0:
+                continue
+            if self.collision(self.Joints[j], self.Links[l],
+                              coarseDistanceThreshold, fineDistanceThreshold,
+                              maxArcLength2=checkedLength) is not None:
+                collidingPairs.append(((j, 'Joint'), (l, 'Link')))
+        for l1, l2 in ll_pairs.T:
+            if self.collision(self.Links[l1], self.Links[l2],
+                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
+                collidingPairs.append(((l1, 'Link'), (l2, 'Link')))
+        return collidingPairs
 
     
     def collisionPairsFromMovingJoint(self, movingJointIndex,
@@ -522,6 +998,11 @@ class KinematicTree(Generic[F]):
     
     
     # Returns None for no collision or the pair of closest points for a collision
+    # Every object is treated as a centerline (interpolate()) with radius .r.
+    # TODO(collision): this means an EndEffector (e.g. a gripper) is
+    # UNDER-approximated as a tube of radius r (the incoming tube radius): its
+    # wider parts (carriage, jaws) are not collision-checked. See
+    # EndEffector.sdf and KNOWN_ISSUES.md.
     # Length of the window (along the incoming path, back from a real joint's proximal end) in which links
     # aren't collision-checked against that joint: in units of the tube radius
     INCOMING_WINDOW_RADII = np.pi
@@ -1042,9 +1523,16 @@ class KinematicTree(Generic[F]):
     def transformJoint(self, jointIndex : int, Transformation : SE3, 
                        propogate : bool = True, recomputeBoundingBall : bool = True,
                        recomputeLinkPath : bool = True, 
-                       safe : bool = True, relative : bool = False, printErrors=False) -> bool:
+                       safe : bool = True, relative : bool = False, localOrient : bool = True,
+                       printErrors=False, lightweight : bool = False) -> bool:
         if relative:
-            Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+            if localOrient:
+                # Use the joint's full orientation for the transformation
+                Transformation = self.Joints[jointIndex].Pose @ Transformation @ self.Joints[jointIndex].Pose.inv()
+            else:
+                # Only use the joint's position, not orientation
+                translate_transform = SE3(self.Joints[jointIndex].Pose.t)
+                Transformation = translate_transform @ Transformation @ translate_transform.inv()
         
         if safe:
             backup = self.dataDeepCopy()
@@ -1066,30 +1554,55 @@ class KinematicTree(Generic[F]):
                     print("Reverting chain to before outer call.")
                 self.setTo(backup)
                 return False
+            except Exception as err:
+                if printErrors:
+                    print("WARNING: Unexpected error in transformJoint:")
+                    print(err)
+                    print("Reverting chain to before outer call.")
+                self.setTo(backup)
+                return False
 
         else:
-            self.Joints[jointIndex].transformPoseBy(Transformation)
             joint = self.Joints[jointIndex]
-            if recomputeLinkPath and jointIndex > 0:
+            if lightweight:
+                # Fast path: only update link poses for GL transform, skip
+                # full link reconstruction (elbows, cylinders, path objects)
+                self.Joints[jointIndex].transformPoseBy(Transformation)
+                self.Links[jointIndex].transformPosesInPlace(Transformation)
+            elif recomputeLinkPath and jointIndex > 0:
                 parent = self.Joints[self.Parents[jointIndex]]
-
-                self.Links[jointIndex] = LinkCSC(self.r, parent.DistalDubinsFrame(), 
-                                        joint.ProximalDubinsFrame(),
-                                        self.maxAnglePerElbow)
+                link_constructor = self._get_link_constructor()
+                # Build the new link BEFORE moving the joint so that if link_constructor
+                # raises (e.g. CSC solver fails), the joint hasn't moved yet and the tree
+                # remains consistent. After transformPoseBy(T), ProximalDubinsFrame() ==
+                # T @ current_ProximalDubinsFrame(), so we pass that directly.
+                new_link = link_constructor(self.r, parent.DistalDubinsFrame(),
+                                            Transformation @ joint.ProximalDubinsFrame(),
+                                            self.maxAnglePerElbow)
+                self.Joints[jointIndex].transformPoseBy(Transformation)
+                self.Links[jointIndex] = new_link
             else:
+                self.Joints[jointIndex].transformPoseBy(Transformation)
                 self.Links[jointIndex] = self.Links[jointIndex].newLinkTransformedBy(Transformation)
+            joint = self.Joints[jointIndex]  # reference is valid; transformPoseBy modifies in-place
+            if not lightweight and jointIndex == 0 and not self.Links[0].length() == 0:
+                raise ValueError("Error in transformJoint: Link 0 is supposed to stay empty (length 0).")
+            
             if propogate:
                 for c in self.Children[jointIndex]:
                     self.transformJoint(c, Transformation, propogate=True, 
                                         recomputeBoundingBall=False,
                                         recomputeLinkPath=False,
-                                        safe=False, relative=False)
+                                        safe=False, relative=False,
+                                        lightweight=lightweight)
                 
-                self.recursivelyRecomputeCollisionCapsules(jointIndex)
+                if not lightweight:
+                    self.recursivelyRecomputeCollisionCapsules(jointIndex)
             else:
+                link_constructor = self._get_link_constructor()
                 for c in self.Children[jointIndex]:
                     child = self.Joints[c]
-                    self.Links[c] = LinkCSC(self.r, joint.DistalDubinsFrame(), 
+                    self.Links[c] = link_constructor(self.r, joint.DistalDubinsFrame(), 
                                             child.ProximalDubinsFrame(),
                                             self.maxAnglePerElbow)
                 self.Joints[jointIndex].recomputeCollisionCapsules()
@@ -1101,7 +1614,7 @@ class KinematicTree(Generic[F]):
 
         return True
                 
-    def setJointState(self, jointIndex : int, newState : float) -> bool:
+    def setJointState(self, jointIndex : int, newState : float, lightweight : bool = False) -> bool:
         joint = self.Joints[jointIndex]
 
         if joint is None:
@@ -1123,10 +1636,11 @@ class KinematicTree(Generic[F]):
             # TODO: it is possible, and would be more efficient, to make this 
             # transform the existing links rather than recompute them
             self.transformJoint(c, Transformation, propogate=True, recomputeLinkPath=False,
-                                recomputeBoundingBall=False, safe=False)
-        self.recomputeBoundingBall()
-
-        self.recursivelyRecomputeCollisionCapsules(jointIndex)
+                                recomputeBoundingBall=False, safe=False,
+                                lightweight=lightweight)
+        if not lightweight:
+            self.recomputeBoundingBall()
+            self.recursivelyRecomputeCollisionCapsules(jointIndex)
         return True
     
     def recursivelyRecomputeCollisionCapsules(self, index):
@@ -1147,7 +1661,7 @@ class KinematicTree(Generic[F]):
             try:
                 self.translateJointAlongAxisOfMotion(jointIndex, distance, 
                             propogate, applyToPreviousWaypoint, safe = False)
-            except ValueError as err:
+            except Exception as err:
                 print("WARNING: something went wrong in translateJointAlongAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
@@ -1177,7 +1691,7 @@ class KinematicTree(Generic[F]):
             try:
                 self.rotateJointAboutAxisOfMotion(jointIndex, angle, propogate, 
                              applyToPreviousWaypoint, safe = False)
-            except ValueError as err:
+            except Exception as err:
                 print("WARNING: something went wrong in rotateJointAboutAxisOfMotion:")
                 print(err)
                 print("Reverting chain to before outer call.")
@@ -1197,15 +1711,18 @@ class KinematicTree(Generic[F]):
         return True
     
     def save(self, filename: str, saveDir = True):
-        #TODO: ADD EXTENSIONS FOR PRINTED JOINTS
-        name = filename + ".tree"
-        if saveDir:
-            name = "save/" + filename
+        # Don't add extension if filename already has one
+        if not (filename.endswith('.tree') or filename.endswith('.chain')):
+            name = filename + ".tree"
+        else:
+            name = filename
+            
+        if saveDir and not os.path.isabs(filename):
+            name = os.path.join("save", name)
         
-        with open(name, "w") as f:
-            save = self.__repr__()
-            f.write(save)
-            f.close()
+        os.makedirs(os.path.dirname(os.path.abspath(name)), exist_ok=True)
+        with open(name, "wb") as f:
+            dill.dump(self, f)
 
     def totalLengthLowerBound(self):
         sum = self.Joints[0].neutralLength/2
@@ -1312,6 +1829,7 @@ def loadKinematicTree(filename : str):
                 'CoaxialRevolute': CoaxialRevolute,
                 'Waypoint': Waypoint,
                 'Tip': Tip,
+                'ParallelJawGripper': ParallelJawGripper,
             }
             tree = eval(data, eval_namespace)
             f.close()
@@ -1324,6 +1842,15 @@ def isWaypoint(joint):
     if joint is None:
         return False
     return isinstance(joint, Waypoint)
+
+
+def _waypoint_pose_at_split(sub_path_before, sub_path_after) -> SE3:
+    """Build an SE3 pose for a Waypoint(pathIndex=2) at the junction of two sub-paths."""
+    pos  = sub_path_before.endPosition
+    zhat = sub_path_before.endDir / np.linalg.norm(sub_path_before.endDir)
+    xhat = sub_path_after.circleNormal1   # guaranteed ⊥ zhat
+    yhat = np.cross(zhat, xhat)
+    return SE3.Rt(SO3(np.column_stack([xhat, yhat, zhat])), pos)
 
 def curvinessOfLink(link : LinkCSC):
     return link.path.theta1 ** 1.5 * link.path.r + link.path.theta2 ** 1.5 * link.path.r
@@ -1510,3 +2037,15 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
     toReturn.append(jointToPlace)
     return toReturn
     
+
+def loadTree(filename: str):
+    """Load any KinematicTree (or subclass) from a dill-serialized file.
+    Also supports legacy text-based files saved with __repr__/eval."""
+    try:
+        with open(filename, "rb") as f:
+            return dill.load(f)
+    except Exception:
+        # Fall back to legacy text-based loading for old files
+        raise Exception(f"Could not load file {filename}. "
+                        "If this is a legacy text-based save file, "
+                        "it must be re-saved in the new format.")

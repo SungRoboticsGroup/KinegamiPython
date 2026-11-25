@@ -1,3 +1,4 @@
+﻿import os
 from Joint import *
 from TubularPattern import *
 from TubularPattern import revoluteColorDefault, revoluteEdgeColorDefault, sphereColorDefault, surfaceOpacityDefault, xColorDefault, yColorDefault, zColorDefault
@@ -7,16 +8,68 @@ from Tube import Tube
 from KinematicTree import KinematicTree
 from mpl_toolkits.mplot3d import Axes3D
 
+def _circle_points(center, normal, radius, n=32):
+    """Generate n points equally spaced around a circle in 3D."""
+    if abs(normal[0]) < 0.9:
+        u = np.cross(normal, [1, 0, 0])
+    else:
+        u = np.cross(normal, [0, 1, 0])
+    u = u / np.linalg.norm(u)
+    v = np.cross(normal, u)
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    return center + radius * (np.cos(angles)[:, None] * u + np.sin(angles)[:, None] * v)
+
+def _circle_verts_and_tris(center, normal, radius, n=32):
+    """Generate vertices and triangle indices for a filled circle disc in 3D (for pyqtgraph)."""
+    if abs(normal[0]) < 0.9:
+        u = np.cross(normal, [1, 0, 0])
+    else:
+        u = np.cross(normal, [0, 1, 0])
+    u = u / np.linalg.norm(u)
+    v = np.cross(normal, u)
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    ring = center + radius * (np.cos(angles)[:, None] * u + np.sin(angles)[:, None] * v)
+    verts = np.vstack([center.reshape(1, 3), ring])  # index 0 = center
+    tris = np.array([[0, i + 1, (i % n) + 2] for i in range(n - 1)] + [[0, n, 1]])
+    return verts, tris
+
 class PrintedTube(Tube):
-    def __init__(self, wallThickness : float, holeDiameter : float, numHoles : int):
-        self.wallThickness = wallThickness
-        self.holeDiameter = holeDiameter
-        self.numHoles = numHoles
+    # Fabrication parameters — edit these in one place for all PrintedTube subclasses
+    WALL_THICKNESS = 3.0   # wall thickness in mm
+    HOLE_DIAMETER = 3.0    # We use M3 bolts
+    NUM_HOLES = 4
+    LOOSE_FIT_TOLERANCE = 0.1   # amount in mm to increase radius for loose fit (e.g. clearance holes)
+    TIGHT_FIT_TOLERANCE = 0.05  # amount in mm to reduce radius for tight fit (e.g. friction-fit inserts)
+
+    def __init__(self):
+        pass
+
+    @property
+    def wallThickness(self):
+        return self.WALL_THICKNESS
+
+    @property
+    def holeDiameter(self):
+        return self.HOLE_DIAMETER
+
+    @property
+    def numHoles(self):
+        return self.NUM_HOLES
+
+    @property
+    def looseFitTolerance(self):
+        return self.LOOSE_FIT_TOLERANCE
+
+    @property
+    def tightFitTolerance(self):
+        return self.TIGHT_FIT_TOLERANCE
     
 class TransverseRDS3225(PrintedTube, TransverseRevolute):
     """
     RDS3225 Servo Motor with brackets and 3D-printed parts attached to make it attach transversely to tubes.
-    Works for 180 degree or 270 degree versions. Dimensions are from our CAD model of the 3D printed joint, in mm.
+    Can be set up for the 180 or 270 degree servo, but the 270 version actually has smaller 
+    range of motion (214.5 degrees) due to collisions of the proximal and distal attachments. 
+    Dimensions are from our CAD model of the 3D printed joint, in mm.
     In the future this parameterized model could be written in the manifold library so wallThickness, holeDiameter, 
     and numHoles could be adjusted as needed. Radius r is as small as possible to bound the servo.
 
@@ -25,27 +78,401 @@ class TransverseRDS3225(PrintedTube, TransverseRevolute):
     When using this in a robot, attach the servo horn and brackets to face forward at 90 or 135 degrees respectively, 
     and then subtract 90 or 135 degrees from the joint state when commanding the servo.
 
-    # TODO: edit hole placement in CAD model, update dimensions here
-    Dimensions: 
-    r = 30.0  # outer radius of tube in mm
-    wallThickness = 5.0  # wall thickness in mm
-    holeDiameter = 2.0 # We use M2 bolts
-    numHoles = 4
-    neutralLength = 76.791 # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
+    
     """
+    # Dimensions from CAD model (mm) — update these when CAD changes
+    R = 33.0              # outer radius of tube in mm
+    NEUTRAL_LENGTH = 93.783  # length in mm from opposite ends of CAD model, excluding the protrusion to inset into the next tube
+
     def __init__(self, Pose : SE3, version : int | float | str, initialState : float = 0.0):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
             maxBendingAngle = np.pi
         elif version == 270 or version == "270" or version == 270.0 or version == 3*np.pi/2:
-            maxBendingAngle = 3*np.pi/2
+            # 2*170.25 degrees is the largest range we can achieve without the proximal and distal attachments 
+            # colliding with each other (based on CAD model measurements) — this is less than 270 degrees but still more than 180 degrees
+            maxBendingAngle = 2 * np.deg2rad(107.25)
         else:
             raise ValueError("version must be 180 or 270")
         
-        PrintedTube.__init__(self, wallThickness=5, holeDiameter=2, numHoles=4)
-        TransverseRevolute.__init__(self, r=30, Pose=Pose, 
-                                    minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
-                                    neutralLength=76.791, initialState=initialState)
+        PrintedTube.__init__(self)
+        TransverseRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH, 
+                                    minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, checkCircleOverlap=True,
+                                    initialState=initialState)
     
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
+             axisScale=jointAxisScaleDefault, showPoses=True):
+        """Override to display a simplified servo icon instead of the default revolute visualization.
+        
+        Draws a 40x40x18 box (narrow along z-axis of Pose) offset -11 in x from Pose center,
+        plus 9mm cylinders extending from the proximal and distal frames toward the Pose center.
+        Calls Joint.addToPlot (skipping TransverseRevolute/Revolute surface drawing).
+        """
+        # Call Joint.addToPlot directly to get frames/axis without revolute surface
+        plotHandles = Joint.addToPlot(self, ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, edgeColor=edgeColor,
+                          surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses)
+        
+        if showSurface:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            
+            xhat = self.Pose.R[:, 0]  # path direction
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]  # rotation axis
+            
+            # Box dimensions: 40 along x, 20 along y, 40 along z
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + (-11.0) * xhat
+            
+            # 8 corners of the box in local frame, then transform
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            # Transform to world: columns of R are [xhat, yhat, zhat]
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            # 6 faces of the box (indices into corners)
+            face_indices = [
+                [0, 1, 2, 3],  # -z face
+                [4, 5, 6, 7],  # +z face
+                [0, 1, 5, 4],  # -y face
+                [2, 3, 7, 6],  # +y face
+                [0, 3, 7, 4],  # -x face
+                [1, 2, 6, 5],  # +x face
+            ]
+            faces = [[corners[i] for i in face] for face in face_indices]
+            box_collection = Poly3DCollection(faces, alpha=surfaceOpacity,
+                                              facecolors='black',
+                                              edgecolors=edgeColor)
+            ax.add_collection3d(box_collection)
+            
+            # Cylinders: 9mm long, radius self.r, with solid end caps
+            cyl_length = 9.0
+            numCapPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
+            proximal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_xhat = distalFrame.R[:, 0]
+            distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
+            distal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            # 4 vertical lines along each cylinder at ±y/±z in the respective frames
+            prox_inner = proximal_pos + cyl_length * xhat
+            for direction in [yhat, -yhat, zhat, -zhat]:
+                line_pts = np.array([proximal_pos + self.r * direction, prox_inner + self.r * direction])
+                ax.plot(line_pts[:, 0], line_pts[:, 1], line_pts[:, 2], color=edgeColor, linewidth=1)
+            distal_inner = distal_pos - cyl_length * distal_xhat
+            distal_yhat = distalFrame.R[:, 1]
+            distal_zhat = distalFrame.R[:, 2]
+            for direction in [distal_yhat, -distal_yhat, distal_zhat, -distal_zhat]:
+                line_pts = np.array([distal_pos + self.r * direction, distal_inner + self.r * direction])
+                ax.plot(line_pts[:, 0], line_pts[:, 1], line_pts[:, 2], color=edgeColor, linewidth=1)
+            
+            # End caps for solid cylinders
+            for cap_center, cap_normal in [
+                (proximal_pos + cyl_length * xhat, xhat),       # inner cap of proximal cyl
+                (distal_pos - cyl_length * distal_xhat, -distal_xhat),  # inner cap of distal cyl
+            ]:
+                cap_pts = _circle_points(cap_center, cap_normal, self.r, numCapPoints)
+                cap_face = Poly3DCollection([cap_pts], alpha=surfaceOpacity,
+                                            facecolors=surfaceColor, edgecolors=edgeColor)
+                ax.add_collection3d(cap_face)
+            
+            # Bracket dimensions
+            bracket_color = 'gray'
+            bracket_lw = 2
+            bracket_hy = 10.0  # half of 20 units wide in y
+            
+            # Proximal [-bracket: connects ±z edges of box's -x face to inner end of proximal cylinder
+            box_prox_face = box_center - hx * xhat  # center of box's -x face
+            prox_inner = proximal_pos + cyl_length * xhat  # inner end of proximal cylinder
+            # Draw two [ outlines at y = ±bracket_hy, plus connecting edges
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * yhat
+                prox_bracket = np.array([
+                    box_prox_face + hz * zhat + y_offset,
+                    prox_inner + hz * zhat + y_offset,
+                    prox_inner - hz * zhat + y_offset,
+                    box_prox_face - hz * zhat + y_offset,
+                ])
+                ax.plot(prox_bracket[:, 0], prox_bracket[:, 1], prox_bracket[:, 2],
+                        color=bracket_color, linewidth=bracket_lw)
+            # Connecting edges between the two y sides at the 4 bracket corners
+            for z_sign in [+1, -1]:
+                for x_pos in [box_prox_face, prox_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * yhat, corner - bracket_hy * yhat])
+                    ax.plot(edge[:, 0], edge[:, 1], edge[:, 2],
+                            color=bracket_color, linewidth=bracket_lw)
+            # Rectangular faces connecting +y and -y bracket outlines (3 segments of the [)
+            prox_bracket_faces = [
+                # Top horizontal: box_prox+z to prox_inner+z
+                [box_prox_face + hz*zhat + bracket_hy*yhat, prox_inner + hz*zhat + bracket_hy*yhat,
+                 prox_inner + hz*zhat - bracket_hy*yhat, box_prox_face + hz*zhat - bracket_hy*yhat],
+                # Vertical: prox_inner+z to prox_inner-z
+                [prox_inner + hz*zhat + bracket_hy*yhat, prox_inner - hz*zhat + bracket_hy*yhat,
+                 prox_inner - hz*zhat - bracket_hy*yhat, prox_inner + hz*zhat - bracket_hy*yhat],
+                # Bottom horizontal: prox_inner-z to box_prox-z
+                [prox_inner - hz*zhat + bracket_hy*yhat, box_prox_face - hz*zhat + bracket_hy*yhat,
+                 box_prox_face - hz*zhat - bracket_hy*yhat, prox_inner - hz*zhat - bracket_hy*yhat],
+            ]
+            prox_face_collection = Poly3DCollection(prox_bracket_faces, alpha=surfaceOpacity*0.5,
+                                                     facecolors=bracket_color, edgecolors=bracket_color)
+            ax.add_collection3d(prox_face_collection)
+            
+            # Distal [-bracket: connects from axis of motion (Pose.t) to inner end of distal cylinder, in distal frame
+            distal_inner = distal_pos - cyl_length * distal_xhat  # inner end of distal cylinder
+            distal_yhat = distalFrame.R[:, 1]
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * distal_yhat
+                distal_bracket = np.array([
+                    self.Pose.t + hz * zhat + y_offset,
+                    distal_inner + hz * zhat + y_offset,
+                    distal_inner - hz * zhat + y_offset,
+                    self.Pose.t - hz * zhat + y_offset,
+                ])
+                ax.plot(distal_bracket[:, 0], distal_bracket[:, 1], distal_bracket[:, 2],
+                        color=bracket_color, linewidth=bracket_lw)
+            # Connecting edges between the two y sides at the 4 bracket corners
+            for z_sign in [+1, -1]:
+                for x_pos in [self.Pose.t, distal_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * distal_yhat, corner - bracket_hy * distal_yhat])
+                    ax.plot(edge[:, 0], edge[:, 1], edge[:, 2],
+                            color=bracket_color, linewidth=bracket_lw)
+            # Rectangular faces connecting +y and -y bracket outlines (3 segments of the [)
+            distal_bracket_faces = [
+                # Top horizontal: Pose.t+z to distal_inner+z
+                [self.Pose.t + hz*zhat + bracket_hy*distal_yhat, distal_inner + hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner + hz*zhat - bracket_hy*distal_yhat, self.Pose.t + hz*zhat - bracket_hy*distal_yhat],
+                # Vertical: distal_inner+z to distal_inner-z
+                [distal_inner + hz*zhat + bracket_hy*distal_yhat, distal_inner - hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner - hz*zhat - bracket_hy*distal_yhat, distal_inner + hz*zhat - bracket_hy*distal_yhat],
+                # Bottom horizontal: distal_inner-z to Pose.t-z
+                [distal_inner - hz*zhat + bracket_hy*distal_yhat, self.Pose.t - hz*zhat + bracket_hy*distal_yhat,
+                 self.Pose.t - hz*zhat - bracket_hy*distal_yhat, distal_inner - hz*zhat - bracket_hy*distal_yhat],
+            ]
+            distal_face_collection = Poly3DCollection(distal_bracket_faces, alpha=surfaceOpacity*0.5,
+                                                       facecolors=bracket_color, edgecolors=bracket_color)
+            ax.add_collection3d(distal_face_collection)
+        
+        return plotHandles
+
+    
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=revoluteColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        #Override to display a simplified servo icon in the pyqtgraph widget.
+        
+        #Mirrors the addToPlot method: box, cylinders with inner caps, and [-brackets.
+        #Calls Joint.addToWidget directly (skipping Revolute/TransverseRevolute surface).
+        
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList, revoluteColorDefault
+        
+        # Call Joint.addToWidget directly for poses/axis without revolute surface
+        Joint.addToWidget(self, widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        
+        if showSurface:
+            # Use surfaceColor override if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            xhat = self.Pose.R[:, 0]
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]
+            
+            # Box dimensions: 40 along x, 20 along y, 40 along z
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + (-11.0) * xhat
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            
+            # 8 corners of the box
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            # 12 triangles for 6 box faces
+            box_tris = np.array([
+                [0,1,2], [0,2,3],  # -z
+                [4,5,6], [4,6,7],  # +z
+                [0,1,5], [0,5,4],  # -y
+                [2,3,7], [2,7,6],  # +y
+                [0,3,7], [0,7,4],  # -x
+                [1,2,6], [1,6,5],  # +x
+            ])
+            box_mesh = gl.GLMeshItem(vertexes=corners, faces=box_tris,
+                                      color=(0, 0, 0, 0.6), smooth=False, 
+                                      drawEdges=True, edgeColor=(0.3, 0.3, 0.3, 1))
+            box_mesh.setGLOptions('opaque')
+            box_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(box_mesh)
+            self._gl_items_center.append(box_mesh)
+            
+            # Proximal cylinder: 9mm long, radius self.r → proximal group
+            cyl_length = 9.0
+            numCylPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, xhat, cyl_length)
+            items_before = list(widget.plot_widget.items)
+            proximal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            
+            # Distal cylinder → distal group
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_xhat = distalFrame.R[:, 0]
+            distal_cyl = Cylinder(self.r, distal_pos, -distal_xhat, cyl_length)
+            items_before = list(widget.plot_widget.items)
+            distal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
+            
+            # 4 vertical lines along proximal cylinder → proximal group
+            line_color = (0.3, 0.3, 0.3, 1.0)
+            prox_inner = proximal_pos + cyl_length * xhat
+            for direction in [yhat, -yhat, zhat, -zhat]:
+                line_pts = np.array([proximal_pos + self.r * direction, prox_inner + self.r * direction])
+                line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_proximal.append(line)
+            # 4 vertical lines along distal cylinder → distal group
+            distal_inner_pos = distal_pos - cyl_length * distal_xhat
+            distal_yhat = distalFrame.R[:, 1]
+            distal_zhat = distalFrame.R[:, 2]
+            for direction in [distal_yhat, -distal_yhat, distal_zhat, -distal_zhat]:
+                line_pts = np.array([distal_pos + self.r * direction, distal_inner_pos + self.r * direction])
+                line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
+            
+            # Inner end caps: proximal → proximal group, distal → distal group
+            prox_cap_center = proximal_pos + cyl_length * xhat
+            prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, xhat, self.r, numCylPoints)
+            prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
+                                          color=tuple(color), smooth=True)
+            prox_cap_mesh.setGLOptions('opaque')
+            prox_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(prox_cap_mesh)
+            self._gl_items_proximal.append(prox_cap_mesh)
+
+            dist_cap_center = distal_pos - cyl_length * distal_xhat
+            dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_xhat, self.r, numCylPoints)
+            dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
+                                          color=tuple(color), smooth=True)
+            dist_cap_mesh.setGLOptions('opaque')
+            dist_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(dist_cap_mesh)
+            self._gl_items_distal.append(dist_cap_mesh)
+            
+            # Bracket dimensions — brackets span Pose + cylinders, assign to center group
+            bracket_color = (0.5, 0.5, 0.5, 0.8)
+            bracket_line_color = (0.5, 0.5, 0.5, 1.0)
+            bracket_hy = 10.0
+            
+            # Proximal [-bracket
+            box_prox_face = box_center - hx * xhat
+            prox_inner = proximal_pos + cyl_length * xhat
+            
+            # Bracket outlines at y = ±bracket_hy
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * yhat
+                pts = np.array([
+                    box_prox_face + hz * zhat + y_offset,
+                    prox_inner + hz * zhat + y_offset,
+                    prox_inner - hz * zhat + y_offset,
+                    box_prox_face - hz * zhat + y_offset,
+                ])
+                line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_center.append(line)
+            # Connecting edges
+            for z_sign in [+1, -1]:
+                for x_pos in [box_prox_face, prox_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * yhat, corner - bracket_hy * yhat])
+                    line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+                    self._gl_items_center.append(line)
+            # Bracket face quads (as triangulated meshes)
+            prox_bracket_quads = [
+                [box_prox_face + hz*zhat + bracket_hy*yhat, prox_inner + hz*zhat + bracket_hy*yhat,
+                 prox_inner + hz*zhat - bracket_hy*yhat, box_prox_face + hz*zhat - bracket_hy*yhat],
+                [prox_inner + hz*zhat + bracket_hy*yhat, prox_inner - hz*zhat + bracket_hy*yhat,
+                 prox_inner - hz*zhat - bracket_hy*yhat, prox_inner + hz*zhat - bracket_hy*yhat],
+                [prox_inner - hz*zhat + bracket_hy*yhat, box_prox_face - hz*zhat + bracket_hy*yhat,
+                 box_prox_face - hz*zhat - bracket_hy*yhat, prox_inner - hz*zhat - bracket_hy*yhat],
+            ]
+            for quad in prox_bracket_quads:
+                verts = np.array(quad)
+                tris = np.array([[0, 1, 2], [0, 2, 3]])
+                mesh = gl.GLMeshItem(vertexes=verts, faces=tris, color=bracket_color, smooth=False)
+                mesh.setGLOptions('translucent')
+                mesh.setObjectName("Joint")
+                widget.plot_widget.addItem(mesh)
+                self._gl_items_center.append(mesh)
+            
+            # Distal [-bracket
+            distal_inner = distal_pos - cyl_length * distal_xhat
+            distal_yhat = distalFrame.R[:, 1]
+            
+            for sign_y in [+1, -1]:
+                y_offset = sign_y * bracket_hy * distal_yhat
+                pts = np.array([
+                    self.Pose.t + hz * zhat + y_offset,
+                    distal_inner + hz * zhat + y_offset,
+                    distal_inner - hz * zhat + y_offset,
+                    self.Pose.t - hz * zhat + y_offset,
+                ])
+                line = gl.GLLinePlotItem(pos=pts, color=bracket_line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
+            for z_sign in [+1, -1]:
+                for x_pos in [self.Pose.t, distal_inner]:
+                    corner = x_pos + z_sign * hz * zhat
+                    edge = np.array([corner + bracket_hy * distal_yhat, corner - bracket_hy * distal_yhat])
+                    line = gl.GLLinePlotItem(pos=edge, color=bracket_line_color, width=2, antialias=True)
+                    widget.plot_widget.addItem(line)
+                    self._gl_items_distal.append(line)
+            distal_bracket_quads = [
+                [self.Pose.t + hz*zhat + bracket_hy*distal_yhat, distal_inner + hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner + hz*zhat - bracket_hy*distal_yhat, self.Pose.t + hz*zhat - bracket_hy*distal_yhat],
+                [distal_inner + hz*zhat + bracket_hy*distal_yhat, distal_inner - hz*zhat + bracket_hy*distal_yhat,
+                 distal_inner - hz*zhat - bracket_hy*distal_yhat, distal_inner + hz*zhat - bracket_hy*distal_yhat],
+                [distal_inner - hz*zhat + bracket_hy*distal_yhat, self.Pose.t - hz*zhat + bracket_hy*distal_yhat,
+                 self.Pose.t - hz*zhat - bracket_hy*distal_yhat, distal_inner - hz*zhat - bracket_hy*distal_yhat],
+            ]
+            for quad in distal_bracket_quads:
+                verts = np.array(quad)
+                tris = np.array([[0, 1, 2], [0, 2, 3]])
+                mesh = gl.GLMeshItem(vertexes=verts, faces=tris, color=bracket_color, smooth=False)
+                mesh.setGLOptions('translucent')
+                mesh.setObjectName("Joint")
+                widget.plot_widget.addItem(mesh)
+                self._gl_items_distal.append(mesh)
+        
 class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     """
     RDS3225 Servo Motor with brackets and 3D-printed parts attached to make it attach coaxially to tubes.
@@ -59,13 +486,11 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
     and then subtract 90 or 135 degrees from the joint state when commanding the servo.
 
     # TODO: edit hole placement in CAD model, update dimensions here
-    Dimensions:
-    r = 30.0  # outer radius of tube in mm
-    wallThickness = 5.0  # wall thickness in mm
-    holeDiameter = 2.0 # We use M2 bolts
-    numHoles = 4
-    length = 64.5 
     """
+    # Dimensions from CAD model (mm) — update these when CAD changes
+    R = 33.0              # outer radius of tube in mm
+    NEUTRAL_LENGTH = 62.4  # length in mm
+
     def __init__(self, Pose : SE3, version : [int, float, str], initialState : float = 0.0):
         if version == 180 or version == "180" or version == 180.0 or version == np.pi:
             maxBendingAngle = np.pi
@@ -74,25 +499,413 @@ class CoaxialRDS3225(PrintedTube, CoaxialRevolute):
         else:
             raise ValueError("version must be 180 or 270")
         
-        
-        PrintedTube.__init__(self, wallThickness=5, holeDiameter=2, numHoles=4)
-        CoaxialRevolute.__init__(self, r=30, Pose=Pose, neutralLength=64.5,
+        PrintedTube.__init__(self)
+        CoaxialRevolute.__init__(self, r=self.R, Pose=Pose, neutralLength=self.NEUTRAL_LENGTH,
                                  minAngle=-maxBendingAngle/2, maxAngle=maxBendingAngle/2, 
                                  initialState=initialState)
+
+    def addToPlot(self, ax, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+             proximalColor='c', centerColor='m', distalColor='y',
+             sphereColor=sphereColorDefault, showSphere=False, 
+             surfaceColor=revoluteColorDefault, edgeColor=revoluteEdgeColorDefault,
+             surfaceOpacity=surfaceOpacityDefault, showSurface=True, showAxis=True,
+             axisScale=jointAxisScaleDefault, showPoses=True):
+        """Override to display a simplified coaxial servo icon instead of the default revolute visualization.
+        
+        Draws a 40x20x40 black box (the servo) centered at (11, 0, 1.95) in the Pose frame,
+        a proximal cylinder of radius self.r and length 9mm,
+        and a distal cylinder of radius (self.r - self.wallThickness) and length 12.9mm 
+        oriented in the distal frame so it rotates with the joint state.
+        Calls Joint.addToPlot directly (skipping Revolute/CoaxialRevolute surface drawing).
+        """
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+        # Call Joint.addToPlot directly to get frames/axis without revolute surface
+        plotHandles = Joint.addToPlot(self, ax=ax, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, edgeColor=edgeColor,
+                          surfaceOpacity=surfaceOpacity, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses)
+        
+        if showSurface:
+            xhat = self.Pose.R[:, 0]
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]  # path direction for coaxial
+            
+            # --- Servo box: 40x20x40 centered at (11, 0, -1.95) in Pose frame ---
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + 11.0 * xhat + (-1.95) * zhat
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            face_indices = [
+                [0, 1, 2, 3],  # -z face
+                [4, 5, 6, 7],  # +z face
+                [0, 1, 5, 4],  # -y face
+                [2, 3, 7, 6],  # +y face
+                [0, 3, 7, 4],  # -x face
+                [1, 2, 6, 5],  # +x face
+            ]
+            faces = [[corners[i] for i in face] for face in face_indices]
+            box_collection = Poly3DCollection(faces, alpha=surfaceOpacity,
+                                              facecolors='black',
+                                              edgecolors=edgeColor)
+            ax.add_collection3d(box_collection)
+            
+            # --- Proximal cylinder: radius self.r, 9mm long, from ProximalFrame along zhat ---
+            prox_cyl_length = 9.0
+            numCapPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, zhat, prox_cyl_length)
+            proximal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            # Inner cap for proximal cylinder
+            prox_cap_center = proximal_pos + prox_cyl_length * zhat
+            prox_cap_pts = _circle_points(prox_cap_center, zhat, self.r, numCapPoints)
+            prox_cap_face = Poly3DCollection([prox_cap_pts], alpha=surfaceOpacity,
+                                              facecolors=surfaceColor, edgecolors=edgeColor)
+            ax.add_collection3d(prox_cap_face)
+            
+            # 4 vertical lines along the proximal cylinder at ±x/±y in the Pose frame
+            for direction in [xhat, -xhat, yhat, -yhat]:
+                line_start = proximal_pos + self.r * direction
+                line_end = prox_cap_center + self.r * direction
+                line_pts = np.array([line_start, line_end])
+                ax.plot(line_pts[:, 0], line_pts[:, 1], line_pts[:, 2],
+                        color=edgeColor, linewidth=1)
+            
+            # --- Distal cylinder: radius (r - wallThickness), 12.9mm long, in distal frame ---
+            dist_cyl_length = 12.9
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_zhat = distalFrame.R[:, 2]  # path direction in distal frame
+            distal_r = self.r - self.wallThickness
+            distal_cyl = Cylinder(distal_r, distal_pos, -distal_zhat, dist_cyl_length)
+            distal_cyl.addToPlot(ax, color=surfaceColor, alpha=surfaceOpacity, edgeColor=edgeColor)
+            
+            # Inner cap for distal cylinder
+            dist_cap_center = distal_pos - dist_cyl_length * distal_zhat
+            dist_cap_pts = _circle_points(dist_cap_center, -distal_zhat, distal_r, numCapPoints)
+            dist_cap_face = Poly3DCollection([dist_cap_pts], alpha=surfaceOpacity,
+                                              facecolors=surfaceColor, edgecolors=edgeColor)
+            ax.add_collection3d(dist_cap_face)
+            
+            # 4 vertical lines along the distal cylinder at ±x/±y in the distal frame
+            distal_xhat = distalFrame.R[:, 0]
+            distal_yhat = distalFrame.R[:, 1]
+            for direction in [distal_xhat, -distal_xhat, distal_yhat, -distal_yhat]:
+                line_start = distal_pos + distal_r * direction
+                line_end = dist_cap_center + distal_r * direction
+                line_pts = np.array([line_start, line_end])
+                ax.plot(line_pts[:, 0], line_pts[:, 1], line_pts[:, 2],
+                        color=edgeColor, linewidth=1)
+            
+            # Mark proximal and distal frame origins with labeled scatter points
+            ax.scatter(*proximal_pos, color='cyan', s=60, zorder=5)
+            ax.text(*proximal_pos, '  Prox', color='cyan', fontsize=8)
+            ax.scatter(*distal_pos, color='yellow', s=60, zorder=5)
+            ax.text(*distal_pos, '  Dist', color='yellow', fontsize=8)
+        
+        return plotHandles
+
     
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault, 
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, 
+                    surfaceColor=revoluteColorDefault, 
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        #Override to display a simplified coaxial servo icon in the pyqtgraph widget.
+        
+        #Mirrors the addToPlot method: black box, proximal cylinder (r), distal cylinder (r-wallThickness),
+        #each with inner end caps.
+        #Calls Joint.addToWidget directly (skipping Revolute/CoaxialRevolute surface).
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList, revoluteColorDefault
+        
+        # Call Joint.addToWidget directly for poses/axis without revolute surface
+        Joint.addToWidget(self, widget=widget, xColor=xColor, yColor=yColor, zColor=zColor, 
+                          proximalColor=proximalColor, centerColor=centerColor, distalColor=distalColor, 
+                          sphereColor=sphereColor, showSphere=showSphere,
+                          surfaceColor=surfaceColor, showSurface=False, showAxis=showAxis,
+                          axisScale=axisScale, showPoses=showPoses, poseAxisScaleMultipler=poseAxisScaleMultipler)
+        
+        if showSurface:
+            # Use surfaceColor override if provided, otherwise default color list
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            xhat = self.Pose.R[:, 0]
+            yhat = self.Pose.R[:, 1]
+            zhat = self.Pose.R[:, 2]  # path direction for coaxial
+            
+            # --- Servo box: 40x20x40 centered at (11, 0, -1.95) in Pose frame → center group ---
+            bx, by, bz = 40.0, 20.0, 40.0
+            box_center = self.Pose.t + 11.0 * xhat + (-1.95) * zhat
+            hx, hy, hz = bx / 2, by / 2, bz / 2
+            
+            local_corners = np.array([
+                [-hx, -hy, -hz], [+hx, -hy, -hz], [+hx, +hy, -hz], [-hx, +hy, -hz],
+                [-hx, -hy, +hz], [+hx, -hy, +hz], [+hx, +hy, +hz], [-hx, +hy, +hz],
+            ])
+            R = np.column_stack([xhat, yhat, zhat])
+            corners = (R @ local_corners.T).T + box_center
+            
+            box_tris = np.array([
+                [0,1,2], [0,2,3],  # -z
+                [4,5,6], [4,6,7],  # +z
+                [0,1,5], [0,5,4],  # -y
+                [2,3,7], [2,7,6],  # +y
+                [0,3,7], [0,7,4],  # -x
+                [1,2,6], [1,6,5],  # +x
+            ])
+            box_mesh = gl.GLMeshItem(vertexes=corners, faces=box_tris,
+                                      color=(0, 0, 0, 0.6), smooth=False, 
+                                      drawEdges=True, edgeColor=(0.3, 0.3, 0.3, 1))
+            box_mesh.setGLOptions('opaque')
+            box_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(box_mesh)
+            self._gl_items_center.append(box_mesh)
+            
+            # --- Proximal cylinder: radius self.r, 9mm long → proximal group ---
+            prox_cyl_length = 9.0
+            numCylPoints = 32
+            proximal_pos = self.ProximalFrame().t
+            proximal_cyl = Cylinder(self.r, proximal_pos, zhat, prox_cyl_length)
+            items_before = list(widget.plot_widget.items)
+            proximal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            
+            # Inner cap for proximal cylinder → proximal group
+            prox_cap_center = proximal_pos + prox_cyl_length * zhat
+            prox_cap_verts, prox_cap_tris = _circle_verts_and_tris(prox_cap_center, zhat, self.r, numCylPoints)
+            prox_cap_mesh = gl.GLMeshItem(vertexes=prox_cap_verts, faces=prox_cap_tris,
+                                           color=tuple(color), smooth=True)
+            prox_cap_mesh.setGLOptions('opaque')
+            prox_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(prox_cap_mesh)
+            self._gl_items_proximal.append(prox_cap_mesh)
+            
+            # 4 vertical lines along the proximal cylinder → proximal group
+            line_color = (0.3, 0.3, 0.3, 1.0)
+            for direction in [xhat, -xhat, yhat, -yhat]:
+                line_start = proximal_pos + self.r * direction
+                line_end = prox_cap_center + self.r * direction
+                line_pts = np.array([line_start, line_end])
+                line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_proximal.append(line)
+            
+            # --- Distal cylinder: radius (r - wallThickness), 12.9mm long → distal group ---
+            dist_cyl_length = 12.9
+            distalFrame = self.DistalFrame()
+            distal_pos = distalFrame.t
+            distal_zhat = distalFrame.R[:, 2]  # path direction in distal frame
+            distal_r = self.r - self.wallThickness
+            distal_cyl = Cylinder(distal_r, distal_pos, -distal_zhat, dist_cyl_length)
+            items_before = list(widget.plot_widget.items)
+            distal_cyl.addToWidget(widget, color_list=color, is_joint=True, opaque=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
+            
+            # Inner cap for distal cylinder → distal group
+            dist_cap_center = distal_pos - dist_cyl_length * distal_zhat
+            dist_cap_verts, dist_cap_tris = _circle_verts_and_tris(dist_cap_center, -distal_zhat, distal_r, numCylPoints)
+            dist_cap_mesh = gl.GLMeshItem(vertexes=dist_cap_verts, faces=dist_cap_tris,
+                                           color=tuple(color), smooth=True)
+            dist_cap_mesh.setGLOptions('opaque')
+            dist_cap_mesh.setObjectName("Joint")
+            widget.plot_widget.addItem(dist_cap_mesh)
+            self._gl_items_distal.append(dist_cap_mesh)
+            
+            # 4 vertical lines along the distal cylinder → distal group
+            distal_xhat = distalFrame.R[:, 0]
+            distal_yhat = distalFrame.R[:, 1]
+            line_color = (0.3, 0.3, 0.3, 1.0)
+            for direction in [distal_xhat, -distal_xhat, distal_yhat, -distal_yhat]:
+                line_start = distal_pos + distal_r * direction
+                line_end = dist_cap_center + distal_r * direction
+                line_pts = np.array([line_start, line_end])
+                line = gl.GLLinePlotItem(pos=line_pts, color=line_color, width=2, antialias=True)
+                widget.plot_widget.addItem(line)
+                self._gl_items_distal.append(line)
+    
+class PrintedHemisphere(PrintedTube, Tip):
+    def __init__(self, r : float, Pose : SE3, closesForward : bool, pathIndex : int = 2):
+        PrintedTube.__init__(self)
+        Tip.__init__(self, r, Pose, length=r, closesForward=closesForward, pathIndex=pathIndex)
+
+    def connectableModule(self, numSides : int = 50) -> m3d.Manifold:
+        """Generate a connectable hemisphere module for 3D printing.
+        
+        Creates a hollow hemisphere with an inset or outset connection at
+        the open face, matching the link connection pattern.
+        
+        Forward tips (end caps) get an inset at the open (proximal) face.
+        Backward tips (start caps) get an outset at the open (distal) face.
+        """
+        connectionLength = 2 * self.holeDiameter
+        eps = 0.01 * self.r  # small epsilon for boolean clearance
+
+        # Build a hollow sphere at the origin, then trim and transform
+        outer = m3d.Manifold.sphere(self.r, circular_segments=numSides)
+        inner = m3d.Manifold.sphere(self.r - self.wallThickness, circular_segments=numSides)
+        shell = outer - inner
+
+        # The tree/link connection uses proximal frame for end caps and distal
+        # frame for start caps. Use that same open face frame for cap geometry.
+        openFrame = self.ProximalDubinsFrame() if self.forward else self.DistalDubinsFrame()
+        openCenter = openFrame.t
+
+        # Trim: keep the closed half relative to the open face center.
+        # Forward tip closes in +openFrame xhat; backward tip closes in -xhat.
+        openAxis = openFrame.R[:,0]
+        trim_normal = openAxis if self.forward else -openAxis
+        # trim_by_plane keeps the side in the direction of the normal.
+        # origin_offset = dot(normal, point_on_plane) positions the plane through openCenter.
+        shell = shell.translate(tuple(openCenter))
+        origin_offset = float(np.dot(trim_normal, openCenter))
+        shell = shell.trim_by_plane(tuple(trim_normal), origin_offset)
+
+        if self.forward:
+            # Forward tip: open face is proximal → receives an outset from the
+            # preceding link → needs an INSET at the open face.
+            # Inset holes use loose fit (bolts clear through).
+            holeSlicer = m3d.Manifold()
+            holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
+            for angle in holeAnglesDegrees:
+                hole = m3d.Manifold.cylinder(height=self.r + eps,
+                                             radius_low=self.holeDiameter/2 + self.looseFitTolerance,
+                                             radius_high=self.holeDiameter/2 + self.looseFitTolerance,
+                                             circular_segments=numSides)
+                hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+                holeSlicer += hole
+
+            inset = m3d.Manifold.cylinder(
+                height=2*connectionLength + 2*eps,
+                radius_low=self.r - self.wallThickness + eps,
+                radius_high=self.r - self.wallThickness + eps,
+                circular_segments=numSides)
+            shell -= inset.translate((0,0,-connectionLength-eps)) \
+                         .rotate((0,90,0)).transform(openFrame.A[:3,:])
+            shell -= holeSlicer.translate((0,0,self.holeDiameter)) \
+                               .rotate((0,90,0)).transform(openFrame.A[:3,:])
+        else:
+            # Backward tip: open face is distal → inserts into the following
+            # link's inset → needs an OUTSET at the open face.
+            # Outset holes use tight fit (bolts friction-fit in).
+            holeSlicer = m3d.Manifold()
+            holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
+            for angle in holeAnglesDegrees:
+                hole = m3d.Manifold.cylinder(height=self.r + eps,
+                                             radius_low=self.holeDiameter/2 + self.tightFitTolerance,
+                                             radius_high=self.holeDiameter/2 + self.tightFitTolerance,
+                                             circular_segments=numSides)
+                hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+                holeSlicer += hole
+
+            outsetRadius = self.r - self.wallThickness
+            outset = m3d.Manifold.cylinder(
+                height=2*connectionLength,
+                radius_low=outsetRadius - self.tightFitTolerance,
+                radius_high=outsetRadius - self.tightFitTolerance,
+                circular_segments=numSides)
+            outset += m3d.Manifold.cylinder(
+                height=connectionLength,
+                radius_low=outsetRadius + eps,
+                radius_high=outsetRadius + eps,
+                circular_segments=numSides)
+            outset -= m3d.Manifold.cylinder(
+                height=2*connectionLength,
+                radius_low=self.r - 2*self.wallThickness,
+                radius_high=self.r - 2*self.wallThickness,
+                circular_segments=numSides)
+            outset -= holeSlicer.translate((0,0,3*self.holeDiameter))
+            outset = outset.translate((0,0,-connectionLength)) \
+                           .rotate((0,90,0)).transform(openFrame.A[:3,:])
+            shell += outset
+
+        return shell
+
+class PrintedStartHemisphere(PrintedHemisphere):
+    def __init__(self, r : float, Pose : SE3, pathIndex : int = 2):
+        super().__init__(r, Pose, closesForward=False, pathIndex=pathIndex)
+
+class PrintedEndHemisphere(PrintedHemisphere):
+    def __init__(self, r : float, Pose : SE3, pathIndex : int = 2):
+        super().__init__(r, Pose, closesForward=True, pathIndex=pathIndex)
+
+
+class PrintedParallelGripper(PrintedTube, ParallelJawGripper):
+    """
+    Servo-driven parallel jaw gripper (gripper_photo1.png / gripper_photo2.png)
+    attaching to a 33 mm radius printed tube, modeled in simplified form as a
+    cylindrical servo housing, a box carriage, and two box jaws.
+    Dimensions are in mm. state = gap between the jaws, in [0, MAX_OPENING].
+
+    It must be the last joint on its branch (a leaf). It is left out of
+    Arduino code generation (generateArduino.py) for now.
+
+    TODO(collision): collision detection treats this as a tube of radius R
+    (see EndEffector.sdf), so the carriage and jaws are not collision-checked.
+    """
+    R = 33.0                            # incoming tube / housing radius
+    HOUSING_LENGTH = 49.5               # cylinder housing the servo, along z
+    CARRIAGE_SIZE = (108.0, 63.3, 30.0) # x (jaw travel), y, z (approach direction)
+    JAW_SIZE = (7.5, 27.0, 78.0)        # x (thickness along travel), y, z (protrusion from carriage)
+    MAX_OPENING = 45.0                  # maximum gap between the jaws
+
+    def __init__(self, Pose : SE3, initialState : float = 0.0):
+        PrintedTube.__init__(self)
+        ParallelJawGripper.__init__(self, r=self.R, Pose=Pose, housingLength=self.HOUSING_LENGTH,
+                                    carriageSize=self.CARRIAGE_SIZE, jawSize=self.JAW_SIZE,
+                                    maxOpening=self.MAX_OPENING, initialState=initialState)
+
+    def __repr__(self):
+        return f"PrintedParallelGripper(Pose={repr(self.Pose)}, initialState={repr(self.state)})"
+
 
 class PrintedLinkCSC(PrintedTube, LinkCSC):
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
-                 wallThickness : float, holeDiameter : float, numHoles : int,
                  maxAnglePerElbow : float = np.pi/10, path : Optional[PathCSC] = None, 
                  EPSILON : float = 0.01, startRadius : Optional[float] = None, 
                  endRadius : Optional[float] = None):
-        PrintedTube.__init__(self, wallThickness, holeDiameter, numHoles)
+        PrintedTube.__init__(self)
         LinkCSC.__init__(self, r, StartDubinsPose, EndDubinsPose,
                             maxAnglePerElbow=maxAnglePerElbow, path=path, EPSILON=EPSILON)
         self.startRadius = startRadius if startRadius is not None else r
         self.endRadius = endRadius if endRadius is not None else r
         
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Override to preserve PrintedLinkCSC type and interpolate radii across the split."""
+        start_r = (1 - start_frac) * self.startRadius + start_frac * self.endRadius
+        end_r   = (1 - end_frac)   * self.startRadius + end_frac   * self.endRadius
+        return PrintedLinkCSC(self.r, start_frame, end_frame,
+                              self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON,
+                              startRadius=start_r, endRadius=end_r)
+
+    def newLinkTransformedBy(self, Transformation : SE3):
+        """Override to preserve PrintedLinkCSC type when transforming"""
+        newLink = PrintedLinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+                              Transformation @ self.EndDubinsPose,
+                              maxAnglePerElbow = self.maxAnglePerElbow, 
+                              path = self.path.newPathTransformedBy(Transformation),
+                              EPSILON = self.EPSILON,
+                              startRadius = self.startRadius,
+                              endRadius = self.endRadius)
+        # Transfer GL cache: the shape hasn't changed, only the pose
+        if not getattr(self, '_gl_shape_dirty', True):
+            newLink._gl_items = self._gl_items
+            newLink._gl_ref_pose = self._gl_ref_pose
+            newLink._gl_shape_dirty = False
+        return newLink
 
     def manifold(self, startRadius : Optional[float] = None, endRadius : Optional[float] = None, 
                  numSides : int = 20,  hullBends : bool = False, stabilize : bool = True, 
@@ -112,10 +925,7 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         totalLength = cumulativeLengths[-1]
         ts = cumulativeLengths / totalLength if totalLength > 0 else np.zeros(cumulativeLengths.shape)
         rs = (1-ts) * startRadius + ts * endRadius
-
-        output = m3d.Manifold() # empty manifold
         innerExtendLength = self.DISTANCE_EPSILON if stabilize else 0
-
         output = m3d.Manifold() # empty manifold
 
         if self.elbow1:
@@ -209,8 +1019,8 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
         holeAnglesDegrees = np.linspace(0, 360, self.numHoles, endpoint=False)
         for angle in holeAnglesDegrees:
             hole = m3d.Manifold.cylinder(height=self.r+self.DISTANCE_EPSILON, 
-                                         radius_low=self.holeDiameter/2, 
-                                         radius_high=self.holeDiameter/2, 
+                                         radius_low=self.holeDiameter/2 + self.looseFitTolerance, 
+                                         radius_high=self.holeDiameter/2 + self.looseFitTolerance, 
                                          circular_segments=numSides)
             hole = hole.rotate((0,90,0)).rotate((0,0,angle))
             holeSlicer += hole
@@ -221,15 +1031,23 @@ class PrintedLinkCSC(PrintedTube, LinkCSC):
                                        circular_segments=numSides)
         tube -= inset.translate((0,0,-connectionLength-self.DISTANCE_EPSILON)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
         tube -= holeSlicer.translate((0,0,self.holeDiameter)).rotate((0,90,0)).transform(self.StartDubinsPose.A[:3,:])
+        outsetRadius = self.endRadius-self.wallThickness
         outset = m3d.Manifold.cylinder(height=2*connectionLength, 
-                                       radius_low=self.endRadius-self.wallThickness+self.DISTANCE_EPSILON, 
-                                       radius_high=self.endRadius-self.wallThickness+self.DISTANCE_EPSILON,
+                                       radius_low=outsetRadius-self.tightFitTolerance, 
+                                       radius_high=outsetRadius-self.tightFitTolerance,
+                                       circular_segments=numSides)
+        outset += m3d.Manifold.cylinder(height=connectionLength, 
+                                       radius_low=outsetRadius+self.DISTANCE_EPSILON, 
+                                       radius_high=outsetRadius+self.DISTANCE_EPSILON,
                                        circular_segments=numSides)
         outset -= m3d.Manifold.cylinder(height=2*connectionLength, 
                                        radius_low=self.endRadius-2*self.wallThickness, 
                                        radius_high=self.endRadius-2*self.wallThickness,
                                        circular_segments=numSides)
         outset -= holeSlicer.translate((0,0,3*self.holeDiameter))
+
+
+
         outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(self.EndDubinsPose.A[:3,:])
 
         tube += outset
@@ -321,6 +1139,8 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
     wallThickness = links[0].wallThickness
     holeDiameter = links[0].holeDiameter
     numHoles = links[0].numHoles
+    looseFitTolerance = links[0].looseFitTolerance
+    tightFitTolerance = links[0].tightFitTolerance
     r = links[0].r
     startRadius = links[0].startRadius
     
@@ -350,35 +1170,49 @@ def branchingModule(links : list[PrintedLinkCSC], numSides : int = 50, hullBends
     tube = outer - inner
 
     # Create the inset at the base
-    holeSlicer = m3d.Manifold()
+    holeSlicerLoose = m3d.Manifold()
     holeAnglesDegrees = np.linspace(0, 360, numHoles, endpoint=False)
     connectionLength = 2 * holeDiameter
     for angle in holeAnglesDegrees:
-        hole = m3d.Manifold.cylinder(height=r+DISTANCE_EPSILON, 
-                                         radius_low=holeDiameter/2, 
-                                         radius_high=holeDiameter/2, 
+        hole = m3d.Manifold.cylinder(height=1.5*r, 
+                                         radius_low=holeDiameter/2 + looseFitTolerance, 
+                                         radius_high=holeDiameter/2 + looseFitTolerance, 
                                          circular_segments=numSides)
         hole = hole.rotate((0,90,0)).rotate((0,0,angle))
-        holeSlicer += hole
+        holeSlicerLoose += hole
+    
+    holeSlicerTight = m3d.Manifold()
+    for angle in holeAnglesDegrees:
+        hole = m3d.Manifold.cylinder(height=1.5*r, 
+                                         radius_low=holeDiameter/2 + tightFitTolerance, 
+                                         radius_high=holeDiameter/2 + tightFitTolerance, 
+                                         circular_segments=numSides)
+        hole = hole.rotate((0,90,0)).rotate((0,0,angle))
+        holeSlicerTight += hole
     
     inset = m3d.Manifold.cylinder(height=2*connectionLength+2*DISTANCE_EPSILON, 
                                        radius_low=startRadius-wallThickness+DISTANCE_EPSILON, 
                                        radius_high=startRadius-wallThickness+DISTANCE_EPSILON,
                                        circular_segments=numSides)
     tube -= inset.translate((0,0,-connectionLength-DISTANCE_EPSILON)).rotate((0,90,0)).transform(startPose.A[:3,:])
-    tube -= holeSlicer.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(startPose.A[:3,:])
+    tube -= holeSlicerLoose.translate((0,0,holeDiameter)).rotate((0,90,0)).transform(startPose.A[:3,:])
 
     # Create the outsets at each link end
     for link in links:
+        outsetRadius = link.endRadius-wallThickness
         outset = m3d.Manifold.cylinder(height=2*connectionLength, 
-                                       radius_low=link.endRadius-wallThickness+DISTANCE_EPSILON, 
-                                       radius_high=link.endRadius-wallThickness+DISTANCE_EPSILON,
+                                       radius_low=outsetRadius-tightFitTolerance, 
+                                       radius_high=outsetRadius-tightFitTolerance,
+                                       circular_segments=numSides)
+        outset += m3d.Manifold.cylinder(height=connectionLength, 
+                                       radius_low=outsetRadius+DISTANCE_EPSILON, 
+                                       radius_high=outsetRadius+DISTANCE_EPSILON,
                                        circular_segments=numSides)
         outset -= m3d.Manifold.cylinder(height=2*connectionLength, 
                                        radius_low=link.endRadius-2*wallThickness, 
                                        radius_high=link.endRadius-2*wallThickness,
                                        circular_segments=numSides)
-        outset -= holeSlicer.translate((0,0,3*holeDiameter))
+        outset -= holeSlicerTight.translate((0,0,3*holeDiameter))
         outset = outset.translate((0,0,-connectionLength)).rotate((0,90,0)).transform(link.EndDubinsPose.A[:3,:])
         tube += outset
     
@@ -392,7 +1226,7 @@ class PrintedKinematicTree(KinematicTree):
     _fabrication_type = PrintedTube  # Class-level fabrication type constraint
     Links: list[PrintedLinkCSC]  # Type annotation override for proper type checking
     
-    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/2,
+    def __init__(self, root : Joint, maxAnglePerElbow : float = np.pi/10,
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
                  boundingBall : Optional[Ball] = None):
@@ -402,21 +1236,10 @@ class PrintedKinematicTree(KinematicTree):
     def _get_link_constructor(self):
         """Return callable that creates PrintedLinkCSC with proper fabrication parameters"""
         def make_printed_link(r, start_pose, end_pose, max_angle_per_elbow, path=None, epsilon=0.01):
-            # Infer fabrication parameters from existing joints
-            wallThickness = 5
-            holeDiameter = 2
-            numHoles = 4
-            for joint in self.Joints:
-                if isinstance(joint, PrintedTube):
-                    wallThickness = joint.wallThickness
-                    holeDiameter = joint.holeDiameter
-                    numHoles = joint.numHoles
-                    break
-            return PrintedLinkCSC(r, start_pose, end_pose, wallThickness, 
-                                  holeDiameter, numHoles, max_angle_per_elbow, path, epsilon)
+            return PrintedLinkCSC(r, start_pose, end_pose, max_angle_per_elbow, path, epsilon)
         return make_printed_link
     
-    def getBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+    def getLinkModules(self, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10) -> dict[int, m3d.Manifold]:
         """Generate connectable branching modules for all joints with children"""
         branchingModules = {}
@@ -426,26 +1249,45 @@ class PrintedKinematicTree(KinematicTree):
                 branchingModuleManifold = branchingModule(links, numSides, hullBends, maxSectionAngle)
                 branchingModules[jointIndex] = branchingModuleManifold
         return branchingModules
+
+    def getCapModules(self, numSides : int = 50) -> dict[int, m3d.Manifold]:
+        """Generate connectable cap modules for all PrintedHemisphere joints"""
+        capModules = {}
+        for jointIndex, joint in enumerate(self.Joints):
+            if isinstance(joint, PrintedHemisphere):
+                capModules[jointIndex] = joint.connectableModule(numSides=numSides)
+        return capModules
     
-    def saveBranchingModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
+    def saveLinkModules(self, baseFilename : str, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10) -> None:
-        """Save connectable branching modules for all joints with children to files"""
-        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
-        for jointIndex, module in branchingModules.items():
-            filename = f"{baseFilename}_joint{jointIndex}.stl"
+        """Save connectable branching modules and cap modules to files"""
+        branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
+        for linkIndex, module in branchingModules.items():
+            filename = f"{baseFilename}_link{linkIndex}.stl"
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
+            faces = mesh_data.tri_verts
+            tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+            tri_mesh.export(filename)
+        capModules = self.getCapModules(numSides)
+        for jointIndex, module in capModules.items():
+            filename = f"{baseFilename}_cap{jointIndex}.stl"
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
             mesh_data = module.to_mesh()
             vertices = mesh_data.vert_properties[:, :3]  # Get XYZ coordinates
             faces = mesh_data.tri_verts
             tri_mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
             tri_mesh.export(filename)
     
-    def showBranchingModules(self, numSides : int = 50, hullBends : bool = False,
+    def showLinkModules(self, numSides : int = 50, hullBends : bool = False,
                           maxSectionAngle : float = np.pi/10, block : bool = False) -> None:
-        """Display connectable branching modules for all joints with children in a 3D plot window"""
-        branchingModules = self.getBranchingModules(numSides, hullBends, maxSectionAngle)
+        """Display connectable branching and cap modules in a 3D plot window"""
+        branchingModules = self.getLinkModules(numSides, hullBends, maxSectionAngle)
+        capModules = self.getCapModules(numSides)
         fig = plt.figure()
         ax: Axes3D = fig.add_subplot(projection='3d')
-        for jointIndex, module in branchingModules.items():
+        for linkIndex, module in branchingModules.items():
             mesh_data = module.to_mesh()
             vertices = mesh_data.vert_properties[:, :3]
             triangles = mesh_data.tri_verts
@@ -456,6 +1298,17 @@ class PrintedKinematicTree(KinematicTree):
             mesh_collection = Poly3DCollection(faces, alpha=0.5, 
                                               edgecolor='k',
                                               facecolors='cyan')
+            ax.add_collection3d(mesh_collection)
+        for jointIndex, module in capModules.items():
+            mesh_data = module.to_mesh()
+            vertices = mesh_data.vert_properties[:, :3]
+            triangles = mesh_data.tri_verts
+
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            faces = [vertices[tri] for tri in triangles]
+            mesh_collection = Poly3DCollection(faces, alpha=0.5,
+                                              edgecolor='k',
+                                              facecolors='orange')
             ax.add_collection3d(mesh_collection)
         ax.set_aspect('equal')
         plt.show(block=block)

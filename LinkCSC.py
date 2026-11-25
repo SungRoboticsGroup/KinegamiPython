@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Created on Thu Dec 14 15:42:09 2023
 
@@ -15,7 +15,15 @@ import TubularPattern
 from TubularPattern import TubularPattern, TubeFittingPattern, \
                             ElbowFittingPattern, TwistFittingPattern
 from CollisionDetection import *
-from ZACH_vectorized_link_sdf import *
+
+
+def _dubins_frame_from_pos_and_dir(pos: np.ndarray, path_dir: np.ndarray) -> SE3:
+    """Build a minimal valid SE3 Dubins frame with path_dir as column 0 (x-axis)."""
+    xhat = path_dir / norm(path_dir)
+    yhat = unitNormalToBoth(xhat, np.array([0., 0., 1.]))
+    zhat = np.cross(xhat, yhat)
+    return SE3.Rt(SO3(np.column_stack([xhat, yhat, zhat])), pos)
+
 
 class LinkCSC:
     def __init__(self, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
@@ -118,6 +126,25 @@ class LinkCSC:
 
         self.collisionCapsules = self.getCapsules()
 
+        # GL mesh cache for fast animation (populated by addToWidget)
+        self._gl_items: list = []          # cached GLMeshItem / GLLinePlotItem refs
+        self._gl_ref_pose: SE3 | None = None  # StartDubinsPose when meshes were built
+        self._gl_shape_dirty: bool = True     # True => must rebuild meshes
+
+    # GL cache attributes that hold pyqtgraph GL objects (cannot be pickled)
+    _GL_CACHE_KEYS = frozenset({'_gl_items', '_gl_ref_pose', '_gl_shape_dirty'})
+
+    def __getstate__(self):
+        """Exclude GL cache from pickling / deepcopy."""
+        return {k: v for k, v in self.__dict__.items()
+                if k not in LinkCSC._GL_CACHE_KEYS}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._gl_items = []
+        self._gl_ref_pose = None
+        self._gl_shape_dirty = True
+
     def __repr__(self):
         return (
             "LinkCSC("
@@ -151,11 +178,17 @@ class LinkCSC:
         return [twist1Deg, theta1Deg, self.r, self.path.tMag, twist2Deg, theta2Deg, self.r]
 
     def newLinkTransformedBy(self, Transformation : SE3):
-        return LinkCSC(self.r, Transformation @ self.StartDubinsPose, 
+        newLink = LinkCSC(self.r, Transformation @ self.StartDubinsPose, 
                        Transformation @ self.EndDubinsPose, 
                        maxAnglePerElbow = self.maxAnglePerElbow, 
                        path = self.path.newPathTransformedBy(Transformation),
                        EPSILON = self.EPSILON)
+        # Transfer GL cache: the shape hasn't changed, only the pose
+        if not getattr(self, '_gl_shape_dirty', True):
+            newLink._gl_items = self._gl_items
+            newLink._gl_ref_pose = self._gl_ref_pose
+            newLink._gl_shape_dirty = False
+        return newLink
         
     def addToPlot(self, ax, numSides : int = 32, color : str = linkColorDefault, 
                   alpha : float = 0.5, wireFrame : bool = False, 
@@ -206,6 +239,108 @@ class LinkCSC:
         
         return allElbowHandleSets
     
+    def addToWidget(self, widget, numSides : int = 8, color : str = linkColorDefault, 
+                  alpha : float = 0.5, wireFrame : bool = False, 
+                  showFrames : bool = False, showPath : bool = True, 
+                  pathColor : str = pathColorDefault,
+                  showPathCircles : bool = False, showBoundary : bool = True,
+                  showElbowBoundingBalls : bool = False, linkID : int = None):
+        import pyqtgraph.opengl as gl
+        from meshHelpers import LinkMesh
+        # Reset GL cache for this rebuild
+        self._gl_items = []
+        self._gl_ref_pose = SE3(self.StartDubinsPose.A.copy())
+        self._gl_shape_dirty = False
+        allElbowHandleSets = []
+        if showBoundary:
+            vertices = []
+            faces = []
+            vertex_offset = 0
+
+            if not self.elbow1 is None:
+                v, f = self.elbow1.circleEllipseCircleQT(numSides)
+
+                vertices.extend(v)
+                faces.extend(f)
+                vertex_offset += len(v)
+            
+            if self.path.tMag > self.DISTANCE_EPSILON:
+                v, f = self.cylinder.interpolateQtCircles(numSides, 2)
+
+                vertices.extend(v)
+                f2 = [[item + vertex_offset for item in sublist] for sublist in f]
+                faces.extend(f2)
+                vertex_offset += len(v)
+
+            if not self.elbow2 is None:
+                v, f = self.elbow2.circleEllipseCircleQT(numSides)
+
+                vertices.extend(v)
+                f2 = [[item + vertex_offset for item in sublist] for sublist in f]
+                faces.extend(f2)
+                vertex_offset += len(v)
+
+            if (len(vertices) > 0 and len(faces) > 0):
+                meshdata = gl.MeshData(vertexes=np.array(vertices), faces=np.array(faces))
+                # Apply alpha to color if it's an RGBA tuple
+                draw_color = color
+                if isinstance(color, (tuple, list)) and len(color) >= 4:
+                    draw_color = (color[0], color[1], color[2], alpha)
+                link_shader = None if alpha >= 1.0 else 'shaded'
+                draw_edges = True if alpha >= 1.0 else wireFrame
+                meshitem = LinkMesh(id=linkID, meshdata=meshdata, color=draw_color, drawEdges=draw_edges, shader=link_shader, smooth=True)
+                meshitem.setObjectName("Link")
+                if alpha >= 1.0:
+                    meshitem.setGLOptions('opaque')
+                else:
+                    meshitem.setGLOptions('translucent')
+                widget.plot_widget.addItem(meshitem)
+                self._gl_items.append(meshitem)
+        elif showFrames:
+            # show the start and end frames
+            startFrameHandles = addPosesToWidget(np.array([self.StartDubinsPose]), widget, 
+                                              axisLength=self.r, xColor='darkred', 
+                                              yColor='darkblue', zColor='darkgreen')
+            endFrameHandles = addPosesToWidget(np.array([self.EndDubinsPose]), widget, 
+                                            axisLength=self.r, xColor='darkred', 
+                                            yColor='darkblue', zColor='darkgreen')
+            allElbowHandleSets.append(startFrameHandles)
+            allElbowHandleSets.append(endFrameHandles)
+
+        if showPath:
+            self.path.addToWidget(widget, showCircles=showPathCircles, 
+                                showPoses=False, pathColor=pathColor)
+        
+        return allElbowHandleSets
+    
+    def updateCachedGLTransforms(self):
+        """Apply the rigid-body delta between cached and current pose
+        to all cached GL items via setTransform (GPU model matrix, zero-cost).
+        Call this instead of removing + re-adding items when only the pose changed."""
+        if not self._gl_items or self._gl_ref_pose is None:
+            return
+        from pyqtgraph import Transform3D
+        delta = self.StartDubinsPose @ self._gl_ref_pose.inv()
+        mat = Transform3D(delta.A)
+        for item in self._gl_items:
+            item.setTransform(mat)
+
+    def clearGLCache(self):
+        """Discard cached GL items (e.g. before a full rebuild)."""
+        self._gl_items = []
+        self._gl_ref_pose = None
+        self._gl_shape_dirty = True
+
+    def hasGLCache(self) -> bool:
+        return not self._gl_shape_dirty
+
+    def transformPosesInPlace(self, Transformation : SE3):
+        """Lightweight pose update: only move start/end poses without
+        rebuilding path, elbows, or cylinder geometry.  Sufficient for
+        updateCachedGLTransforms() which only reads StartDubinsPose."""
+        self.StartDubinsPose = Transformation @ self.StartDubinsPose
+        self.EndDubinsPose = Transformation @ self.EndDubinsPose
+
     def addTurnToPlot(self, ax, turn : int, numSides : int = 32, color : str = linkColorDefault,
                       alpha : float = 0.5, wireFrame : bool = False, maxStepAngle : float = np.pi/32):
         # The tube around turn 1 or 2 of the path: a section of a torus whose center circle is the path's turning
@@ -424,3 +559,30 @@ class LinkCSC:
             normal=self.EndDubinsPose.R[:,0] if forward else -self.EndDubinsPose.R[:,0],
             radialVector=self.EndDubinsPose.R[:,1]
         )
+
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Factory for sub-links produced by splitAtFractions. Subclasses override to preserve type."""
+        return LinkCSC(self.r, start_frame, end_frame,
+                       self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON)
+
+    def splitAtFractions(self, fractions: list) -> list:
+        """
+        Split this link at arc-length fractions (each in (0,1)).
+        Returns len(fractions)+1 sub-links. Returns [self] for empty fractions.
+        """
+        sub_paths = self.path.splitAtFractions(fractions)
+        if len(sub_paths) == 1:
+            return [self]
+        n = len(sub_paths)
+        boundary_fracs = [0] + list(fractions) + [1]
+        result = []
+        for i, sub_path in enumerate(sub_paths):
+            start_frame = (self.StartDubinsPose if i == 0
+                           else _dubins_frame_from_pos_and_dir(
+                               sub_path.startPosition, sub_path.startDir))
+            end_frame   = (self.EndDubinsPose if i == n - 1
+                           else _dubins_frame_from_pos_and_dir(
+                               sub_path.endPosition, sub_path.endDir))
+            result.append(self._makeSubLink(start_frame, end_frame, sub_path,
+                                            boundary_fracs[i], boundary_fracs[i + 1]))
+        return result

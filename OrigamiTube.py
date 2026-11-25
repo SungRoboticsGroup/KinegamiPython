@@ -1,4 +1,4 @@
-from Joint import *
+﻿from Joint import *
 from TubularPattern import *
 from LinkCSC import *
 from KinematicChain import *
@@ -34,8 +34,8 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
     """
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
                  Pose : SE3, outerLength: Optional[float] = None, numSinkLayers : int = 1,
-                 initialState : float = 0):
-        if not (totalBendingAngle > 0 and totalBendingAngle < np.pi):
+                 initialState : float = 0, checkCircleOverlap : bool = True):
+        if not (totalBendingAngle > 0 and totalBendingAngle < 2*np.pi):
             raise ValueError("OrigamiExtendedRevolute requires totalBendingAngle to be in (0, 2*pi) radians")
         self.totalBendingAngle = totalBendingAngle
         self.numSinkLayers = numSinkLayers
@@ -44,7 +44,7 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
         TransverseRevolute.__init__(self, r, Pose, minAngle=-totalBendingAngle/2, 
                                     maxAngle=totalBendingAngle/2, 
                                     neutralLength=None if outerLength is None else self.revoluteLength + 2*outerLength, 
-                                    initialState=initialState)
+                                    initialState=initialState, checkCircleOverlap=checkCircleOverlap)
         self.outerLength = (self.neutralLength - self.revoluteLength) / 2
     
     def creasePattern(self) -> TubularPattern:
@@ -132,11 +132,85 @@ class OrigamiExtendedRevolute(OrigamiTube, TransverseRevolute):
                                               numPointsPerCircle=self.numSides)
         return plotHandles
 
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False, surfaceColor=revoluteColorDefault,
+                    showSurface=True, showAxis=True, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import revoluteColorList
+
+        # Call Joint base addToWidget first (resets cache groups, adds pose/axis)
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+
+        if showSurface:
+            color = surfaceColor if surfaceColor != revoluteColorDefault else revoluteColorList
+            scale = self.creasePattern().baseSideLength / 2
+            centerSegment = np.array([self.Pose.t - scale * self.Pose.R[:, 2],
+                                      self.Pose.t + scale * self.Pose.R[:, 2]])
+
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+
+            # Proximal half → proximal group
+            RevoluteProximalPose = self.RevoluteProximalFrame()
+            uhatProximal = RevoluteProximalPose.R[:, 1]
+            vhatProximal = RevoluteProximalPose.R[:, 2]
+            RevoluteProximalBase = np.array([RevoluteProximalPose.t + u[i] * uhatProximal + v[i] * vhatProximal
+                                             for i in range(radialCount - 1)])
+            ProximalPoints = np.vstack((RevoluteProximalBase, centerSegment))
+            ProximalHull = ConvexHull(ProximalPoints)
+            proxVertices = ProximalPoints[ProximalHull.vertices]
+            proxFaces = ProximalHull.simplices
+
+            meshdata = gl.MeshData(vertexes=proxVertices.astype(np.float32), faces=proxFaces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
+            self._gl_items_proximal.append(item)
+
+            # Distal half → distal group
+            RevoluteDistalPose = self.RevoluteDistalFrame()
+            uhatDistal = RevoluteDistalPose.R[:, 1]
+            vhatDistal = RevoluteDistalPose.R[:, 2]
+            DistalBase = np.array([RevoluteDistalPose.t + u[i] * uhatDistal + v[i] * vhatDistal
+                                   for i in range(radialCount - 1)])
+            DistalPoints = np.vstack((DistalBase, centerSegment))
+            DistalHull = ConvexHull(DistalPoints)
+            distalVertices = DistalPoints[DistalHull.vertices]
+            distalFaces = DistalHull.simplices
+
+            meshdata2 = gl.MeshData(vertexes=distalVertices.astype(np.float32), faces=distalFaces)
+            item2 = gl.GLMeshItem(meshdata=meshdata2, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item2.setGLOptions('translucent')
+            item2.setObjectName("Joint")
+            widget.plot_widget.addItem(item2)
+            self._gl_items_distal.append(item2)
+
+            # Tubular extensions
+            if self.outerLength > 0:
+                items_before = list(widget.plot_widget.items)
+                self.proximalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
+                for it in widget.plot_widget.items:
+                    if it not in items_before:
+                        self._gl_items_proximal.append(it)
+                items_before = list(widget.plot_widget.items)
+                self.distalExtension().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2, color_list=color, is_joint=True)
+                for it in widget.plot_widget.items:
+                    if it not in items_before:
+                        self._gl_items_distal.append(it)
+
 
 class OrigamiRevolute(OrigamiExtendedRevolute):
     def __init__(self, numSides : int, r : float, totalBendingAngle : float, 
                  Pose : SE3, numSinkLayers : int = 1, initialState : float = 0):
-        super().__init__(numSides, r, totalBendingAngle, Pose, 0, numSinkLayers, initialState)
+        super().__init__(numSides, r, totalBendingAngle, Pose, 0, numSinkLayers, initialState, 
+                         checkCircleOverlap=False)
 
 
 class OrigamiPrismatic(OrigamiTube, Prismatic):
@@ -176,7 +250,36 @@ class OrigamiPrismatic(OrigamiTube, Prismatic):
                                               edgeColor=edgeColor,
                                               numPointsPerCircle=self.numSides)            
         return plotHandles
-    
+
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False,
+                    surfaceColor=prismaticColorDefault,
+                    showSurface=True, showAxis=True, axisScale=10, showPoses=True, poseAxisScaleMultipler=None):
+        from style import prismaticColorList
+
+        # Call Joint base addToWidget for poses, axis, sphere (resets cache groups)
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+        if showSurface:
+            color = surfaceColor if surfaceColor != prismaticColorDefault else prismaticColorList
+            # Proximal cylinder → proximal group
+            items_before = list(widget.plot_widget.items)
+            self.proximalCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
+                                                color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_proximal.append(item)
+            # Distal cylinder → distal group
+            items_before = list(widget.plot_widget.items)
+            self.distalCylinder().addToWidget(widget, numPointsPerCircle=self.numSides, numCircles=2,
+                                              color_list=color, is_joint=True)
+            for item in widget.plot_widget.items:
+                if item not in items_before:
+                    self._gl_items_distal.append(item)
+
 class OrigamiTip(OrigamiTube, Tip):
     def __init__(self, numSides : int, r : float, Pose : SE3, length : float, 
                  closesForward : bool = True, pathIndex : int = 2):
@@ -253,6 +356,78 @@ class OrigamiTip(OrigamiTube, Tip):
             
         return plotHandles
 
+    def addToWidget(self, widget, xColor=xColorDefault, yColor=yColorDefault, zColor=zColorDefault,
+                    proximalColor=proximalColorDefault, centerColor=centerColorDefault, distalColor=distalColorDefault,
+                    sphereColor=sphereColorDefault, showSphere=False,
+                    surfaceColor=linkColorDefault,
+                    showSurface=True, showAxis=False, axisScale=jointAxisScaleDefault, showPoses=True, poseAxisScaleMultipler=None):
+        import pyqtgraph.opengl as gl
+        from style import linkColorList
+
+        # Call Joint base addToWidget for poses, axis, sphere
+        Joint.addToWidget(self, widget, xColor, yColor, zColor, proximalColor,
+                          centerColor, distalColor, sphereColor, showSphere,
+                          surfaceColor, False, showAxis,
+                          axisScale, showPoses, poseAxisScaleMultipler)
+
+        if showSurface:
+            color = surfaceColor if surfaceColor != linkColorDefault else linkColorList
+            radialCount = self.numSides + 1
+            angle = np.linspace(0, 2 * np.pi, radialCount) + np.pi / self.numSides
+            u = self.r * np.cos(angle)
+            v = self.r * np.sin(angle)
+            scale = self.creasePattern().baseSideLength / 2
+
+            match self.pidx:
+                case 0: tipSegmentIndex, uhatIndex, vhatIndex = 2, 1, 2
+                case 1: tipSegmentIndex, uhatIndex, vhatIndex = 0, 2, 0
+                case 2: tipSegmentIndex, uhatIndex, vhatIndex = 1, 0, 1
+
+            if self.forward:
+                DistalPose = self.DistalFrame()
+                TipSegment = np.array([DistalPose.t - scale * DistalPose.R[:, tipSegmentIndex],
+                                       DistalPose.t + scale * DistalPose.R[:, tipSegmentIndex]])
+                ProximalPose = self.ProximalFrame()
+                uhatProximal = ProximalPose.R[:, uhatIndex]
+                vhatProximal = ProximalPose.R[:, vhatIndex]
+                ProximalBase = np.array([ProximalPose.t + u[i] * uhatProximal + v[i] * vhatProximal
+                                         for i in range(radialCount - 1)])
+                tipPoints = np.vstack((ProximalBase, TipSegment))
+            else:
+                ProximalPose = self.ProximalFrame()
+                TipSegment = np.array([ProximalPose.t - scale * ProximalPose.R[:, tipSegmentIndex],
+                                       ProximalPose.t + scale * ProximalPose.R[:, tipSegmentIndex]])
+                DistalPose = self.DistalFrame()
+                uhatDistal = DistalPose.R[:, uhatIndex]
+                vhatDistal = DistalPose.R[:, vhatIndex]
+                DistalBase = np.array([DistalPose.t + u[i] * uhatDistal + v[i] * vhatDistal
+                                       for i in range(radialCount - 1)])
+                tipPoints = np.vstack((DistalBase, TipSegment))
+
+            hull = ConvexHull(tipPoints)
+            vertices = tipPoints[hull.vertices]
+            faces = hull.simplices
+
+            meshdata = gl.MeshData(vertexes=vertices.astype(np.float32), faces=faces)
+            item = gl.GLMeshItem(meshdata=meshdata, color=tuple(color), shader='shaded', smooth=False, drawEdges=True)
+            item.setGLOptions('translucent')
+            item.setObjectName("Joint")
+            widget.plot_widget.addItem(item)
+            # Forward tip built from ProximalFrame base → proximal;
+            # backward tip built from DistalFrame base → distal
+            if self.forward:
+                self._gl_items_proximal.append(item)
+            else:
+                self._gl_items_distal.append(item)
+
+class OrigamiStartTip(OrigamiTip):
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
+        super().__init__(numSides, r, Pose, length, closesForward=False, pathIndex=2)
+
+class OrigamiEndTip(OrigamiTip):
+    def __init__(self, numSides : int, r : float, Pose : SE3, length : float):
+        super().__init__(numSides, r, Pose, length, closesForward=True, pathIndex=2)
+
 
 class OrigamiLinkCSC(OrigamiTube, LinkCSC):
     def __init__(self, numSides : int, r : float, StartDubinsPose : SE3, EndDubinsPose : SE3,
@@ -306,6 +481,20 @@ class OrigamiLinkCSC(OrigamiTube, LinkCSC):
                 composed.append(elbow2PartPattern)
         
         return composed
+    
+    def _makeSubLink(self, start_frame, end_frame, sub_path, start_frac, end_frac):
+        """Override to preserve OrigamiLinkCSC type when splitting."""
+        return OrigamiLinkCSC(self.numSides, self.r, start_frame, end_frame,
+                              self.maxAnglePerElbow, path=sub_path, EPSILON=self.EPSILON)
+
+    def newLinkTransformedBy(self, Transformation : SE3):
+        """Override to preserve OrigamiLinkCSC type when transforming"""
+        return OrigamiLinkCSC(self.numSides, self.r,
+                             Transformation @ self.StartDubinsPose,
+                             Transformation @ self.EndDubinsPose,
+                             maxAnglePerElbow = self.maxAnglePerElbow,
+                             path = self.path.newPathTransformedBy(Transformation),
+                             EPSILON = self.EPSILON)
 
 
 class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
@@ -321,8 +510,9 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
             raise ValueError("OrigamiKinematicChain requires numSides to be an even integer >= 4")
         
         # Check that startJoint has correct numSides if it's an OrigamiTube
-        if isinstance(startJoint, OrigamiTube) and startJoint.numSides != numSides:
-            raise ValueError(f"startJoint has numSides={startJoint.numSides} but chain requires numSides={numSides}")
+        if isinstance(startJoint, OrigamiTube):
+            if startJoint.numSides != numSides:
+                raise ValueError(f"startJoint has numSides={startJoint.numSides} but chain requires numSides={numSides}")
         elif not isinstance(startJoint, Waypoint):
             raise ValueError("startJoint must be an OrigamiTube or Waypoint")
         
@@ -333,7 +523,9 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
     
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 safe : bool = True, chooseXhatToMinPath : bool = False, cachedLink = None) -> int:
+                 safe : bool = True, chooseXhatToMinPath : bool = False, 
+                 relativeToDistalDubins : bool = False, 
+                 cachedLink : Optional[OrigamiLinkCSC] = None) -> int:
         """Override append to enforce numSides constraint on OrigamiTube joints"""
         # Check that newJoint has correct numSides if it's an OrigamiTube
         if isinstance(newJoint, OrigamiTube):
@@ -342,7 +534,8 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
         elif not isinstance(newJoint, Waypoint):
             raise ValueError("newJoint must be an OrigamiTube or Waypoint")
         
-        return super().append(newJoint, relative, fixedPosition, fixedOrientation, safe, chooseXhatToMinPath)
+        return super().append(newJoint, relative, fixedPosition, fixedOrientation, safe, 
+                              chooseXhatToMinPath, relativeToDistalDubins=relativeToDistalDubins, cachedLink=cachedLink)
     
     def _get_link_constructor(self):
         """Return a callable that creates OrigamiLinkCSC with the chain's numSides"""
@@ -352,12 +545,54 @@ class OrigamiKinematicChain(KinematicChain[OrigamiTube]):
     
     
     def creasePattern(self, twistPortion : float = 0.2) -> TubularPattern:
-        chainPattern = copy.deepcopy(self.Joints[0].creasePattern())
+        chainPattern = copy.deepcopy(self.Joints[0].creasePattern()) if not isinstance(self.Joints[0], Waypoint) else TubularPattern(self.numSides, self.Joints[0].r)
         for j in range(1, len(self.Joints)):
             chainPattern.append(self.Links[j].creasePattern(twistPortion))
             if not isinstance(self.Joints[j], Waypoint):
                 chainPattern.append(self.Joints[j].creasePattern())
         return chainPattern
 
-# Note: _link_constructor is set via the _get_link_constructor() method above
-# which dynamically infers numSides from joints rather than using a static class attribute
+def loadOrigamiChain(filename : str):
+    """Load an OrigamiKinematicChain from a file with origami-specific classes"""
+    from numpy import array
+    from geometryHelpers import Ball, Cylinder, Plane, Circle3D, Arc3D
+    from KinematicTree import KinematicTree
+    from LinkCSC import LinkCSC
+    from PathCSC import PathCSC
+    from spatialmath import SE3
+    from Joint import Prismatic, TransverseRevolute, CoaxialRevolute, Waypoint, Tip
+    
+    try:
+        with open(filename) as f:
+            data = f.read()
+            # Provide necessary imports for eval, including origami-specific classes
+            eval_namespace = {
+                'KinematicTree': KinematicTree,
+                'LinkCSC': LinkCSC,
+                'OrigamiLinkCSC': OrigamiLinkCSC,
+                'PathCSC': PathCSC,
+                'SE3': SE3,
+                'array': array,
+                'Ball': Ball,
+                'Cylinder': Cylinder,
+                'Plane': Plane,
+                'Circle3D': Circle3D,
+                'Arc3D': Arc3D,
+                'Prismatic': Prismatic,
+                'TransverseRevolute': TransverseRevolute,
+                'CoaxialRevolute': CoaxialRevolute,
+                'Waypoint': Waypoint,
+                'Tip': Tip,
+                'OrigamiRevolute': OrigamiRevolute,
+                'OrigamiPrismatic': OrigamiPrismatic,
+                'OrigamiTip': OrigamiTip,
+                'StartTip': StartTip,
+                'EndTip': EndTip,
+                'OrigamiKinematicChain': OrigamiKinematicChain,
+            }
+            chain = eval(data, eval_namespace)
+            f.close()
+            return chain
+    except Exception as e:
+        print(e)
+        raise Exception(f"Could not load file {filename}: {e}")

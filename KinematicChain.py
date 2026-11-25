@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Created on Wed Dec  6 14:07:27 2023
 
@@ -13,8 +13,8 @@ class KinematicChain(KinematicTree[F]):
     def __init__(self, startJoint : Joint, maxAnglePerElbow : float = np.pi/2, gimbal : bool = False,
                  joints : Optional[list[Joint]] = None, links : Optional[list[LinkCSC]] = None, 
                  parents : Optional[list[int]] = None, children : Optional[list[list[int]]] = None, 
-                 boundingBall : Optional[Ball] = None):
-        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, boundingBall)
+                 boundingBall : Optional[Ball] = None, units : str = "Centimeter (cm)"):
+        super().__init__(startJoint, maxAnglePerElbow, joints, links, parents, children, boundingBall, units)
         if gimbal:
             self.boundingBall.expandToCenterOnLine(Line(startJoint.Pose.t, startJoint.Pose.R[:,2]))
             self.nestedBallsRelativeToJoints = []
@@ -25,10 +25,12 @@ class KinematicChain(KinematicTree[F]):
     """ Add the given joint to the end of the chain, return its index """
     def append(self, newJoint : Joint, relative : bool = True, 
                  fixedPosition : bool = False, fixedOrientation : bool = False, 
-                 safe : bool = True, chooseXhatToMinPath : bool = False) -> int:
+                 safe : bool = True, chooseXhatToMinPath : bool = False,
+                 relativeToDistalDubins : bool = False, cachedLink : Optional[LinkCSC] = None) -> int:
         parentIndex = len(self.Joints) - 1
         return super().addJoint(parentIndex, newJoint, relative, fixedPosition,
-                                fixedOrientation, safe, None, chooseXhatToMinPath)
+                                fixedOrientation, safe, None, chooseXhatToMinPath, 
+                                relativeToDistalDubins, cachedLink=cachedLink)
     
     def appendGlobalFixed(self, newJoint : Joint) -> int:
         parentIndex = len(self.Joints) - 1
@@ -51,7 +53,8 @@ class KinematicChain(KinematicTree[F]):
         else:
             nextJoint = self.Joints[jointIndex+1]
             prevJoint = self.Joints[jointIndex-1] if jointIndex>0 else nextJoint
-            newLink = LinkCSC(self.r, prevJoint.DistalDubinsFrame(), 
+            link_constructor = self._get_link_constructor()
+            newLink = link_constructor(self.r, prevJoint.DistalDubinsFrame(), 
                                     nextJoint.ProximalDubinsFrame(),
                                     self.maxAnglePerElbow)
             linksBefore = self.Links[:jointIndex]
