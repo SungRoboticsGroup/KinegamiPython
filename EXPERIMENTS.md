@@ -416,3 +416,34 @@ Geometric mean ratio to power 2: power 1 + parent-locking 0.467 (better on 8 of 
 **Learned / decided:**
 - Open: the pair test's closest-pair masking, for a joint and its outgoing links and for neighboring links (see PSO.md, Known issues).
 - Next: overnight, the waypoint options (#6) and plain power 2 on 6 joints (#5), on this code.
+
+## 2026-11-24: Waypoint options at the new defaults, and plain power 2 on 6 joints
+
+**Status:** done (4-joint sweep 23:47–04:23, 6-joint sweep 04:23–06:01), on `b0cb0422`.
+
+**Question:** with the collision fixes and the new defaults (power 1 + parent-locking), do the waypoint options matter (checklist #1)? And what does plain power 2 give on 6 joints with the fixed checks (the baseline for the parent-locking runs)?
+
+**Run:** `python parameterSweep.py --grid power=1 --grid parentLocking=True --grid waypointSampling=box,multiscale --grid straightThroughGuess=True,False --grid alignmentWeight=10,0 --settings <defaults, and each option changed alone> --note "..."`: folder `2026.11.24_23.47.09_Sweep_Joints4_Seeds0-7` (32 runs). Then `--joints 6 --seeds 3 --grid power=2 --grid parentLocking=False ...`: folder `2026.11.25_04.23.23_Sweep_Joints6_Seeds0-2` (3 runs).
+
+**Result, 4 joints** (final total length; no errors, no reverts, no final collisions; all 7 waypoints parent-locked in 31 of 32 runs):
+
+| Chain | Defaults | No straight-through guess | Alignment weight 0 | Multiscale sampling | Lower bound |
+|---|---|---|---|---|---|
+| 0 | 22.3 | 23.8 | 22.3 | 22.5 | 9.2 |
+| 1 | 20.3 | 19.9 | 19.0 | 19.4 | 7.7 |
+| 2 | 28.1 | 28.6 | 28.1 | 29.1 | 10.0 |
+| 3 | 23.3 | 31.2 | 23.3 | 21.2 | 12.0 |
+| 4 | 25.7 | 25.8 | 26.6 | 26.0 | 13.6 |
+| 5 | 18.7 | 19.8 | 21.0 | 34.2 | 11.5 |
+| 6 | 20.4 | 16.1 | 20.8 | 19.6 | 7.8 |
+| 7 | 37.1 | 36.8 | 37.1 | 36.0 | 11.6 |
+
+Geometric mean ratio to the defaults: no straight-through guess 1.022 (better on 3, worse on 5), alignment weight 0 1.013 (better on 1, worse on 3, same on 4), multiscale sampling 1.058 (better on 4, worse on 4; chain 5 alone is 1.83). Mean run time 7.9–9.2 minutes.
+
+**Result, 6 joints, plain power 2:** 107.0 / 106.4 / 141.3 (lower bounds 15.4 / 22.3 / 17.8), 32.7 minutes per run, no reverts or final collisions. With the old checks (2026-11-23) it gave 93.1 / 103.1 / 121.9. Power 1 + parent-locking gave 53.1 / 44.8 / 59.1, but on `c1b79125`, before the collision changes of 2026-11-24, so that comparison isn't on the same code.
+
+**Learned / decided:**
+- **The waypoint options make no clear difference at the new defaults:** every option is within a few percent of the defaults on average, with chains going both ways. That's expected, since essentially every waypoint ends parent-locked, so how waypoints are placed matters little. The defaults stay (box sampling, straight-through guess, alignment weight 10).
+- **The defaults give 1.6–3.2× the lower bound on 4-joint chains,** similar to the 2026-11-23 rerun (individual chains moved both ways by up to 5, from the code changes since).
+- **No reverts in 35 runs,** against 2 in 38 before: consistent with the near-contact fix (only real overlaps count, and the penalty agrees with the count).
+- **Not yet on the same code:** power 1 + parent-locking on 6 joints.
