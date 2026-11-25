@@ -1106,11 +1106,16 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
                     base_path = sys._MEIPASS 
                 except AttributeError:
                     base_path = os.path.abspath(".")  
-                file_path, _ = QFileDialog.getSaveFileName(
+                file_path, selected_filter = QFileDialog.getSaveFileName(
                     self, "Save File", os.path.join(base_path, "save"),
                     "Session Files (*.session);;Tree Files (*.tree);;Chain Files (*.chain)",
                     options=options
                 )
+                # Qt's own (non-native) file dialog, used on Linux, doesn't add the selected filter's extension,
+                # and a name without one would be saved as a bare .tree file: add it here
+                if file_path and not file_path.endswith(('.session', '.tree', '.chain')):
+                    extension = selected_filter.split('(*')[-1].split(')')[0].split()[0] if '(*' in selected_filter else '.session'
+                    file_path += extension
             else:
                 try:
                     base_path = sys._MEIPASS
