@@ -389,7 +389,7 @@ Geometric mean ratio to power 2: power 1 + parent-locking 0.467 (better on 8 of 
 - Mean run time 38.9 minutes for power 1 + parent-locking (149 penalized retries over 3 runs) and 27.5 for power 2 + parent-locking.
 
 **Learned / decided:**
-- **The power-1 + parent-locking result survives the collision fixes.** On 4 joints the lengths barely changed (within about 1.4 either way) and are now verified collision-free: about 47% of the power-2 length, better on every chain. On 6 joints it is 2.5–3.3× the lower bound, against 5.9–8.3× for power 2 + parent-locking.
+- **The power-1 + parent-locking result survives the collision fixes.** On 4 joints the lengths barely changed (within about 1.4 either way) and are now verified collision-free: about 47% of the power-2 length, better on every chain. On 6 joints it is 2.0–3.4× the lower bound, against 4.8–8.3× for power 2 + parent-locking.
 - With parent-locking at power 1, essentially every waypoint ends locked: on these chains, the best trees found have no waypoints in use.
 - Power 2 + parent-locking is unconvincing (5 of 8 on 4 joints, and chain 2 on 6 joints got much worse, 99.4 → 148.5), with waypoints locking and unlocking repeatedly.
 - No power-2 baseline without parent-locking on 6 joints was rerun with the fixes; the earlier ones (93.1 / 103.1 / 121.9) passed the fixed checker but ran with the old checks.

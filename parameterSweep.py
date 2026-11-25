@@ -51,10 +51,10 @@ from KinematicChain import *
 
 SETTINGS_GRID = {
     'waypointSampling': ['box', 'multiscale'],
-    'straightThroughGuess': [False, True],
+    'straightThroughGuess': [True, False],
     'alignmentWeight': [10, 0],
-    'power': [2, 1],
-    'parentLocking': [False],
+    'power': [1, 2],
+    'parentLocking': [True, False],
 }
 TRAVERSAL = dict(traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n",
                  childFraction=1, guarantee=True)

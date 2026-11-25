@@ -76,7 +76,7 @@ The no-penalty attempt runs first because the penalty is expensive: it runs coll
 
 ### Parent-locking
 
-With `parentLocking=True`, a waypoint can be **parent-locked**: its proximal Dubins frame coincides with its parent's distal Dubins frame (within 1e-6), so its incoming link is empty. The tree then behaves as if the waypoint were deleted, but it stays in the tree in case it's needed again. Whether a waypoint is parent-locked is read from the geometry (`isParentLocked`), so it needs no extra saved state, and existing trees with empty links count as parent-locked.
+With `parentLocking=True` (the default whenever `guarantee=True`), a waypoint can be **parent-locked**: its proximal Dubins frame coincides with its parent's distal Dubins frame (within 1e-6), so its incoming link is empty. The tree then behaves as if the waypoint were deleted, but it stays in the tree in case it's needed again. Whether a waypoint is parent-locked is read from the geometry (`isParentLocked`), so it needs no extra saved state, and existing trees with empty links count as parent-locked.
 
 - **Locked waypoints move with what they're locked to.** Every move a joint or waypoint visit considers is also applied to its parent-locked descendants (recursively), which are snapped back onto their parents' distal frames (`moveWithParentLocked`). The links leaving them count as the visited joint's outgoing links in `linkLoss`. Without this, a joint with a waypoint sitting on its distal frame can barely move: shifting the joint forward makes the path to the waypoint loop back.
 - **Waypoint visits consider locking.** After PSO, the visit also evaluates the waypoint locked onto its parent, and locks it if that's better on `linkLoss` by at least 0.1% (`PARENT_LOCK_MARGIN`).
@@ -99,7 +99,7 @@ loss = (incoming link length)^power
 
 Two consequences:
 - The penalty gives PSO no gradient to follow out of a collision. It only makes colliding placements look bad.
-- With the default `power = 2`, the visits minimize **squared** link lengths, while the experiments report **total length**. A visit can lower its own objective and still slightly raise total length. `power = 1` makes the visits minimize plain length instead.
+- With the default `power = 1`, the visits minimize plain link length, which is what the experiments report (total length). `power = 2` minimizes **squared** link lengths instead, which pushes waypoints toward the middle of their links to even out incoming and outgoing lengths. That helped before parent-locking; whether it still does is open. At power 2 a visit can lower its own objective and still raise total length.
 
 ## Options
 
@@ -113,12 +113,12 @@ Two consequences:
 | `repeatTraversal` | int, or `"n"` | Number of passes. `"n"` means one pass per entry in `tree.Joints` (joints and waypoints together) |
 | `configurations` | list of state lists | Each state list has an entry for every joint and waypoint (0 for waypoints). The result must be collision-free in all of them. `None` means a single all-zeros configuration |
 | `childFraction` | float ≥ 0 | Weight on outgoing links in each visit's objective, and in the randomized traversal's weights (default 1) |
-| `power` | float ≥ 0 | Power on link lengths in each visit's objective: 1 = plain length, 2 = squared lengths (default 2) |
+| `power` | float ≥ 0 | Power on link lengths in each visit's objective: 1 = plain length, 2 = squared lengths (default 1) |
 | `traversalPower` | float ≥ 0 | Power on link lengths in the randomized traversal's weights only (default 2) |
 | `waypointSampling` | `"box"`, `"multiscale"` | How waypoint visits sample random initial particles (default `"box"`); see [One waypoint visit](#one-waypoint-visit-optimizewaypointplacementonce) |
 | `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `True` since 2026-11-22; was `False`) |
 | `alignmentWeight` | float ≥ 0 | Weight of the waypoint objective's alignment penalty, per radian (default 10; 0 turns it off) |
-| `parentLocking` | bool | Let waypoints be parent-locked onto their parent's distal frame, as if deleted but kept available (default `False`; needs `guarantee=True`). See [Parent-locking](#parent-locking) |
+| `parentLocking` | bool | Let waypoints be parent-locked onto their parent's distal frame, as if deleted but kept available (default: on when `guarantee=True`, which it needs). See [Parent-locking](#parent-locking) |
 | `guarantee` | bool | **Always pass `True`.** `False` makes visits optimize a cut-down subtree; that path is untested and slated for removal |
 | `parallelize` | bool | Evaluates particles across processes. Particle sampling is seeded by `np.random`, but results aren't guaranteed to be identical from run to run |
 | `directory` | path or `None` | Where per-visit `.tree` files and `checkpoints/` go |
@@ -179,7 +179,7 @@ Each script:
 
 ### Parameter sweeps
 
-[parameterSweep.py](parameterSweep.py) runs every combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight` and visit `power` on small random gimbal chains (default: 4 joints, seeds 0–7, 5 configurations each), with DFS outward for one pass per entry in `tree.Joints`. Runs go one seed at a time, so stopping early still leaves complete comparisons for the finished seeds.
+[parameterSweep.py](parameterSweep.py) runs every combination of `waypointSampling`, `straightThroughGuess`, `alignmentWeight`, visit `power` and `parentLocking` (defaults first) on small random gimbal chains (default: 4 joints, seeds 0–7, 5 configurations each), with DFS outward for one pass per entry in `tree.Joints`. Runs go one seed at a time, so stopping early still leaves complete comparisons for the finished seeds.
 
 ```
 python parameterSweep.py --note "why" [--joints 4] [--seeds 8] [--first-seed 0] [--settings PATTERN,...] [--grid KEY=V1,V2 ...]
@@ -306,46 +306,33 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 
 ### Current status
 
-> **All results below were obtained with a collision checker that never compared links entering real joints against each other** (fixed 2026-11-23; see [EXPERIMENTS.md](EXPERIMENTS.md)). They're unreliable, power 1 especially, and need rerunning.
+**Defaults (decided 2026-11-24): power 1 with parent-locking**, together with box sampling, the straight-through guess and alignment weight 10. All of these will be revisited in the final tests.
 
-"Default settings" in this section means the defaults when these runs were made: box sampling, alignment weight 10, and **no** straight-through guess. `straightThroughGuess` became the default afterwards (see the decision below).
+**Results before 2026-11-23 are unreliable.** Until then, the collision checker never compared links entering real joints against each other, carried parent-locked waypoints weren't checked, and penalized joint retries scored their reversed-axis option on the wrong geometry (see [Known issues](#known-issues)). Their history is in [EXPERIMENTS.md](EXPERIMENTS.md); the waypoint-option results there (the straight-through guess, multiscale sampling, alignment weight) and the 8-joint seed-44 runs need rerunning.
 
-**8-joint seed-44 chain, single traversal (2026.11.20_16.15.57, BFS Outward Shortest, default settings):** finished 23 passes at total length 242.8, vs. 243.9 for April's DFS Outward run, which visits the same order on a chain. Sum of squares 3,329 vs. 4,497. No penalized retries or reverts. The final tree is still visibly bunched, for example in a loop near the base, and collisions don't explain it: no two unattached parts come within 4.4 of each other in any configuration.
+**Parent-locking sweeps with the fixes (`c1b79125`; DFS outward, one pass per entry in `tree.Joints`, box sampling, straight-through guess, alignment weight 10).** No errors, no final tree collides, 2 reverts in 38 runs.
 
-**Bunching examples** (`python bunchingExamples.py`): five waypoints from that final tree where a heavy search found much better placements. Share of the gap in local squared link length closed, averaged over 3 seeds:
+4-joint chains, 8 seeds (`2026.11.23_19.01.14_Sweep_Joints4_Seeds0-7`), final total length relative to power 2 without parent-locking on the same chain:
 
-| Settings | Overall | Notes |
+| Settings | Geometric mean ratio | Better on |
 |---|---|---|
-| Default | 5% | |
-| `alignmentWeight=0` alone | 5% | Box sampling never finds the moves it would allow |
-| `waypointSampling="multiscale"` alone | 26% | |
-| `straightThroughGuess=True` alone | 62% | Nearly identical across seeds, since the guesses are deterministic |
-| All three | 65% | |
+| Power 1 + parent-locking | **0.467** | 8 of 8 |
+| Power 2 + parent-locking | 0.954 | 5 of 8 |
+| Power 1 | 1.788 | 0 of 8 |
 
-None of the settings fixes W1, a waypoint sitting on its parent's frame (incoming link length 0); see [Empty links](#empty-links).
+6-joint chains, 3 seeds, parent-locking only (`2026.11.23_23.04.06_Sweep_Joints6_Seeds0-2`):
 
-**Overnight sweep (2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7):** 4-joint chains, 8 seeds, DFS outward. The first night stopped after 52 of 128 runs, when a Windows Update restart killed it. Seeds 3–7 were then finished with power 2 only (see the decision below). All 90 runs finished without errors, and no final tree collides. Final total length relative to the default settings on the same chain, over all 8 seeds:
+| Chain | Power 1 + parent-locking | Power 2 + parent-locking | Lower bound |
+|---|---|---|---|
+| 0 | **53.1** | 90.5 | 15.4 |
+| 1 | **44.8** | 108.1 | 22.3 |
+| 2 | **59.1** | 148.5 | 17.8 |
 
-| Settings (power 2) | Mean ratio | Range |
-|---|---|---|
-| multiscale + straight-through + alignment 0 | 0.732 | 0.59–1.05 |
-| multiscale + straight-through + alignment 10 | 0.751 | 0.59–1.00 |
-| box + straight-through + alignment 10 | 0.755 | 0.56–0.94 |
-| box + straight-through + alignment 0 | 0.786 | 0.53–1.13 |
-| multiscale + alignment 0 | 0.892 | 0.71–1.22 |
-| multiscale + alignment 10 | 0.913 | 0.79–1.06 |
-| alignment 0 alone | 0.979 | 0.80–1.13 |
-
-- **The straight-through guess is the one clear win:** about 21% shorter, and better in 31 of 32 paired comparisons. Multiscale sampling gives about 6% (better in 20/32). The alignment weight makes no measurable difference here (18/32). The top three settings don't separate.
-- **Results are still far from the lower bound:** the best run on each chain is 3.1–5.9 times it.
-- **Power 1 is worse in every run:** all 26 power-1 runs finished 12–76% longer than the default settings. Visits with power 1 slide waypoints onto their neighbors, leaving zero-length links (seed 0's power-1 link lengths: `[0, 0, 12.2, 0, 0, 16.2, 0, 0, 24.2, 0]`). The waypoints then get stuck, so the waypoint settings barely matter: on seed 0, all 8 power-1 settings gave identical results.
-- **23 visits were reverted** (10 on the first night, 13 in the power-2 resume). All have the signature of the [near-contact mismatch](#known-issues) (a collision flagged, loss unchanged); one was traced and confirmed. Reverting kept the trees collision-free.
-
-Details and per-seed numbers are in [EXPERIMENTS.md](EXPERIMENTS.md).
-
-**Decision (2026-11-22): `straightThroughGuess=True` is now the default**, since it was better in 31 of 32 paired comparisons. `waypointSampling` stays `"box"` and `alignmentWeight` stays 10 until they're tested on bigger chains. Use `--no-straight` in `bunchingExamples.py` to compare against the old default.
-
-**Decision (2026-11-22): power 2 only for now.** Seeds 3–7 were finished with the 8 power-2 settings only. Power 1 waits for the [empty-links](#empty-links) investigation: more power-1 runs would say little about the waypoint settings, because power-1 runs get stuck regardless of them, and any fix for empty links would mean rerunning power 1 anyway.
+- **Power 1 + parent-locking is shortest on all 11 chains:** 1.8–2.8× the lower bound on 4 joints, 2.0–3.4× on 6 joints. It ends with essentially every waypoint parent-locked (7 of 7; 10–11 of 11).
+- **Power 1 without parent-locking gets stuck:** its waypoints collapse onto their parents too (5–7 of 7), but joints can't move with them.
+- **At power 2, parent-locking waypoints lock and unlock repeatedly** (3–13 unlocks per run) and end with 1–4 locked.
+- **Run time:** 6.7–9.2 minutes per 4-joint run; 27.5 (power 2) and 38.9 (power 1) minutes per 6-joint run with parent-locking, mostly penalized retries.
+- **Not yet rerun with the fixes:** power 2 without parent-locking on 6 joints (earlier: 93.1 / 103.1 / 121.9, which pass the fixed checker but ran with the old checks).
 
 ### Known issues
 
@@ -355,8 +342,9 @@ Details and per-seed numbers are in [EXPERIMENTS.md](EXPERIMENTS.md).
 - **Collision count and penalty disagree about near-contacts.** `collisionsCountAndError` counts any pair closer than `fineDistanceThreshold` (0.001) as a collision, but its smooth penalty is about 0.5 at distance 0 and about 0 at 0.001. So the optimizer can bring two parts within 0.001 of each other at almost no cost, and the post-visit check then counts a collision and reverts the visit (logged as "did not raise the objective"). Traced in one of the sweep's 10 reverts: links 5 and 9 at distance 0.000976, penalty term 1.4 × 10⁻⁶. Two options, not yet decided:
   - (a) count only real overlaps (distance below 0) as collisions, and treat 0–0.001 as allowed near-contact;
   - (b) shift the penalty so it's already near its full value at 0.001.
+- **Open question: end-cap false positives with only one closest point at an end.** The collision check models tubes with rounded end caps and filters out overlaps that lie only between two caps (the disc test), but not an overlap between one tube's cap and the middle of another. Such a false positive set off the failure cascade in the first 6-joint parent-locking run (EXPERIMENTS.md, 2026-11-23), and parent-locking makes them likelier, since links pass closer to joints. Filtering them without much extra computation or false negatives in edge cases is hard (whiteboard discussions with Samhitha and others); left open for now.
 - **Empty links.** See [Empty links](#empty-links).
-- **The root joint has a broken initial guess.** DFS and BFS visit the root (index 0), but the root has no parent: `Parents[0] = -1`, so the joint optimizer uses `Joints[-1]` (the last joint) to compute its guess. The current-placement particle keeps this from making things worse, but the guess is meaningless. The randomized traversal never visits the root.
+- **Fixed 2026-11-24: the root joint had a broken initial guess.** The root has no parent (`Parents[0] = -1`), so the joint visit computed its line-up guess from `Joints[-1]`, the last joint. The root now gets no line-up guess: its particles are the current placement and random ones. The randomized traversal never visits the root.
 - **Resuming can change the traversal order.** `optimizeTree` computes the order from the starting tree. `resumeFromCheckpoint` recomputes it from the checkpoint's tree, so `longest`/`shortest` orderings can differ after a resume.
 - **The collision penalty is all-or-nothing** (see [Objective](#objective)), so PSO has no gradient to follow out of a collision.
 - **Runs aren't exactly reproducible.** Earlier 3-joint runs with the same seed ended between 18.1 and 50.6, partly because the code changed between runs. Comparing variants needs several trials per setting.
@@ -378,10 +366,10 @@ Ideas to investigate:
 
 ### Before systematic experiments
 
-1. **Decide the remaining defaults:** `waypointSampling` and `alignmentWeight` are undecided; test them on bigger chains (see [Current status](#current-status)).
-2. **Test [parent-locking](#parent-locking)** for [empty links](#empty-links): at power 1 against power 2, and with power 2 to check it doesn't make things worse.
+1. **Rerun the waypoint options** (`straightThroughGuess`, `waypointSampling`, `alignmentWeight`) with the collision fixes and the new defaults; the earlier results are unreliable.
+2. ~~Test parent-locking~~ Done: power 1 + parent-locking is now the default (see [Current status](#current-status)). Still to do: parent-locking at branch points (the unlock guess assumes one outgoing path).
 3. **Decide the near-contact question** (see [Known issues](#known-issues)).
-4. **Decide which metric to report,** total length or the visits' sum of squares. Suggestion: total length as the headline result, with sum of squares as a check on the optimizer. Power 1 targets total length directly but currently does worse because of empty links.
+4. **Metric: decided, total length.** Sum of squares is only an option for the visits' objective (power 2).
 5. **Rerun the 8-joint seed-44 chain** with the best settings from the sweep, on several traversals. So far only one traversal has been rerun, with default settings.
 6. Port the clustering fix from the GUI branch, then smoke-test `randomTree.py`.
 7. Profile:
@@ -390,7 +378,7 @@ Ideas to investigate:
    - how collision checking scales with the number of configurations.
 8. Fix the experiment list. The parameter space from the 5/7 meeting notes:
    - **Inputs:** number of joints, number of configurations.
-   - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits, `waypointSampling`, `straightThroughGuess`, `alignmentWeight`.
+   - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits (default 1), `parentLocking` (default on), `waypointSampling` (default box), `straightThroughGuess` (default on), `alignmentWeight` (default 10).
    - **PSO parameters:** global vs. local best; number of particles; sampling bounds; initial particles (uniform random vs. evenly spaced, from [TODO_tests.md](TODO_tests.md)); k; w.
 
    The planned plots compare time per joint against the objective divided by the best objective found by a reference method.

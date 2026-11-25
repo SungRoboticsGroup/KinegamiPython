@@ -4,7 +4,7 @@ the result with known better placements, without running a whole tree optimizati
 
 Usage:
     python bunchingExamples.py [names...] [--sampling box|multiscale] [--straight | --no-straight] [--alignment W]
-                               [--parent-locking]
+                               [--parent-locking | --no-parent-locking]
                                [--repeats N] [--seed S] [--serial]
     python bunchingExamples.py W8 --show [--sampling ...]   # plot one example (current / result / references)
 
@@ -16,8 +16,10 @@ best under plain linkLoss ("ref len"). Both are collision-free in every configur
 For each example and repeat, the table reports linkLoss (power 2, the length term alone) and the waypoint
 objective with the default alignmentWeight 10, before and after the visit, next to the references. "gap
 closed" is how much of the distance from the current linkLoss to the "ref len" linkLoss the visit closed.
-With --parent-locking, "lock" shows what the visit did about parent-locking (locked to the parent, unlocked,
-or kept locked), and the "before" columns mark a waypoint that starts parent-locked with "*".
+Visits use power 2 (not the optimizer's default of 1), since the examples and references are measured
+at power 2. With parent-locking (the default; --no-parent-locking turns it off), "lock" shows what the visit
+did about parent-locking (locked to the parent, unlocked, or kept locked), and the "before" columns mark a
+waypoint that starts parent-locked with "*".
 """
 import argparse
 import json
@@ -156,7 +158,8 @@ def main():
     parser.add_argument('--straight', action=argparse.BooleanOptionalAction, default=None,
                         help="straightThroughGuess (default: True)")
     parser.add_argument('--alignment', type=float, help="alignmentWeight (default: 10)")
-    parser.add_argument('--parent-locking', action='store_true', help="parentLocking=True")
+    parser.add_argument('--parent-locking', action=argparse.BooleanOptionalAction, default=None,
+                        help="parentLocking (default: True)")
     parser.add_argument('--repeats', type=int, default=3, help="runs per example with different seeds (default 3)")
     parser.add_argument('--seed', type=int, default=0, help="first seed (default 0)")
     parser.add_argument('--serial', action='store_true', help="don't parallelize particle evaluation")
@@ -164,15 +167,15 @@ def main():
     parser.add_argument('--save', help="with --show: save the plot to this file instead of opening a window")
     args = parser.parse_args()
 
-    settings = {}
+    settings = {'power': 2}  # the examples and their references are measured at power 2
     if args.sampling:
         settings['waypointSampling'] = args.sampling
     if args.straight is not None:
         settings['straightThroughGuess'] = args.straight
     if args.alignment is not None:
         settings['alignmentWeight'] = args.alignment
-    if args.parent_locking:
-        settings['parentLocking'] = True
+    if args.parent_locking is not None:
+        settings['parentLocking'] = args.parent_locking
     examples = loadExamples(args.names or None)
     if args.show:
         if len(examples) != 1:

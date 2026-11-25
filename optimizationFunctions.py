@@ -655,10 +655,12 @@ def writeRunInfo(directory, settings, filename='run_info.json', note=None):
 
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                            childFraction = 1, ignoreLater = False, parallelize = False,
-                           verbose=True, power=2, includeCollisionPenalty=True,
-                           configurations=None, visitRecord=None, parentLocking=False):
+                           verbose=True, power=1, includeCollisionPenalty=True,
+                           configurations=None, visitRecord=None, parentLocking=None):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
+    if parentLocking is None:
+        parentLocking = not ignoreLater  # default: on whenever the whole tree is considered
     if parentLocking and ignoreLater:
         raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeJointPlacement")
@@ -742,23 +744,30 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
     start = time.time()
 
     joint = subject.Joints[index]
-    parent = subject.Joints[subject.Parents[index]]
+    # The root has no parent (Parents[0] == -1), so it gets no line-up guess: only the current placement
+    # and random particles
+    hasParent = subject.Parents[index] >= 0
+    if hasParent:
+        parent = subject.Joints[subject.Parents[index]]
 
-    frame1 = joint.Pose
-    frame2 = parent.DistalDubinsFrame()
+        frame1 = joint.Pose
+        frame2 = parent.DistalDubinsFrame()
 
-    transformation = frame1.inv() * frame2
+        transformation = frame1.inv() * frame2
 
-    #try to make initial guess right next to each other
-    initialPosition = transformation.t[2]
-    initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
-    initialGuess = [initialPosition,initialRotation]
-    initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
-
-    if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
+        #try to make initial guess right next to each other
+        initialPosition = transformation.t[2]
+        initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
+        initialGuess = [initialPosition,initialRotation]
         initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
 
-    if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
+        if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
+            initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+
+        if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
+            initialGuess = [0,0]
+    else:
+        initialPosition = 0
         initialGuess = [0,0]
 
     initialLoss = objective([0,0])
@@ -776,16 +785,18 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         return np.array([objective(x) for x in X])
     n_particles = 16
 
-    # particle 0 is the initial guess and particle 1 is the current placement
+    # particle 0 is the initial guess and particle 1 is the current placement, followed by random particles;
+    # the root has no initial guess, so its particle 0 is the current placement
     init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
     init_pos[1] = np.array([0,0])
+    first = 2 if hasParent else 1
     #add random noise
-    noise = np.zeros_like(init_pos[2:])
-    noise[:, 0] = np.random.uniform(-dist2,dist2, n_particles - 2)
-    noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
-    init_pos[2:] += noise
-    init_pos[2:, 0] = np.clip(init_pos[2:, 0], positionBound[0], positionBound[1])
-    init_pos[2:, 1] = wrapToRange(init_pos[2:, 1], angleBound[0], angleBound[1])
+    noise = np.zeros_like(init_pos[first:])
+    noise[:, 0] = np.random.uniform(-dist2,dist2, n_particles - first)
+    noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - first)
+    init_pos[first:] += noise
+    init_pos[first:, 0] = np.clip(init_pos[first:, 0], positionBound[0], positionBound[1])
+    init_pos[first:, 1] = wrapToRange(init_pos[first:, 1], angleBound[0], angleBound[1])
 
     min_bound = np.array([b[0] for b in bounds])
     max_bound = np.array([b[1] for b in bounds])
@@ -887,13 +898,15 @@ def straightThroughGuesses(subject, index):
 def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
                               ignoreLater=False, parallelize=False, verbose = True, configurations=None,
-                              includeCollisionPenalty=True, visitRecord=None, power=2,
+                              includeCollisionPenalty=True, visitRecord=None, power=1,
                               waypointSampling="box", straightThroughGuess=True, alignmentWeight=10,
-                              parentLocking=False):
+                              parentLocking=None):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     if waypointSampling not in WAYPOINT_SAMPLINGS:
         raise ValueError(f"waypointSampling must be one of {WAYPOINT_SAMPLINGS}")
+    if parentLocking is None:
+        parentLocking = not ignoreLater  # default: on whenever the whole tree is considered
     if parentLocking and ignoreLater:
         raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeWaypointPlacement")
@@ -1068,9 +1081,9 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
 
 def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
-                 traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
+                 traversal="dfs", direction="outward", orderBy="longest", power=1, configurations=None, 
                  repeatTraversal=1, save_checkpoints=True, traversalPower=2,
-                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10, parentLocking=False):
+                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10, parentLocking=None):
     """
     Optimize the placement of joints in a kinematic tree.
     
@@ -1103,10 +1116,13 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         parentLocking: If True, waypoints can be parent-locked onto their parent's distal frame (as if deleted,
             but kept available): visits carry parent-locked descendants along, waypoint visits consider
             locking, and visits to parent-locked waypoints consider unlocking them. Needs guarantee=True.
+            Default (None): on when guarantee=True, off otherwise.
     
     Returns:
         Optimized KinematicTree, or (tree, times, lengths) if evaluate=True
     """
+    if parentLocking is None:
+        parentLocking = guarantee
     if repeatTraversal == "n":
         repeatTraversal = len(subject.Joints)
 
