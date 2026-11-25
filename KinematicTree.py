@@ -478,11 +478,16 @@ class KinematicTree(Generic[F]):
             (idx1, type1), (idx2, type2), collisionResult = collision
             minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
             distance = min(minDist1to2, minDist2to1)
-            # Smooth error function based on logistic function
-            # k = steepness of the transition
+            # Smooth error function based on logistic function, centered on the collision threshold: it's 0.5 at
+            # distance fineDistanceThreshold, rises to 1 - epsilon at distance 0 (k = steepness of the transition),
+            # and every pair counted as a collision above has distance below the threshold, so each one adds at
+            # least 0.5. (Centered at 0, a counted near-contact between 0 and the threshold added almost nothing,
+            # so the optimizer could land there and the post-visit check would then revert the visit.)
+            # The threshold itself stays above 0 to be conservative: center lines are sampled every
+            # fineDistanceThreshold, so a sampled minimum distance can overestimate the true one by up to half that.
             epsilon = 1e-6
             k = np.log(1/epsilon - 1) / fineDistanceThreshold # transition over [0, fineDistanceThreshold]
-            totalError += 1 / (1 + np.exp(k * distance))
+            totalError += 1 / (1 + np.exp(k * (distance - fineDistanceThreshold)))
             if show:
                 self.show(block=False)
             if debug:
@@ -537,17 +542,41 @@ class KinematicTree(Generic[F]):
                     minIdx2to1 = np.argmin(distsCenterline2toSurface1)
                     minDist2to1 = distsCenterline2toSurface1[minIdx2to1] - tube2.r
                     if minDist1to2 < fineDistanceThreshold and minDist2to1 < fineDistanceThreshold:
-                        # Filter out collisions that are solely in the hemispherical end caps
-                        # Check if both closest points are at endpoints
-                        isEndpoint1 = (minIdx1to2 == 0 or minIdx1to2 == len(points1) - 1)
-                        isEndpoint2 = (minIdx2to1 == 0 or minIdx2to1 == len(points2) - 1)
+                        # Filter out collisions that are solely in the hemispherical end caps.
+                        # The SDF is point-to-surface, so a query point inside a tube's 
+                        # hemispherical cap appears as within r of the tube surface.
+                        # This happens where adjacent tubes connect. We filter these by
+                        # checking end-circle disc planes.
+                        # Use distance-based endpoint check (within r of start/end) 
+                        # rather than exact index, since the closest point may be 
+                        # slightly inward from the exact endpoint.
+                        # (Ported from chainsGUIdevelopment b38c016a and 392f2061.)
+                        startDist1 = norm(points1[minIdx1to2] - points1[0])
+                        endDist1 = norm(points1[minIdx1to2] - points1[-1])
+                        nearStart1 = startDist1 < tube1.r
+                        nearEnd1 = endDist1 < tube1.r
+                        isEndpoint1 = nearStart1 or nearEnd1
+                        
+                        startDist2 = norm(points2[minIdx2to1] - points2[0])
+                        endDist2 = norm(points2[minIdx2to1] - points2[-1])
+                        nearStart2 = startDist2 < tube2.r
+                        nearEnd2 = endDist2 < tube2.r
+                        isEndpoint2 = nearStart2 or nearEnd2
                         
                         isTrueCollision = True
                         if isEndpoint1 and isEndpoint2:
-                            # Both closest points are endpoints - need to check disc intersection
-                            # Get the circles at the relevant endpoints
-                            circle1 = tube1.startCircle(forward=False) if (minIdx1to2 == 0) else tube1.endCircle(forward=True)
-                            circle2 = tube2.startCircle(forward=False) if (minIdx2to1 == 0) else tube2.endCircle(forward=True)
+                            # Both closest points are at/near endpoints - need to check disc intersection
+                            # Get the circles at the relevant endpoints.
+                            # When both nearStart and nearEnd are true (tube shorter than r),
+                            # pick the closer endpoint to avoid choosing the wrong disc plane.
+                            if nearStart1 and nearEnd1:
+                                circle1 = tube1.startCircle(forward=False) if startDist1 <= endDist1 else tube1.endCircle(forward=True)
+                            else:
+                                circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
+                            if nearStart2 and nearEnd2:
+                                circle2 = tube2.startCircle(forward=False) if startDist2 <= endDist2 else tube2.endCircle(forward=True)
+                            else:
+                                circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
                             
                             # It's definitely a true collision if it's on the inside side of either disc's plane
                             # Otherwise, check if the discs cross

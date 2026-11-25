@@ -95,7 +95,7 @@ loss = (incoming link length)^power
      + [if includeCollisionPenalty] sum over configurations of collisionErrorWeight * collisionError
 ```
 
-`collisionError` is a logistic function of the signed surface-to-surface distance, and it reaches about 1 within `fineDistanceThreshold` = 0.001. In practice any collision adds the full `collisionErrorWeight` (set to `failurePenalty`), however deep it is.
+A pair counts as a collision when its sampled surface-to-surface distance is below `fineDistanceThreshold` = 0.001 (above 0 to be conservative: center lines are sampled every 0.001, so a sampled distance can overestimate the true one by up to 0.0005). For each counted pair, `collisionError` adds a logistic function of the distance centered on that threshold: 0.5 at 0.001, about 1 at 0 and below. So every counted collision adds at least half of `collisionErrorWeight` (set to `failurePenalty`), and in practice the full weight, however deep it is.
 
 Two consequences:
 - The penalty gives PSO no gradient to follow out of a collision. It only makes colliding placements look bad.
@@ -339,9 +339,7 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 - **Fixed 2026-11-23: links entering real joints were never checked against each other.** `findLinkClusters` left the link from the last waypoint into each real joint out of every cluster, and `buildCollisionMatrices` treated all such links as one cluster. Each cluster now includes the link into the next joint, and any link left out of every cluster gets its own. Results from before the fix are unreliable.
 - **Fixed 2026-11-23: `linkLoss` with the collision penalty left the tree in the last configuration.** The joint visit's objective then scored the reversed-axis option on that posed tree, so penalized joint retries could pick a placement that collides once rebuilt in the neutral pose (the revert guard caught it). `linkLoss` now restores the tree's configuration.
 - **Fixed 2026-11-23: with parent-locking, carried waypoints' links weren't collision-checked.** The penalty and the revert guard now check the visited node plus the parent-locked waypoints carried with it.
-- **Collision count and penalty disagree about near-contacts.** `collisionsCountAndError` counts any pair closer than `fineDistanceThreshold` (0.001) as a collision, but its smooth penalty is about 0.5 at distance 0 and about 0 at 0.001. So the optimizer can bring two parts within 0.001 of each other at almost no cost, and the post-visit check then counts a collision and reverts the visit (logged as "did not raise the objective"). Traced in one of the sweep's 10 reverts: links 5 and 9 at distance 0.000976, penalty term 1.4 × 10⁻⁶. Two options, not yet decided:
-  - (a) count only real overlaps (distance below 0) as collisions, and treat 0–0.001 as allowed near-contact;
-  - (b) shift the penalty so it's already near its full value at 0.001.
+- **Fixed 2026-11-24: collision count and penalty disagreed about near-contacts.** Pairs closer than `fineDistanceThreshold` (0.001) counted as collisions, but the penalty was centered at distance 0, so a near-contact between 0 and 0.001 added almost nothing (1.4 × 10⁻⁶ in a traced case at 0.000976). The optimizer could land there, and the post-visit check then reverted the visit. The penalty is now centered at the threshold, so it adds at least 0.5 per counted pair (0.58 in that case).
 - **Open question: end-cap false positives with only one closest point at an end.** The collision check models tubes with rounded end caps and filters out overlaps that lie only between two caps (the disc test), but not an overlap between one tube's cap and the middle of another. Such a false positive set off the failure cascade in the first 6-joint parent-locking run (EXPERIMENTS.md, 2026-11-23), and parent-locking makes them likelier, since links pass closer to joints. Filtering them without much extra computation or false negatives in edge cases is hard (whiteboard discussions with Samhitha and others); left open for now.
 - **Empty links.** See [Empty links](#empty-links).
 - **Fixed 2026-11-24: the root joint had a broken initial guess.** The root has no parent (`Parents[0] = -1`), so the joint visit computed its line-up guess from `Joints[-1]`, the last joint. The root now gets no line-up guess: its particles are the current placement and random ones. The randomized traversal never visits the root.
@@ -368,7 +366,7 @@ Ideas to investigate:
 
 1. **Rerun the waypoint options** (`straightThroughGuess`, `waypointSampling`, `alignmentWeight`) with the collision fixes and the new defaults; the earlier results are unreliable.
 2. ~~Test parent-locking~~ Done: power 1 + parent-locking is now the default (see [Current status](#current-status)). Still to do: parent-locking at branch points (the unlock guess assumes one outgoing path).
-3. **Decide the near-contact question** (see [Known issues](#known-issues)).
+3. ~~Decide the near-contact question~~ Done: the penalty is centered at the collision threshold (see [Known issues](#known-issues)).
 4. **Metric: decided, total length.** Sum of squares is only an option for the visits' objective (power 2).
 5. **Rerun the 8-joint seed-44 chain** with the best settings from the sweep, on several traversals. So far only one traversal has been rerun, with default settings.
 6. Port the clustering fix from the GUI branch, then smoke-test `randomTree.py`.
