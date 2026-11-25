@@ -463,9 +463,15 @@ class KinematicTree(Generic[F]):
                                                 coarseDistanceThreshold, fineDistanceThreshold)
             if collisionResult is not None:
                 collisions.append(( (j1, 'Joint'), (j2, 'Joint'), collisionResult))
+        incomingWindows = self.incomingWindowCheckedLengths()
         for j, l in jl_pairs.T:
+            # A joint is checked only against the part of each incoming-path link outside its window
+            checkedLength = incomingWindows.get((int(j), int(l)))
+            if checkedLength is not None and checkedLength <= 0:
+                continue
             collisionResult = self.collision(self.Joints[j], self.Links[l], 
-                                                coarseDistanceThreshold, fineDistanceThreshold)
+                                                coarseDistanceThreshold, fineDistanceThreshold,
+                                                maxArcLength2=checkedLength)
             if collisionResult is not None:
                 collisions.append(( (j, 'Joint'), (l, 'Link'), collisionResult))
         for l1, l2 in ll_pairs.T:
@@ -478,16 +484,14 @@ class KinematicTree(Generic[F]):
             (idx1, type1), (idx2, type2), collisionResult = collision
             minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
             distance = min(minDist1to2, minDist2to1)
-            # Smooth error function based on logistic function, centered on the collision threshold: it's 0.5 at
-            # distance fineDistanceThreshold, rises to 1 - epsilon at distance 0 (k = steepness of the transition),
-            # and every pair counted as a collision above has distance below the threshold, so each one adds at
-            # least 0.5. (Centered at 0, a counted near-contact between 0 and the threshold added almost nothing,
-            # so the optimizer could land there and the post-visit check would then revert the visit.)
-            # The threshold itself stays above 0 to be conservative: center lines are sampled every
-            # fineDistanceThreshold, so a sampled minimum distance can overestimate the true one by up to half that.
+            # Smooth error function based on logistic function, centered on the collision threshold (an overlap
+            # of CONTACT_TOLERANCE, about 0): 0.5 there, rising to 1 - epsilon at an overlap of
+            # fineDistanceThreshold (k = steepness of the transition). Every pair counted as a collision above
+            # overlaps by more than the threshold, so each one adds at least 0.5, consistent with the count.
             epsilon = 1e-6
-            k = np.log(1/epsilon - 1) / fineDistanceThreshold # transition over [0, fineDistanceThreshold]
-            totalError += 1 / (1 + np.exp(k * (distance - fineDistanceThreshold)))
+            k = np.log(1/epsilon - 1) / fineDistanceThreshold # transition over [threshold - fineDistanceThreshold, threshold]
+            contact = -self.CONTACT_TOLERANCE * self.r
+            totalError += 1 / (1 + np.exp(k * (distance - contact)))
             if show:
                 self.show(block=False)
             if debug:
@@ -518,8 +522,88 @@ class KinematicTree(Generic[F]):
     
     
     # Returns None for no collision or the pair of closest points for a collision
+    # Length of the window (along the incoming path, back from a real joint's proximal end) in which links
+    # aren't collision-checked against that joint: in units of the tube radius
+    INCOMING_WINDOW_RADII = np.pi
+
+    def incomingWindowCheckedLengths(self) -> dict:
+        # For each real joint K and each link L on its incoming path (link K, then back through waypoints until
+        # the real joint where K's rigid part starts), whose end is within INCOMING_WINDOW_RADII * r of K's
+        # proximal end along that path: {(K, L): the arc length from L's start that is still checked against K}.
+        # The rest of L, inside the window, isn't checked against K: when K's incoming link is empty or short,
+        # the links before it meet K there, so they would otherwise give false positives. (0 or less means L
+        # lies entirely in the window.) Siblings and everything else in K's part are still checked against K.
+        # Computed from the current link lengths, so it follows waypoints as they're parent-locked or unlocked.
+        window = self.INCOMING_WINDOW_RADII * self.r
+        checked = {}
+        for k in range(1, len(self.Joints)):
+            if isWaypoint(self.Joints[k]):
+                continue
+            node, distance = k, 0.0  # distance: along the path from link `node`'s end to K's proximal end
+            while distance < window:
+                length = self.Links[node].path.length
+                checked[(k, node)] = length - (window - distance)
+                distance += length
+                parent = self.Parents[node]
+                if parent == -1 or not isWaypoint(self.Joints[parent]):
+                    break
+                node = parent
+        return checked
+
+    # A pair collides when the tubes overlap by more than this, in units of the tube radius: only real overlaps
+    # count, not tubes that just touch (e.g. after a U-turn of radius r, the tube before the turn and the part
+    # after it are exactly 2r apart and touch along a line). It's slightly below 0 to absorb floating-point
+    # error in an exact touch; sampling error is removed by refining each sampled minimum (refinedMinimum).
+    CONTACT_TOLERANCE = 1e-9
+
+    @staticmethod
+    def refinedMinimum(tube, points, dists, other, spacing, fullCount=None, refineFrom=-np.inf, maxCandidates=5):
+        # The minimum over tube's whole center line of other.sdf, from its values dists at the sample points
+        # (spaced at most `spacing` apart, starting at tube's start). Samples can miss the true minimum by up to
+        # spacing/2, so each sampled local minimum within that of the best is refined by a bounded search
+        # between its neighboring samples, along the true center line: the CSC path for a link (its samples
+        # are evenly spaced in its path parameter), and straight segments between samples for a joint (whose
+        # center line is straight between its proximal, center and distal points, all of which are samples).
+        # fullCount: the number of samples over the whole tube, if points are only the first of them.
+        # refineFrom: refine only if the sampled minimum is in [refineFrom, refineFrom + spacing): below that
+        # the true minimum is certainly below refineFrom as well, and from refineFrom + spacing/2 up it certainly
+        # isn't, so refining can't change a decision made at refineFrom (it's only needed near the threshold,
+        # which keeps it cheap).
+        # Returns (point, value).
+        n = len(points)
+        best = int(np.argmin(dists))
+        if n < 2 or not (refineFrom <= dists[best] < refineFrom + spacing):
+            return points[best], dists[best]
+        isLocalMin = np.ones(n, dtype=bool)
+        isLocalMin[1:] &= dists[1:] <= dists[:-1]
+        isLocalMin[:-1] &= dists[:-1] <= dists[1:]
+        candidates = np.where(isLocalMin & (dists <= dists[best] + spacing / 2))[0]
+        candidates = candidates[np.argsort(dists[candidates])][:maxCandidates]
+        path = getattr(tube, 'path', None)
+        if fullCount is None:
+            fullCount = n
+        def pointAt(u):  # u: fractional sample index
+            if path is not None:
+                return path.interpolate_vectorized(np.array([u / (fullCount - 1)]))[0]
+            k = min(int(np.floor(u)), n - 2)
+            return points[k] + (u - k) * (points[k + 1] - points[k])
+        bestPoint, bestValue = points[best], dists[best]
+        for c in candidates:
+            lo, hi = max(0, c - 1), min(n - 1, c + 1)
+            result = scipy.optimize.minimize_scalar(lambda u: float(other.sdf(pointAt(u).reshape(1, 3))[0]),
+                                                    bounds=(lo, hi), method='bounded', options={'xatol': 1e-6})
+            if result.fun < bestValue:
+                bestPoint, bestValue = pointAt(result.x), result.fun
+        return bestPoint, bestValue
+
     def collision(self, tube1, tube2, coarseDistanceThreshold=0.5, 
-                  fineDistanceThreshold=0.001) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
+                  fineDistanceThreshold=0.001, maxArcLength2=None) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
+        # fineDistanceThreshold: the spacing of the center-line samples. Overlaps are judged against
+        # CONTACT_TOLERANCE, from refined minimum distances (see refinedMinimum).
+        # maxArcLength2: if given, only the part of tube2 from its start to this arc length counts. The check
+        # from tube2's sample points uses only that part; the check from tube1's sample points still measures
+        # to all of tube2, which can only make it smaller, so a real overlap with that part is still found
+        # (both directions must agree), while an overlap only with the rest of tube2 isn't.
         coarseDensity = 1 / coarseDistanceThreshold
         fineDensity = 1 / fineDistanceThreshold        
         # Filter out if either tube is empty (no length)
@@ -535,13 +619,22 @@ class KinematicTree(Generic[F]):
                     # Finer check
                     points1 = tube1.interpolate(density = fineDensity)
                     distsCenterline1toSurface2 = tube2.sdf(points1)
-                    minIdx1to2 = np.argmin(distsCenterline1toSurface2)
-                    minDist1to2 = distsCenterline1toSurface2[minIdx1to2] - tube1.r
-                    points2 = tube2.interpolate(density = fineDensity)
+                    contact = -self.CONTACT_TOLERANCE * min(tube1.r, tube2.r)
+                    closest1, minDist1to2 = self.refinedMinimum(tube1, points1, distsCenterline1toSurface2, tube2,
+                                                                fineDistanceThreshold, refineFrom=tube1.r + contact)
+                    minDist1to2 = minDist1to2 - tube1.r
+                    allPoints2 = tube2.interpolate(density = fineDensity)
+                    points2 = allPoints2
+                    if maxArcLength2 is not None:
+                        # samples are evenly spaced by arc length
+                        keep = int(np.floor(maxArcLength2 / tube2.length() * (len(allPoints2) - 1))) + 1
+                        points2 = allPoints2[:max(1, min(keep, len(allPoints2)))]
                     distsCenterline2toSurface1 = tube1.sdf(points2)
-                    minIdx2to1 = np.argmin(distsCenterline2toSurface1)
-                    minDist2to1 = distsCenterline2toSurface1[minIdx2to1] - tube2.r
-                    if minDist1to2 < fineDistanceThreshold and minDist2to1 < fineDistanceThreshold:
+                    closest2, minDist2to1 = self.refinedMinimum(tube2, points2, distsCenterline2toSurface1, tube1,
+                                                                fineDistanceThreshold, fullCount=len(allPoints2),
+                                                                refineFrom=tube2.r + contact)
+                    minDist2to1 = minDist2to1 - tube2.r
+                    if minDist1to2 < contact and minDist2to1 < contact:
                         # Filter out collisions that are solely in the hemispherical end caps.
                         # The SDF is point-to-surface, so a query point inside a tube's 
                         # hemispherical cap appears as within r of the tube surface.
@@ -551,14 +644,14 @@ class KinematicTree(Generic[F]):
                         # rather than exact index, since the closest point may be 
                         # slightly inward from the exact endpoint.
                         # (Ported from chainsGUIdevelopment b38c016a and 392f2061.)
-                        startDist1 = norm(points1[minIdx1to2] - points1[0])
-                        endDist1 = norm(points1[minIdx1to2] - points1[-1])
+                        startDist1 = norm(closest1 - points1[0])
+                        endDist1 = norm(closest1 - points1[-1])
                         nearStart1 = startDist1 < tube1.r
                         nearEnd1 = endDist1 < tube1.r
                         isEndpoint1 = nearStart1 or nearEnd1
                         
-                        startDist2 = norm(points2[minIdx2to1] - points2[0])
-                        endDist2 = norm(points2[minIdx2to1] - points2[-1])
+                        startDist2 = norm(closest2 - allPoints2[0])  # tube2's real ends, not a cut
+                        endDist2 = norm(closest2 - allPoints2[-1])
                         nearStart2 = startDist2 < tube2.r
                         nearEnd2 = endDist2 < tube2.r
                         isEndpoint2 = nearStart2 or nearEnd2
@@ -580,69 +673,29 @@ class KinematicTree(Generic[F]):
                             
                             # It's definitely a true collision if it's on the inside side of either disc's plane
                             # Otherwise, check if the discs cross
-                            isTrueCollision = Plane(circle1.c, circle1.n).signedDistanceToPoint(points2[minIdx2to1]) < 0\
-                                        or Plane(circle2.c, circle2.n).signedDistanceToPoint(points1[minIdx1to2]) < 0\
+                            isTrueCollision = Plane(circle1.c, circle1.n).signedDistanceToPoint(closest2) < 0\
+                                        or Plane(circle2.c, circle2.n).signedDistanceToPoint(closest1) < 0\
                                         or discs_cross(circle1, circle2)
                         if isTrueCollision:
-                            return points1[minIdx1to2], minDist1to2, points2[minIdx2to1], minDist2to1                
+                            return closest1, minDist1to2, closest2, minDist2to1                
         return None
 
     def findLinkClusters(self):
-        # Find clusters of waypoints and their incoming + outgoing links, that are connected without real joints between them
-        # Every link except link 0 should be in a cluster
-
-        visited = set()
-        waypoint_sets = []
-        link_sets = []
-        
-        def buildWaypointSet(joint_idx, current_wp_set, current_link_set):
-            if joint_idx in visited or joint_idx is None or joint_idx == -1:
-                return
-            
-            # If not a waypoint, include only the link and return
-            if not isWaypoint(self.Joints[joint_idx]):
-                current_link_set.append(joint_idx)
-                return
-            
-            # Add waypoint to current set and mark as visited
-            current_wp_set.append(joint_idx)
-            visited.add(joint_idx)
-
-            # Add the incoming link to the link set
-            incoming_link_idx = joint_idx
-            if incoming_link_idx is not None and incoming_link_idx != -1:
-                current_link_set.append(incoming_link_idx)
-            
-            # Check parent
-            parent_idx = self.Parents[joint_idx]
-            if parent_idx is not None and parent_idx != -1 and parent_idx not in visited:
-                if isWaypoint(self.Joints[parent_idx]):
-                    buildWaypointSet(parent_idx, current_wp_set, current_link_set)
-            
-            # Check children, including real joints, whose incoming link (from this waypoint) belongs to this
-            # cluster too (the call adds that link and stops there)
-            children_indices = self.Children[joint_idx]
-            for child_idx in children_indices:
-                if child_idx not in visited:
-                    buildWaypointSet(child_idx, current_wp_set, current_link_set)
-        
-        # Go through all joints and find waypoint sets
-        for joint_idx in range(len(self.Joints)):
-            if joint_idx not in visited and isWaypoint(self.Joints[joint_idx]):
-                current_wp_set = []
-                current_link_set = []
-                buildWaypointSet(joint_idx, current_wp_set, current_link_set)
-                if current_wp_set:
-                    waypoint_sets.append(current_wp_set)
-                    link_sets.append(current_link_set)
-
-        # A link directly between two real joints has no waypoints around it: it's a cluster of its own.
-        # (Every link must be in some cluster: links missing from all of them would never be checked
-        # against each other.)
-        clustered = {l for link_set in link_sets for l in link_set}
-        link_sets += [[l] for l in range(1, len(self.Links)) if l not in clustered]
-
-        return link_sets
+        # Groups the links into rigid parts, each list being one part. Link i (the link into node i) belongs to
+        # the part that starts at its nearest real-joint ancestor: following Parents from node i's parent through
+        # any waypoints. So a part is everything from a real joint's distal end up to the next real joints. At a
+        # branch point it's one physical piece that starts in the joint's distal connection and splits into
+        # several rigidly connected tubes (direct ones and ones routed through waypoints), which may overlap
+        # each other anywhere. Links in the same part aren't collision-checked against each other; everything
+        # else still is, including the next real joints and their descendants against all of the part's tubes.
+        # Parent-locked waypoints are still waypoints, so locking doesn't change the parts.
+        parts = {}
+        for i in range(1, len(self.Links)):
+            source = self.Parents[i]
+            while source != -1 and isWaypoint(self.Joints[source]):
+                source = self.Parents[source]
+            parts.setdefault(source, []).append(i)
+        return list(parts.values())
     
     
     def buildCollisionMatrices(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -657,7 +710,7 @@ class KinematicTree(Generic[F]):
         Rules:
         - Waypoints don't collision check directly (all False)
         - Link 0 is empty, not checked against anything (all False)
-        - Link/Link: check iff separated by real joint (different waypoint cluster)
+        - Link/Link: check iff in different rigid parts (see findLinkClusters), i.e. separated by a real joint
         - Real Joint/Real Joint: always check
         - Real Joint/Link: always check
         """
@@ -698,7 +751,7 @@ class KinematicTree(Generic[F]):
         
         Rules:
         - Waypoints don't collision check directly
-        - Link/Link: check iff separated by real joint (different waypoint cluster)
+        - Link/Link: check iff in different rigid parts (see findLinkClusters), i.e. separated by a real joint
         - Real Joint/Real Joint: always check
         - Real Joint/Link: always check
         

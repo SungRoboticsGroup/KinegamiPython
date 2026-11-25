@@ -316,12 +316,12 @@ This is a different bug from the GUI branch's clustering fix `af6b0359` (sibling
 
 **Fix:** follow real-joint children too, so each cluster includes the link into the next joint; any link still left out of every cluster gets a cluster of its own.
 
-**Recheck of all 138 final trees in the four sweeps with the fixed checker** (all configurations of each chain):
+**Recheck of all 138 final trees in the four sweeps with the fixed checker** (all configurations of each chain; corrected 2026-11-24, the counts first recorded here were mis-added: 29 colliding trees in all, not 26):
 
 | Settings | Final trees that collide |
 |---|---|
-| Power 2, all settings, all sweeps | 1 of 99 |
-| Power 1, no parent-locking | 18 of 37 |
+| Power 2, all settings, all sweeps | 1 of 86 |
+| Power 1, no parent-locking | 21 of 39 |
 | Power 1 + parent-locking, 4 joints | 4 of 10 |
 | Power 1 + parent-locking, 6 joints | 3 of 3 |
 
@@ -393,3 +393,26 @@ Geometric mean ratio to power 2: power 1 + parent-locking 0.467 (better on 8 of 
 - With parent-locking at power 1, essentially every waypoint ends locked: on these chains, the best trees found have no waypoints in use.
 - Power 2 + parent-locking is unconvincing (5 of 8 on 4 joints, and chain 2 on 6 joints got much worse, 99.4 → 148.5), with waypoints locking and unlocking repeatedly.
 - No power-2 baseline without parent-locking on 6 joints was rerun with the fixes; the earlier ones (93.1 / 103.1 / 121.9) passed the fixed checker but ran with the old checks.
+
+## 2026-11-24: Collision rules for branching trees, the incoming-path window, and counting only real overlaps
+
+**Status:** done (on `00ac559b` plus uncommitted changes, committed right after).
+
+**Question:** can the optimizer handle branching trees (parent-locking at branch points, GUI-branch collision fixes), and what should count as a collision near where parts meet?
+
+**Changes:**
+- **Rigid parts.** A branching link is one physical part that starts in the parent's distal connection and splits into rigidly connected tubes, which may overlap anywhere. Links are now grouped by their nearest real-joint ancestor, and links in the same part aren't checked against each other. Before, every pair of links leaving a branch point counted as colliding (they start from the same frame in the same direction): 2–6 false collisions in the start tree of each of 5 random 5-joint trees with a branch point. The GUI branch's fix (`af6b0359`) merged only waypoint siblings, missing the direct link to the first child.
+- **Incoming-path window.** A real joint isn't checked against the stretch of its incoming path within π·r of its proximal end (only that stretch: the rest of the link is still checked, through a cut in the pair test). With an empty or short incoming link, the link before it meets the joint there.
+- **Only real overlaps count.** With the window, a saved 4-joint tree (chain 3, power 1 + parent-locking, `2026.11.23_02.36.20`) showed a contact at distance 0.000 between joint 3 and the straight part of its incoming link before a U-turn: after a U-turn of radius r the two are exactly 2r apart and touch without overlapping. It had been hidden because the pair test looks only at the closest pair of points, which was where the link meets the joint. Collisions now require a real overlap (below −1e-9·r), with sampled minima refined along the true center line, only when the sampled value is within a sample spacing of the threshold (elsewhere sampling can't change the verdict). The penalty is centered at the same threshold. This replaces the 0.001 threshold and the shifted penalty from earlier the same day.
+- **Ported from the GUI branch:** the distance-based end-cap check (`b38c016a`, `392f2061`). `randomTree.py` now uses this branch's joint classes.
+
+**Results:**
+- All saved sweep trees (199, in every configuration): the same verdicts as the 2026-11-23 recheck. The touching contact above no longer counts.
+- Cost of a whole-tree collision check, on 110 posed sweep trees: 11.2–13.2 s with plain sampling, 13.8–13.9 s with refinement near the threshold (refining every minimum took 38.5–39.5 s).
+- Two random 5-joint trees with branch points, optimized with the new defaults (DFS outward, one pass per node): seed 0, one branch point with 3 children, 114.7 → 27.0 (lower bound 12.5); seed 5, two branch points, 123.2 → 49.9 (lower bound 11.0), flat at 59.4 from pass 1 to pass 8. No errors, no reverts, collision-free in every configuration, with 3–4 of 4 waypoints parent-locked, including those at branch points. Parent-locking needed no changes for branch points.
+- 3-joint smoke test: identical lengths (14.41, 14.59), no errors, reverts or final collisions. Times were up to 1.6× longer, but so were the phases that never check collisions, so the machine was slower during that run.
+- Correction: the 2026-11-23 recheck counts were mis-added (29 colliding trees, not 26); fixed in that entry.
+
+**Learned / decided:**
+- Open: the pair test's closest-pair masking, for a joint and its outgoing links and for neighboring links (see PSO.md, Known issues).
+- Next: overnight, the waypoint options (#6) and plain power 2 on 6 joints (#5), on this code.

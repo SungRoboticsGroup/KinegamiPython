@@ -45,11 +45,16 @@ def generateTree(nJoints):
                 for _ in range(nJoints) ]
 
     r = 1
-    numSides = 4
-    neutralLength = 3
+    # Same joint types as randomChain.py and parameterSweep.py
+    jointConstructors = [
+        lambda pose: TransverseRevolute(r=r, Pose=pose, minAngle=-np.pi/2, maxAngle=np.pi/2),
+        lambda pose: CoaxialRevolute(r=r, Pose=pose, neutralLength=2, minAngle=-np.pi/2, maxAngle=np.pi/2),
+        lambda pose: Prismatic(r=r, neutralLength=3, minLength=1, maxLength=5, Pose=pose)
+    ]
+    def newRandomJoint(pose):
+        return jointConstructors[np.random.randint(len(jointConstructors))](pose)
 
-    root = RevoluteJoint(numSides,r,np.pi,poses[0]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[0])
+    root = newRandomJoint(poses[0])
 
     specTree = JointSpecificationTree(root)
 
@@ -65,8 +70,7 @@ def generateTree(nJoints):
             leaves = specTree.leaves()
             parent = leaves[np.random.randint(0,len(leaves))]
         
-        newJoint = RevoluteJoint(numSides,r,np.pi,poses[i]) if np.random.rand() > 0.5 \
-            else PrismaticJoint(numSides,r,neutralLength,3,np.pi/5,poses[i])
+        newJoint = newRandomJoint(poses[i])
         specTree.addJoint(parent, newJoint)
 
     initialTree = makeTubularKinematicTree(specTree)
