@@ -650,10 +650,19 @@ class WindowKinegamiGUI(BaseWindowKinegamiGUI):
         # Ctrl+Z / Ctrl+Y on Windows/Linux, Cmd+Z / Cmd+Shift+Z on Mac
         self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
         self.undo_shortcut.activated.connect(self.undo)
-        self.redo_shortcut = QShortcut(QKeySequence.Redo, self)
-        self.redo_shortcut.activated.connect(self.redo)
-        self.redo_shortcut2 = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
-        self.redo_shortcut2.activated.connect(self.redo)
+        # Redo: Ctrl+Y and Ctrl+Shift+Z on every platform, plus the platform's other standard redo keys, with
+        # one shortcut per key. Two shortcuts for the same key are ambiguous to Qt, which then fires neither:
+        # QKeySequence.Redo is Ctrl+Shift+Z on Linux (and includes it on Windows), and doesn't include Ctrl+Y
+        # on Linux, where Ctrl+Y would otherwise reach keyPressEvent as plain Y.
+        redoKeys = []
+        for key in [QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")] + QKeySequence.keyBindings(QKeySequence.Redo):
+            if key.toString() not in [k.toString() for k in redoKeys]:
+                redoKeys.append(key)
+        self.redo_shortcuts = []
+        for key in redoKeys:
+            shortcut = QShortcut(key, self)
+            shortcut.activated.connect(self.redo)
+            self.redo_shortcuts.append(shortcut)
 
         # Ctrl+S: Save Tree, Ctrl+E: Export Link Modules
         self.save_shortcut = QShortcut(QKeySequence.Save, self)
