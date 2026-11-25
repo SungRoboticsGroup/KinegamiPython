@@ -210,7 +210,6 @@ def resumeFromCheckpoint(checkpoint_path: str,
     
     # Get other parameters from metadata
     metadata = state.metadata
-    guarantee = metadata.get('guarantee', False)
     parallelize = metadata.get('parallelize', False)
     childFraction = metadata.get('childFraction', 1)
     power = metadata.get('power', 2)
@@ -263,25 +262,36 @@ def resumeFromCheckpoint(checkpoint_path: str,
                 print(f"Optimizing joint index: {index} {tree.Joints[index]}")
             
             iters = 50
+            waypoint_iters = 75  # Run 3 budget
             tolerance = tree.r / 10
             
-            if isWaypoint(tree.Joints[index]):
-                tree, loss = optimizeWaypointPlacement(
-                    tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction,
-                    ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations)
-            else:
-                tree, loss = optimizeJointPlacement(
-                    tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction,
-                    ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations)
-            
-            if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
-                print(f"Post-optimization collision detected at joint {index}.")
-                raise Exception("Post-optimization collision detected.")
-            
+            prev_tree = copy.deepcopy(tree)
+            loss = None
+            collision_reverted = False
+            try:
+                if isWaypoint(tree.Joints[index]):
+                    tree, loss = optimizeWaypointPlacement(
+                        tree, index, maxiter=waypoint_iters, tol=tolerance,
+                        failurePenalty=failurePenalty, childFraction=childFraction,
+                        ignoreLater=False, parallelize=parallelize,
+                        verbose=verbose, configurations=configurations)
+                else:
+                    tree, loss = optimizeJointPlacement(
+                        tree, index, maxiter=iters, tol=tolerance,
+                        failurePenalty=failurePenalty, childFraction=childFraction,
+                        ignoreLater=False, parallelize=parallelize,
+                        verbose=verbose, configurations=configurations)
+
+                if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
+                    print(f"Post-optimization collision detected at joint {index}.")
+                    print(f"Reverting to previous solution and continuing.")
+                    tree = prev_tree
+                    collision_reverted = True
+            except Exception as e:
+                print(f"Optimization of joint {index} raised exception: {e}. Reverting to previous solution and continuing.")
+                tree = prev_tree
+                collision_reverted = True
+
             log(tree, index)
             losses.append(loss)
             completed_indices.add(index)
@@ -310,7 +320,6 @@ def resumeFromCheckpoint(checkpoint_path: str,
                         'iteration_count': iteration_count,
                         'total_joints': len(tree.Joints),
                         'directory': directory,
-                        'guarantee': guarantee,
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
@@ -382,6 +391,9 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
 
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
+    if configurations == []:
+        original_includeCollisionPenalty = False
+        includeCollisionPenalty = False
 
     for configuration in configurations:
         copied_subject = copy.deepcopy(subject)
@@ -489,6 +501,7 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
     initialLoss = objective([0,0])
 
     #calculate dist
+    
     dist = subject.Links[index].path.length
     dist2 = dist*2
     #bounds = [(-dist*2, dist*2), (-np.pi*2, np.pi*2)]
@@ -500,31 +513,67 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
     global joint_batch_objective_function
     def joint_batch_objective_function(X):
         return np.array([objective(x) for x in X])
-    n_particles = 16
-
-    init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
-    init_pos[1] = np.array([0,0])
-    #add random noise
-    noise = np.zeros_like(init_pos[2:])
-    noise[:, 0] = np.random.uniform(-dist2,dist2, n_particles - 2)
-    noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
-    init_pos[2:] += noise
-    init_pos[2:, 0] = np.clip(init_pos[2:, 0], -dist2, dist2)
-    init_pos[2:, 1] = np.clip(init_pos[2:, 1], -np.pi*2, np.pi*2)
-
+    
+    n_particles = 24
+    dist3 = dist * 3
+    positionBound[0] = min(-dist3, initialPosition - dist3)
+    positionBound[1] = max(dist3, initialPosition + dist3)
+    bounds[0] = positionBound
     min_bound = np.array([b[0] for b in bounds])
     max_bound = np.array([b[1] for b in bounds])
+
+    # init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
+    # init_pos[1] = np.array([0,0])
+
+    # TODO: TRY UNIFORM, RANDOM AND GAUSSIAN SAMPLING FOR INIT_POS
+
+    # uniform (discrete grid-uniform sampling)
+    points_per_dim = max(2, int(np.ceil(np.sqrt(n_particles))))
+    axes = [
+        np.linspace(min_bound[d], max_bound[d], points_per_dim)
+        for d in range(2)
+    ]
+    grid = np.stack(np.meshgrid(*axes, indexing='ij'), axis=-1).reshape(-1, 2)
+    replace = n_particles > len(grid)
+    indices = np.random.choice(len(grid), size=n_particles, replace=replace)
+    init_pos = grid[indices]
+
+    # # random
+    # init_pos = np.random.random((n_particles, 2)) * (max_bound - min_bound) + min_bound
+
+    # # gaussian
+    # initial_guess_arr = np.array(initialGuess, dtype='float64')
+    # init_pos = np.random.normal(
+    #     loc=initial_guess_arr,
+    #     scale=(max_bound - min_bound) / 4.0,
+    #     size=(n_particles, 2)
+    # )
+    # init_pos = np.clip(init_pos, min_bound, max_bound)
+    # init_pos[0] = np.clip(initial_guess_arr, min_bound, max_bound)
+
+    #add random noise spread across wider range for better exploration
+    noise = np.zeros_like(init_pos[2:])
+    noise[:, 0] = np.random.uniform(-dist3, dist3, n_particles - 2)
+    noise[:, 1] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
+    init_pos[2:] += noise
+    init_pos[2:, 0] = np.clip(init_pos[2:, 0], positionBound[0], positionBound[1])
+    init_pos[2:, 1] = np.clip(init_pos[2:, 1], -np.pi*2, np.pi*2)
+
     dimensions = 2
     if not min_bound.shape == (dimensions,) or not max_bound.shape == (dimensions,):
         raise ValueError(f"Bounds arrays must be of shape ({dimensions},)")
 
-    optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':0.6, 'c2':0.7, 'w':0.5},
-                                        bounds=(min_bound, max_bound),init_pos=init_pos,ftol=tol)
-    minSwarmLoss, minSwarmResult = optimizer.optimize(joint_batch_objective_function, iters=int((maxiter + 1)/2),verbose=False, 
+    # w=0.72: higher inertia for better exploration (vs 0.5 which converges too fast)
+    # c1>c2: favour personal/cognitive exploration over social convergence
+    # k=3: slightly larger local neighbourhood prevents premature convergence
+    optimizer = ps.single.LocalBestPSO(n_particles=n_particles,dimensions=2,options={'c1':1.5, 'c2':0.8, 'w':0.72, 'k':3, 'p':2},
+                                       bounds=(min_bound, max_bound),init_pos=init_pos,ftol=tol)
+    pso_iters = int((maxiter + 1) * 2 // 3)
+    minSwarmLoss, minSwarmResult = optimizer.optimize(joint_batch_objective_function, iters=pso_iters, verbose=False,
                                                         n_processes=n_particles if parallelize else None)
 
     nelderMead = minimize(objective, minSwarmResult, method="Nelder-Mead", bounds=bounds, tol=tol, options={
-        'maxiter':int(maxiter/2),
+        'maxiter':max(1, int(maxiter//3)),
         'fatol':tol,
     })
     result = nelderMead.x
@@ -614,6 +663,9 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
 
     # If includeCollisionPenalty is True, first try without it
     original_includeCollisionPenalty = includeCollisionPenalty
+    if configurations == []:
+        original_includeCollisionPenalty = False
+        includeCollisionPenalty = False
     if original_includeCollisionPenalty and not retryingWithPenalty:
         try:
             if verbose:
@@ -672,37 +724,104 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
 
     if not initialTree.transformJoint(index, SE3.Trans(initialGuess[0:3]) @ SE3.Rz(initialGuess[3]) @ SE3.Ry(initialGuess[4]) @ SE3.Rz(initialGuess[5]),  
                                       propogate=False, safe=True, relative=False, recomputeBoundingBall=False):
+        print("Warning: Initial guess for waypoint optimization is not valid, using zero transform instead.")
         initialGuess = [0]*6
 
-    #print(f"INITAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
+    # print(f"INITIAL WAYPOINT GUESS LOSS: {objective(initialGuess)}")
 
     #initialTree.detectCollisions(debug=True)        
         
     initialLoss = objective([0]*6)
 
     dist = subject.Links[index].path.length + max(np.amax(np.abs(initialGuess)), np.amax(np.abs(subject.Joints[index].Pose.t)))
-    bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
+    # bounds = [(-dist*2, dist*2)]*3 + [(-np.pi*2, np.pi*2)] * 3
+
+    # Revamp how bounds are computed for optimizeWaypointPlacement
+    # Take the set of positions of adjacent joints/waypoints (parent and children)
+    # transform them into local coordinates of this waypoint
+    # Find the max and min separately in each dimension
+    # Add r to maxes, subtract r from mins (not sure if this is necessary)
+
+    parentPosition = subject.Joints[subject.Parents[index]].Pose.t
+    childPositions = [subject.Joints[child].Pose.t for child in subject.Children[index]]
+    
+    waypointPose = subject.Joints[index].Pose
+    R_inv = waypointPose.R.T
+    waypointT = waypointPose.t
+
+    allPositions = np.array([parentPosition] + childPositions + [waypointT])  # Include the waypoint's own position as well
+
+    localPositions = np.array([R_inv @ (pos - waypointT) for pos in allPositions])
+
+    # Sanity check - the local position of the waypoint itself should be close to zero
+    if np.linalg.norm(localPositions[-1]) > subject.Joints[index].r * 1e-5:
+        print(f"Warning: Local position of the waypoint itself is not close to zero: {localPositions[-1]}")
+
+    # add initialGuess to localPositions to ensure bounds are large enough to include it
+    localPositions = np.vstack([localPositions, initialGuess[0:3]])
+
+    positionMins = np.min(localPositions, axis=0) - subject.Joints[index].r
+    positionMaxs = np.max(localPositions, axis=0) + subject.Joints[index].r
+
+    bounds = [(positionMins[i], positionMaxs[i]) for i in range(3)] + [(-np.pi*2, np.pi*2)] * 3
 
     global waypoint_batch_objective_function
     def waypoint_batch_objective_function(X):
         return np.array([objective(x) for x in X])
 
-    n_particles = 24
+    n_particles = 48  # Run 3
+    dist3 = dist * 3
+    # bounds = [(-dist3, dist3)]*3 + [(-np.pi*2, np.pi*2)] * 3
 
-    init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
-    init_pos[1] = np.array([0]*6, dtype='float64')
-    #add random noise
-    noise = np.zeros_like(init_pos[2:])
-    for i in range(0,3):
-        noise[:, i] = np.random.uniform(-dist*2,dist*2, n_particles - 2)
-    for i in range(3, 6):
-        noise[:, i] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
-    init_pos[2:] += noise
-    for i in range(0,3):
-        init_pos[2:, i] = np.clip(init_pos[2:, i], -dist*2, dist*2)
-    for i in range(3, 6):
-        init_pos[2:, i] = np.clip(init_pos[2:, i], -np.pi*2, np.pi*2)
-    optimizer = ps.single.GlobalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':0.7, 'c2':0.5, 'w':0.5},bounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])),init_pos=init_pos,ftol=tol)
+    # init_pos = np.tile(np.array(initialGuess, dtype='float64'), (n_particles,1))
+    # init_pos[1] = np.array([0]*6, dtype='float64')
+    # #add random noise spread across wider range for better exploration
+    # noise = np.zeros_like(init_pos[2:])
+    # for i in range(0,3):
+    #     noise[:, i] = np.random.uniform(-dist3, dist3, n_particles - 2)
+    # for i in range(3, 6):
+    #     noise[:, i] = np.random.uniform(-np.pi*2,np.pi*2, n_particles - 2)
+    # init_pos[2:] += noise
+    # for i in range(0,3):
+    #     init_pos[2:, i] = np.clip(init_pos[2:, i], -dist3, dist3)
+    # for i in range(3, 6):
+    #     init_pos[2:, i] = np.clip(init_pos[2:, i], -np.pi*2, np.pi*2)
+
+    # define init_pos as random samples within bounds, but include the initial guess as one of the particles
+    # TODO: TEST UNIFORM VS RANDOM VS GAUSSIAN SAMPLING FOR INIT_POS
+
+    low = np.array([b[0] for b in bounds])
+    high = np.array([b[1] for b in bounds])
+
+    # uniform sampling (discrete grid-uniform sampling)
+    points_per_dim = max(2, int(np.ceil(n_particles ** (1.0 / 6))))
+    axes = [
+        np.linspace(low[d], high[d], points_per_dim)
+        for d in range(6)
+    ]
+    grid = np.stack(np.meshgrid(*axes, indexing='ij'), axis=-1).reshape(-1, 6)
+    replace = n_particles > len(grid)
+    indices = np.random.choice(len(grid), size=n_particles, replace=replace)
+    init_pos = grid[indices]
+
+    # random sampling 
+    # low = np.array([b[0] for b in bounds])
+    # high = np.array([b[1] for b in bounds])
+    # init_pos = np.random.random((n_particles, 6)) * (high - low) + low
+
+    # # gaussian sampling
+    # initial_guess_arr = np.array(initialGuess, dtype='float64')
+    # init_pos = np.random.normal(
+    #     loc=initial_guess_arr,
+    #     scale=(high - low) / 4.0,
+    #     size=(n_particles, 6)
+    # )
+    # init_pos = np.clip(init_pos, low, high)
+    # init_pos[0] = np.clip(initial_guess_arr, low, high)  # Set the first particle to the initial guess
+
+    # Run 3 waypoint settings: w=0.9, c1=2.0, c2=0.3, k=5
+    testBounds=(np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds]))
+    optimizer = ps.single.LocalBestPSO(n_particles=n_particles,dimensions=6,options={'c1':2.0, 'c2':0.3, 'w':0.9, 'k':5, 'p':2},bounds=testBounds,init_pos=init_pos,ftol=tol)
     minSwarmLoss, minSwarmResult = optimizer.optimize(waypoint_batch_objective_function, iters=maxiter,verbose=False, n_processes=n_particles if parallelize else None)
     
     tree = subject.copyAbbreviatedSelf()
@@ -751,7 +870,7 @@ def optimizeWaypointPlacement(subject, index, maxiter, tol,
     else:
         raise Exception("Optimization failed dramatically")
 
-def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
+def optimizeTree(subject, showSteps=False, childFraction=1, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=2, configurations=None, 
                  repeatTraversal=1, save_checkpoints=True):
@@ -762,7 +881,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         subject: KinematicTree to optimize
         showSteps: Show visualization after optimization
         childFraction: Weight for child link costs
-        guarantee: If True, don't ignore later joints
         parallelize: Enable parallel computation
         evaluate: If True, return (tree, times, lengths) tuple
         verbose: Print progress information
@@ -874,21 +992,31 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             iters = 50
             tolerance = subject.r/10
 
-            if isWaypoint(subject.Joints[index]):
-                tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, 
-                                                    ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations)
-            else:
-                tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, 
-                                                    ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations)
-                
-            if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
-                print(f"Post-optimization collision detected at joint {index}. Tree: {repr(tree)}")
-                print(f"Optimization loss for this joint was {loss}.")
-                raise Exception("Post-optimization collision detected.")
+            prev_tree = copy.deepcopy(tree)
+            loss = None
+            collision_reverted = False
+            try:
+                if isWaypoint(subject.Joints[index]):
+                    tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
+                                                        failurePenalty=failurePenalty, childFraction=childFraction, 
+                                                        ignoreLater=False, parallelize=parallelize, verbose=verbose, 
+                                                        configurations=configurations)
+                else:
+                    tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
+                                                        failurePenalty=failurePenalty, childFraction=childFraction, 
+                                                        ignoreLater=False, parallelize=parallelize, verbose=verbose, 
+                                                        configurations=configurations)
+
+                if tree.detectCollisions(specificJointIndex=index, debug=True) > 0:
+                    print(f"Post-optimization collision detected at joint {index}. Tree: {repr(tree)}")
+                    print(f"Optimization loss for this joint was {loss}.")
+                    print(f"Reverting to previous solution and continuing.")
+                    tree = prev_tree
+                    collision_reverted = True
+            except Exception as e:
+                print(f"Optimization of joint {index} raised exception: {e}. Reverting to previous solution and continuing.")
+                tree = prev_tree
+                collision_reverted = True
             log(tree, index)
             losses.append(loss)
             completed_indices.add(index)
@@ -921,7 +1049,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                         'iteration_count': iteration_count,
                         'total_joints': len(tree.Joints),
                         'directory': directory,
-                        'guarantee': guarantee,
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
