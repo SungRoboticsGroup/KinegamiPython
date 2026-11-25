@@ -11,7 +11,23 @@ from functools import partial
 import threading
 import os 
 import shutil
+import sys
 from datetime import datetime
+
+class _TeeOutput:
+    """Writes to both the original stream and a log file."""
+    def __init__(self, original, log_file):
+        self._original = original
+        self._log_file = log_file
+    def write(self, data):
+        self._original.write(data)
+        self._log_file.write(data)
+        self._log_file.flush()
+    def flush(self):
+        self._original.flush()
+        self._log_file.flush()
+    def __getattr__(self, name):
+        return getattr(self._original, name)
 
 jointCount = 8
 sparse = False
@@ -34,6 +50,7 @@ os.makedirs(results_dir, exist_ok=True)
 # Set up collision penalty logging to a file in the results directory
 collision_log_path = os.path.join(results_dir, "collision_penalty_log.txt")
 setCollisionPenaltyLogFile(collision_log_path)
+
 
 def generateRandomChain(nJoints):
     bounds = (-cubeSize/2, cubeSize/2)
@@ -84,15 +101,15 @@ def find_collision_free_configs(tree, max_attempts=100, num_configs_needed=2):
 
 def test():
     versions = [
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "DFS Outward Shortest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="dfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "DFS Inward Shortest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
-        (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "BFS Outward Shortest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
-        # (partial(optimizeTree, childFraction=1, guarantee=True, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
+        (partial(optimizeTree, childFraction=1, traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n"), "DFS Outward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="dfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "DFS Outward Shortest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="dfs", direction="inward", orderBy="longest", repeatTraversal="n"), "DFS Inward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="dfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "DFS Inward Shortest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="bfs", direction="outward", orderBy="longest", repeatTraversal="n"), "BFS Outward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="bfs", direction="outward", orderBy="shortest", repeatTraversal="n"), "BFS Outward Shortest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="bfs", direction="inward", orderBy="longest", repeatTraversal="n"), "BFS Inward Longest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="bfs", direction="inward", orderBy="shortest", repeatTraversal="n"), "BFS Inward Shortest n repetitions"),
+        (partial(optimizeTree, childFraction=1, traversal="randomized", power=3, repeatTraversal="n"), "Randomized Weighted n repetitions")
     ]
     optimizations = [v[0] for v in versions]
     labels = [v[1] for v in versions]
@@ -137,21 +154,31 @@ def test():
             os.makedirs(direc, exist_ok=True)
             # Reset random state before each optimization to ensure deterministic behavior
             np.random.set_state(saved_state)
-            optimized, times, losses = f(construct, 
-                                        configurations=collision_free_configs,
-                                        showSteps=False, 
-                                        parallelize=True, 
-                                        evaluate=True, 
-                                        verbose=False, 
-                                        directory=direc)
-            if multipleIterations:
-                count = 2
-                while (losses[0] - losses[-1] > 100):
-                    print(f"Trying loss function {no} for the {count}th time")
-                    # Reset random state before each retry
-                    np.random.set_state(saved_state)
-                    optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
-                    count += 1
+            _traversal_log_path = os.path.join(direc, f"{labels[no]}_terminalOutput.txt")
+            _prev_stdout = sys.stdout
+            _prev_stderr = sys.stderr
+            with open(_traversal_log_path, 'w', buffering=1) as _tlog:
+                sys.stdout = _TeeOutput(_prev_stdout, _tlog)
+                sys.stderr = _TeeOutput(_prev_stderr, _tlog)
+                try:
+                    optimized, times, losses = f(construct, 
+                                                configurations=collision_free_configs,
+                                                showSteps=False, 
+                                                parallelize=True, 
+                                                evaluate=True, 
+                                                verbose=False, 
+                                                directory=direc)
+                    if multipleIterations:
+                        count = 2
+                        while (losses[0] - losses[-1] > 100):
+                            print(f"Trying loss function {no} for the {count}th time")
+                            # Reset random state before each retry
+                            np.random.set_state(saved_state)
+                            optimized, times, losses = f(construct, showSteps=False, parallelize=True, evaluate=True, verbose=False, directory=None)
+                            count += 1
+                finally:
+                    sys.stdout = _prev_stdout
+                    sys.stderr = _prev_stderr
             #print(optimized.detectCollisions(plot=True, includeEnds=False, debug=True))
             results[i].append((times, losses))
             #optimized.show(block=False)

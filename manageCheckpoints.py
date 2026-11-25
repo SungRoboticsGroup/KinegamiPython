@@ -6,8 +6,32 @@ from optimizationFunctions import (
 )
 import matplotlib.pyplot as plt
 
-CHECKPOINT_DIR = '/home/samhitha/code/Trials Before Experiments/2026.04.06_21.12.11_Joints2_Chains1_Seed44/0/BFS Outward Shortest n repetitions/checkpoints'
-CHECKPOINT_FILE = '/home/samhitha/code/Trials Before Experiments/2026.04.06_21.12.11_Joints2_Chains1_Seed44/0/BFS Outward Shortest n repetitions/checkpoints/iter_2_2.dill'
+# RUN 1 8 joints
+# CHECKPOINT_DIR = '/home/samhitha/code/Trials Before Experiments/2026.05.11_01.29.28_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/Trials Before Experiments/2026.05.11_01.29.28_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill'
+
+# RUN 2 8 joints
+# CHECKPOINT_DIR = '/home/samhitha/code/Trials Before Experiments/2026.05.13_21.10.16_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/Trials Before Experiments/2026.05.13_21.10.16_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill'
+
+# RUN 2 6 joints 
+# CHECKPOINT_DIR = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_00.54.57_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_00.54.57_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_16.dill' 
+
+# RUN 3 6 joints 
+# CHECKPOINT_DIR = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_01.18.26_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_01.18.26_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_16.dill'
+
+# Old bounds 2 joints
+# CHECKPOINT_DIR = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.08.28_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.08.28_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill'
+
+# New bounds 2 joints
+# CHECKPOINT_DIR = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.20.11_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints'
+# CHECKPOINT_FILE = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.20.11_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill'
+
+
+CHECKPOINT_FILE = '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.47.51_Joints3_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_7_7.dill'
 
 def exampleInspectAndVisualize(checkpoint_path=CHECKPOINT_FILE):
     info = inspectCheckpoint(checkpoint_path, load_tree=True)
@@ -80,6 +104,18 @@ def exampleResumeFromCheckpoint(checkpoint_path=CHECKPOINT_FILE):
     tree = resumeFromCheckpoint(checkpoint_path, verbose=True)
     return tree
 
+def viewMultiple(checkpoint_paths):
+    paths = [cp['path'] if isinstance(cp, dict) else cp for cp in checkpoint_paths]
+    for i, path in enumerate(paths):
+        info = inspectCheckpoint(path, load_tree=True)
+        if 'tree' not in info:
+            print(f"Could not load tree from {path}")
+            continue
+        label = (f"checkpoint {i+1}")
+        print(f"Showing: {label}  (length={info['tree'].totalLength():.2f})")
+        block = (i == len(paths) - 1) 
+        info['tree'].show(block=block)
+
 def findWhenCollisionAppeared():
     checkpoints = listCheckpoints(CHECKPOINT_DIR)
     
@@ -128,4 +164,33 @@ if __name__ == "__main__":
     # state_no_random = exampleLoadWithoutRestoringRandom()
     # tree = exampleResumeFromCheckpoint()
     # collision_cp = findWhenCollisionAppeared()
-    iterations, lengths = plotLengthProgression()
+    # iterations, lengths = plotLengthProgression()
+
+    viewMultiple([
+        # '/home/samhitha/code/Trials Before Experiments/2026.05.13_21.10.16_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill',
+        # '/home/samhitha/code/Trials Before Experiments/2026.05.11_01.29.28_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_00.54.57_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_16.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.14_01.18.26_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_16.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.08.28_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.20.11_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_09.47.51_Joints3_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_7_7.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_10.31.46_Joints3_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_7_7.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_11.10.00_Joints4_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_10_10.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.05.31_13.10.51_Joints4_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_10_10.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.06.09_13.20.46_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.06.09_13.34.51_Joints3_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_7_7.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.06.11_23.55.46_Joints4_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_10_10.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.06.12_12.18.08_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_0_0.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.06.12_12.18.08_Joints2_Chains1_Seed44/0/DFS Inward Longest n repetitions/checkpoints/iter_4_4.dill',
+        # '/home/samhitha/code/Trials Before Experiments/2026.06.18_00.30.07_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_0_7.dill',
+        # '/home/samhitha/code/Trials Before Experiments/2026.06.18_00.30.07_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_15.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.12_12.42.28_Joints6_Chains1_Seed44/0/BFS Inward Longest n repetitions/checkpoints/iter_0_0.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.12_12.42.28_Joints6_Chains1_Seed44/0/BFS Inward Longest n repetitions/checkpoints/iter_16_16.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.12_23.41.39_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_0_0.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.12_23.41.39_Joints6_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_16_16.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.13_09.27.05_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_0_0.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.13_09.27.05_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill',
+        # '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.13_09.28.43_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill',
+        '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.21_00.24.17_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_0_0.dill',
+        '/home/samhitha/code/KinegamiPython/Trials Before Experiments/2026.07.21_00.24.17_Joints8_Chains1_Seed44/0/DFS Outward Longest n repetitions/checkpoints/iter_22_22.dill'
+    ])
