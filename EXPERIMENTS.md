@@ -352,3 +352,44 @@ This is a different bug from the GUI branch's clustering fix `af6b0359` (sibling
 **Learned / decided:**
 - The fixed code runs cleanly. Every penalized joint retry before this fix could have chosen between its two axis options on the wrong geometry, one more reason the earlier results are unreliable.
 - On 3-joint chains, power 1 + parent-locking stays at about half the power-2 length with the fixed checks. Too small to conclude anything; next is rerunning the 4-joint sweep and the 6-joint parent-locking settings.
+
+## 2026-11-23: Rerun of the parent-locking sweeps with all three collision fixes
+
+**Status:** done (4-joint sweep 19:01–23:04; 6-joint sweep started 23:04, cut off by the computer sleeping before its first run finished, resumed 23:17). Both on `c1b79125`.
+
+**Question:** with the collision checks fixed, does power 1 + parent-locking still beat power 2, and does it hold on 6 joints?
+
+**Run:** as in the earlier 2026-11-23 entry, except the 6-joint sweep ran only `parentLocking=True` (power 2 and power 1): folders `2026.11.23_19.01.14_Sweep_Joints4_Seeds0-7` (32 runs) and `2026.11.23_23.04.06_Sweep_Joints6_Seeds0-2` (6 runs).
+
+**Result, 4 joints** (final total length; no errors, no final tree collides, 1 revert in all 32 runs):
+
+| Chain | Power 1 | Power 1 + parent-locking | Power 2 | Power 2 + parent-locking | Lower bound |
+|---|---|---|---|---|---|
+| 0 | 61.5 | **22.2** | 45.9 | 44.9 | 9.2 |
+| 1 | 93.9 | **19.0** | 59.7 | 55.2 | 7.7 |
+| 2 | 119.9 | **23.6** | 57.2 | 60.7 | 10.0 |
+| 3 | 86.1 | **28.0** | 46.2 | 45.2 | 12.0 |
+| 4 | 82.5 | **25.1** | 44.5 | 36.6 | 13.6 |
+| 5 | 92.1 | **21.9** | 45.9 | 50.6 | 11.5 |
+| 6 | 76.3 | **20.3** | 55.0 | 43.9 | 7.8 |
+| 7 | 133.5 | **32.4** | 54.5 | 54.9 | 11.6 |
+
+Geometric mean ratio to power 2: power 1 + parent-locking 0.467 (better on 8 of 8), power 2 + parent-locking 0.954 (5 of 8), power 1 1.788 (0 of 8).
+
+**Result, 6 joints** (no errors, no final tree collides, 1 revert):
+
+| Chain | Power 1 + parent-locking | Power 2 + parent-locking | Lower bound |
+|---|---|---|---|
+| 0 | **53.1** | 90.5 | 15.4 |
+| 1 | **44.8** | 108.1 | 22.3 |
+| 2 | **59.1** | 148.5 | 17.8 |
+
+- Before the fixes these were 79.4 / 51.6 / 42.7 (all colliding under the fixed checker) and 90.5 / 103.2 / 99.4.
+- Power 1 + parent-locking ended with 10–11 of 11 waypoints locked; power 2 + parent-locking unlocked 8–13 times per run and ended with 2–3 locked.
+- Mean run time 38.9 minutes for power 1 + parent-locking (149 penalized retries over 3 runs) and 27.5 for power 2 + parent-locking.
+
+**Learned / decided:**
+- **The power-1 + parent-locking result survives the collision fixes.** On 4 joints the lengths barely changed (within about 1.4 either way) and are now verified collision-free: about 47% of the power-2 length, better on every chain. On 6 joints it is 2.5–3.3× the lower bound, against 5.9–8.3× for power 2 + parent-locking.
+- With parent-locking at power 1, essentially every waypoint ends locked: on these chains, the best trees found have no waypoints in use.
+- Power 2 + parent-locking is unconvincing (5 of 8 on 4 joints, and chain 2 on 6 joints got much worse, 99.4 → 148.5), with waypoints locking and unlocking repeatedly.
+- No power-2 baseline without parent-locking on 6 joints was rerun with the fixes; the earlier ones (93.1 / 103.1 / 121.9) passed the fixed checker but ran with the old checks.

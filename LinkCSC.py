@@ -162,9 +162,17 @@ class LinkCSC:
                   showFrames : bool = False, showPath : bool = True, 
                   pathColor : str = pathColorDefault,
                   showPathCircles : bool = False, showBoundary : bool = True,
-                  showElbowBoundingBalls : bool = False):
+                  showElbowBoundingBalls : bool = False, smoothTurns : bool = True):
+        # smoothTurns: draw each turn as the torus section the tube really occupies (as the collision checker
+        # models it). Otherwise draw it as the origami pattern's straight-cut elbows (at most
+        # maxAnglePerElbow each), whose outer corners stick out beyond the tube; showFrames needs those elbows.
         allElbowHandleSets = []
-        if showBoundary:
+        if showBoundary and smoothTurns and not showFrames:
+            for turn in (1, 2):
+                self.addTurnToPlot(ax, turn, numSides, color, alpha, wireFrame)
+            if self.path.tMag > self.DISTANCE_EPSILON:
+                self.cylinder.addToPlot(ax, numSides, color, alpha, wireFrame)
+        elif showBoundary:
             if not self.elbow1 is None:
                 elbow1HandleSets = self.elbow1.addToPlot(ax, numSides, color, 
                                                 alpha, wireFrame, showFrames,
@@ -198,6 +206,33 @@ class LinkCSC:
         
         return allElbowHandleSets
     
+    def addTurnToPlot(self, ax, turn : int, numSides : int = 32, color : str = linkColorDefault,
+                      alpha : float = 0.5, wireFrame : bool = False, maxStepAngle : float = np.pi/32):
+        # The tube around turn 1 or 2 of the path: a section of a torus whose center circle is the path's turning
+        # circle. Each is parametrized from the link's end it touches: the center line starts at
+        # center - R*w (w is the unit vector from that end toward the circle's center) and leaves along d.
+        path = self.path
+        if turn == 1:
+            if self.elbow1 is None:
+                return None
+            center, w, d, angle = path.circleCenter1, path.w1, path.startDir, path.theta1
+        else:
+            if self.elbow2 is None:
+                return None
+            center, w, d, angle = path.circleCenter2, path.w2, -path.endDir, path.theta2
+        R = path.r
+        binormal = np.cross(d, w)
+        a = np.linspace(0, angle, max(2, int(np.ceil(angle / maxStepAngle)) + 1))
+        phi = np.linspace(0, 2*np.pi, numSides + 1)
+        radial = -np.cos(a)[:, None] * w + np.sin(a)[:, None] * d          # unit, from circle center to center line
+        centerLine = center + R * radial
+        surface = centerLine[:, None, :] + self.r * (np.cos(phi)[None, :, None] * radial[:, None, :] +
+                                                     np.sin(phi)[None, :, None] * binormal[None, None, :])
+        X, Y, Z = surface[:, :, 0], surface[:, :, 1], surface[:, :, 2]
+        if wireFrame:
+            return ax.plot_wireframe(X, Y, Z, color=color, alpha=alpha)
+        return ax.plot_surface(X, Y, Z, color=color, alpha=alpha, linewidth=0)
+
     def endBoundingBalls2r(self):
         startBall = Ball(self.path.circleCenter1, 2*self.r) if self.elbow1 else Ball(self.StartDubinsPose.t, self.r)
         endBall = Ball(self.path.circleCenter2, 2*self.r) if self.elbow2 else Ball(self.EndDubinsPose.t, self.r)
