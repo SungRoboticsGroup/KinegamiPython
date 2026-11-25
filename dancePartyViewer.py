@@ -13,6 +13,7 @@ Usage:
     python dancePartyViewer.py --env club
 """
 
+import glPlatform  # must come before anything imports OpenGL (see glPlatform.py)
 import sys, os, glob, copy, argparse, math, time
 import numpy as np
 import dill
