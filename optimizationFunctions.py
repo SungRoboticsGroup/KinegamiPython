@@ -491,6 +491,7 @@ def moveWithParentLocked(tree, index, transformation, locked, relative=True):
         return tree.transformJoint(index, transformation, propogate=False, safe=True, relative=relative,
                                    recomputeBoundingBall=False)
     backup = tree.dataDeepCopy()
+    makeLink = tree._get_link_constructor()  # e.g. PrintedLinkCSC for a PrintedKinematicTree, as in transformJoint
     try:
         if relative:
             transformation = tree.Joints[index].Pose @ transformation @ tree.Joints[index].Pose.inv()
@@ -500,14 +501,14 @@ def moveWithParentLocked(tree, index, transformation, locked, relative=True):
             tree.Joints[d].transformPoseBy(snap)
         moved = [index] + locked
         if index > 0:
-            tree.Links[index] = LinkCSC(tree.r, tree.Joints[tree.Parents[index]].DistalDubinsFrame(),
+            tree.Links[index] = makeLink(tree.r, tree.Joints[tree.Parents[index]].DistalDubinsFrame(),
                                         tree.Joints[index].ProximalDubinsFrame(), tree.maxAnglePerElbow)
         else:
             tree.Links[0] = tree.Links[0].newLinkTransformedBy(transformation)
             tree.boundingBall = tree.boundingBall.newBallTransformedBy(transformation)
         for node in moved:
             for c in tree.Children[node]:
-                tree.Links[c] = LinkCSC(tree.r, tree.Joints[node].DistalDubinsFrame(),
+                tree.Links[c] = makeLink(tree.r, tree.Joints[node].DistalDubinsFrame(),
                                         tree.Joints[c].ProximalDubinsFrame(), tree.maxAnglePerElbow)
             tree.Joints[node].recomputeCollisionCapsules()
     except (ValueError, AssertionError):
