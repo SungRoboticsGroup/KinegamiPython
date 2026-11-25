@@ -1,3 +1,4 @@
+import glPlatform  # must come before anything imports OpenGL (see glPlatform.py)
 import sys, os
 import dill
 import time as _time_module
