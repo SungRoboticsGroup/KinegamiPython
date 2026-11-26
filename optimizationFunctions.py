@@ -9,6 +9,8 @@ from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
 import csv
 import json
+import sys
+import traceback
 
 # Global file path for collision penalty logging (can be set externally)
 collision_penalty_log_file = None
@@ -223,7 +225,9 @@ def resumeFromCheckpoint(checkpoint_path: str,
     
     # Get other parameters from metadata
     metadata = state.metadata
-    guarantee = metadata.get('guarantee', False)
+    if metadata.get('guarantee', True) is False:
+        print("Note: this checkpoint was saved with guarantee=False, which no longer exists; "
+              "the rest of the run considers the whole tree.")
     parallelize = metadata.get('parallelize', False)
     childFraction = metadata.get('childFraction', 1)
     if 'traversalPower' in metadata:
@@ -275,6 +279,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
     
     checkpoint_dir = os.path.join(directory, 'checkpoints') if directory else None
     iteration_count = metadata.get('iteration_count', len(completed_indices))
+    exceptionCount = 0
     
     # Continue from where we left off
     for rep in range(repeat_index, total_repeats):
@@ -293,21 +298,15 @@ def resumeFromCheckpoint(checkpoint_path: str,
             
             visitRecord = {}
             visitStart = time.time()
-            if isWaypoint(tree.Joints[index]):
-                tree, loss = optimizeWaypointPlacement(
-                    tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction, power=power,
-                    ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations, visitRecord=visitRecord,
-                    waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
-                    alignmentWeight=alignmentWeight, parentLocking=parentLocking)
-            else:
-                tree, loss = optimizeJointPlacement(
-                    tree, index, maxiter=iters, tol=tolerance,
-                    failurePenalty=failurePenalty, childFraction=childFraction, power=power,
-                    ignoreLater=(not guarantee), parallelize=parallelize,
-                    verbose=verbose, configurations=configurations, visitRecord=visitRecord,
-                    parentLocking=parentLocking)
+            tree, loss = visitNode(tree, index, visitRecord, directory=directory,
+                                   waypointOptions=dict(waypointSampling=waypointSampling,
+                                                        straightThroughGuess=straightThroughGuess,
+                                                        alignmentWeight=alignmentWeight),
+                                   maxiter=iters, tol=tolerance, failurePenalty=failurePenalty,
+                                   childFraction=childFraction, power=power, parallelize=parallelize,
+                                   verbose=verbose, configurations=configurations, parentLocking=parentLocking)
+            if visitRecord.get('exception'):
+                exceptionCount += 1
             visitTime = time.time() - visitStart
 
             log(tree, index)
@@ -344,7 +343,6 @@ def resumeFromCheckpoint(checkpoint_path: str,
                         'iteration_count': iteration_count,
                         'total_joints': len(tree.Joints),
                         'directory': directory,
-                        'guarantee': guarantee,
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
@@ -368,6 +366,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
     
     if verbose:
         print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+    warnAboutExceptions(directory, exceptionCount)
     
     if directory is not None:
         tree.save(os.path.join(directory, "final"), saveDir=False)
@@ -610,7 +609,7 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
 
 # Columns of visits.csv, one row per visit
 VISIT_FIELDS = ['visit', 'repeat', 'index', 'kind', 'initial_loss', 'final_loss',
-                'retried', 'reverted', 'revert_reason',
+                'retried', 'reverted', 'revert_reason', 'exception',
                 'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s', 'collision_check_s',
                 'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length',
                 'parent_lock_action', 'parent_locked_count']
@@ -655,24 +654,20 @@ def writeRunInfo(directory, settings, filename='run_info.json', note=None):
         json.dump(info, f, indent=2, default=str)
 
 def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
-                           childFraction = 1, ignoreLater = False, parallelize = False,
+                           childFraction = 1, parallelize = False,
                            verbose=True, power=1, includeCollisionPenalty=True,
-                           configurations=None, visitRecord=None, parentLocking=None):
+                           configurations=None, visitRecord=None, parentLocking=True):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
-    if parentLocking is None:
-        parentLocking = not ignoreLater  # default: on whenever the whole tree is considered
-    if parentLocking and ignoreLater:
-        raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeJointPlacement")
 
     optimizeOnce = partial(optimizeJointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
-                           childFraction, ignoreLater, parallelize, verbose, power, configurations, parentLocking)
+                           childFraction, parallelize, verbose, power, configurations, parentLocking)
     movedIndices = [index] + parentLockedDescendants(subject, index) if parentLocking else [index]
     return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations,
                                       visitRecord, movedIndices)
 
-def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
+def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction,
                                parallelize, verbose, power, configurations, parentLocking, includeCollisionPenalty):
     collisionMatrices = subject.buildCollisionMatrices()
     # parent-locked waypoints move with the joint, and the links leaving them count as the joint's outgoing links
@@ -684,7 +679,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         return moveWithParentLocked(tree, index, transformation, locked)
 
     def objective(params, returnWhich : bool = False) -> float:
-        tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        tree = subject.copyAbbreviatedSelf()
 
         translation = params[0]
         rotation = params[1]
@@ -711,7 +706,7 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         tree.Joints[index].reverseZhat()
         if (linkLossSameZhat == pathNonExistancePenalty or
              not move(tree, SE3())):
-            tree2 = subject.copyAbbreviatedSelf(ignoreLater, index)
+            tree2 = subject.copyAbbreviatedSelf()
             tree2.Joints[index].reverseZhat()
             if move(tree2, SE3.Trans([0,0,-translation]) @ SE3.Rz(-rotation)):
                 linkLossReversedZhat = linkLoss(tree2,
@@ -760,10 +755,10 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
         initialPosition = transformation.t[2]
         initialRotation = np.arctan2(transformation.R[1, 0], transformation.R[0, 0])
         initialGuess = [initialPosition,initialRotation]
-        initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        initialTree = subject.copyAbbreviatedSelf()
 
         if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
-            initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+            initialTree = subject.copyAbbreviatedSelf()
 
         if not move(initialTree, SE3.Trans([0,0,initialPosition]) @ SE3.Rz(initialRotation)):
             initialGuess = [0,0]
@@ -898,28 +893,24 @@ def straightThroughGuesses(subject, index):
 
 def optimizeWaypointPlacement(subject, index, maxiter, tol,
                               failurePenalty, childFraction = 1,
-                              ignoreLater=False, parallelize=False, verbose = True, configurations=None,
+                              parallelize=False, verbose = True, configurations=None,
                               includeCollisionPenalty=True, visitRecord=None, power=1,
                               waypointSampling="box", straightThroughGuess=True, alignmentWeight=10,
-                              parentLocking=None):
+                              parentLocking=True):
     if configurations is None:
         configurations = [[0] * len(subject.Joints)]
     if waypointSampling not in WAYPOINT_SAMPLINGS:
         raise ValueError(f"waypointSampling must be one of {WAYPOINT_SAMPLINGS}")
-    if parentLocking is None:
-        parentLocking = not ignoreLater  # default: on whenever the whole tree is considered
-    if parentLocking and ignoreLater:
-        raise ValueError("parentLocking needs the whole tree (ignoreLater=False, i.e. guarantee=True)")
     warnIfInitialCollisions(subject, configurations, "optimizeWaypointPlacement")
 
     optimizeOnce = partial(optimizeWaypointPlacementOnce, subject, index, maxiter, tol, failurePenalty,
-                           childFraction, ignoreLater, parallelize, verbose, power, configurations,
+                           childFraction, parallelize, verbose, power, configurations,
                            waypointSampling, straightThroughGuess, alignmentWeight, parentLocking)
     movedIndices = [index] + parentLockedDescendants(subject, index) if parentLocking else [index]
     return optimizeWithCollisionRetry(subject, index, "waypoint", optimizeOnce, includeCollisionPenalty, configurations,
                                       visitRecord, movedIndices)
 
-def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction, ignoreLater,
+def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction,
                                   parallelize, verbose, power, configurations,
                                   waypointSampling, straightThroughGuess, alignmentWeight, parentLocking,
                                   includeCollisionPenalty):
@@ -957,7 +948,7 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
                         collisionErrorWeight=failurePenalty, outgoing=outgoing)
 
     def objective(params):
-        tree = subject.copyAbbreviatedSelf(ignoreLater, index)
+        tree = subject.copyAbbreviatedSelf()
 
         if not moveWithParentLocked(tree, index, paramsToTransform(params), locked):
             return failurePenalty * len(subject.Joints) * (len(subject.Children) + 1)
@@ -969,7 +960,7 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
                         collisionMatrices=collisionMatrices, movedJointIndex=movedJointIndex,
                         collisionErrorWeight=failurePenalty, outgoing=outgoing) + misalignment * alignmentWeight
 
-    initialTree = subject.copyAbbreviatedSelf(ignoreLater, index)
+    initialTree = subject.copyAbbreviatedSelf()
     if not moveWithParentLocked(initialTree, index, paramsToTransform(initialGuess), locked):
         initialGuess = [0]*6
 
@@ -1080,11 +1071,50 @@ def optimizeWaypointPlacementOnce(subject, index, maxiter, tol, failurePenalty, 
             print(msg)
     return tree, minSwarmLoss, initialLoss, timing
 
-def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, parallelize=False, 
+def visitNode(tree, index, visitRecord, directory=None, waypointOptions=None, **visitOptions):
+    # One visit to the joint or waypoint at index (waypointOptions go only to waypoint visits).
+    # If the visit raises, the tree is kept as it was before the visit, the exception is recorded in
+    # visitRecord (and so in visits.csv), its traceback is appended to <directory>/exceptions.log, and a
+    # warning is printed. This isn't meant to make exceptions acceptable: it lets a sweep keep going so the
+    # failures can be investigated afterwards (optimizeTree warns again at the end of the run).
+    before = copy.deepcopy(tree)
+    kind = "waypoint" if isWaypoint(tree.Joints[index]) else "joint"
+    try:
+        if kind == "waypoint":
+            return optimizeWaypointPlacement(tree, index, visitRecord=visitRecord, **visitOptions,
+                                             **(waypointOptions or {}))
+        return optimizeJointPlacement(tree, index, visitRecord=visitRecord, **visitOptions)
+    except Exception as e:
+        message = f"{type(e).__name__}: {e}"
+        details = traceback.format_exc()
+        visitRecord.update(kind=kind, reverted=True, revert_reason="exception", exception=message,
+                           parent_lock_action='')
+        print(f"WARNING: the visit to {kind} {index} raised {message}\n{details}"
+              f"Keeping the placement from before this visit and continuing.", file=sys.stderr, flush=True)
+        logCollisionPenalty(f"WARNING: {kind} {index} raised {message}; keeping previous placement.")
+        if directory is not None:
+            with open(os.path.join(directory, 'exceptions.log'), 'a') as f:
+                f.write(f"[{datetime.now().isoformat()}] visit to {kind} {index}:\n{details}\n")
+        return before, float('nan')
+
+def warnAboutExceptions(directory, count):
+    # Printed at the end of a run: exceptions in visits were caught so the run could continue, but each one
+    # is a bug to investigate. Counts the whole run's visits.csv when there is one (so a resumed run
+    # includes the exceptions from before it was resumed), else this call's count.
+    if directory is not None and os.path.exists(os.path.join(directory, 'visits.csv')):
+        with open(os.path.join(directory, 'visits.csv')) as f:
+            count = sum(bool(r.get('exception')) for r in csv.DictReader(f))
+    if count > 0:
+        where = f" (see visits.csv and exceptions.log in {directory})" if directory is not None else ""
+        print(f"WARNING: {count} visit{'s' if count != 1 else ''} in this run raised an exception and "
+              f"{'were' if count != 1 else 'was'} reverted{where}. These are bugs to investigate.",
+              file=sys.stderr, flush=True)
+
+def optimizeTree(subject, showSteps=False, childFraction=1, parallelize=False, 
                  evaluate=False, verbose=True, directory=None, resetOnFail=False,
                  traversal="dfs", direction="outward", orderBy="longest", power=1, configurations=None, 
                  repeatTraversal=1, save_checkpoints=True, traversalPower=2,
-                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10, parentLocking=None):
+                 waypointSampling="box", straightThroughGuess=True, alignmentWeight=10, parentLocking=True):
     """
     Optimize the placement of joints in a kinematic tree.
     
@@ -1092,7 +1122,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         subject: KinematicTree to optimize
         showSteps: Show visualization after optimization
         childFraction: Weight on outgoing links in each visit's objective (and the randomized traversal's weights)
-        guarantee: If True, don't ignore later joints
         parallelize: Enable parallel computation
         evaluate: If True, return (tree, times, lengths) tuple
         verbose: Print progress information
@@ -1116,14 +1145,11 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
             parent's distal frame; 0 turns it off
         parentLocking: If True, waypoints can be parent-locked onto their parent's distal frame (as if deleted,
             but kept available): visits carry parent-locked descendants along, waypoint visits consider
-            locking, and visits to parent-locked waypoints consider unlocking them. Needs guarantee=True.
-            Default (None): on when guarantee=True, off otherwise.
+            locking, and visits to parent-locked waypoints consider unlocking them (default True)
     
     Returns:
         Optimized KinematicTree, or (tree, times, lengths) if evaluate=True
     """
-    if parentLocking is None:
-        parentLocking = guarantee
     if repeatTraversal == "n":
         repeatTraversal = len(subject.Joints)
 
@@ -1132,6 +1158,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
     losses = []  # Track optimization losses
     completed_indices = set()  # Track completed joint indices
     iteration_count = 0
+    exceptionCount = 0  # visits that raised (and were reverted)
     
     # Setup checkpoint directory
     checkpoint_dir = None
@@ -1225,19 +1252,15 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
 
             visitRecord = {}
             visitStart = time.time()
-            if isWaypoint(subject.Joints[index]):
-                tree, loss = optimizeWaypointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, power=power, 
-                                                    ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations, visitRecord=visitRecord,
-                                                    waypointSampling=waypointSampling, straightThroughGuess=straightThroughGuess,
-                                                    alignmentWeight=alignmentWeight, parentLocking=parentLocking)
-            else:
-                tree, loss = optimizeJointPlacement(tree,index, maxiter=iters, tol=tolerance, 
-                                                    failurePenalty=failurePenalty, childFraction=childFraction, power=power, 
-                                                    ignoreLater = (not guarantee), parallelize=parallelize, verbose=verbose, 
-                                                    configurations=configurations, visitRecord=visitRecord,
-                                                    parentLocking=parentLocking)
+            tree, loss = visitNode(tree, index, visitRecord, directory=directory,
+                                   waypointOptions=dict(waypointSampling=waypointSampling,
+                                                        straightThroughGuess=straightThroughGuess,
+                                                        alignmentWeight=alignmentWeight),
+                                   maxiter=iters, tol=tolerance, failurePenalty=failurePenalty,
+                                   childFraction=childFraction, power=power, parallelize=parallelize,
+                                   verbose=verbose, configurations=configurations, parentLocking=parentLocking)
+            if visitRecord.get('exception'):
+                exceptionCount += 1
             visitTime = time.time() - visitStart
 
             log(tree, index)
@@ -1278,7 +1301,6 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
                         'iteration_count': iteration_count,
                         'total_joints': len(tree.Joints),
                         'directory': directory,
-                        'guarantee': guarantee,
                         'parallelize': parallelize,
                         'childFraction': childFraction,
                         'power': power,
@@ -1306,6 +1328,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, guarantee=False, par
         tree.show()
 
     print(f"TOTAL OPTIMIZATION TIME: {time.time() - start}")
+    warnAboutExceptions(directory, exceptionCount)
 
     if directory != None:
         tree.save(os.path.join(directory, "final"), saveDir=False)

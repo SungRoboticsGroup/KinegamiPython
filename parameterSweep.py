@@ -27,10 +27,12 @@ in their settings.
 Output, in "Trials Before Experiments/<timestamp>_Sweep_Joints<N>_Seeds<a>-<b>/":
     run_info.json            git commit, versions, and the sweep's settings
     summary.csv              one row per run: settings, start/final total length, sum of squares, time,
-                             retries, reverts, final collisions, parent-locks and unlocks, and any error
+                             retries, reverts, final collisions, parent-locks and unlocks, visits that
+                             raised an exception (reverted so the run could continue), and any error
     errors.log               tracebacks of runs that raised
     seed<k>/start.tree, seed<k>/configs.json
-    seed<k>/<settings label>/visits.csv, final.tree, checkpoints/, collision_penalty_log.txt
+    seed<k>/<settings label>/visits.csv, final.tree, checkpoints/, collision_penalty_log.txt,
+                             exceptions.log (tracebacks of visits that raised, if any)
 """
 import argparse
 import copy
@@ -57,13 +59,13 @@ SETTINGS_GRID = {
     'parentLocking': [True, False],
 }
 TRAVERSAL = dict(traversal="dfs", direction="outward", orderBy="longest", repeatTraversal="n",
-                 childFraction=1, guarantee=True)
+                 childFraction=1)
 CUBE_SIZE = 10
 NUM_EXTRA_CONFIGS = 4  # collision-free random configurations in addition to neutral, as in randomChain.py
 
 RESULT_FIELDS = ['start_length', 'final_length', 'lower_bound', 'start_sum_squared', 'final_sum_squared',
                  'time_s', 'visits', 'retried', 'reverted', 'final_colliding_configs',
-                 'parent_locks', 'parent_unlocks', 'final_parent_locked', 'error']
+                 'parent_locks', 'parent_unlocks', 'final_parent_locked', 'exceptions', 'error']
 
 def summaryFields(grid):
     return ['seed', 'label'] + list(grid) + RESULT_FIELDS
@@ -202,6 +204,7 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints, g
         row.update(final_length=tree.totalLength(), final_sum_squared=sumSquaredLinkLength(tree),
                    visits=len(visits), retried=sum(r['retried'] == 'True' for r in visits),
                    reverted=sum(r['reverted'] == 'True' for r in visits),
+                   exceptions=sum(bool(r.get('exception')) for r in visits),
                    parent_locks=sum(r.get('parent_lock_action') == 'parentLocked' for r in visits),
                    parent_unlocks=sum(r.get('parent_lock_action') == 'unlocked' for r in visits),
                    final_parent_locked=countParentLocked(tree),
@@ -241,6 +244,12 @@ def summarize(sweepDir):
               f"{np.mean([float(r['final_length']) for r in runs]):>10.1f} "
               f"{sum(int(r['retried']) for r in runs):>7} {sum(int(r['reverted']) for r in runs):>8} "
               f"{np.mean([float(r['time_s']) for r in runs]) / 60:>8.1f}m")
+    withExceptions = [r for r in ok if r.get('exceptions') not in (None, '', '0')]
+    if withExceptions:
+        print("\nWARNING: runs with visits that raised an exception (reverted so the run could continue; "
+              "see each run's visits.csv and exceptions.log):")
+        for r in withExceptions:
+            print(f"  seed {r['seed']} {r['label']}: {r['exceptions']}")
     if failed:
         print("\nFailed runs (see errors.log):")
         for r in failed:
@@ -322,7 +331,8 @@ def main():
             runTimes.append(row['time_s'])
             remaining = (total - count) * np.mean(runTimes)
             result = f"error: {row['error']}" if row.get('error') else \
-                     f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']}, reverted {row['reverted']}"
+                     f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']}, reverted {row['reverted']}" + \
+                     (f", WARNING: {row['exceptions']} visit exceptions (see visits.csv, exceptions.log)" if row.get('exceptions') else "")
             print(f"[{datetime.now():%H:%M:%S}] {count}/{total} seed {seed} {label}: {result} "
                   f"({row['time_s'] / 60:.1f} min; about {remaining / 3600:.1f} h left)", flush=True)
     print()

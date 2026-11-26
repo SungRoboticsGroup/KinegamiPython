@@ -76,7 +76,7 @@ The no-penalty attempt runs first because the penalty is expensive: it runs coll
 
 ### Parent-locking
 
-With `parentLocking=True` (the default whenever `guarantee=True`), a waypoint can be **parent-locked**: its proximal Dubins frame coincides with its parent's distal Dubins frame (within 1e-6), so its incoming link is empty. The tree then behaves as if the waypoint were deleted, but it stays in the tree in case it's needed again. Whether a waypoint is parent-locked is read from the geometry (`isParentLocked`), so it needs no extra saved state, and existing trees with empty links count as parent-locked.
+With `parentLocking=True` (the default), a waypoint can be **parent-locked**: its proximal Dubins frame coincides with its parent's distal Dubins frame (within 1e-6), so its incoming link is empty. The tree then behaves as if the waypoint were deleted, but it stays in the tree in case it's needed again. Whether a waypoint is parent-locked is read from the geometry (`isParentLocked`), so it needs no extra saved state, and existing trees with empty links count as parent-locked.
 
 - **Locked waypoints move with what they're locked to.** Every move a joint or waypoint visit considers is also applied to its parent-locked descendants (recursively), which are snapped back onto their parents' distal frames (`moveWithParentLocked`). The links leaving them count as the visited joint's outgoing links in `linkLoss`. Without this, a joint with a waypoint sitting on its distal frame can barely move: shifting the joint forward makes the path to the waypoint loop back.
 - **Waypoint visits consider locking.** After PSO, the visit also evaluates the waypoint locked onto its parent, and locks it if that's better on `linkLoss` by at least 0.1% (`PARENT_LOCK_MARGIN`).
@@ -120,14 +120,17 @@ Two consequences:
 | `waypointSampling` | `"box"`, `"multiscale"` | How waypoint visits sample random initial particles (default `"box"`); see [One waypoint visit](#one-waypoint-visit-optimizewaypointplacementonce) |
 | `straightThroughGuess` | bool | Add two waypoint particles pointing along the line between the neighboring parts (default `True` since 2026-11-22; was `False`) |
 | `alignmentWeight` | float ≥ 0 | Weight of the waypoint objective's alignment penalty, per radian (default 10; 0 turns it off) |
-| `parentLocking` | bool | Let waypoints be parent-locked onto their parent's distal frame, as if deleted but kept available (default: on when `guarantee=True`, which it needs). See [Parent-locking](#parent-locking) |
-| `guarantee` | bool | **Always pass `True`.** `False` makes visits optimize a cut-down subtree; that path is untested and slated for removal |
+| `parentLocking` | bool | Let waypoints be parent-locked onto their parent's distal frame, as if deleted but kept available (default `True`). See [Parent-locking](#parent-locking) |
 | `parallelize` | bool | Evaluates particles across processes. Particle sampling is seeded by `np.random`, but results aren't guaranteed to be identical from run to run |
 | `directory` | path or `None` | Where per-visit `.tree` files and `checkpoints/` go |
 | `save_checkpoints` | bool | Save a `.dill` checkpoint after every visit (default `True`) |
 | `evaluate` | bool | Return `(tree, times, lengths)` instead of just the tree |
 | `showSteps`, `verbose` | bool | Display and printing only |
 | `resetOnFail` | | Unused |
+
+Visits always consider the whole tree. The former `guarantee` option (`False` made visits optimize a cut-down subtree and skip collisions with later joints) was removed on 2026-11-26; resuming a checkpoint saved with `guarantee=False` prints a note and continues on the whole tree.
+
+**Exceptions in a visit don't stop the run** (since 2026-11-26). `visitNode` keeps the tree from before the visit, records the exception in `visits.csv` (`exception`, with `revert_reason = exception`), appends the traceback to `exceptions.log` in the run's directory, and prints a warning. The run ends with another warning if any visit raised, and the parameter sweep counts them in `summary.csv` (`exceptions`) and its summary. This is so a sweep can finish: every caught exception is still a bug to investigate.
 
 ### Traversals
 
@@ -154,7 +157,7 @@ These are hard-coded in [optimizationFunctions.py](optimizationFunctions.py), no
 | Translation bounds | ±2·`localLinkScale` around 0 and the guess | same, per axis |
 | Angle bounds | ±2π, wrapped | ±2π per angle, wrapped |
 
-`maxiter = 50` is set in `optimizeTree`. Spring 2026 meetings tried `LocalBestPSO` and other values of its neighbor count k and inertia w (see [Development status](#development-status)). That code is not in this branch.
+`maxiter = 50` is set in `optimizeTree`. Spring 2026 meetings tried `LocalBestPSO` and other values of its neighbor count k and inertia w (see [Development status](#development-status)). That code is not in this branch; Samhitha's later variants are listed in [Before systematic experiments](#before-systematic-experiments), item 8.
 
 ## Running
 
@@ -214,6 +217,7 @@ Trials Before Experiments/<timestamp>_Joints<N>_Chains<C>_Seed<S>/
      visits.csv                       one row per visit (see below)
      <elapsed seconds>_<index>.tree   tree after each visit (index -1 = start)
      final.tree
+     exceptions.log                   tracebacks of visits that raised, if any
      checkpoints/visit00012_iter_<pass>_<index>.dill
 ```
 
@@ -224,6 +228,7 @@ Trials Before Experiments/<timestamp>_Joints<N>_Chains<C>_Seed<S>/
 | `visit`, `repeat`, `index`, `kind` | Visit number (matches the checkpoint name), pass, index in `tree.Joints`, and `joint` or `waypoint` |
 | `initial_loss`, `final_loss` | The visit's objective at the current placement, and after the visit. If the penalized retry ran, both include the penalty |
 | `retried`, `reverted`, `revert_reason` | Whether the penalized retry ran, and whether (and why) the visit was reverted |
+| `exception` | If the visit raised: the exception's type and message (the visit was reverted; the traceback is in `exceptions.log`). Blank otherwise |
 | `nopenalty_pso_s`, `nopenalty_nm_s` | Seconds spent on PSO and Nelder-Mead in the no-penalty attempt (Nelder-Mead is 0 for waypoints) |
 | `penalty_pso_s`, `penalty_nm_s` | The same for the penalized retry; blank if it didn't run |
 | `collision_check_s` | Seconds spent on the collision checks after each attempt. Checks inside the penalized objective run in PSO's worker processes and are counted in `penalty_pso_s` instead |
@@ -385,5 +390,10 @@ Ideas to investigate:
    - **Inputs:** number of joints, number of configurations.
    - **Our parameters:** traversal, number of passes (or visits), `childFraction`, `power` for visits (default 1), `parentLocking` (default on), `waypointSampling` (default box), `straightThroughGuess` (default on), `alignmentWeight` (default 10).
    - **PSO parameters:** global vs. local best; number of particles; sampling bounds; initial particles (uniform random vs. evenly spaced, from [TODO_tests.md](TODO_tests.md)); k; w.
+   - **Samhitha's variants** (`merging-in-sdf-collisions`, `f17ad2fc`, 2026-11-24; her "Run 3" settings), to port as options rather than replacements:
+     - Joint visits: `LocalBestPSO` with c1 = 1.5, c2 = 0.8, w = 0.72, k = 3, p = 2; 24 particles; translation bounds ±3·(incoming link length) around 0 and the current position (ours: ±2·`localLinkScale`); PSO for ⅔ of `maxiter` and Nelder-Mead for ⅓ (ours: ½ and ½).
+     - Waypoint visits: `LocalBestPSO` with c1 = 2.0, c2 = 0.3, w = 0.9, k = 5, p = 2; 48 particles; 75 iterations (ours: 50).
+     - **Neighbor-based waypoint bounds:** the bounding box, in the waypoint's own frame, of its parent's and children's positions, its own position and the initial guess, widened by r per axis. Ours: the initial guess ± 2·`localLinkScale`. Would fit as another `waypointSampling` option.
+     - Initial particles from a grid (`linspace` per dimension, particles drawn from the grid points), with random-uniform and Gaussian-around-the-guess versions commented out. Two problems to fix when porting: the current placement and the initial guess are no longer particles, so a visit can end worse than it started (ours keeps them as particles 0 and 1); and with 48 particles in 6 dimensions the grid has 2 points per axis, so every waypoint particle starts at a corner of the bounds with angles ±2π, i.e. no rotation.
 
    The planned plots compare time per joint against the objective divided by the best objective found by a reference method.

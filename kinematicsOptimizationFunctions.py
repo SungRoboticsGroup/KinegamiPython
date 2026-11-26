@@ -291,7 +291,7 @@ def optimizeWaypointPlacementEndEffector(subject, index, endEffectorIndices, end
     else:
         raise Exception("Optimization failed dramatically")
     
-def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, posesOnly, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
+def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, posesOnly, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, parallelize=False, evaluate=False, verbose = True, directory = None):
     times = []
     lengths = []
 
@@ -542,8 +542,8 @@ def squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, po
     
     return tree
 
-def squaredOptimizeForEndEffectorPoses(subject, endEffectorIndices, endEffectorPoses, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, guarantee=False, parallelize=False, evaluate=False, verbose = True, directory = None):
-    treeWithPoses = squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, True, showSteps, childFraction, streamline, resetOnFail, guarantee, parallelize, evaluate, verbose, directory)
+def squaredOptimizeForEndEffectorPoses(subject, endEffectorIndices, endEffectorPoses, showSteps=False, childFraction=1, streamline = False, resetOnFail = True, parallelize=False, evaluate=False, verbose = True, directory = None):
+    treeWithPoses = squaredOptimizeEndEffector(subject, endEffectorIndices, endEffectorPoses, True, showSteps, childFraction, streamline, resetOnFail, parallelize, evaluate, verbose, directory)
     
     print("Found reachable end effector poses")
     
@@ -570,4 +570,4 @@ def squaredOptimizeForEndEffectorPoses(subject, endEffectorIndices, endEffectorP
         
     print("Now trying to optimize link lengths and avoid self-collisions")
     
-    return squaredOptimizeEndEffector(treeWithPoses, endEffectorIndices, reachableEndEffectorPoses, False, showSteps, childFraction, streamline, resetOnFail, guarantee, parallelize, evaluate, verbose, directory)
+    return squaredOptimizeEndEffector(treeWithPoses, endEffectorIndices, reachableEndEffectorPoses, False, showSteps, childFraction, streamline, resetOnFail, parallelize, evaluate, verbose, directory)

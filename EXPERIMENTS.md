@@ -447,3 +447,15 @@ Geometric mean ratio to the defaults: no straight-through guess 1.022 (better on
 - **The defaults give 1.6–3.2× the lower bound on 4-joint chains,** similar to the 2026-11-23 rerun (individual chains moved both ways by up to 5, from the code changes since).
 - **No reverts in 35 runs,** against 2 in 38 before: consistent with the near-contact fix (only real overlaps count, and the penalty agrees with the count).
 - **Not yet on the same code:** power 1 + parent-locking on 6 joints.
+
+## 2026-11-26: Samhitha's branch compared; `guarantee` removed; exceptions in visits caught
+
+**Status:** done (code change and test; no sweep).
+
+**Context:** Samhitha pushed three commits to `merging-in-sdf-collisions` (2026-11-24). Compared with this branch: nothing she fixed is missing here. Her revert after a colliding visit is covered by ours (which checks every configuration and the carried waypoints, and also reverts a visit that raised the objective); her PSO settings, grid initial particles and neighbor-based waypoint bounds are experiments, now in PSO.md's experiment list (item 8) with two problems to fix when porting.
+
+**Changes:**
+- **`guarantee` removed** (as on her branch): visits always consider the whole tree, and `parentLocking` defaults to `True` everywhere. Every script here already passed `guarantee=True`, so results are unaffected.
+- **Exceptions in a visit are caught** (`visitNode`): the visit is reverted, the exception goes into `visits.csv` (`exception`) and the run's `exceptions.log`, and a warning is printed then and again at the end of the run. The sweep counts them (`exceptions` in `summary.csv`, and a warning in its summary). This lets a sweep finish; each caught exception is still a bug to investigate.
+
+**Test:** a 3-joint sweep run (seed 0, defaults) with an exception injected into the second waypoint visit: the run continued (64 visits, 42.96 → 14.63, no final collisions); the failed visit's row shows `reverted = True`, `revert_reason = exception`, the exception message, and the same total length as before the visit; `exceptions.log` has the traceback; both warnings and the sweep summary's warning appeared. Resuming from a checkpoint uses the same `visitNode` but wasn't run.
