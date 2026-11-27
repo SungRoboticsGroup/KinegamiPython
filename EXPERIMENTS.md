@@ -459,3 +459,28 @@ Geometric mean ratio to the defaults: no straight-through guess 1.022 (better on
 - **Exceptions in a visit are caught** (`visitNode`): the visit is reverted, the exception goes into `visits.csv` (`exception`) and the run's `exceptions.log`, and a warning is printed then and again at the end of the run. The sweep counts them (`exceptions` in `summary.csv`, and a warning in its summary). This lets a sweep finish; each caught exception is still a bug to investigate.
 
 **Test:** a 3-joint sweep run (seed 0, defaults) with an exception injected into the second waypoint visit: the run continued (64 visits, 42.96 → 14.63, no final collisions); the failed visit's row shows `reverted = True`, `revert_reason = exception`, the exception message, and the same total length as before the visit; `exceptions.log` has the traceback; both warnings and the sweep summary's warning appeared. Resuming from a checkpoint uses the same `visitNode` but wasn't run.
+
+## 2026-11-26: Closest-pair masking, and collision checking with joints split into halves
+
+**Status:** done (code change, tests and rechecks; no new sweep).
+
+**Question:** when the end-cap test dismisses the closest pair of points of two parts (where they meet), does that hide real overlaps elsewhere between them, and how should the checker avoid it?
+
+**Probe:** an instrumented copy of the checker over every saved sweep tree in every configuration (1,180 posed trees, 14 sweeps), rechecking each dismissed pair with the π·r of a link nearest the dismissed end cut off. 3,702 dismissals: 3,690 were a real joint against a link of its own outgoing part (they always meet at the joint's distal end, so that pair was never really checked), 5 adjacent joints end to end, 4 links on either side of a joint, 3 parts meeting end to end without being connected. The recheck found 13 real overlaps (0.03–0.35·r, a few units along the link), 4 of them in posed trees otherwise collision-free: the power 2 baseline on 4-joint chain 5 in configuration 1 (the same final tree in `2026.11.22_02.00.54`, `2026.11.23_02.36.20` and `2026.11.23_19.01.14`; link 2 cuts 0.24·r into the root joint's proximal end) and plain power 2 on 6-joint chain 1 in configuration 3 (`2026.11.25_04.23.23`, 0.03·r).
+
+**Change:** joints split into proximal and distal halves as separate collision objects, with one window rule along the path between any two objects (see PSO.md, Objective), replacing the incoming-path window. The end-contact test now checks the flat-ended solids (cross-section discs near the closest points against the other part's sdf) instead of whether a closest point is behind the other's end plane, which gave a false positive beside a folded joint (found by the tests). Joint halves are flat at both ends, prismatic ones too (`Prismatic.sdf` still has round ends; with them, one end contact in a saved tree was a round-cap artifact).
+
+**Learned along the way (from ground truth by sampling the solids):**
+- My first estimate that two adjacent long transverse revolutes (half-length h > r) overlap when folded toward each other was wrong: it measured center line to center line, i.e. round caps. With flat ends, their outer arms only touch at full range.
+- Real overlaps between joints exist across a short middle joint (e.g. half-lengths 3r, 1r, 3r at 98% of range: 0.33·r), and between a fully folded long joint and the far half of a very short neighbor. The checker finds them.
+- A joint with a range narrower than ±90° reaches, at its elbow, past its own proximal end into the part before it (not counted, see PSO.md, Known issues).
+- The CSC path solver is accurate to about 1e-5·r, above the 1e-9·r contact tolerance; raised to 1e-4·r (no saved tree's verdict changes; a constructed exact U-turn tangency no longer counts).
+- Trees saved since the GUI merge are dill pickles that `loadKinematicTree` couldn't read; fixed (both loaders read both formats).
+
+**Results:**
+- [test_collision_halves.py](test_collision_halves.py) passes (fixed cases, 60 random adjacent pairs and triples against the sampled solids, U-turn, branch siblings, saved trees).
+- Recheck of all 1,180 saved posed trees, old checker vs new: no collision lost; 15 pairs found, in 6 more colliding posed trees: the 13 masked overlaps and 2 real end contacts the old plane test dismissed (the defaults on 4-joint chain 6 in `2026.11.24_23.47.09`, configurations 3 and 4: the root joint's proximal half reaches 0.09–0.12·r into the end of link 6). Whole-tree checks take 22% longer (1.29 s vs 1.06 s mean per posed tree).
+- 3-joint sweep run (seed 0, defaults) end to end: 42.96 → 17.33, no errors, retries or reverts, collision-free in every configuration; resuming from its visit-60 checkpoint finishes the same.
+
+**Learned / decided:**
+- The masked overlaps and the missed end contacts were in results recorded as collision-free; those runs were optimized against a checker that missed them, so their numbers aren't on the current checker. The pending rerun of the 6-joint power 1 + parent-locking sweep should use this code.

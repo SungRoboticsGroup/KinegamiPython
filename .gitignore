@@ -12,6 +12,7 @@ testenv/
 Dockerfile
 save/*
 img_output.png
+viewBrokenExample.py
 
 # from chainsGUIdevelopment
 build/

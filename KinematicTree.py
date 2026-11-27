@@ -29,6 +29,116 @@ from Tube import Tube
 # logger = logging.getLogger('pyswarms')
 # logger.setLevel(logging.DEBUG)
 
+class JointHalf:
+    """
+    One half of a real joint, as its own collision object. The proximal half runs from the joint's proximal end
+    to its center, and the distal half from its center to its distal end (for a prismatic joint, which doesn't
+    bend, the split is at the midpoint of its current ends). The two halves belong to different rigid bodies:
+    the proximal half moves with the links coming into the joint, the distal half with the links leaving it.
+    Each half is a flat-ended cylinder: flat at the split and at its outer end (for prismatic joints too,
+    whose own sdf still has round ends: see the TODO in Prismatic.sdf). Provides what KinematicTree.collision
+    needs from a tube.
+    """
+    def __init__(self, joint, which : str):
+        assert which in ('proximal', 'distal')
+        self.joint = joint
+        self.which = which
+        self.r = joint.r
+
+    def __repr__(self):
+        return f"JointHalf({self.which} half of {type(self.joint).__name__})"
+
+    def splitPoint(self) -> np.ndarray:
+        if isinstance(self.joint, Revolute):
+            return np.asarray(self.joint.Pose.t, dtype=float)
+        return (np.asarray(self.joint.ProximalDubinsFrame().t, dtype=float) +
+                np.asarray(self.joint.DistalDubinsFrame().t, dtype=float)) / 2
+
+    def endpoints(self) -> Tuple[np.ndarray, np.ndarray]:
+        # start and end, in path order (root to leaves)
+        if self.which == 'proximal':
+            return np.asarray(self.joint.ProximalDubinsFrame().t, dtype=float), self.splitPoint()
+        return self.splitPoint(), np.asarray(self.joint.DistalDubinsFrame().t, dtype=float)
+
+    def direction(self) -> np.ndarray:
+        return np.asarray(self.joint.pathDirection() if self.which == 'proximal'
+                          else self.joint.distalPathDirection(), dtype=float)
+
+    def length(self) -> float:
+        a, b = self.endpoints()
+        return float(np.linalg.norm(b - a))
+
+    def interpolate(self, density : float, xp : ModuleType = np) -> ArrayLike:
+        a, b = self.endpoints()
+        n = max(2, int(np.ceil(density * np.linalg.norm(b - a))))
+        return xp.asarray(a.reshape(1, 3) + np.linspace(0, 1, n).reshape(-1, 1) * (b - a).reshape(1, 3))
+
+    def sdf(self, point : ArrayLike, xp : ModuleType = np) -> ArrayLike:
+        point = xp.asarray(point).reshape(-1, 3)
+        a, b = self.endpoints()
+        n = self.direction()
+        d = sdf_capsule(xp, point, a=xp.asarray(a).reshape(1, 3), b=xp.asarray(b).reshape(1, 3), r=self.r).flatten()
+        # flat at both ends: the start (normal pointing back along the half) and the end
+        d = xp.maximum(d, sdf_plane(xp, point, a, -n))
+        return xp.maximum(d, sdf_plane(xp, point, b, n))
+
+    def boundingBox(self, xp : ModuleType = np) -> ArrayLike:
+        a, b = self.endpoints()
+        return xp.vstack((xp.minimum(a, b) - self.r, xp.maximum(a, b) + self.r))
+
+    def _radialVector(self) -> np.ndarray:
+        frame = self.joint.ProximalFrame() if self.which == 'proximal' else self.joint.DistalFrame()
+        return frame.R[:, 1]
+
+    def startCircle(self, forward : bool = True) -> Circle3D:
+        n = self.direction()
+        return Circle3D(radius=self.r, center=self.endpoints()[0], normal=n if forward else -n,
+                        radialVector=self._radialVector())
+
+    def endCircle(self, forward : bool = True) -> Circle3D:
+        n = self.direction()
+        return Circle3D(radius=self.r, center=self.endpoints()[1], normal=n if forward else -n,
+                        radialVector=self._radialVector())
+
+
+class CollisionStructure:
+    """
+    The collision objects of a tree and the pairs of them that are checked (KinematicTree.buildCollisionMatrices).
+    It depends only on the tree's structure, not its geometry, so it can be reused while joints move;
+    KinematicTree.collisionCandidates rebuilds it if the structure has changed (signature).
+    objects: list of (kind, node, which): kind 'link' (the link into node), 'half' (which is 'proximal' or
+        'distal'), or 'joint' (a real joint checked whole: one that doesn't split into halves, e.g. a tip or an
+        end effector)
+    pairs: (2, P) array of indices into objects
+    ancestors: for each node, the set of its proper ancestors
+    """
+    # position of each kind of object within its node, along the path from the root
+    ORDER = {('link', None): 0, ('half', 'proximal'): 1, ('joint', None): 1, ('half', 'distal'): 2}
+
+    def __init__(self, objects, pairs, ancestors, signature):
+        self.objects = objects
+        self.pairs = pairs
+        self.ancestors = ancestors
+        self.signature = signature
+
+    def before(self, x : int, y : int) -> bool:
+        # whether object x lies on the path from the root to object y, before it
+        kx, nx, wx = self.objects[x]
+        ky, ny, wy = self.objects[y]
+        if nx == ny:
+            return self.ORDER[(kx, wx)] < self.ORDER[(ky, wy)]
+        return nx in self.ancestors[ny]
+
+    def label(self, k : int) -> str:
+        kind, node, which = self.objects[k]
+        return f"Link {node}" if kind == 'link' else f"Joint {node}" + (f" ({which} half)" if which else "")
+
+    def key(self, k : int) -> Tuple[int, str]:
+        # (index, 'Joint' or 'Link'), as getCollidingPairs reports pairs
+        kind, node, _ = self.objects[k]
+        return (node, 'Link' if kind == 'link' else 'Joint')
+
+
 F = TypeVar("F", bound="Tube")
 class KinematicTree(Generic[F]):
     """
@@ -826,138 +936,212 @@ class KinematicTree(Generic[F]):
 
         return newTree
 
+    # ---------------------------------------------------------------------------------------------------
+    # Collision checking
+    #
+    # Objects: every link (except the empty link 0), and every real joint, split into a proximal and a distal
+    # half (JointHalf) if it's a revolute or prismatic joint, else checked whole (tips, end effectors).
+    # Waypoints aren't objects. A rigid body is then one real joint's distal half, the links of its rigid part
+    # (see findLinkClusters), and the proximal halves of the real joints where that part ends.
+    #
+    # Pairs (buildCollisionMatrices):
+    # - two links: checked iff they're in different rigid parts. A part's tubes may overlap each other
+    #   anywhere: at a branch point it's one piece that splits into several tubes.
+    # - two joint objects: checked unless they're the two halves of the same joint (each joint's range is
+    #   designed so its own halves don't collide).
+    # - a joint object and a link: always checked, including the links of the joint's own bodies.
+    #
+    # Window (collisionCandidates): where one object of a pair lies on the path from the root to the other, the
+    # stretch of one of them within PATH_WINDOW_RADII * r of the other, measured along that path, isn't checked.
+    # Tubes have bend radius at least r, so a path can't come back within 2r of where it was in less than pi*r
+    # (it only touches after exactly a U-turn), while parts next to each other along the path always meet
+    # where they connect, which the closest-pair test would otherwise always pick (and dismiss as an end-cap
+    # contact, hiding anything else). This one rule covers a joint against its incoming and outgoing links,
+    # the links on either side of a short joint, and adjacent joints touching end to end (e.g. with only
+    # parent-locked waypoints between them, where a proximal half and the next joint's distal half can
+    # overlap if both bend far toward the same side), however many joints are in between. The window doesn't
+    # pass between branches: a joint and the tubes of a sibling branch are checked everywhere.
+    # Which side is cut: a link rather than a joint object, else the object farther from the root, at its end
+    # nearer the other one.
+    # ---------------------------------------------------------------------------------------------------
+
+    # Length of the window along the path, in units of the tube radius
+    PATH_WINDOW_RADII = np.pi
+
+    @staticmethod
+    def splitsIntoHalves(joint) -> bool:
+        return isinstance(joint, (Revolute, Prismatic))
+
+    def collisionStructureSignature(self):
+        return (tuple(self.Parents), tuple(isWaypoint(j) for j in self.Joints),
+                tuple(self.splitsIntoHalves(j) for j in self.Joints))
+
     def detectCollisions(self, specificJointIndex = None, plot: bool = False, debug: bool = False) -> int:
-        # specificJointIndex: None for the whole tree, or an index or list of indices (see collisionPairsFromMovingJoint)
+        # specificJointIndex: None for the whole tree, or an index or list of indices (see collisionCandidates)
         collisionMatrices = self.buildCollisionMatrices()
         numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
         return numCollisions
+
+    def buildCollisionMatrices(self) -> CollisionStructure:
+        """
+        Build the collision objects and the pairs of them to check (see the comment above PATH_WINDOW_RADII).
+        Kept under its old name: it used to return joint/joint, link/link and joint/link matrices.
+        """
+        partOf = {link: p for p, links in enumerate(self.findLinkClusters()) for link in links}
+        objects = []
+        for i in range(len(self.Joints)):
+            if i > 0:
+                objects.append(('link', i, None))
+            if not isWaypoint(self.Joints[i]):
+                if self.splitsIntoHalves(self.Joints[i]):
+                    objects += [('half', i, 'proximal'), ('half', i, 'distal')]
+                else:
+                    objects.append(('joint', i, None))
+        pairs = []
+        for a in range(len(objects)):
+            kindA, nodeA, _ = objects[a]
+            for b in range(a + 1, len(objects)):
+                kindB, nodeB, _ = objects[b]
+                if kindA == 'link' and kindB == 'link':
+                    if partOf.get(nodeA) == partOf.get(nodeB):
+                        continue
+                elif kindA != 'link' and kindB != 'link':
+                    if nodeA == nodeB:
+                        continue
+                pairs.append((a, b))
+        ancestors = []
+        for i in range(len(self.Joints)):
+            found, node = set(), self.Parents[i]
+            while node != -1:
+                found.add(node)
+                node = self.Parents[node]
+            ancestors.append(found)
+        pairs = np.array(pairs, dtype=int).T if pairs else np.empty((2, 0), dtype=int)
+        return CollisionStructure(objects, pairs, ancestors, self.collisionStructureSignature())
+
+    def collisionObjectTube(self, structure : CollisionStructure, k : int):
+        kind, node, which = structure.objects[k]
+        if kind == 'link':
+            return self.Links[node]
+        if kind == 'half':
+            return JointHalf(self.Joints[node], which)
+        return self.Joints[node]
+
+    def collisionObjectIntervals(self, structure : CollisionStructure, tubes) -> list:
+        # [(start, end)] of each object along the path from the root (the root joint's proximal end is at 0)
+        n = len(self.Joints)
+        sProx, sSplit, sDist = np.zeros(n), np.zeros(n), np.zeros(n)
+        stack = [0]
+        while stack:
+            i = stack.pop()
+            parent = self.Parents[i]
+            sProx[i] = 0.0 if parent == -1 else sDist[parent] + self.Links[i].length()
+            joint = self.Joints[i]
+            if not isWaypoint(joint) and self.splitsIntoHalves(joint):
+                sSplit[i] = sProx[i] + JointHalf(joint, 'proximal').length()
+                sDist[i] = sSplit[i] + JointHalf(joint, 'distal').length()
+            else:
+                prox, dist = np.asarray(joint.ProximalDubinsFrame().t), np.asarray(joint.DistalDubinsFrame().t)
+                center = np.asarray(joint.Pose.t)
+                sSplit[i] = sProx[i]
+                sDist[i] = sProx[i] + np.linalg.norm(center - prox) + np.linalg.norm(dist - center)
+            stack.extend(self.Children[i])
+        intervals = []
+        for kind, node, which in structure.objects:
+            if kind == 'link':
+                intervals.append((sDist[self.Parents[node]], sProx[node]))
+            elif which == 'proximal':
+                intervals.append((sProx[node], sSplit[node]))
+            elif which == 'distal':
+                intervals.append((sSplit[node], sDist[node]))
+            else:
+                intervals.append((sProx[node], sDist[node]))
+        return intervals
+
+    def collisionCandidates(self, movingJointIndex=None, collisionMatrices=None):
+        """
+        The pairs to check, with the window applied. Returns (candidates, structure): candidates is
+        [(x, y, tubeX, tubeY, keepArcY)], where x and y index structure.objects, and keepArcY is None (check all of tubeY) or (lo, hi), the stretch of tubeY
+        by arc length from its start that is checked (the cut object is always second). Pairs that lie
+        entirely in the window are left out.
+        movingJointIndex: None for every pair, or an index (or a list of indices, for joints that move
+        together, e.g. a joint and the parent-locked waypoints carried with it): the pairs involving any of
+        their objects or the links into them and out of them.
+        collisionMatrices: from buildCollisionMatrices; rebuilt if missing, of another kind (e.g. from an old
+        checkpoint), or from a tree of a different structure.
+        """
+        s = collisionMatrices
+        if not isinstance(s, CollisionStructure) or s.signature != self.collisionStructureSignature():
+            s = self.buildCollisionMatrices()
+        pairs = s.pairs
+        if movingJointIndex is not None:
+            nodes = [int(movingJointIndex)] if isinstance(movingJointIndex, (int, np.integer)) else [int(i) for i in movingJointIndex]
+            links = set(nodes) | {c for i in nodes for c in self.Children[i]}
+            involved = np.array([(kind == 'link' and node in links) or (kind != 'link' and node in nodes)
+                                 for kind, node, _ in s.objects], dtype=bool)
+            pairs = pairs[:, involved[pairs[0]] | involved[pairs[1]]] if pairs.size > 0 else pairs
+        tubes = [self.collisionObjectTube(s, k) for k in range(len(s.objects))]
+        intervals = self.collisionObjectIntervals(s, tubes)
+        window = self.PATH_WINDOW_RADII * self.r
+        candidates = []
+        for x, y in pairs.T:
+            x, y = int(x), int(y)
+            keep = None
+            if s.before(x, y):
+                up, down = x, y
+            elif s.before(y, x):
+                up, down = y, x
+            else:
+                up = None
+            if up is not None:
+                cutLength = window - (intervals[down][0] - intervals[up][1])
+                if cutLength > 0:
+                    if s.objects[up][0] == 'link' and s.objects[down][0] != 'link':
+                        cut, other = up, down
+                        keep = (0.0, tubes[up].length() - cutLength)  # the link's end, nearer the joint, is cut
+                    else:
+                        cut, other = down, up
+                        keep = (cutLength, tubes[down].length())  # the start, nearer the other one, is cut
+                    if keep[1] <= keep[0]:
+                        continue
+                    x, y = other, cut
+            candidates.append((x, y, tubes[x], tubes[y], keep))
+        return candidates, s
 
     def getCollidingPairs(self, coarseDistanceThresholdRatio : float = 0.5,
                           fineDistanceThresholdRatio : float = 0.001) -> list[Tuple[Tuple[int, str], Tuple[int, str]]]:
         """
         Return a list of all currently colliding pairs of objects.
-        
-        Each element is ((idx1, type1), (idx2, type2)) where type is 'Joint' or 'Link'.
+
+        Each element is ((idx1, type1), (idx2, type2)) where type is 'Joint' or 'Link' (a joint half is
+        reported as its joint), without repeats.
         """
         coarseDistanceThreshold = self.r * coarseDistanceThresholdRatio
         fineDistanceThreshold = self.r * fineDistanceThresholdRatio
-        
-        collisionMatrices = self.buildCollisionMatrices()
-        jj_pairs, jl_pairs, ll_pairs = self.getAllCollisionPairs(collisionMatrices)
-        
+        candidates, s = self.collisionCandidates()
         collidingPairs = []
-        for j1, j2 in jj_pairs.T:
-            if self.collision(self.Joints[j1], self.Joints[j2],
-                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
-                collidingPairs.append(((j1, 'Joint'), (j2, 'Joint')))
-        # as in collisionsCountAndError: a joint is checked only against the part of each incoming-path link
-        # outside its window (see incomingWindowCheckedLengths)
-        incomingWindows = self.incomingWindowCheckedLengths()
-        for j, l in jl_pairs.T:
-            checkedLength = incomingWindows.get((int(j), int(l)))
-            if checkedLength is not None and checkedLength <= 0:
-                continue
-            if self.collision(self.Joints[j], self.Links[l],
-                              coarseDistanceThreshold, fineDistanceThreshold,
-                              maxArcLength2=checkedLength) is not None:
-                collidingPairs.append(((j, 'Joint'), (l, 'Link')))
-        for l1, l2 in ll_pairs.T:
-            if self.collision(self.Links[l1], self.Links[l2],
-                              coarseDistanceThreshold, fineDistanceThreshold) is not None:
-                collidingPairs.append(((l1, 'Link'), (l2, 'Link')))
+        for x, y, tubeX, tubeY, keep in candidates:
+            if self.collision(tubeX, tubeY, coarseDistanceThreshold, fineDistanceThreshold, keepArc2=keep) is not None:
+                pair = (s.key(x), s.key(y))
+                if pair not in collidingPairs:
+                    collidingPairs.append(pair)
         return collidingPairs
 
-    
-    def collisionPairsFromMovingJoint(self, movingJointIndex,
-            collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        # movingJointIndex may be a list of indices, for joints that move together (e.g. a joint and the
-        # parent-locked waypoints carried with it): then the pairs involving any of them, without repeats
-        if not isinstance(movingJointIndex, (int, np.integer)):
-            parts = [self.collisionPairsFromMovingJoint(int(i), collisionMatrices) for i in movingJointIndex]
-            jj_pairs, jl_pairs, ll_pairs = [np.hstack([p[k] for p in parts]).astype(int) for k in range(3)]
-            jj_pairs = np.unique(np.sort(jj_pairs, axis=0), axis=1) if jj_pairs.size > 0 else jj_pairs
-            jl_pairs = np.unique(jl_pairs, axis=1) if jl_pairs.size > 0 else jl_pairs
-            ll_pairs = np.unique(np.sort(ll_pairs, axis=0), axis=1) if ll_pairs.size > 0 else ll_pairs
-            return jj_pairs, jl_pairs, ll_pairs
-        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
-        i = movingJointIndex
-        
-        # Vectorized: Find all collidable objects for this joint
-        # Joint-Joint collisions where row i is True
-        joints_paired_with_joint_i = np.where(jointJointCollisionMatrix[i, :])[0]
-        jj_pairs = np.vstack((np.full(len(joints_paired_with_joint_i), i), joints_paired_with_joint_i)) if len(joints_paired_with_joint_i) > 0 else np.empty((2, 0), dtype=int)
-        
-        # Joint-Link collisions where row i is True
-        links_paired_with_joint_i = np.where(jointLinkCollisionMatrix[i, :])[0]
-        jl_pairs_list = [np.vstack((np.full(len(links_paired_with_joint_i), i), links_paired_with_joint_i))] if len(links_paired_with_joint_i) > 0 else []
-        
-        # Find all collidable objects for this joint's incoming and outgoing links
-        adjacentLinks = np.array([i] + self.Children[i])
-        ll_pairs_list = []
-        for linkIdx in adjacentLinks:
-            links_paired_with_link_idx = np.where(linkLinkCollisionMatrix[linkIdx, :])[0]
-            if len(links_paired_with_link_idx) > 0:
-                ll_pairs_list.append(np.vstack((np.full(len(links_paired_with_link_idx), linkIdx), links_paired_with_link_idx)))
-            joints_paired_with_link_idx = np.where(jointLinkCollisionMatrix[:, linkIdx])[0]
-            if len(joints_paired_with_link_idx) > 0:
-                jl_pairs_list.append(np.vstack((joints_paired_with_link_idx, np.full(len(joints_paired_with_link_idx), linkIdx))))
-        ll_pairs = np.hstack(ll_pairs_list) if ll_pairs_list else np.empty((2,0), dtype=int)
-        jl_pairs = np.hstack(jl_pairs_list) if jl_pairs_list else np.empty((2,0), dtype=int)
-        
-        # Remove duplicates (e.g., (i,j) and (j,i))
-        jj_pairs = np.unique(np.sort(jj_pairs, axis=0), axis=1) if jj_pairs.size > 0 else jj_pairs
-        ll_pairs = np.unique(np.sort(ll_pairs, axis=0), axis=1) if ll_pairs.size > 0 else ll_pairs
-
-        return jj_pairs, jl_pairs, ll_pairs
-
-    
-    def getAllCollisionPairs(self, collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
-        jj_pairs = np.array(np.where(np.triu(jointJointCollisionMatrix, k=1)))
-        jl_pairs = np.array(np.where(jointLinkCollisionMatrix))
-        ll_pairs = np.array(np.where(np.triu(linkLinkCollisionMatrix, k=1)))
-        return jj_pairs, jl_pairs, ll_pairs
-    
-    
-    def collisionsCountAndError(self, movingJointIndex: Optional[int], 
-                                  collisionMatrices : Tuple[np.ndarray, np.ndarray, np.ndarray], 
+    def collisionsCountAndError(self, movingJointIndex,
+                                  collisionMatrices = None,
                                   show : bool = False, debug: bool = False,
                                   coarseDistanceThreshold : float = 0.5, fineDistanceThreshold: float = 0.001) -> Tuple[int, float]:
-        jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix = collisionMatrices
-        numCollisions = 0
-        pairs = []
-
-        if movingJointIndex is None:
-            jj_pairs, jl_pairs, ll_pairs = self.getAllCollisionPairs(collisionMatrices)
-        else:
-            jj_pairs, jl_pairs, ll_pairs = self.collisionPairsFromMovingJoint(movingJointIndex, collisionMatrices)          
-        
+        # Returns (the number of colliding pairs of collision objects, the collision penalty). A pair of joints
+        # can count more than once, through their halves.
+        candidates, s = self.collisionCandidates(movingJointIndex, collisionMatrices)
         collisions = []
+        for x, y, tubeX, tubeY, keep in candidates:
+            collisionResult = self.collision(tubeX, tubeY, coarseDistanceThreshold, fineDistanceThreshold, keepArc2=keep)
+            if collisionResult is not None:
+                collisions.append((x, y, collisionResult))
+
         totalError = 0.0
-        for j1, j2 in jj_pairs.T:
-            collisionResult = self.collision(self.Joints[j1], self.Joints[j2], 
-                                                coarseDistanceThreshold, fineDistanceThreshold)
-            if collisionResult is not None:
-                collisions.append(( (j1, 'Joint'), (j2, 'Joint'), collisionResult))
-        incomingWindows = self.incomingWindowCheckedLengths()
-        for j, l in jl_pairs.T:
-            # A joint is checked only against the part of each incoming-path link outside its window
-            checkedLength = incomingWindows.get((int(j), int(l)))
-            if checkedLength is not None and checkedLength <= 0:
-                continue
-            collisionResult = self.collision(self.Joints[j], self.Links[l], 
-                                                coarseDistanceThreshold, fineDistanceThreshold,
-                                                maxArcLength2=checkedLength)
-            if collisionResult is not None:
-                collisions.append(( (j, 'Joint'), (l, 'Link'), collisionResult))
-        for l1, l2 in ll_pairs.T:
-            collisionResult = self.collision(self.Links[l1], self.Links[l2], 
-                                                coarseDistanceThreshold, fineDistanceThreshold)
-            if collisionResult is not None:
-                collisions.append(( (l1, 'Link'), (l2, 'Link'), collisionResult))
-        
-        for collision in collisions:
-            (idx1, type1), (idx2, type2), collisionResult = collision
+        for x, y, collisionResult in collisions:
             minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
             distance = min(minDist1to2, minDist2to1)
             # Smooth error function based on logistic function, centered on the collision threshold (an overlap
@@ -971,81 +1155,36 @@ class KinematicTree(Generic[F]):
             if show:
                 self.show(block=False)
             if debug:
-                print(f"{type1} {idx1} vs {type2} {idx2}")
-            
+                print(f"{s.label(x)} vs {s.label(y)}")
+
         return len(collisions), totalError
 
-    # def getCollisionErrorFromDict(self, indices, collisionPairDict):
-    #     totalError = 0
-        
-    #     for idx in indices:
-    #         pairs = collisionPairDict.get(idx, [])
-            
-    #         for (obj1, obj2) in pairs:
-    #             idx1, type1 = obj1
-    #             idx2, type2 = obj2
-                
-    #             collisionResult = self.collision(idx1, type1, idx2, type2)
-    #             if collisionResult is not None:
-    #                 minPoint1to2, minDist1to2, minPoint2to1, minDist2to1 = collisionResult
-    #                 distance = min(minDist1to2, minDist2to1)
-    #                 # Smooth error function based on logistic function
-    #                 k = 50 #steepness of the transition
-    #                 error = 1 / (1 + np.exp(-k * distance))
-    #                 totalError += error
-        
-    #     return totalError
-    
-    
     # Returns None for no collision or the pair of closest points for a collision
     # Every object is treated as a centerline (interpolate()) with radius .r.
     # TODO(collision): this means an EndEffector (e.g. a gripper) is
     # UNDER-approximated as a tube of radius r (the incoming tube radius): its
     # wider parts (carriage, jaws) are not collision-checked. See
     # EndEffector.sdf and KNOWN_ISSUES.md.
-    # Length of the window (along the incoming path, back from a real joint's proximal end) in which links
-    # aren't collision-checked against that joint: in units of the tube radius
-    INCOMING_WINDOW_RADII = np.pi
-
-    def incomingWindowCheckedLengths(self) -> dict:
-        # For each real joint K and each link L on its incoming path (link K, then back through waypoints until
-        # the real joint where K's rigid part starts), whose end is within INCOMING_WINDOW_RADII * r of K's
-        # proximal end along that path: {(K, L): the arc length from L's start that is still checked against K}.
-        # The rest of L, inside the window, isn't checked against K: when K's incoming link is empty or short,
-        # the links before it meet K there, so they would otherwise give false positives. (0 or less means L
-        # lies entirely in the window.) Siblings and everything else in K's part are still checked against K.
-        # Computed from the current link lengths, so it follows waypoints as they're parent-locked or unlocked.
-        window = self.INCOMING_WINDOW_RADII * self.r
-        checked = {}
-        for k in range(1, len(self.Joints)):
-            if isWaypoint(self.Joints[k]):
-                continue
-            node, distance = k, 0.0  # distance: along the path from link `node`'s end to K's proximal end
-            while distance < window:
-                length = self.Links[node].path.length
-                checked[(k, node)] = length - (window - distance)
-                distance += length
-                parent = self.Parents[node]
-                if parent == -1 or not isWaypoint(self.Joints[parent]):
-                    break
-                node = parent
-        return checked
 
     # A pair collides when the tubes overlap by more than this, in units of the tube radius: only real overlaps
     # count, not tubes that just touch (e.g. after a U-turn of radius r, the tube before the turn and the part
-    # after it are exactly 2r apart and touch along a line). It's slightly below 0 to absorb floating-point
-    # error in an exact touch; sampling error is removed by refining each sampled minimum (refinedMinimum).
-    CONTACT_TOLERANCE = 1e-9
+    # after it are exactly 2r apart and touch along a line). It's slightly below 0 to absorb the error of the
+    # geometry in an exact touch: the CSC path solver places links about 1e-5 r off (7.3e-6 r in a constructed
+    # U-turn alongside a joint), so it was raised from 1e-9 on 2026-11-26. Sampling error is removed by
+    # refining each sampled minimum (refinedMinimum).
+    CONTACT_TOLERANCE = 1e-4
 
     @staticmethod
-    def refinedMinimum(tube, points, dists, other, spacing, fullCount=None, refineFrom=-np.inf, maxCandidates=5):
+    def refinedMinimum(tube, points, dists, other, spacing, fullCount=None, refineFrom=-np.inf, maxCandidates=5, start=0):
         # The minimum over tube's whole center line of other.sdf, from its values dists at the sample points
-        # (spaced at most `spacing` apart, starting at tube's start). Samples can miss the true minimum by up to
-        # spacing/2, so each sampled local minimum within that of the best is refined by a bounded search
-        # between its neighboring samples, along the true center line: the CSC path for a link (its samples
-        # are evenly spaced in its path parameter), and straight segments between samples for a joint (whose
-        # center line is straight between its proximal, center and distal points, all of which are samples).
-        # fullCount: the number of samples over the whole tube, if points are only the first of them.
+        # (spaced at most `spacing` apart). Samples can miss the true minimum by up to spacing/2, so each sampled
+        # local minimum within that of the best is refined by a bounded search between its neighboring samples,
+        # along the true center line: the CSC path for a link (its samples are evenly spaced in its path
+        # parameter), and straight segments between samples otherwise (a joint's center line is straight
+        # between its proximal, center and distal points, all of which are samples, and a joint half's is
+        # straight).
+        # fullCount: the number of samples over the whole tube, if points are only some of them; start: the
+        # index of points[0] among them.
         # refineFrom: refine only if the sampled minimum is in [refineFrom, refineFrom + spacing): below that
         # the true minimum is certainly below refineFrom as well, and from refineFrom + spacing/2 up it certainly
         # isn't, so refining can't change a decision made at refineFrom (it's only needed near the threshold,
@@ -1062,10 +1201,10 @@ class KinematicTree(Generic[F]):
         candidates = candidates[np.argsort(dists[candidates])][:maxCandidates]
         path = getattr(tube, 'path', None)
         if fullCount is None:
-            fullCount = n
-        def pointAt(u):  # u: fractional sample index
+            fullCount = start + n
+        def pointAt(u):  # u: fractional sample index within points
             if path is not None:
-                return path.interpolate_vectorized(np.array([u / (fullCount - 1)]))[0]
+                return path.interpolate_vectorized(np.array([(u + start) / (fullCount - 1)]))[0]
             k = min(int(np.floor(u)), n - 2)
             return points[k] + (u - k) * (points[k + 1] - points[k])
         bestPoint, bestValue = points[best], dists[best]
@@ -1077,89 +1216,136 @@ class KinematicTree(Generic[F]):
                 bestPoint, bestValue = pointAt(result.x), result.fun
         return bestPoint, bestValue
 
-    def collision(self, tube1, tube2, coarseDistanceThreshold=0.5, 
-                  fineDistanceThreshold=0.001, maxArcLength2=None) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
+    def collision(self, tube1, tube2, coarseDistanceThreshold=0.5,
+                  fineDistanceThreshold=0.001, keepArc2=None) -> Optional[Tuple[np.ndarray, float, np.ndarray, float]]:
         # fineDistanceThreshold: the spacing of the center-line samples. Overlaps are judged against
         # CONTACT_TOLERANCE, from refined minimum distances (see refinedMinimum).
-        # maxArcLength2: if given, only the part of tube2 from its start to this arc length counts. The check
-        # from tube2's sample points uses only that part; the check from tube1's sample points still measures
-        # to all of tube2, which can only make it smaller, so a real overlap with that part is still found
-        # (both directions must agree), while an overlap only with the rest of tube2 isn't.
+        # keepArc2: if given, (lo, hi): only the stretch of tube2 from arc length lo to hi (from its start)
+        # counts (the rest is in the window, see collisionCandidates). The overlap is then measured from that
+        # stretch's center line to tube1's surface, and its closest point is paired with the nearest point of
+        # tube1's center line. (Measuring from tube1's center line to all of tube2 would find the place where
+        # the two meet, inside the window, every time.) Otherwise both directions are measured and must agree.
         coarseDensity = 1 / coarseDistanceThreshold
-        fineDensity = 1 / fineDistanceThreshold        
+        fineDensity = 1 / fineDistanceThreshold
         # Filter out if either tube is empty (no length)
         epsilon = 1e-2 * fineDistanceThreshold
-        if tube1.length() > epsilon and tube2.length() > epsilon:
-            # Filter based on distance between bounding boxes
-            min1, max1 = tube1.boundingBox()
-            min2, max2 = tube2.boundingBox()
-            if sdf_aabb(min1, max1, min2, max2) < 0: # bounding boxes overlap
-                # Check SDF values at coarse density to see if close enough to consider collision
-                if np.min(tube2.sdf(tube1.interpolate(density = coarseDensity))) < tube1.r + coarseDistanceThreshold or \
-                np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < tube2.r + coarseDistanceThreshold:
-                    # Finer check
-                    points1 = tube1.interpolate(density = fineDensity)
-                    distsCenterline1toSurface2 = tube2.sdf(points1)
-                    contact = -self.CONTACT_TOLERANCE * min(tube1.r, tube2.r)
-                    closest1, minDist1to2 = self.refinedMinimum(tube1, points1, distsCenterline1toSurface2, tube2,
-                                                                fineDistanceThreshold, refineFrom=tube1.r + contact)
-                    minDist1to2 = minDist1to2 - tube1.r
-                    allPoints2 = tube2.interpolate(density = fineDensity)
-                    points2 = allPoints2
-                    if maxArcLength2 is not None:
-                        # samples are evenly spaced by arc length
-                        keep = int(np.floor(maxArcLength2 / tube2.length() * (len(allPoints2) - 1))) + 1
-                        points2 = allPoints2[:max(1, min(keep, len(allPoints2)))]
-                    distsCenterline2toSurface1 = tube1.sdf(points2)
-                    closest2, minDist2to1 = self.refinedMinimum(tube2, points2, distsCenterline2toSurface1, tube1,
-                                                                fineDistanceThreshold, fullCount=len(allPoints2),
-                                                                refineFrom=tube2.r + contact)
-                    minDist2to1 = minDist2to1 - tube2.r
-                    if minDist1to2 < contact and minDist2to1 < contact:
-                        # Filter out collisions that are solely in the hemispherical end caps.
-                        # The SDF is point-to-surface, so a query point inside a tube's 
-                        # hemispherical cap appears as within r of the tube surface.
-                        # This happens where adjacent tubes connect. We filter these by
-                        # checking end-circle disc planes.
-                        # Use distance-based endpoint check (within r of start/end) 
-                        # rather than exact index, since the closest point may be 
-                        # slightly inward from the exact endpoint.
-                        # (Ported from chainsGUIdevelopment b38c016a and 392f2061.)
-                        startDist1 = norm(closest1 - points1[0])
-                        endDist1 = norm(closest1 - points1[-1])
-                        nearStart1 = startDist1 < tube1.r
-                        nearEnd1 = endDist1 < tube1.r
-                        isEndpoint1 = nearStart1 or nearEnd1
-                        
-                        startDist2 = norm(closest2 - allPoints2[0])  # tube2's real ends, not a cut
-                        endDist2 = norm(closest2 - allPoints2[-1])
-                        nearStart2 = startDist2 < tube2.r
-                        nearEnd2 = endDist2 < tube2.r
-                        isEndpoint2 = nearStart2 or nearEnd2
-                        
-                        isTrueCollision = True
-                        if isEndpoint1 and isEndpoint2:
-                            # Both closest points are at/near endpoints - need to check disc intersection
-                            # Get the circles at the relevant endpoints.
-                            # When both nearStart and nearEnd are true (tube shorter than r),
-                            # pick the closer endpoint to avoid choosing the wrong disc plane.
-                            if nearStart1 and nearEnd1:
-                                circle1 = tube1.startCircle(forward=False) if startDist1 <= endDist1 else tube1.endCircle(forward=True)
-                            else:
-                                circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
-                            if nearStart2 and nearEnd2:
-                                circle2 = tube2.startCircle(forward=False) if startDist2 <= endDist2 else tube2.endCircle(forward=True)
-                            else:
-                                circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
-                            
-                            # It's definitely a true collision if it's on the inside side of either disc's plane
-                            # Otherwise, check if the discs cross
-                            isTrueCollision = Plane(circle1.c, circle1.n).signedDistanceToPoint(closest2) < 0\
-                                        or Plane(circle2.c, circle2.n).signedDistanceToPoint(closest1) < 0\
-                                        or discs_cross(circle1, circle2)
-                        if isTrueCollision:
-                            return closest1, minDist1to2, closest2, minDist2to1                
-        return None
+        if not (tube1.length() > epsilon and tube2.length() > epsilon):
+            return None
+        # Filter based on distance between bounding boxes
+        min1, max1 = tube1.boundingBox()
+        min2, max2 = tube2.boundingBox()
+        if sdf_aabb(min1, max1, min2, max2) >= 0:
+            return None
+        # Check SDF values at coarse density to see if close enough to consider collision
+        if not (np.min(tube2.sdf(tube1.interpolate(density = coarseDensity))) < tube1.r + coarseDistanceThreshold or
+                np.min(tube1.sdf(tube2.interpolate(density = coarseDensity))) < tube2.r + coarseDistanceThreshold):
+            return None
+        # Finer check
+        points1 = tube1.interpolate(density = fineDensity)
+        allPoints2 = tube2.interpolate(density = fineDensity)
+        contact = -self.CONTACT_TOLERANCE * min(tube1.r, tube2.r)
+        if keepArc2 is None:
+            closest1, minDist1to2 = self.refinedMinimum(tube1, points1, tube2.sdf(points1), tube2,
+                                                        fineDistanceThreshold, refineFrom=tube1.r + contact)
+            minDist1to2 = minDist1to2 - tube1.r
+            closest2, minDist2to1 = self.refinedMinimum(tube2, allPoints2, tube1.sdf(allPoints2), tube1,
+                                                        fineDistanceThreshold, refineFrom=tube2.r + contact)
+            minDist2to1 = minDist2to1 - tube2.r
+            if not (minDist1to2 < contact and minDist2to1 < contact):
+                return None
+        else:
+            # samples are evenly spaced by arc length
+            n2 = len(allPoints2)
+            scale = (n2 - 1) / tube2.length()
+            i0 = max(0, int(np.ceil(keepArc2[0] * scale - 1e-9)))
+            i1 = min(n2, int(np.floor(keepArc2[1] * scale + 1e-9)) + 1)
+            if i1 <= i0:
+                return None
+            points2 = allPoints2[i0:i1]
+            closest2, minDist2to1 = self.refinedMinimum(tube2, points2, tube1.sdf(points2), tube1,
+                                                        fineDistanceThreshold, fullCount=n2,
+                                                        refineFrom=tube2.r + contact, start=i0)
+            minDist2to1 = minDist2to1 - tube2.r
+            if not minDist2to1 < contact:
+                return None
+            closest1 = points1[int(np.argmin(norm(points1 - closest2, axis=1)))]
+            minDist1to2 = minDist2to1
+        # Filter out collisions that are solely in the hemispherical end caps.
+        # The SDF is point-to-surface, so a query point inside a tube's
+        # hemispherical cap appears as within r of the tube surface.
+        # This happens where adjacent tubes connect. We filter these by
+        # checking end-circle disc planes.
+        # Use distance-based endpoint check (within r of start/end)
+        # rather than exact index, since the closest point may be
+        # slightly inward from the exact endpoint.
+        # (Ported from chainsGUIdevelopment b38c016a and 392f2061.)
+        startDist1 = norm(closest1 - points1[0])
+        endDist1 = norm(closest1 - points1[-1])
+        nearStart1 = startDist1 < tube1.r
+        nearEnd1 = endDist1 < tube1.r
+        isEndpoint1 = nearStart1 or nearEnd1
+
+        startDist2 = norm(closest2 - allPoints2[0])  # tube2's real ends, not a cut
+        endDist2 = norm(closest2 - allPoints2[-1])
+        nearStart2 = startDist2 < tube2.r
+        nearEnd2 = endDist2 < tube2.r
+        isEndpoint2 = nearStart2 or nearEnd2
+
+        if isEndpoint1 and isEndpoint2:
+            # Both closest points are at/near endpoints - need to check disc intersection
+            # Get the circles at the relevant endpoints.
+            # When both nearStart and nearEnd are true (tube shorter than r),
+            # pick the closer endpoint to avoid choosing the wrong disc plane.
+            if nearStart1 and nearEnd1:
+                circle1 = tube1.startCircle(forward=False) if startDist1 <= endDist1 else tube1.endCircle(forward=True)
+            else:
+                circle1 = tube1.startCircle(forward=False) if nearStart1 else tube1.endCircle(forward=True)
+            if nearStart2 and nearEnd2:
+                circle2 = tube2.startCircle(forward=False) if startDist2 <= endDist2 else tube2.endCircle(forward=True)
+            else:
+                circle2 = tube2.startCircle(forward=False) if nearStart2 else tube2.endCircle(forward=True)
+
+            # The overlap above is between balls around the center lines, which bulge past flat ends. It's real
+            # only if the solids themselves overlap: if the end discs cross, or a cross-section of either tube
+            # near its closest point reaches inside the other. (This replaced a test of whether either closest
+            # point is behind the other's end plane, which is true anywhere in a half-space, e.g. beside a
+            # joint folded far enough that its end comes back near the part before it.)
+            isTrueCollision = discs_cross(circle1, circle2) \
+                        or self.crossSectionsReach(tube1, points1, closest1, tube2, contact) \
+                        or self.crossSectionsReach(tube2, allPoints2, closest2, tube1, contact)
+            if not isTrueCollision:
+                return None
+        return closest1, minDist1to2, closest2, minDist2to1
+
+    @staticmethod
+    def crossSectionsReach(tube, points, closestPoint, other, contact, spacingRadii=0.125, rings=4, spokes=24) -> bool:
+        # Whether any cross-section disc of tube (radius tube.r, normal to its center line), at the center-line
+        # samples points within tube.r of closestPoint, reaches inside other (other.sdf below contact). Every such
+        # disc is part of the tube's solid, so this tests the solids near an end directly, flat ends included.
+        # The discs are spaced about spacingRadii * r apart, each sampled on `rings` circles of `spokes` points.
+        near = np.where(np.linalg.norm(points - closestPoint, axis=1) <= tube.r)[0]
+        if len(near) == 0:
+            return False
+        spacing = np.linalg.norm(points[-1] - points[0]) / max(1, len(points) - 1) if len(points) > 1 else tube.r
+        step = max(1, int(round(spacingRadii * tube.r / max(spacing, 1e-12))))
+        indices = np.unique(np.concatenate([near[::step], near[-1:]]))
+        angles = np.linspace(0, 2 * np.pi, spokes, endpoint=False)
+        radii = tube.r * (1 - 1e-9) * np.arange(1, rings + 1) / rings
+        samples = []
+        for i in indices:
+            tangent = points[min(i + 1, len(points) - 1)] - points[max(i - 1, 0)]
+            if np.linalg.norm(tangent) < 1e-12:
+                continue
+            tangent = tangent / np.linalg.norm(tangent)
+            u = np.cross(tangent, [1.0, 0, 0] if abs(tangent[0]) < 0.9 else [0, 1.0, 0])
+            u /= np.linalg.norm(u)
+            v = np.cross(tangent, u)
+            ring = np.cos(angles)[:, None] * u + np.sin(angles)[:, None] * v
+            samples.append(points[i] + (radii[:, None, None] * ring[None, :, :]).reshape(-1, 3))
+            samples.append(points[i].reshape(1, 3))
+        if not samples:
+            return False
+        return bool(np.min(other.sdf(np.vstack(samples))) < contact)
 
     def findLinkClusters(self):
         # Groups the links into rigid parts, each list being one part. Link i (the link into node i) belongs to
@@ -1177,55 +1363,8 @@ class KinematicTree(Generic[F]):
                 source = self.Parents[source]
             parts.setdefault(source, []).append(i)
         return list(parts.values())
-    
-    
-    def buildCollisionMatrices(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Build matrices indicating which joint/joint, link/link, and joint/link pairs need collision checking.
-        
-        Returns:
-            jointJointCollisionMatrix (np.ndarray): Boolean matrix for joint/joint collisions.
-            linkLinkCollisionMatrix (np.ndarray): Boolean matrix for link/link collisions.
-            jointLinkCollisionMatrix (np.ndarray): Boolean matrix for joint/link collisions.
-        
-        Rules:
-        - Waypoints don't collision check directly (all False)
-        - Link 0 is empty, not checked against anything (all False)
-        - Link/Link: check iff in different rigid parts (see findLinkClusters), i.e. separated by a real joint
-        - Real Joint/Real Joint: always check
-        - Real Joint/Link: always check
-        """
-        link_sets = self.findLinkClusters()
-        # Create link-to-set mapping 
-        whichLinkSet = {}
-        for set_idx, link_set in enumerate(link_sets):
-            for link_idx in link_set:
-                whichLinkSet[link_idx] = set_idx
-        
-        # Pre-classify all joints
-        real_joints = [i for i in range(len(self.Joints)) if not isWaypoint(self.Joints[i])]
 
-        # Initialize matrices
-        jointJointCollisionMatrix = np.zeros((len(self.Joints), len(self.Joints)), dtype=bool)
-        linkLinkCollisionMatrix = np.zeros((len(self.Links), len(self.Links)), dtype=bool)
-        jointLinkCollisionMatrix = np.zeros((len(self.Joints), len(self.Links)), dtype=bool)
 
-        for i in range(len(self.Joints)):
-            # Joint i
-            if not isWaypoint(self.Joints[i]):
-                # Check real joint against all other real joints and against all links
-                for j in range(len(self.Joints)):
-                    jointJointCollisionMatrix[i, j] = not isWaypoint(self.Joints[j]) and i != j  
-                    jointLinkCollisionMatrix[i, j] = True
-            # Link i
-            if i > 0:
-                set_idx = whichLinkSet.get(i)
-                for j in range(len(self.Links)):
-                    linkLinkCollisionMatrix[i, j] = whichLinkSet.get(j) != set_idx
-        
-        return jointJointCollisionMatrix, linkLinkCollisionMatrix, jointLinkCollisionMatrix
-    
-    
     def buildCollisionPairDictionary(self):
         """
         Build a dictionary mapping each joint index to collision pairs that need checking.
@@ -1806,7 +1945,16 @@ def optimizationLoss(tree):
         loss += tree.Links[i].path.length
     return loss
 
+def isPickledTreeFile(filename : str) -> bool:
+    # KinematicTree.save writes a dill pickle (since the GUI-branch merge, 2026-11-25), whose first byte is the
+    # pickle protocol marker 0x80; older saves (and parameterSweep's start.tree) are text, a tree's repr
+    with open(filename, "rb") as f:
+        return f.read(1) == b"\x80"
+
 def loadKinematicTree(filename : str): 
+    # Loads either format: a dill pickle (KinematicTree.save) or a text repr
+    if isPickledTreeFile(filename):
+        return loadTree(filename)
     from numpy import array
     from geometryHelpers import Ball, Cylinder, Plane, Circle3D, Arc3D
     try:
@@ -2041,11 +2189,10 @@ def placeJointAndWayPoints(jointToPlace, neighbor, ball, backwards=False):
 def loadTree(filename: str):
     """Load any KinematicTree (or subclass) from a dill-serialized file.
     Also supports legacy text-based files saved with __repr__/eval."""
+    if not isPickledTreeFile(filename):
+        return loadKinematicTree(filename)
     try:
         with open(filename, "rb") as f:
             return dill.load(f)
-    except Exception:
-        # Fall back to legacy text-based loading for old files
-        raise Exception(f"Could not load file {filename}. "
-                        "If this is a legacy text-based save file, "
-                        "it must be re-saved in the new format.")
+    except Exception as e:
+        raise Exception(f"Could not load file {filename}: {e}")

@@ -17,7 +17,8 @@ In the window:
   configuration to see whether a bend that looks unnecessary there is avoiding a collision elsewhere.
 
 Clearances are surface-to-surface distances between the pairs the optimizer's collision checking
-compares (KinematicTree.buildCollisionMatrices), sampled along each part's centerline, so they're
+compares (KinematicTree.collisionCandidates, with joints split into halves and the path window),
+sampled along each part's centerline, so they're
 approximate to within the sampling spacing.
 """
 import argparse
@@ -63,10 +64,10 @@ def partName(tree, kind, i):
     return f"{'W' if isWaypoint(tree.Joints[i]) else 'J'}{i}"
 
 def isAttachment(obj1, points1, i1, obj2, points2, i2):
-    # Same end-disc test KinematicTree.collision uses (in its near-endpoint form from the GUI branch):
-    # when both closest points are within r of an end, it's only a real contact if either point is on
-    # the inner side of the other's end disc, or the end discs cross. Otherwise it's where two
-    # connected parts attach.
+    # Same end test KinematicTree.collision uses: when both closest points are within r of an end, the
+    # contact is real only if the end discs cross or a cross-section of either part near its closest point
+    # reaches inside the other (KinematicTree.crossSectionsReach). Otherwise it's only the round caps of the
+    # center-line distance meeting, e.g. where two connected parts attach.
     def nearestEnd(obj, points, i):
         startDist = np.linalg.norm(points[i] - points[0])
         endDist = np.linalg.norm(points[i] - points[-1])
@@ -77,43 +78,52 @@ def isAttachment(obj1, points1, i1, obj2, points2, i2):
     circle2 = nearestEnd(obj2, points2, i2)
     if circle1 is None or circle2 is None:
         return False
-    isTrueContact = Plane(circle1.c, circle1.n).signedDistanceToPoint(points2[i2]) < 0 \
-                    or Plane(circle2.c, circle2.n).signedDistanceToPoint(points1[i1]) < 0 \
-                    or discs_cross(circle1, circle2)
+    isTrueContact = discs_cross(circle1, circle2) \
+                    or KinematicTree.crossSectionsReach(obj1, points1, points1[i1], obj2, 0) \
+                    or KinematicTree.crossSectionsReach(obj2, points2, points2[i2], obj1, 0)
     return not isTrueContact
 
 def clearances(tree, collisionMatrices, threshold):
-    # Returns [(clearance, (kind1, i1), (kind2, i2), point1, point2)] for every collidable pair closer than threshold
-    parts = {}
-    def part(kind, i):
-        if (kind, i) not in parts:
-            obj = tree.Joints[i] if kind == 'Joint' else tree.Links[i]
-            points = obj.interpolate(density=SAMPLE_DENSITY) if obj.length() > 1e-6 else np.zeros((0, 3))
-            parts[(kind, i)] = (obj, points)
-        return parts[(kind, i)]
-
-    jj, jl, ll = tree.getAllCollisionPairs(collisionMatrices)
-    pairs = [(('Joint', a), ('Joint', b)) for a, b in jj.T] + \
-            [(('Joint', a), ('Link', b)) for a, b in jl.T] + \
-            [(('Link', a), ('Link', b)) for a, b in ll.T]
-    close = []
-    for key1, key2 in pairs:
-        obj1, points1 = part(*key1)
-        obj2, points2 = part(*key2)
-        if len(points1) == 0 or len(points2) == 0:
+    # Returns [(clearance, (kind1, i1), (kind2, i2), point1, point2)] for every collidable pair closer than threshold,
+    # using the checker's pairs and path window (KinematicTree.collisionCandidates); a joint's halves are
+    # reported as the joint, keeping the closest of their clearances
+    candidates, structure = tree.collisionCandidates(None, collisionMatrices)
+    best = {}
+    for x, y, obj1, obj2, keep in candidates:
+        if obj1.length() <= 1e-6 or obj2.length() <= 1e-6:
             continue
+        points1 = obj1.interpolate(density=SAMPLE_DENSITY)
+        allPoints2 = obj2.interpolate(density=SAMPLE_DENSITY)
+        points2 = allPoints2
+        if keep is not None:
+            # only the stretch of obj2 outside the window (samples are evenly spaced by arc length)
+            arc = np.linspace(0, obj2.length(), len(allPoints2))
+            points2 = allPoints2[(arc >= keep[0]) & (arc <= keep[1])]
+            if len(points2) == 0:
+                continue
         # skip pairs whose sample bounding boxes are clearly farther apart than the threshold
         reach = obj1.r + obj2.r + threshold
         if np.any(points1.min(axis=0) - points2.max(axis=0) > reach) or np.any(points2.min(axis=0) - points1.max(axis=0) > reach):
             continue
-        dists1 = obj2.sdf(points1) - obj1.r
         dists2 = obj1.sdf(points2) - obj2.r
-        i1, i2 = np.argmin(dists1), np.argmin(dists2)
-        # like KinematicTree.collision, require both directions to agree, which avoids end-cap artifacts
-        clearance = max(dists1[i1], dists2[i2])
-        if clearance < threshold and not isAttachment(obj1, points1, i1, obj2, points2, i2):
-            close.append((clearance, key1, key2, points1[i1], points2[i2]))
-    close.sort(key=lambda c: c[0])
+        i2 = np.argmin(dists2)
+        if keep is None:
+            dists1 = obj2.sdf(points1) - obj1.r
+            i1 = np.argmin(dists1)
+            # like KinematicTree.collision, require both directions to agree, which avoids end-cap artifacts
+            clearance = max(dists1[i1], dists2[i2])
+            if isAttachment(obj1, points1, i1, obj2, allPoints2, int(np.argmin(np.linalg.norm(allPoints2 - points2[i2], axis=1)))):
+                continue
+        else:
+            # as in KinematicTree.collision: from the checked stretch, paired with the nearest point of obj1
+            clearance = dists2[i2]
+            i1 = int(np.argmin(np.linalg.norm(points1 - points2[i2], axis=1)))
+        if clearance < threshold:
+            (n1, k1), (n2, k2) = structure.key(x), structure.key(y)
+            key = ((k1, n1), (k2, n2))
+            if key not in best or clearance < best[key][0]:
+                best[key] = (clearance, key[0], key[1], points1[i1], points2[i2])
+    close = sorted(best.values(), key=lambda c: c[0])
     return close
 
 def centerline(tree, kind, i):
