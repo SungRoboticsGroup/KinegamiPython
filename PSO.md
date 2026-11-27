@@ -247,10 +247,10 @@ Trials Before Experiments/<timestamp>_Joints<N>_Chains<C>_Seed<S>/
 | `total_length`, `sum_squared_length` | The tree's total link length, and its sum of squared link lengths (the tree-wide version of the visits' objective) |
 | `parent_lock_action` | With `parentLocking`: `parentLocked`, `unlocked` or `keptLocked` (a locked waypoint stayed locked); blank otherwise, or if the visit was reverted |
 | `parent_locked_count` | The number of parent-locked waypoints after the visit |
-| `cpu_s` | CPU time (user + system) the visit used, in the main process and its PSO workers (since 2026-11-26). Unlike `visit_s`, it barely changes when other programs compete for the cores |
+| `cpu_s` | CPU time (user + system) the visit used, in the main process and its PSO workers (since 2026-11-26). It changes less than `visit_s` when other programs compete for the cores, but not by nothing: with hyperthreading, a busy machine slows each thread, and identical runs have differed by 1.5× (EXPERIMENTS.md, 2026-11-27) |
 | `load_avg` | The 1-minute load average after the visit. Under WSL it sees only Linux processes, not Windows programs |
 
-**Timing under load:** wall-clock times (`visit_s`, `*_pso_s`, `time_s`) slow down when other programs use the machine, and under WSL the load average can't see Windows programs. `cpu_s / visit_s` (per visit) and `cpu_per_wall` in the sweep's `summary.csv` (per run: the average number of cores kept busy) show how much of the machine a run got: lower than usual for the same settings means its times aren't comparable. Compare costs across runs by CPU time instead; heavy contention can still raise it a little (shared caches and cores).
+**Timing under load:** wall-clock times (`visit_s`, `*_pso_s`, `time_s`) slow down when other programs use the machine, and under WSL the load average can't see Windows programs. `cpu_s / visit_s` (per visit) and `cpu_per_wall` in the sweep's `summary.csv` (per run: the average number of cores kept busy) show how much of the machine a run got: lower than usual for the same settings means its times aren't comparable. Compare costs across runs by CPU time instead, but only roughly: contention for hyperthreads and caches raises it too, by up to 1.5× between identical runs so far. For timing comparisons, use an idle machine.
 
 For example, with pandas (`pip install pandas`; it isn't in `requirements.txt`):
 
@@ -336,6 +336,8 @@ This section is a snapshot of where things stand. The experiments behind it, wit
 **Results before 2026-11-23 are unreliable.** Until then, the collision checker never compared links entering real joints against each other, carried parent-locked waypoints weren't checked, and penalized joint retries scored their reversed-axis option on the wrong geometry (see [Known issues](#known-issues)). Their history is in [EXPERIMENTS.md](EXPERIMENTS.md); the waypoint-option results there (the straight-through guess, multiscale sampling, alignment weight) and the 8-joint seed-44 runs need rerunning.
 
 **Collision checking changed on 2026-11-26** (joints split into halves, the path window, and the end-contact test: see [Objective](#objective)). Rechecked with it, every saved sweep tree keeps its earlier collisions, and 6 more posed trees collide. Among the results below, these are the power 2 baseline on 4-joint chain 5 (configuration 1, also in the earlier sweeps), plain power 2 on 6-joint chain 1 (configuration 3), and the defaults on 4-joint chain 6 in the waypoint-options sweep (configurations 3 and 4). Results from before the change were optimized against a checker that missed these.
+
+**6-joint rerun on the current checker (2026-11-27, `a13da72d`; `2026.11.27_02.02.41_Sweep_Joints6_Seeds0-2`):** power 1 + parent-locking 55.4 / 59.2 / 47.7 against plain power 2 106.1 / 113.4 / 133.4 (lower bounds 15.4 / 22.3 / 17.8), so plain power 2 is 2.2× longer on average. Every final tree is collision-free, with no reverts or exceptions; the subtree retry ran 5 times, all in one run. The results below are from before the 2026-11-26 checker changes.
 
 **Parent-locking sweeps with the fixes (`c1b79125`; DFS outward, one pass per entry in `tree.Joints`, box sampling, straight-through guess, alignment weight 10).** No errors, no final tree collides, 2 reverts in 38 runs.
 

@@ -514,8 +514,28 @@ A whole-tree check of every tree saved after a visit, in every configuration, in
 
 ## 2026-11-27: 6-joint power 1 + parent-locking vs plain power 2, rerun with the subtree check
 
-**Status:** running (started 02:02), folder `2026.11.27_02.02.41_Sweep_Joints6_Seeds0-2`.
+**Status:** done (02:02–06:13), folder `2026.11.27_02.02.41_Sweep_Joints6_Seeds0-2`.
 
 **Question:** the comparison from the stopped sweep above, with joint visits also checking their subtree.
 
-**Run:** the same command, on `089dd804` plus the subtree check (uncommitted; `uncommitted.diff` in the folder).
+**Run:** the same command, on `089dd804` plus the subtree check (`uncommitted.diff` in the folder; committed as `a13da72d`). I was using the computer during parts of it.
+
+**Result** (final total length; every run collision-free in every configuration, no reverts or exceptions):
+
+| Chain | Power 1 + parent-locking | Plain power 2 | Lower bound |
+|---|---|---|---|
+| 0 | **55.4** (73 min, 418 CPU-min, 5.7 cores busy; 60 retries, 5 of them subtree) | 106.1 (33 min, 121 CPU-min, 3.6 cores; 15 retries) | 15.4 |
+| 1 | **59.2** (41 min, 221 CPU-min, 5.4 cores; 30 retries) | 113.4 (37 min, 173 CPU-min, 4.6 cores; 25 retries) | 22.3 |
+| 2 | **47.7** (32 min, 123 CPU-min, 3.8 cores; 19 retries) | 133.4 (33 min, 139 CPU-min, 4.2 cores; 14 retries) | 17.8 |
+
+Mean ratio of plain power 2 to power 1 + parent-locking: 2.21 (1.91–2.79).
+
+**Found:**
+- **The subtree retry ran only in chain 0's power 1 + parent-locking run**, at the same visit as before (78, joint 9) and then at visits 129 (joint 9), 211 (joint 6), 259 and 276 (joint 3). The five reruns took 2.6 min in all. After visit 78 the run differs from the stopped one and ends at 55.4 instead of 50.2: the stopped run's 50.2 came partly from a path through colliding trees.
+- **Runs the subtree check never triggered reproduce the stopped sweep exactly**: chain 1 at both settings, chain 2 power 1 + parent-locking (59.19, 113.37, 47.75), and chain 2 plain power 2 matches it visit for visit through the 155 visits the stopped run finished. So the sweeps are deterministic, and the check changes nothing where it finds nothing.
+- **Chain 0's power 1 + parent-locking run was slow because of ordinary penalty retries**, not the subtree check: 60 retries took 38 of its 72 minutes of visits (the other runs: 4–16 min).
+- **CPU time also varies with load:** chain 2 power 1 + parent-locking took 183 CPU-min in the stopped sweep and 123 here, on identical visits. With 22 logical cores (hyperthreads), a busy machine slows each thread, so CPU time grows too, though less than wall time. Compare CPU times only roughly, and run timing experiments on an idle machine.
+
+**Learned / decided:**
+- **Power 1 + parent-locking is about half the length of plain power 2 on all three 6-joint chains** (2.2× on average), with the subtree check and the new collision checker. It stays the default.
+- The subtree check is cheap where it finds nothing (no extra reruns in 5 of 6 runs) and inexpensive where it does.
