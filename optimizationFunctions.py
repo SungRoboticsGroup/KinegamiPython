@@ -11,6 +11,7 @@ import csv
 import json
 import sys
 import traceback
+import multiprocessing
 
 # Global file path for collision penalty logging (can be set externally)
 collision_penalty_log_file = None
@@ -298,6 +299,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
             
             visitRecord = {}
             visitStart = time.time()
+            cpuStart = cpuSeconds()
             tree, loss = visitNode(tree, index, visitRecord, directory=directory,
                                    waypointOptions=dict(waypointSampling=waypointSampling,
                                                         straightThroughGuess=straightThroughGuess,
@@ -308,6 +310,7 @@ def resumeFromCheckpoint(checkpoint_path: str,
             if visitRecord.get('exception'):
                 exceptionCount += 1
             visitTime = time.time() - visitStart
+            visitRecord.update(cpu_s=cpuSeconds() - cpuStart, load_avg=loadAverage())
 
             log(tree, index)
             losses.append(loss)
@@ -612,7 +615,25 @@ VISIT_FIELDS = ['visit', 'repeat', 'index', 'kind', 'initial_loss', 'final_loss'
                 'retried', 'reverted', 'revert_reason', 'exception',
                 'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s', 'collision_check_s',
                 'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length',
-                'parent_lock_action', 'parent_locked_count']
+                'parent_lock_action', 'parent_locked_count', 'cpu_s', 'load_avg']
+
+def cpuSeconds():
+    # CPU time (user + system) used so far by this process and its finished child processes, i.e. the PSO
+    # workers. pyswarms closes its worker pool without joining it, and a worker's time only counts once it
+    # has been joined, so join any that are finishing first. Unlike wall-clock time, CPU time barely changes
+    # when other programs compete for the cores (including Windows programs, which WSL's load average can't
+    # see), so cpu_s / visit_s shows how much of the machine a visit got.
+    for child in multiprocessing.active_children():
+        child.join(timeout=30)
+    t = os.times()
+    return t.user + t.system + t.children_user + t.children_system
+
+def loadAverage():
+    # 1-minute load average of the Linux side only (under WSL, Windows programs don't show up in it)
+    try:
+        return os.getloadavg()[0]
+    except OSError:
+        return float('nan')
 
 def appendVisitRecord(directory, visitRecord):
     path = os.path.join(directory, 'visits.csv')
@@ -646,6 +667,8 @@ def writeRunInfo(directory, settings, filename='run_info.json', note=None):
         'git_branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
         'uncommitted_changes_to_tracked_files': git('status', '--porcelain', '--untracked-files=no').splitlines(),
         'python_version': platform.python_version(),
+        'cpu_count': os.cpu_count(),
+        'load_avg_at_start': loadAverage(),
         'numpy_version': np.__version__,
         'pyswarms_version': ps.__version__,
         'settings': settings,
@@ -1252,6 +1275,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, parallelize=False,
 
             visitRecord = {}
             visitStart = time.time()
+            cpuStart = cpuSeconds()
             tree, loss = visitNode(tree, index, visitRecord, directory=directory,
                                    waypointOptions=dict(waypointSampling=waypointSampling,
                                                         straightThroughGuess=straightThroughGuess,
@@ -1262,6 +1286,7 @@ def optimizeTree(subject, showSteps=False, childFraction=1, parallelize=False,
             if visitRecord.get('exception'):
                 exceptionCount += 1
             visitTime = time.time() - visitStart
+            visitRecord.update(cpu_s=cpuSeconds() - cpuStart, load_avg=loadAverage())
 
             log(tree, index)
             losses.append(loss)

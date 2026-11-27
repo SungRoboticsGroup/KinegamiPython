@@ -28,7 +28,9 @@ Output, in "Trials Before Experiments/<timestamp>_Sweep_Joints<N>_Seeds<a>-<b>/"
     run_info.json            git commit, versions, and the sweep's settings
     summary.csv              one row per run: settings, start/final total length, sum of squares, time,
                              retries, reverts, final collisions, parent-locks and unlocks, visits that
-                             raised an exception (reverted so the run could continue), and any error
+                             raised an exception (reverted so the run could continue), CPU time and
+                             cpu_per_wall (cores kept busy on average: lower than usual for the same
+                             settings means the run competed with other programs), and any error
     errors.log               tracebacks of runs that raised
     seed<k>/start.tree, seed<k>/configs.json
     seed<k>/<settings label>/visits.csv, final.tree, checkpoints/, collision_penalty_log.txt,
@@ -65,7 +67,7 @@ NUM_EXTRA_CONFIGS = 4  # collision-free random configurations in addition to neu
 
 RESULT_FIELDS = ['start_length', 'final_length', 'lower_bound', 'start_sum_squared', 'final_sum_squared',
                  'time_s', 'visits', 'retried', 'reverted', 'final_colliding_configs',
-                 'parent_locks', 'parent_unlocks', 'final_parent_locked', 'exceptions', 'error']
+                 'parent_locks', 'parent_unlocks', 'final_parent_locked', 'exceptions', 'cpu_s', 'cpu_per_wall', 'error']
 
 def summaryFields(grid):
     return ['seed', 'label'] + list(grid) + RESULT_FIELDS
@@ -205,6 +207,7 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints, g
                    visits=len(visits), retried=sum(r['retried'] == 'True' for r in visits),
                    reverted=sum(r['reverted'] == 'True' for r in visits),
                    exceptions=sum(bool(r.get('exception')) for r in visits),
+                   cpu_s=sum(float(r['cpu_s']) for r in visits if r.get('cpu_s')),
                    parent_locks=sum(r.get('parent_lock_action') == 'parentLocked' for r in visits),
                    parent_unlocks=sum(r.get('parent_lock_action') == 'unlocked' for r in visits),
                    final_parent_locked=countParentLocked(tree),
@@ -215,8 +218,17 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints, g
         with open(os.path.join(sweepDir, 'errors.log'), 'a') as f:
             f.write(f"seed {seed}, {label}:\n{traceback.format_exc()}\n")
     row['time_s'] = time.time() - start
+    if row.get('cpu_s'):
+        # average number of cores the run kept busy; lower than usual for the same settings means it competed
+        # with other programs, so its times aren't comparable
+        row['cpu_per_wall'] = row['cpu_s'] / row['time_s']
     appendSummary(sweepDir, row, grid)
     return row
+
+def cpuColumn(runs, field, fmt):
+    # runs from before CPU time was recorded (2026-11-26) have none
+    values = [float(r[field]) for r in runs if r.get(field)]
+    return fmt(values) if values else f"{'-':>9}" if field == 'cpu_s' else f"{'-':>5}"
 
 def summarize(sweepDir):
     with open(os.path.join(sweepDir, 'summary.csv')) as f:
@@ -230,7 +242,7 @@ def summarize(sweepDir):
     print(f"{sweepDir}\n{len(ok)} finished runs on seeds {seeds}, {len(failed)} failed\n")
     print(f"Final total length relative to the baseline ({baseline}) on the same chain; lower is better.")
     print(f"{'settings':45} {'runs':>4} {'mean ratio':>10} {'best':>6} {'worst':>6} {'wins':>5} "
-          f"{'mean final':>10} {'retried':>7} {'reverted':>8} {'mean time':>9}")
+          f"{'mean final':>10} {'retried':>7} {'reverted':>8} {'mean time':>9} {'mean CPU':>9} {'cores':>5}")
     results = []
     for label in [settingsLabel(s) for s in allSettings(grid)]:
         runs = [r for r in ok if r['label'] == label and int(r['seed']) in base]
@@ -243,7 +255,9 @@ def summarize(sweepDir):
         print(f"{label:45} {len(runs):>4} {meanRatio:>10.3f} {min(ratios):>6.3f} {max(ratios):>6.3f} {wins:>5} "
               f"{np.mean([float(r['final_length']) for r in runs]):>10.1f} "
               f"{sum(int(r['retried']) for r in runs):>7} {sum(int(r['reverted']) for r in runs):>8} "
-              f"{np.mean([float(r['time_s']) for r in runs]) / 60:>8.1f}m")
+              f"{np.mean([float(r['time_s']) for r in runs]) / 60:>8.1f}m "
+              f"{cpuColumn(runs, 'cpu_s', lambda v: f'{np.mean(v) / 60:>8.1f}m')} "
+              f"{cpuColumn(runs, 'cpu_per_wall', lambda v: f'{min(v):>5.1f}')}")
     withExceptions = [r for r in ok if r.get('exceptions') not in (None, '', '0')]
     if withExceptions:
         print("\nWARNING: runs with visits that raised an exception (reverted so the run could continue; "
@@ -331,8 +345,9 @@ def main():
             runTimes.append(row['time_s'])
             remaining = (total - count) * np.mean(runTimes)
             result = f"error: {row['error']}" if row.get('error') else \
-                     f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']}, reverted {row['reverted']}" + \
-                     (f", WARNING: {row['exceptions']} visit exceptions (see visits.csv, exceptions.log)" if row.get('exceptions') else "")
+                     (f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']}, reverted {row['reverted']}, "
+                      f"{row.get('cpu_per_wall', float('nan')):.1f} cores busy on average" +
+                      (f", WARNING: {row['exceptions']} visit exceptions (see visits.csv, exceptions.log)" if row.get('exceptions') else ""))
             print(f"[{datetime.now():%H:%M:%S}] {count}/{total} seed {seed} {label}: {result} "
                   f"({row['time_s'] / 60:.1f} min; about {remaining / 3600:.1f} h left)", flush=True)
     print()

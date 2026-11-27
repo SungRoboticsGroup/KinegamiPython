@@ -245,6 +245,10 @@ Trials Before Experiments/<timestamp>_Joints<N>_Chains<C>_Seed<S>/
 | `total_length`, `sum_squared_length` | The tree's total link length, and its sum of squared link lengths (the tree-wide version of the visits' objective) |
 | `parent_lock_action` | With `parentLocking`: `parentLocked`, `unlocked` or `keptLocked` (a locked waypoint stayed locked); blank otherwise, or if the visit was reverted |
 | `parent_locked_count` | The number of parent-locked waypoints after the visit |
+| `cpu_s` | CPU time (user + system) the visit used, in the main process and its PSO workers (since 2026-11-26). Unlike `visit_s`, it barely changes when other programs compete for the cores |
+| `load_avg` | The 1-minute load average after the visit. Under WSL it sees only Linux processes, not Windows programs |
+
+**Timing under load:** wall-clock times (`visit_s`, `*_pso_s`, `time_s`) slow down when other programs use the machine, and under WSL the load average can't see Windows programs. `cpu_s / visit_s` (per visit) and `cpu_per_wall` in the sweep's `summary.csv` (per run: the average number of cores kept busy) show how much of the machine a run got: lower than usual for the same settings means its times aren't comparable. Compare costs across runs by CPU time instead; heavy contention can still raise it a little (shared caches and cores).
 
 For example, with pandas (`pip install pandas`; it isn't in `requirements.txt`):
 
