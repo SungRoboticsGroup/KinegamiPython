@@ -539,3 +539,27 @@ Mean ratio of plain power 2 to power 1 + parent-locking: 2.21 (1.91–2.79).
 **Learned / decided:**
 - **Power 1 + parent-locking is about half the length of plain power 2 on all three 6-joint chains** (2.2× on average), with the subtree check and the new collision checker. It stays the default.
 - The subtree check is cheap where it finds nothing (no extra reruns in 5 of 6 runs) and inexpensive where it does.
+
+## 2026-11-27: The first parent-locking failure rechecked; false positives beside flat ends found and fixed
+
+**Question:** whether the current checker still counts the false positive that set off the failure cascade in the first 6-joint parent-locking run (2026-11-23: joint 0 vs link 12, chain 0, power 1 + parent-locking, after visit 61, configuration 4), and whether one-end false positives happen at all.
+
+**The 2026-11-23 case:** rechecked from its checkpoint (`2026.11.23_06.10.21`), the solids are 0.26·r apart: link 12 passes 0.26 behind joint 0's proximal end face, outside its rim. The current checker (as of `91312242`) doesn't count it, since joint halves have flat ends in their sdf. The diagnosis in the 2026-11-23 entry stands. (In the rerun of that sweep, `2026.11.23_23.04.06`, the same pair does overlap, by 0.27·r after visits 58–62, with link 3 vs link 12 overlapping by up to 0.78·r: real overlaps that closest-pair masking hid from the checker of that time. They were temporary, and the final tree is collision-free.)
+
+**Scan:** every pair the checker flags in 2,000 evenly spaced saved trees (from about 35,000 saved after visits in all sweeps since 2026-11-22, plus final trees), in every configuration, compared with the overlap of the sampled solids (flat-ended, outside the window), and classified by whether the closest points are near an end:
+
+| Closest points near an end | Real overlap (> 0.01·r) | Within ±0.01·r | Clear by > 0.01·r (false positive) |
+|---|---|---|---|
+| neither | 556 | 0 | 0 |
+| one | 202 | 36 | 22 |
+| both | 97 | 0 | 0 |
+
+**Found:** all 22 false positives were a link passing beside the rim of a joint's flat end (7 cases, some repeated in consecutive trees, 0.02–0.055·r clear). `JointHalf.sdf`, the maximum of a capsule's distance and the end planes', underestimates the distance there: for a point 0.765 behind an end face and 0.78 outside its rim, it gives 0.956 where the true distance is 1.092. Links had a related problem: a straight section is a capsule, so a link that starts or ends straight has a round end (none showed up in the scan).
+
+**Fix:** `sdf_cylinder` in geometryHelpers.py, the exact distance to a cylinder with flat ends (optionally rounded at either end), used by `JointHalf.sdf` and by links' straight sections (flat at the link's own ends, rounded where they meet an arc, as before). Checked against brute-force surface distances (within the sampling spacing). New tests in `test_collision_halves.py`; all pass.
+
+**After the fix:** the same 2,000 trees: exactly the 22 false positives gone, nothing added. All 1,180 posed final trees compared with before: one verdict changed, a false positive joint 3 vs link 15 dropped from the final tree of the 2026-11-23 failure run (configuration 0). The 36 within ±0.01·r are one U-turn case: link 1 comes back alongside joint 0's distal half at exactly 2r, but its CSC path's two arcs miss each other by 0.0014·r, more than the contact tolerance (1e-4·r). Open (PSO.md, Known issues).
+
+**Learned / decided:**
+- One-end false positives did happen, but from inexact sdfs beside flat ends, not from the end-contact test only running when both closest points are near an end. With exact sdfs, there's no need to run the end-contact test in the one-end case.
+- The path solver's accuracy (up to 0.01·r accepted) and the contact tolerance (1e-4·r) disagree; to decide.

@@ -74,13 +74,10 @@ class JointHalf:
         return xp.asarray(a.reshape(1, 3) + np.linspace(0, 1, n).reshape(-1, 1) * (b - a).reshape(1, 3))
 
     def sdf(self, point : ArrayLike, xp : ModuleType = np) -> ArrayLike:
-        point = xp.asarray(point).reshape(-1, 3)
+        # flat at both ends, exact on both sides (also beside the rims: since 2026-11-27, replacing the maximum
+        # of a capsule's distance and the end planes, which underestimated it there)
         a, b = self.endpoints()
-        n = self.direction()
-        d = sdf_capsule(xp, point, a=xp.asarray(a).reshape(1, 3), b=xp.asarray(b).reshape(1, 3), r=self.r).flatten()
-        # flat at both ends: the start (normal pointing back along the half) and the end
-        d = xp.maximum(d, sdf_plane(xp, point, a, -n))
-        return xp.maximum(d, sdf_plane(xp, point, b, n))
+        return sdf_cylinder(xp, point, a, b, self.r)
 
     def boundingBox(self, xp : ModuleType = np) -> ArrayLike:
         a, b = self.endpoints()

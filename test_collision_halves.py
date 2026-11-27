@@ -164,6 +164,44 @@ def testSavedTrees():
         check(f"saved tree {sweep[:19]} seed {seed} {label} config {c}: joint 0 vs link 2 ({pairs})",
               pairs == [((0, 'Joint'), (2, 'Link'))])
 
+def testCylinderSdf():
+    # sdf_cylinder (the joint halves' sdf, and links' straight ends) against the distance to densely sampled
+    # surface points, including beside the rims, where the former capsule-and-planes construction underestimated it
+    from scipy.spatial import cKDTree
+    a, b, rad = np.array([0.3, -0.2, 0.5]), np.array([1.3, 1.8, 0.0]), 0.8
+    L = np.linalg.norm(b - a); n = (b - a) / L
+    u = np.cross(n, [0, 0, 1.0]); u /= np.linalg.norm(u); v = np.cross(n, u)
+    phi = np.linspace(0, 2 * np.pi, 360, endpoint=False)[None, :, None]
+    ring = np.cos(phi) * u + np.sin(phi) * v
+    side = (a + np.linspace(0, 1, 400)[:, None, None] * (b - a) + rad * ring).reshape(-1, 3)
+    discs = [(c + np.linspace(0, rad, 120)[:, None, None] * ring).reshape(-1, 3) for c in (a, b)]
+    surface = cKDTree(np.vstack([side] + discs))
+    P = a + RNG.uniform(-2, 2, (3000, 3)) + (b - a) * RNG.uniform(-0.5, 1.5, (3000, 1))
+    axial = (P - a) @ n; radial = np.linalg.norm((P - a) - axial[:, None] * n, axis=1)
+    inside = (axial >= 0) & (axial <= L) & (radial <= rad)
+    truth = np.where(inside, -1, 1) * surface.query(P)[0]
+    err = np.abs(sdf_cylinder(np, P, a, b, rad) - truth).max()
+    rim = sdf_cylinder(np, (a - 0.765 * n + (rad + 0.78) * u)[None], a, b, rad)[0]
+    check(f"cylinder sdf: within {err:.4f} of sampled surface distances (spacing 0.014); beside a rim "
+          f"{rim:.4f} (true {np.hypot(0.765, 0.78):.4f})", err < 0.01 and abs(rim - np.hypot(0.765, 0.78)) < 1e-9)
+
+def testRimFalsePositive():
+    # A link passing beside the rim of a joint's flat end, clear of it by 0.035r in the sampled solids, which the
+    # former joint-half sdf counted as a collision (scan of saved trees, 2026-11-27)
+    path = os.path.join("Trials Before Experiments", "2026.11.22_02.00.54_Sweep_Joints4_Seeds0-7", "seed2",
+                        "multiscale_straight_align10_power2", "224.2343807220459_2.tree")
+    if not os.path.exists(path):
+        print(f"- skipped (not here): {path}")
+        return
+    tree = loadKinematicTree(path)
+    config = json.load(open(os.path.join(os.path.dirname(os.path.dirname(path)), "configs.json")))[4]
+    for i in range(len(tree.Joints)):
+        if not isWaypoint(tree.Joints[i]):
+            tree.setJointState(i, config[i])
+    pairs = tree.getCollidingPairs()
+    check(f"link 2 beside the rim of joint 0's proximal end, 0.035r clear: no collision ({pairs})",
+          ((0, 'Joint'), (2, 'Link')) not in pairs)
+
 if __name__ == "__main__":
     testFixedCases()
     testShortJointElbow()
@@ -171,4 +209,6 @@ if __name__ == "__main__":
     testUTurnTangency()
     testBranchSiblings()
     testSavedTrees()
+    testCylinderSdf()
+    testRimFalsePositive()
     print("\n✓ All tests passed!")

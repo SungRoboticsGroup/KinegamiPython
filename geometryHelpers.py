@@ -1647,6 +1647,49 @@ def sdf_capsule(xp: ModuleType, p: ArrayLike, a: ArrayLike, b: ArrayLike, r) -> 
     return xp.sqrt(xp.sum(closest * closest, axis=2)) - r[None, :]  # (N,L)
 
 
+def sdf_cylinder(xp: ModuleType, p: ArrayLike, a: ArrayLike, b: ArrayLike, r: float,
+                 flatStart: bool = True, flatEnd: bool = True) -> ArrayLike:
+    """
+    Signed distance from points to a cylinder of radius r from a to b, with each end flat or rounded.
+
+    With flat ends the distance is exact on both sides, including beside the rim of an end, where taking the
+    maximum of a capsule's distance and the end planes' underestimates it (that gave false collisions next to
+    joint ends, 2026-11-27). A rounded end adds a ball of radius r there (exact outside; inside, the depth is
+    the larger of the cylinder's and the ball's).
+
+    Parameters:
+        xp: Array module (np for numpy or cp for cupy)
+        p:  Query points, shape (N, 3)
+        a, b: The ends of the axis, shape (3,)
+        r:  Radius
+        flatStart, flatEnd: whether the end at a, and at b, is flat (otherwise rounded)
+
+    Returns:
+        Signed distances, shape (N,). Negative inside, positive outside.
+    """
+    p = xp.asarray(p).reshape(-1, 3)
+    a = xp.asarray(a, dtype=float).reshape(3)
+    b = xp.asarray(b, dtype=float).reshape(3)
+    ba = b - a
+    length = float(xp.sqrt(xp.sum(ba * ba)))
+    pa = p - a[None, :]
+    if length <= 0:
+        # zero length: a ball, as for a capsule
+        return xp.sqrt(xp.sum(pa * pa, axis=1)) - r
+    n = ba / length
+    axial = pa @ n                                        # (N,)
+    radial = xp.sqrt(xp.maximum(xp.sum(pa * pa, axis=1) - axial * axial, 0.0))
+    dx = radial - r
+    dy = xp.maximum(-axial, axial - length)
+    d = xp.minimum(xp.maximum(dx, dy), 0.0) + xp.sqrt(xp.maximum(dx, 0.0) ** 2 + xp.maximum(dy, 0.0) ** 2)
+    if not flatStart:
+        d = xp.minimum(d, xp.sqrt(xp.sum(pa * pa, axis=1)) - r)
+    if not flatEnd:
+        pb = p - b[None, :]
+        d = xp.minimum(d, xp.sqrt(xp.sum(pb * pb, axis=1)) - r)
+    return d
+
+
 def sdf_plane(xp: ModuleType, p: ArrayLike, plane_point: ArrayLike, plane_normal: ArrayLike) -> ArrayLike:
     """
     Signed distance from points to a plane.

@@ -481,11 +481,13 @@ class LinkCSC:
             
         # 2. Straight section
         if self.path.tMag > self.DISTANCE_EPSILON:
-            # Capsule from turn1end to turn2start
-            distances[1,:] = sdf_capsule(xp, point,
-                                xp.asarray(self.path.turn1end).reshape(1,3), # (L,3)
-                                xp.asarray(self.path.turn2start).reshape(1,3), # (L,3)
-                                radius).flatten() # r: float or (L,)
+            # Cylinder from turn1end to turn2start: flat where it's an end of the link (as the arcs' far ends are),
+            # rounded where it meets an arc (since 2026-11-27; before, a capsule, so a link starting or ending
+            # straight had a round end reaching r past its flat end)
+            hasArc1 = self.arc1 is not None and self.path.theta1 > self.EPSILON
+            hasArc2 = self.arc2 is not None and self.path.theta2 > self.EPSILON
+            distances[1,:] = sdf_cylinder(xp, point, self.path.turn1end, self.path.turn2start, radius,
+                                          flatStart=not hasArc1, flatEnd=not hasArc2)
         
         # 3. Second arc (elbow2)
         if self.arc2 is not None and self.path.theta2 > self.EPSILON:
