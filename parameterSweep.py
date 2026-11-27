@@ -66,7 +66,7 @@ CUBE_SIZE = 10
 NUM_EXTRA_CONFIGS = 4  # collision-free random configurations in addition to neutral, as in randomChain.py
 
 RESULT_FIELDS = ['start_length', 'final_length', 'lower_bound', 'start_sum_squared', 'final_sum_squared',
-                 'time_s', 'visits', 'retried', 'reverted', 'final_colliding_configs',
+                 'time_s', 'visits', 'retried', 'subtree_retried', 'reverted', 'final_colliding_configs',
                  'parent_locks', 'parent_unlocks', 'final_parent_locked', 'exceptions', 'cpu_s', 'cpu_per_wall', 'error']
 
 def summaryFields(grid):
@@ -206,6 +206,7 @@ def runOne(sweepDir, seedDir, seed, chain, configs, settings, saveCheckpoints, g
         row.update(final_length=tree.totalLength(), final_sum_squared=sumSquaredLinkLength(tree),
                    visits=len(visits), retried=sum(r['retried'] == 'True' for r in visits),
                    reverted=sum(r['reverted'] == 'True' for r in visits),
+                   subtree_retried=sum(r.get('subtree_retried') == 'True' for r in visits),
                    exceptions=sum(bool(r.get('exception')) for r in visits),
                    cpu_s=sum(float(r['cpu_s']) for r in visits if r.get('cpu_s')),
                    parent_locks=sum(r.get('parent_lock_action') == 'parentLocked' for r in visits),
@@ -345,7 +346,7 @@ def main():
             runTimes.append(row['time_s'])
             remaining = (total - count) * np.mean(runTimes)
             result = f"error: {row['error']}" if row.get('error') else \
-                     (f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']}, reverted {row['reverted']}, "
+                     (f"{row['start_length']:.1f} -> {row['final_length']:.1f}, retried {row['retried']} (subtree {row['subtree_retried']}), reverted {row['reverted']}, "
                       f"{row.get('cpu_per_wall', float('nan')):.1f} cores busy on average" +
                       (f", WARNING: {row['exceptions']} visit exceptions (see visits.csv, exceptions.log)" if row.get('exceptions') else ""))
             print(f"[{datetime.now():%H:%M:%S}] {count}/{total} seed {seed} {label}: {result} "

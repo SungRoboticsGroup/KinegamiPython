@@ -484,3 +484,38 @@ Geometric mean ratio to the defaults: no straight-through guess 1.022 (better on
 
 **Learned / decided:**
 - The masked overlaps and the missed end contacts were in results recorded as collision-free; those runs were optimized against a checker that missed them, so their numbers aren't on the current checker. The pending rerun of the 6-joint power 1 + parent-locking sweep should use this code.
+
+## 2026-11-26: 6-joint power 1 + parent-locking vs plain power 2 on the new collision checker (stopped)
+
+**Status:** stopped during its last run (2026-11-27, 01:3x) to fix the gap it exposed; rerun with the fix (next entry).
+
+**Question:** the 6-joint comparison on one checker: power 1 + parent-locking (earlier 53.1 / 44.8 / 59.1, on `c1b79125`) against plain power 2 (earlier 107.0 / 106.4 / 141.3, on `b0cb0422`), both earlier results optimized against the checker that missed masked overlaps.
+
+**Run:** `python parameterSweep.py --joints 6 --seeds 3 --grid power=1,2 --grid parentLocking=True,False --grid waypointSampling=box --grid straightThroughGuess=True --grid alignmentWeight=10 --settings box_straight_align10_power1_parentlock,box_straight_align10_power2 --note "..."`: folder `2026.11.26_21.37.50_Sweep_Joints6_Seeds0-2`, on `a2061efc` plus the CPU-time tracking (`uncommitted.diff` in the folder; committed as `089dd804`). I was using the computer during parts of it.
+
+**Result** (final total length; every finished run collision-free in every configuration, no reverts or exceptions):
+
+| Chain | Power 1 + parent-locking | Plain power 2 | Lower bound |
+|---|---|---|---|
+| 0 | **50.2** (52 min, 281 CPU-min, 5.4 cores busy) | 106.1 (34 min, 132 CPU-min, 3.9 cores) | 15.4 |
+| 1 | **59.2** (40 min, 218 CPU-min, 5.5 cores) | 113.4 (40 min, 206 CPU-min, 5.1 cores) | 22.3 |
+| 2 | **47.7** (44 min, 183 CPU-min, 4.2 cores) | stopped after 155 of ~256 visits, at 157.2 | 17.8 |
+
+**Found:** a joint visit could make the joint's subtree collide with the rest of the tree without its checks noticing. In chain 0's power 1 + parent-locking run, visit 78 moved joint 9 by 0.40; joint 9 is bent in configurations 3 and 4 (−0.89 and −1.11 rad), so everything after it swings about its axis there, and joint 15 moved by 3.0 and 8.2, into joints 0 and 3 and links 3 and 6. The visit's penalty and after-visit check covered only pairs involving joint 9 and the waypoints it carries, so it was accepted; visits 81–83 then kept the collision (the tree already collided there), and visit 84 (joint 15's own) cleared it.
+
+A whole-tree check of every tree saved after a visit, in every configuration, in all six runs (about 1,600 trees): this was the only episode. That run collided after visits 78–83 only, and every other run stayed collision-free after every visit.
+
+**Fix:** joint visits now also check the joint's subtree (its distal half and everything after it) against the rest of the tree after the visit, and rerun with those pairs in the collision penalty if they collide (PSO.md, One joint visit). Replaying visit 78 three times (random seeds 0–2): each took the subtree rerun and ended collision-free in every configuration (58.72 → 58.72 / 58.72 / 58.70; the original visit reached 58.32 by colliding), in 115–257 s instead of 34 s. On a 3-joint run with no collisions, the extra check cost about 15 s of 200 (8%); results unchanged (42.96 → 17.33).
+
+**Learned / decided:**
+- Power 1 + parent-locking stays at about half the length of plain power 2 on chains 0 and 1, as before.
+- Against the earlier runs, power 1 + parent-locking moved by up to ±12 per chain (chain 0 53.1 → 50.2, chain 1 44.8 → 59.2, chain 2 59.1 → 47.7); one run per chain can't separate the checker change from run-to-run variation. Plain power 2 moved less (107.0 → 106.1, 106.4 → 113.4).
+- Cores busy varied from 3.9 to 5.5 across runs, so wall-clock times here aren't comparable between runs; use CPU-minutes.
+
+## 2026-11-27: 6-joint power 1 + parent-locking vs plain power 2, rerun with the subtree check
+
+**Status:** running (started 02:02), folder `2026.11.27_02.02.41_Sweep_Joints6_Seeds0-2`.
+
+**Question:** the comparison from the stopped sweep above, with joint visits also checking their subtree.
+
+**Run:** the same command, on `089dd804` plus the subtree check (uncommitted; `uncommitted.diff` in the folder).

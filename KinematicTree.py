@@ -976,10 +976,11 @@ class KinematicTree(Generic[F]):
         return (tuple(self.Parents), tuple(isWaypoint(j) for j in self.Joints),
                 tuple(self.splitsIntoHalves(j) for j in self.Joints))
 
-    def detectCollisions(self, specificJointIndex = None, plot: bool = False, debug: bool = False) -> int:
-        # specificJointIndex: None for the whole tree, or an index or list of indices (see collisionCandidates)
+    def detectCollisions(self, specificJointIndex = None, plot: bool = False, debug: bool = False, subtreeOf = None) -> int:
+        # specificJointIndex: None for the whole tree, or an index or list of indices; subtreeOf: see collisionCandidates
         collisionMatrices = self.buildCollisionMatrices()
-        numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot)
+        numCollisions, _ = self.collisionsCountAndError(specificJointIndex, collisionMatrices, debug=debug, show=plot,
+                                                        subtreeOf=subtreeOf)
         return numCollisions
 
     def buildCollisionMatrices(self) -> CollisionStructure:
@@ -1058,7 +1059,14 @@ class KinematicTree(Generic[F]):
                 intervals.append((sProx[node], sDist[node]))
         return intervals
 
-    def collisionCandidates(self, movingJointIndex=None, collisionMatrices=None):
+    def subtreeObjects(self, structure : CollisionStructure, index : int) -> np.ndarray:
+        # Which objects move with real joint index's distal side: its distal half, and every object of its
+        # descendants (their links included, so the links leaving index too)
+        descendants = {k for k in range(len(self.Joints)) if index in structure.ancestors[k]}
+        return np.array([node in descendants or (node == index and which == 'distal')
+                         for kind, node, which in structure.objects], dtype=bool)
+
+    def collisionCandidates(self, movingJointIndex=None, collisionMatrices=None, subtreeOf=None):
         """
         The pairs to check, with the window applied. Returns (candidates, structure): candidates is
         [(x, y, tubeX, tubeY, keepArcY)], where x and y index structure.objects, and keepArcY is None (check all of tubeY) or (lo, hi), the stretch of tubeY
@@ -1067,6 +1075,11 @@ class KinematicTree(Generic[F]):
         movingJointIndex: None for every pair, or an index (or a list of indices, for joints that move
         together, e.g. a joint and the parent-locked waypoints carried with it): the pairs involving any of
         their objects or the links into them and out of them.
+        subtreeOf: a real joint's index, to also include the pairs between its subtree (its distal half and
+        everything after it) and everything else. Moving a joint doesn't move its descendants in the neutral
+        configuration, but in any configuration that bends it, the whole subtree swings about its axis, so
+        those pairs change too (pairs within the subtree move together, and pairs outside it don't move).
+        With movingJointIndex None, only those pairs.
         collisionMatrices: from buildCollisionMatrices; rebuilt if missing, of another kind (e.g. from an old
         checkpoint), or from a tree of a different structure.
         """
@@ -1074,12 +1087,18 @@ class KinematicTree(Generic[F]):
         if not isinstance(s, CollisionStructure) or s.signature != self.collisionStructureSignature():
             s = self.buildCollisionMatrices()
         pairs = s.pairs
-        if movingJointIndex is not None:
-            nodes = [int(movingJointIndex)] if isinstance(movingJointIndex, (int, np.integer)) else [int(i) for i in movingJointIndex]
-            links = set(nodes) | {c for i in nodes for c in self.Children[i]}
-            involved = np.array([(kind == 'link' and node in links) or (kind != 'link' and node in nodes)
-                                 for kind, node, _ in s.objects], dtype=bool)
-            pairs = pairs[:, involved[pairs[0]] | involved[pairs[1]]] if pairs.size > 0 else pairs
+        if (movingJointIndex is not None or subtreeOf is not None) and pairs.size > 0:
+            keep = np.zeros(pairs.shape[1], dtype=bool)
+            if movingJointIndex is not None:
+                nodes = [int(movingJointIndex)] if isinstance(movingJointIndex, (int, np.integer)) else [int(i) for i in movingJointIndex]
+                links = set(nodes) | {c for i in nodes for c in self.Children[i]}
+                involved = np.array([(kind == 'link' and node in links) or (kind != 'link' and node in nodes)
+                                     for kind, node, _ in s.objects], dtype=bool)
+                keep |= involved[pairs[0]] | involved[pairs[1]]
+            if subtreeOf is not None:
+                inSubtree = self.subtreeObjects(s, int(subtreeOf))
+                keep |= inSubtree[pairs[0]] != inSubtree[pairs[1]]
+            pairs = pairs[:, keep]
         tubes = [self.collisionObjectTube(s, k) for k in range(len(s.objects))]
         intervals = self.collisionObjectIntervals(s, tubes)
         window = self.PATH_WINDOW_RADII * self.r
@@ -1130,10 +1149,11 @@ class KinematicTree(Generic[F]):
     def collisionsCountAndError(self, movingJointIndex,
                                   collisionMatrices = None,
                                   show : bool = False, debug: bool = False,
-                                  coarseDistanceThreshold : float = 0.5, fineDistanceThreshold: float = 0.001) -> Tuple[int, float]:
+                                  coarseDistanceThreshold : float = 0.5, fineDistanceThreshold: float = 0.001,
+                                  subtreeOf = None) -> Tuple[int, float]:
         # Returns (the number of colliding pairs of collision objects, the collision penalty). A pair of joints
-        # can count more than once, through their halves.
-        candidates, s = self.collisionCandidates(movingJointIndex, collisionMatrices)
+        # can count more than once, through their halves. subtreeOf: see collisionCandidates.
+        candidates, s = self.collisionCandidates(movingJointIndex, collisionMatrices, subtreeOf=subtreeOf)
         collisions = []
         for x, y, tubeX, tubeY, keep in candidates:
             collisionResult = self.collision(tubeX, tubeY, coarseDistanceThreshold, fineDistanceThreshold, keepArc2=keep)

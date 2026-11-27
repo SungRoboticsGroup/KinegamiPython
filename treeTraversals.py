@@ -22,9 +22,11 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
              movedJointIndex : Optional[int] = None,
              includeCollisionPenalty : bool = False, 
              configurations : Optional[list] = None, 
-             collisionErrorWeight : float = 1, outgoing : Optional[list] = None) -> float:
+             collisionErrorWeight : float = 1, outgoing : Optional[list] = None, subtreeOf : Optional[int] = None) -> float:
     # outgoing: indices of the links to count as outgoing (default: the links to index's children). Visits
     # with parent-locking pass the links leaving the joint's parent-locked descendants too, which move with it.
+    # subtreeOf: also penalize collisions between that joint's subtree and everything else, which change when
+    # the joint moves (see KinematicTree.collisionCandidates).
     
     if not childFraction>=0:
         raise ValueError("childFraction must be non-negative")
@@ -55,7 +57,7 @@ def linkLoss(tree : KinematicTree, index : int, power : float = 2, childFraction
         for i in range(0, len(configurations)):
             print("Current loss = ", loss)
             tree.setConfiguration(configurations[i])
-            collisionCount, collisionError = tree.collisionsCountAndError(movedJointIndex, collisionMatrices)
+            collisionCount, collisionError = tree.collisionsCountAndError(movedJointIndex, collisionMatrices, subtreeOf=subtreeOf)
             print(f"Collision count: {collisionCount}, Collision error: {collisionError}")
             print(f"Collision error weight: {collisionErrorWeight}")
             newAmount = collisionError * collisionErrorWeight

@@ -409,9 +409,10 @@ def logCollisionPenalty(message):
         with open(collision_penalty_log_file, 'a') as f:
             f.write(message + '\n')
 
-def collidingConfigurations(tree, index, configurations):
+def collidingConfigurations(tree, index, configurations, subtreeOf=None):
     # Returns the configurations in which the moved joint/waypoint at index (or any of a list of indices)
-    # collides with something.
+    # collides with something, or (subtreeOf: a real joint's index) its subtree collides with the rest of the tree
+    # (KinematicTree.collisionCandidates; index None for only those pairs).
     # Only the given configurations matter: the tree's current state is not checked.
     colliding = []
     for configuration in configurations:
@@ -420,7 +421,7 @@ def collidingConfigurations(tree, index, configurations):
             if not isWaypoint(configured.Joints[i]):
                 configured.setJointState(i, configuration[i])
                 configured.Joints[i].recomputeCollisionCapsules()
-        if configured.detectCollisions(specificJointIndex=index, debug=False) > 0:
+        if configured.detectCollisions(specificJointIndex=index, debug=False, subtreeOf=subtreeOf) > 0:
             colliding.append(configuration)
     return colliding
 
@@ -551,33 +552,48 @@ def unlockGuess(subject, index):
     return [list(move.t) + list(move.eul())]
 
 def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeCollisionPenalty, configurations,
-                               visitRecord=None, movedIndices=None):
+                               visitRecord=None, movedIndices=None, subtreeOf=None):
     # optimizeOnce(includeCollisionPenalty) -> (tree, loss, initialLoss, timing), where initialLoss is the
     # same objective evaluated at the current placement and timing has 'pso_s', 'nm_s' (and 'notApplied'
     # if the best particle couldn't be applied).
     # If visitRecord is a dict, it's filled in with what happened on this visit (see VISIT_FIELDS).
     # movedIndices: the joints/waypoints the visit moves (default [index]; with parent-locking, also the waypoints
     # carried along), whose collisions are checked.
+    # subtreeOf: for a joint visit, the joint's index. Moving a joint also swings its whole subtree in every
+    # configuration that bends it, which can make the subtree collide with the rest of the tree in pairs that
+    # don't involve anything moved. Those pairs are checked after the visit (and the visit is retried with them
+    # in the penalty if they collide) rather than penalized from the start, since there can be many of them.
+    # optimizeOnce then also takes subtreePenalty.
     if movedIndices is None:
         movedIndices = [index]
     if visitRecord is None:
         visitRecord = {}
-    visitRecord.update(kind=label, retried=False, reverted=False, revert_reason="", collision_check_s=0.0)
+    visitRecord.update(kind=label, retried=False, subtree_retried=False, reverted=False, revert_reason="",
+                       collision_check_s=0.0)
 
-    def timedCollidingConfigurations(tree):
+    def timedCollidingConfigurations(tree, moved=movedIndices, subtree=subtreeOf):
+        # the moved objects' collisions, and (for a joint visit) the subtree's against the rest of the tree
         start = time.time()
-        colliding = collidingConfigurations(tree, movedIndices, configurations)
+        colliding = collidingConfigurations(tree, moved, configurations, subtreeOf=subtree)
         visitRecord['collision_check_s'] += time.time() - start
         return colliding
 
     # First try without the collision penalty (much cheaper), and only retry with it if that collides.
     tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=False)
     visitRecord.update(nopenalty_pso_s=timing['pso_s'], nopenalty_nm_s=timing['nm_s'])
-    if includeCollisionPenalty and len(timedCollidingConfigurations(tree)) > 0:
+    if includeCollisionPenalty and len(timedCollidingConfigurations(tree, subtree=None)) > 0:
         logCollisionPenalty(f"Collision detected for {label} {index}, retrying with collision penalty")
         visitRecord['retried'] = True
         tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=True)
         visitRecord.update(penalty_pso_s=timing['pso_s'], penalty_nm_s=timing['nm_s'])
+    if includeCollisionPenalty and subtreeOf is not None:
+        subtreeColliding = timedCollidingConfigurations(tree, moved=None)
+        if subtreeColliding:
+            logCollisionPenalty(f"Subtree of {label} {index} collides with the rest of the tree in configurations "
+                                f"{subtreeColliding}, retrying with the subtree in the collision penalty")
+            visitRecord['subtree_retried'] = True
+            tree, loss, initialLoss, timing = optimizeOnce(includeCollisionPenalty=True, subtreePenalty=True)
+            visitRecord.update(subtree_pso_s=timing['pso_s'], subtree_nm_s=timing['nm_s'])
     visitRecord['initial_loss'] = initialLoss
     visitRecord['parent_lock_action'] = timing.get('parentLockAction', '')
 
@@ -613,7 +629,8 @@ def optimizeWithCollisionRetry(subject, index, label, optimizeOnce, includeColli
 # Columns of visits.csv, one row per visit
 VISIT_FIELDS = ['visit', 'repeat', 'index', 'kind', 'initial_loss', 'final_loss',
                 'retried', 'reverted', 'revert_reason', 'exception',
-                'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s', 'collision_check_s',
+                'nopenalty_pso_s', 'nopenalty_nm_s', 'penalty_pso_s', 'penalty_nm_s',
+                'subtree_retried', 'subtree_pso_s', 'subtree_nm_s', 'collision_check_s',
                 'visit_s', 'elapsed_s', 'total_length', 'sum_squared_length',
                 'parent_lock_action', 'parent_locked_count', 'cpu_s', 'load_avg']
 
@@ -688,10 +705,12 @@ def optimizeJointPlacement(subject, index, maxiter, tol, failurePenalty,
                            childFraction, parallelize, verbose, power, configurations, parentLocking)
     movedIndices = [index] + parentLockedDescendants(subject, index) if parentLocking else [index]
     return optimizeWithCollisionRetry(subject, index, "joint", optimizeOnce, includeCollisionPenalty, configurations,
-                                      visitRecord, movedIndices)
+                                      visitRecord, movedIndices, subtreeOf=index)
 
 def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, childFraction,
-                               parallelize, verbose, power, configurations, parentLocking, includeCollisionPenalty):
+                               parallelize, verbose, power, configurations, parentLocking, includeCollisionPenalty,
+                               subtreePenalty=False):
+    # subtreePenalty: the collision penalty also covers the joint's subtree against the rest of the tree
     collisionMatrices = subject.buildCollisionMatrices()
     # parent-locked waypoints move with the joint, and the links leaving them count as the joint's outgoing links
     locked = parentLockedDescendants(subject, index) if parentLocking else []
@@ -721,7 +740,8 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                         movedJointIndex=movedJointIndex,
                                         includeCollisionPenalty=includeCollisionPenalty,
                                         configurations=configurations,
-                                        collisionErrorWeight=failurePenalty, outgoing=outgoing)
+                                        collisionErrorWeight=failurePenalty, outgoing=outgoing,
+                                        subtreeOf=index if subtreePenalty else None)
         else:
             linkLossSameZhat = pathNonExistancePenalty
 
@@ -739,7 +759,8 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                                 movedJointIndex=movedJointIndex,
                                                 includeCollisionPenalty=includeCollisionPenalty,
                                                 configurations=configurations,
-                                                collisionErrorWeight=failurePenalty, outgoing=outgoing)
+                                                collisionErrorWeight=failurePenalty, outgoing=outgoing,
+                                        subtreeOf=index if subtreePenalty else None)
             else:
                 linkLossReversedZhat = pathNonExistancePenalty
         else:
@@ -750,7 +771,8 @@ def optimizeJointPlacementOnce(subject, index, maxiter, tol, failurePenalty, chi
                                             movedJointIndex=movedJointIndex,
                                             includeCollisionPenalty=includeCollisionPenalty,
                                             configurations=configurations,
-                                            collisionErrorWeight=failurePenalty, outgoing=outgoing)
+                                            collisionErrorWeight=failurePenalty, outgoing=outgoing,
+                                        subtreeOf=index if subtreePenalty else None)
 
         if returnWhich:
             if linkLossSameZhat <= linkLossReversedZhat:
